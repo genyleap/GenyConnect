@@ -1,53 +1,20 @@
-# GenyConnect (Qt 6 + Xray-core)
+# GenyConnect
 
-A cross-platform desktop VPN client shell built with Qt 6 (C++) and QML.
+GenyConnect is a modern, cross-platform secure tunneling client designed for high performance, privacy, and precise traffic control.
 
-## What this project does
-
-- Uses official `xray-core` binary as an external process (`QProcess`)
-- Dynamically generates Xray `config.json` from imported profile links
-- Imports VLESS and VMESS links
-- Manages VPN runtime state: `Disconnected`, `Connecting`, `Connected`, `Error`
-- Captures and displays xray logs from stdout/stderr
-- Tracks basic RX/TX counters from parsed log lines
-- Provides a modern desktop UI for server profile management and connect/disconnect
-
-## Architecture
-
-### Backend (C++)
-
-- `VpnController`
-  - App-level state machine
-  - Profile persistence
-  - Runtime config writing
-  - Connect/disconnect orchestration
-- `XrayProcessManager`
-  - Starts/stops xray process
-  - Reads stdout/stderr logs
-  - Emits lifecycle and traffic signals
-- `LinkParser`
-  - Parses `vless://` and `vmess://`
-  - Normalizes fields into `ServerProfile`
-- `XrayConfigBuilder`
-  - Converts `ServerProfile` into an executable Xray JSON config
-- `ServerProfileModel`
-  - QML model for profile list UI
-
-### UI (QML)
-
-- Modern two-panel layout
-- Profile list and link import panel
-- Connect/disconnect state panel
-- Live logs + traffic counters
+- It orchestrates encrypted connections with remote servers, allowing users to import shareable links, manage multiple server profiles, dynamically generate runtime configurations, and control connection lifecycles safely and reliably. Live logs, real-time traffic statistics, and clear connection-state reporting provide full visibility into network activity.
+- GenyConnect delivers lightweight, efficient performance, ensuring minimal overhead even under heavy traffic, making it responsive and reliable for both everyday use and demanding workloads. It supports clean application-level proxying and system-wide tunneling, with a polished user experience that reduces repeated authentication prompts, provides readable and copyable logs, and guarantees deterministic connection behavior.
+- Advanced routing controls give power users fine-grained command over traffic flows, including whitelist-based routing, domain-level tunnel/direct/block rules, and application- or process-based routing. This combination of speed, security, transparency, and flexibility makes GenyConnect ideal for users who demand maximum control without compromising performance, all within a streamlined, responsive interface.
 
 ## Build
 
 Requirements:
 
-- Qt 6.5+
-- CMake 3.21+
-- A local `xray-core` binary (download from official release channel)
+- C++20
+- Qt 6.10+
+- CMake 4.x+
 
+- A local `xray-core` binary (download from official release channel)
 Build steps:
 
 ```bash
