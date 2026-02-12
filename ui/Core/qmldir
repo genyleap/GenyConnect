@@ -1,0 +1,10 @@
+module GenyConnect
+
+singleton AppGlobals 1.0 AppGlobals.qml
+singleton Colors 1.0 Colors.qml
+singleton Metrics 1.0 Metrics.qml
+singleton Typography 1.0 Typography.qml
+singleton Theme 1.0 Theme.qml
+singleton Animations 1.0 Animations.qml
+singleton FontSystem 1.0 FontSystem.qml
+singleton AppStyle 1.0 Colors.qml

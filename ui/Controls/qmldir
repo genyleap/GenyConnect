@@ -1,0 +1,23 @@
+module GenyConnect.Controls
+
+Avatar 1.0 Avatar.qml
+Menu 1.0 Menu.qml
+Button 1.0 Button.qml
+IconButton 1.0 IconButton.qml
+MenuButton 1.0 MenuButton.qml
+PillButton 1.0 PillButton.qml
+Label 1.0 Label.qml
+ToolTip 1.0 ToolTip.qml
+Card 1.0 Card.qml
+TextField 1.0 TextField.qml
+TextArea 1.0 TextArea.qml
+ComboBox 1.0 ComboBox.qml
+SpinBox 1.0 SpinBox.qml
+ProgressBar 1.0 ProgressBar.qml
+AddDownloadDialog 1.0 AddDownloadDialog.qml
+DownloadDelegate 1.0 DownloadDelegate.qml
+DownloadListView 1.0 DownloadListView.qml
+CircleIconButton 1.0 CircleIconButton.qml
+PrimaryActionButton 1.0 PrimaryActionButton.qml
+SignalBars 1.0 SignalBars.qml
+WorldMapDots 1.0 WorldMapDots.qml
