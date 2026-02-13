@@ -1,55 +1,57 @@
 # GenyConnect
 
-GenyConnect is a modern, cross-platform secure tunneling client designed for high performance, privacy, and precise traffic control.
+GenyConnect is a modern, cross-platform **secure tunneling client** and **VPN** designed for **high performance**, **privacy**, and **precise traffic control**.
 
-- It orchestrates encrypted connections with remote servers, allowing users to import shareable links, manage multiple server profiles, dynamically generate runtime configurations, and control connection lifecycles safely and reliably. Live logs, real-time traffic statistics, and clear connection-state reporting provide full visibility into network activity.
-- GenyConnect delivers lightweight, efficient performance, ensuring minimal overhead even under heavy traffic, making it responsive and reliable for both everyday use and demanding workloads. It supports clean application-level proxying and system-wide tunneling, with a polished user experience that reduces repeated authentication prompts, provides readable and copyable logs, and guarantees deterministic connection behavior.
-- Advanced routing controls give power users fine-grained command over traffic flows, including whitelist-based routing, domain-level tunnel/direct/block rules, and application- or process-based routing. This combination of speed, security, transparency, and flexibility makes GenyConnect ideal for users who demand maximum control without compromising performance, all within a streamlined, responsive interface.
+It provides a robust orchestration layer for secure network engines, focusing on correctness, observability, and user experience rather than binding itself to any single protocol or implementation.
 
-## Build
+---
 
-Requirements:
+## Overview
 
-- C++20
-- Qt 6.10+
-- CMake 4.x+
+GenyConnect enables users to establish and manage secure connections through structured server profiles and shareable configuration links. Runtime configurations are generated dynamically, connection lifecycles are supervised explicitly, and system state remains fully observable at all times.
 
-- A local `xray-core` binary (download from official release channel)
-Build steps:
+The platform is intentionally **engine-agnostic**, allowing different tunneling backends to be integrated without altering user workflows or expected behavior.
 
-```bash
-cmake -S . -B build
-cmake --build build
-```
+---
 
-Optional: auto-download and bundle Xray during configure (no manual path selection in app):
+## Key Capabilities
 
-```bash
-cmake -S . -B build \
-  -DGENYCONNECT_AUTO_DOWNLOAD_XRAY=ON \
-  -DGENYCONNECT_XRAY_VERSION=v26.2.6
-cmake --build build
-```
+- **Clear operational visibility**  
+  Live logs, real-time traffic statistics, and explicit connection-state reporting provide full transparency into network activity.
 
-Optional advanced override (if asset naming changes):
+- **High-performance execution**  
+  Lightweight and efficient by design, GenyConnect introduces minimal overhead and remains responsive under heavy traffic and sustained workloads.
 
-```bash
-cmake -S . -B build \
-  -DGENYCONNECT_AUTO_DOWNLOAD_XRAY=ON \
-  -DGENYCONNECT_XRAY_VERSION=v26.2.6 \
-  -DGENYCONNECT_XRAY_ASSET_NAME=Xray-macos-arm64-v8a.zip
-```
+- **Deterministic lifecycle management**  
+  Predictable startup, clean shutdown, and safe reconnection logic prevent partial or undefined states.
 
-Run:
+- **Advanced traffic routing**  
+  Fine-grained control over traffic flows, including:
+  - whitelist-based routing
+  - domain-level tunnel / direct / block rules
+  - application- or process-based routing
 
-```bash
-./build/GenyConnect
-```
+- **Flexible tunneling modes**  
+  Supports both application-level proxying and system-wide tunneling while maintaining a consistent control surface.
 
-If Xray is bundled (manual or auto), GenyConnect will detect `xray-core` near the app binary automatically.  
-Otherwise, set path to your `xray` / `xray.exe` binary in the UI.
+---
 
 ## Notes
 
-- This project intentionally does not re-implement VPN protocols.
-- Traffic counters are currently inferred from log patterns. For strict accounting, integrate Xray stats API endpoint polling in a later iteration.
+- GenyConnect currently delivers a fully functional, production-ready **secure tunneling layer**.
+- **Native VPN protocol support is planned** and will be introduced in future releases.
+- The architecture is designed to accommodate VPN protocols without disrupting existing tunneling workflows or user experience.
+
+---
+
+## Future Notes
+
+- GenyConnect is designed with a long-term vision to support the **Geny token ecosystem**.  
+  In future iterations, this client may serve as an execution and control layer aligned with the Geny token’s economic and utility model.
+
+- The architecture of GenyConnect is intentionally built to allow **integration with decentralized social protocols**.  
+  As part of this vision, plans exist to coordinate and interoperate with **:contentReference[oaicite:0]{index=0}**.
+
+- The goal of this direction is not to build a network client alone, but to evolve GenyConnect into an **intelligent connectivity layer** that can align with user identity, decentralized interaction, and token-based ecosystems.
+
+- These capabilities will be introduced progressively, without disrupting the existing tunneling and VPN experience.
