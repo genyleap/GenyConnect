@@ -1,12 +1,7 @@
 cmake_minimum_required(VERSION 3.28)
 
 # -----------------------------------------------------------------------------
-# GenyConnect CMakeLists - single-file, cross-platform, single-arch build
-# Notes:
-#  - CMake build directory => one toolchain/one architecture. Create separate
-#    build directories for other archs (use cmake presets or scripts).
-#  - This file detects host OS/arch by default but accepts GENYCONNECT_TARGET_OS
-#    and GENYCONNECT_TARGET_ARCH cache variables to override detection.
+# GenyConnect CMakeLists (updated for production deploy/dist)
 # -----------------------------------------------------------------------------
 
 set(PROJECT_NAME "GenyConnect")
@@ -16,8 +11,12 @@ if(POLICY CMP0155)
     cmake_policy(SET CMP0155 NEW)
 endif()
 
+# Generator-expression that evaluates to true for Release or RelWithDebInfo configs.
+# Use it in COMMAND expansions so actions run only for Release-like builds.
+set(GENY_IS_RELEASE "$<OR:$<CONFIG:Release>,$<CONFIG:RelWithDebInfo>>")
+
 # -------------------------
-# User options (same as before)
+# User options
 # -------------------------
 option(GENYCONNECT_USE_MODULES "Enable C++20 modules" ON)
 option(GENYCONNECT_LLVM_AUTO_SCAN "Auto-detect LLVM/clang for modules" ON)
@@ -28,16 +27,14 @@ set(GENYCONNECT_XRAY_VERSION "v26.2.6" CACHE STRING "Xray-core release tag (e.g.
 set(GENYCONNECT_XRAY_ASSET_NAME "" CACHE STRING "Optional explicit Xray release asset name override")
 set(GENYCONNECT_BUNDLED_XRAY_PATH "" CACHE FILEPATH "Path to prebuilt xray-core binary to bundle with app")
 
-# Optional overrides (useful for cross-build or explicit naming)
 set(GENYCONNECT_TARGET_OS "" CACHE STRING "Override target OS for output naming (macos|linux|windows)")
-set(GENYCONNECT_TARGET_ARCH "arm64" CACHE STRING "Override target arch for output naming (arm64|x86_64)")
+# do NOT force an arm64 default for all platforms; let detection choose when empty
+set(GENYCONNECT_TARGET_ARCH "" CACHE STRING "Override target arch for output naming (arm64|x86_64)")
 set(GENYCONNECT_OUTPUT_NAME "" CACHE STRING "Optional explicit output name (overrides generated name)")
-set(CMAKE_OSX_ARCHITECTURES "arm64" CACHE STRING "Build architecture" FORCE)
 
 # -------------------------
-# Detect/normalise OS and arch for naming & xray selection
+# Normalize OS / arch
 # -------------------------
-# Normalise OS
 if(GENYCONNECT_TARGET_OS AND NOT GENYCONNECT_TARGET_OS STREQUAL "")
     string(TOLOWER "${GENYCONNECT_TARGET_OS}" GENY_OS)
 else()
@@ -50,19 +47,16 @@ else()
     endif()
 endif()
 
-# Normalise arch
 if(GENYCONNECT_TARGET_ARCH AND NOT GENYCONNECT_TARGET_ARCH STREQUAL "")
     string(TOLOWER "${GENYCONNECT_TARGET_ARCH}" GENY_ARCH_RAW)
 else()
     if(DEFINED CMAKE_SYSTEM_PROCESSOR AND CMAKE_SYSTEM_PROCESSOR)
         set(GENY_ARCH_RAW "${CMAKE_SYSTEM_PROCESSOR}")
     else()
-        # fallback
         set(GENY_ARCH_RAW "x86_64")
     endif()
 endif()
 
-# Map common variants to canonical names
 string(TOLOWER "${GENY_ARCH_RAW}" GENY_ARCH)
 if(GENY_ARCH MATCHES "^(arm64|aarch64|arm64-v8a)$")
     set(GENY_ARCH "arm64")
@@ -70,7 +64,6 @@ elseif(GENY_ARCH MATCHES "^(x86_64|amd64|x64|64)$")
     set(GENY_ARCH "x86_64")
 endif()
 
-# Compose output name unless user supplied explicit GENYCONNECT_OUTPUT_NAME
 if(GENYCONNECT_OUTPUT_NAME AND NOT GENYCONNECT_OUTPUT_NAME STREQUAL "")
     set(GENY_OUTPUT_NAME "${GENYCONNECT_OUTPUT_NAME}")
 else()
@@ -81,7 +74,7 @@ message(STATUS "GenyConnect build: OS='${GENY_OS}' ARCH='${GENY_ARCH}'")
 message(STATUS "Configured output name: ${GENY_OUTPUT_NAME}")
 
 # -------------------------
-# Compiler / module checks (kept from original)
+# Compiler / module checks (unchanged)
 # -------------------------
 set(GENYCONNECT_LLVM_HINTS "")
 if(GENYCONNECT_LLVM_AUTO_SCAN)
@@ -146,7 +139,7 @@ if(GENYCONNECT_CLANG_SCAN_DEPS AND NOT DEFINED CMAKE_CXX_COMPILER_CLANG_SCAN_DEP
 endif()
 
 # -------------------------
-# Standard project compile flags
+# Standard compile flags
 # -------------------------
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -191,7 +184,7 @@ if(GENYCONNECT_USE_MODULES)
 endif()
 
 # -------------------------
-# Qt auto-scan helpers (unchanged)
+# Qt auto-scan helpers
 # -------------------------
 if(DEFINED ENV{QTDIR})
     list(APPEND CMAKE_PREFIX_PATH "$ENV{QTDIR}")
@@ -280,10 +273,8 @@ qt_add_executable(${PROJECT_NAME}
     ${GENYCONNECT_IMPL_SOURCES}
 )
 
-# Set OUTPUT_NAME so the produced binary/bundle has OS+ARCH+version in its file name
 set_target_properties(${PROJECT_NAME} PROPERTIES OUTPUT_NAME "${GENY_OUTPUT_NAME}")
 
-# Apply C++ modules scanning if requested
 if(GENYCONNECT_USE_MODULES)
     set_property(TARGET ${PROJECT_NAME} PROPERTY CXX_SCAN_FOR_MODULES ON)
 endif()
@@ -302,9 +293,10 @@ target_link_libraries(${PROJECT_NAME}
     Qt6::QuickControls2
 )
 
-# macOS bundle properties if building for macOS
+# -------------------------
+# macOS bundle properties
+# -------------------------
 if(GENY_OS STREQUAL "macos")
-    # Optional: user may choose to set a different macOS deployment target before configure
     set(CMAKE_OSX_DEPLOYMENT_TARGET "15.1" CACHE STRING "Minimum macOS version")
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -mmacosx-version-min=15.1")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -mmacosx-version-min=15.1")
@@ -316,14 +308,13 @@ if(GENY_OS STREQUAL "macos")
         MACOSX_BUNDLE_ICON_FILE "GenyConnect.icns"
     )
 else()
-    # Keep properties consistent across platforms
     set_target_properties(${PROJECT_NAME} PROPERTIES
         WIN32_EXECUTABLE TRUE
     )
 endif()
 
 # -------------------------
-# QML & resources (unchanged)
+# QML & resources
 # -------------------------
 set(qml_core
     ui/Core/FontSystem.qml
@@ -377,10 +368,10 @@ endif()
 qt_add_resources(${PROJECT_NAME} GenyConnectAssets
     PREFIX /
     FILES
-    ui/Resources/fonts/Farhang2-Regular.ttf
-    ui/Resources/fonts/fa-brands-400.woff2
-    ui/Resources/fonts/fa-regular-400.woff2
-    ui/Resources/fonts/fa-solid-900.woff2
+    ui/Resources/fonts/Inter-Regular.ttf
+    ui/Resources/fonts/fa-brands-400.otf
+    ui/Resources/fonts/fa-regular-400.otf
+    ui/Resources/fonts/fa-solid-900.otf
     ${genyconnect_image_assets}
 )
 
@@ -404,9 +395,10 @@ target_sources(${PROJECT_NAME}
 )
 
 # -------------------------
-# Xray asset selection (uses GENY_OS + GENY_ARCH)
+# Xray auto-download (only for Release in single-config; allowed for multi-config)
 # -------------------------
 if(GENYCONNECT_AUTO_DOWNLOAD_XRAY AND NOT GENYCONNECT_BUNDLED_XRAY_PATH)
+
     set(_geny_xray_version "${GENYCONNECT_XRAY_VERSION}")
     if(NOT _geny_xray_version MATCHES "^v")
         set(_geny_xray_version "v${_geny_xray_version}")
@@ -415,7 +407,6 @@ if(GENYCONNECT_AUTO_DOWNLOAD_XRAY AND NOT GENYCONNECT_BUNDLED_XRAY_PATH)
     if(GENYCONNECT_XRAY_ASSET_NAME)
         set(_geny_xray_asset "${GENYCONNECT_XRAY_ASSET_NAME}")
     else()
-        # Map arch to Xray naming
         if(GENY_ARCH MATCHES "^(arm64|aarch64)$")
             set(_geny_xray_arch "arm64-v8a")
         elseif(GENY_ARCH MATCHES "^(x86_64|amd64|x64)$")
@@ -435,66 +426,76 @@ if(GENYCONNECT_AUTO_DOWNLOAD_XRAY AND NOT GENYCONNECT_BUNDLED_XRAY_PATH)
         set(_geny_xray_asset "Xray-${_geny_xray_platform}-${_geny_xray_arch}.zip")
     endif()
 
-    set(_geny_xray_cache_dir "${CMAKE_BINARY_DIR}/_deps/xray")
-    file(MAKE_DIRECTORY "${_geny_xray_cache_dir}")
-    set(_geny_xray_archive "${_geny_xray_cache_dir}/${_geny_xray_asset}")
-    set(_geny_xray_extract_dir "${_geny_xray_cache_dir}/extract-${_geny_xray_version}-${GENY_OS}-${GENY_ARCH}")
-    set(_geny_xray_url "https://github.com/XTLS/Xray-core/releases/download/${_geny_xray_version}/${_geny_xray_asset}")
-
-    if(NOT EXISTS "${_geny_xray_archive}")
-        message(STATUS "Downloading Xray-core: ${_geny_xray_url}")
-        file(DOWNLOAD
-            "${_geny_xray_url}"
-            "${_geny_xray_archive}"
-            STATUS _geny_xray_download_status
-            SHOW_PROGRESS
-            TLS_VERIFY ON
-        )
-        list(GET _geny_xray_download_status 0 _geny_xray_download_code)
-        list(GET _geny_xray_download_status 1 _geny_xray_download_message)
-        if(NOT _geny_xray_download_code EQUAL 0)
-            message(FATAL_ERROR
-                "Failed to download Xray-core (${_geny_xray_url}): ${_geny_xray_download_message}. "
-                "Set GENYCONNECT_XRAY_ASSET_NAME or GENYCONNECT_BUNDLED_XRAY_PATH."
-            )
+    # If generator is single-config and build type is not Release/RelWithDebInfo, skip auto-download.
+    if(NOT CMAKE_CONFIGURATION_TYPES)
+        if(NOT CMAKE_BUILD_TYPE MATCHES "Release|RelWithDebInfo")
+            message(STATUS "Skipping automatic Xray download at configure time (CMAKE_BUILD_TYPE='${CMAKE_BUILD_TYPE}'). Will download for Release builds only.")
+        else()
+            set(_geny_do_xray_download TRUE)
         endif()
     else()
-        message(STATUS "Using cached Xray archive: ${_geny_xray_archive}")
+        # Multi-config: download now (config chosen at build time) to keep packaging steps available.
+        set(_geny_do_xray_download TRUE)
     endif()
 
-    file(REMOVE_RECURSE "${_geny_xray_extract_dir}")
-    file(MAKE_DIRECTORY "${_geny_xray_extract_dir}")
-    execute_process(
-        COMMAND ${CMAKE_COMMAND} -E tar xzf "${_geny_xray_archive}"
-        WORKING_DIRECTORY "${_geny_xray_extract_dir}"
-        RESULT_VARIABLE _geny_xray_extract_result
-        OUTPUT_VARIABLE _geny_xray_extract_out
-        ERROR_VARIABLE _geny_xray_extract_err
-    )
-    if(NOT _geny_xray_extract_result EQUAL 0)
-        message(FATAL_ERROR "Failed to extract Xray-core archive ${_geny_xray_archive}: ${_geny_xray_extract_err}")
-    endif()
+    if(DEFINED _geny_do_xray_download AND _geny_do_xray_download)
+        set(_geny_xray_cache_dir "${CMAKE_BINARY_DIR}/_deps/xray")
+        file(MAKE_DIRECTORY "${_geny_xray_cache_dir}")
+        set(_geny_xray_archive "${_geny_xray_cache_dir}/${_geny_xray_asset}")
+        set(_geny_xray_extract_dir "${_geny_xray_cache_dir}/extract-${_geny_xray_version}-${GENY_OS}-${GENY_ARCH}")
+        set(_geny_xray_url "https://github.com/XTLS/Xray-core/releases/download/${_geny_xray_version}/${_geny_xray_asset}")
 
-    set(_geny_xray_extracted_bin "${_geny_xray_extract_dir}/xray")
-    if(_geny_xray_platform STREQUAL "windows")
-        set(_geny_xray_extracted_bin "${_geny_xray_extract_dir}/xray.exe")
-    endif()
-    if(NOT EXISTS "${_geny_xray_extracted_bin}")
-        message(FATAL_ERROR "Xray binary not found after extraction: ${_geny_xray_extracted_bin}. Asset may be incorrect. Try setting GENYCONNECT_XRAY_ASSET_NAME manually.")
-    endif()
+        if(NOT EXISTS "${_geny_xray_archive}")
+            message(STATUS "Downloading Xray-core: ${_geny_xray_url}")
+            file(DOWNLOAD
+                "${_geny_xray_url}"
+                "${_geny_xray_archive}"
+                STATUS _geny_xray_download_status
+                SHOW_PROGRESS
+                TLS_VERIFY ON
+            )
+            list(GET _geny_xray_download_status 0 _geny_xray_download_code)
+            list(GET _geny_xray_download_status 1 _geny_xray_download_message)
+            if(NOT _geny_xray_download_code EQUAL 0)
+                message(FATAL_ERROR
+                    "Failed to download Xray-core (${_geny_xray_url}): ${_geny_xray_download_message}. "
+                    "Set GENYCONNECT_XRAY_ASSET_NAME or GENYCONNECT_BUNDLED_XRAY_PATH."
+                )
+            endif()
+        else()
+            message(STATUS "Using cached Xray archive: ${_geny_xray_archive}")
+        endif()
 
-    set(GENYCONNECT_BUNDLED_XRAY_PATH "${_geny_xray_extracted_bin}")
-    message(STATUS "Using auto-downloaded Xray-core binary: ${GENYCONNECT_BUNDLED_XRAY_PATH}")
+        file(REMOVE_RECURSE "${_geny_xray_extract_dir}")
+        file(MAKE_DIRECTORY "${_geny_xray_extract_dir}")
+        execute_process(
+            COMMAND ${CMAKE_COMMAND} -E tar xzf "${_geny_xray_archive}"
+            WORKING_DIRECTORY "${_geny_xray_extract_dir}"
+            RESULT_VARIABLE _geny_xray_extract_result
+            OUTPUT_VARIABLE _geny_xray_extract_out
+            ERROR_VARIABLE _geny_xray_extract_err
+        )
+        if(NOT _geny_xray_extract_result EQUAL 0)
+            message(FATAL_ERROR "Failed to extract Xray-core archive ${_geny_xray_archive}: ${_geny_xray_extract_err}")
+        endif()
+
+        set(_geny_xray_extracted_bin "${_geny_xray_extract_dir}/xray")
+        if(_geny_xray_platform STREQUAL "windows")
+            set(_geny_xray_extracted_bin "${_geny_xray_extract_dir}/xray.exe")
+        endif()
+        if(NOT EXISTS "${_geny_xray_extracted_bin}")
+            message(FATAL_ERROR "Xray binary not found after extraction: ${_geny_xray_extracted_bin}. Asset may be incorrect. Try setting GENYCONNECT_XRAY_ASSET_NAME manually.")
+        endif()
+
+        set(GENYCONNECT_BUNDLED_XRAY_PATH "${_geny_xray_extracted_bin}")
+        message(STATUS "Using auto-downloaded Xray-core binary: ${GENYCONNECT_BUNDLED_XRAY_PATH}")
+    endif()
 endif()
 
 # -------------------------
-# Bundle/copy Xray after build and install entry
+# Bundle/copy Xray after build (POST_BUILD) - Run only for Release-like configs
 # -------------------------
 if(GENYCONNECT_BUNDLED_XRAY_PATH)
-    if(NOT EXISTS "${GENYCONNECT_BUNDLED_XRAY_PATH}")
-        message(FATAL_ERROR "GENYCONNECT_BUNDLED_XRAY_PATH does not exist: ${GENYCONNECT_BUNDLED_XRAY_PATH}")
-    endif()
-
     get_filename_component(_geny_xray_file_name "${GENYCONNECT_BUNDLED_XRAY_PATH}" NAME)
     if(GENY_OS STREQUAL "windows")
         set(_geny_xray_target_name "xray-core.exe")
@@ -502,21 +503,26 @@ if(GENYCONNECT_BUNDLED_XRAY_PATH)
         set(_geny_xray_target_name "xray-core")
     endif()
 
+    # Copy xray into target output dir deploy/ (Release-only) and add install rule
     add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        COMMAND $<${GENY_IS_RELEASE}:${CMAKE_COMMAND}> -E make_directory "$<TARGET_FILE_DIR:${PROJECT_NAME}>/deploy"
+        COMMAND $<${GENY_IS_RELEASE}:${CMAKE_COMMAND}> -E copy_if_different
             "${GENYCONNECT_BUNDLED_XRAY_PATH}"
-            "$<TARGET_FILE_DIR:${PROJECT_NAME}>/${_geny_xray_target_name}"
-        COMMENT "Bundling xray-core into app output directory"
+            "$<TARGET_FILE_DIR:${PROJECT_NAME}>/deploy/${_geny_xray_target_name}"
+        COMMENT "Bundling xray-core into app deploy directory (Release only)"
     )
 
     if(NOT (GENY_OS STREQUAL "windows"))
         add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
-            COMMAND chmod +x "$<TARGET_FILE_DIR:${PROJECT_NAME}>/${_geny_xray_target_name}"
-            COMMENT "Setting execute permission on bundled xray-core"
+            COMMAND $<${GENY_IS_RELEASE}:${CMAKE_COMMAND}> -E chmod +x
+                "$<TARGET_FILE_DIR:${PROJECT_NAME}>/deploy/${_geny_xray_target_name}"
+            COMMENT "Setting execute permission on bundled xray-core (Release only)"
         )
     endif()
 
+    # install rule for xray so cmake --install picks it up (when prefix used)
     install(FILES "${GENYCONNECT_BUNDLED_XRAY_PATH}"
+        CONFIGURATIONS Release RelWithDebInfo
         DESTINATION ${CMAKE_INSTALL_BINDIR}
         RENAME ${_geny_xray_target_name}
         PERMISSIONS
@@ -527,18 +533,18 @@ if(GENYCONNECT_BUNDLED_XRAY_PATH)
 endif()
 
 # -------------------------
-# macOS icon & macdeployqt (only when building for macos)
+# macOS icon & macdeployqt (Release-only runtime commands)
 # -------------------------
 if(GENY_OS STREQUAL "macos")
-    # Copy icon inside bundle
+    # Copy icon into bundle only for Release-like builds
     add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        COMMAND $<${GENY_IS_RELEASE}:${CMAKE_COMMAND}> -E copy_if_different
             "${CMAKE_CURRENT_SOURCE_DIR}/ui/Resources/image/GenyConnect.icns"
             "$<TARGET_FILE_DIR:${PROJECT_NAME}>/../Resources/GenyConnect.icns"
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        COMMAND $<${GENY_IS_RELEASE}:${CMAKE_COMMAND}> -E copy_if_different
             "${CMAKE_CURRENT_SOURCE_DIR}/ui/Resources/image/GenyConnect.png"
             "$<TARGET_FILE_DIR:${PROJECT_NAME}>/../Resources/GenyConnect.png"
-        COMMENT "Copying GenyConnect icons into bundle Resources"
+        COMMENT "Copying GenyConnect icons into bundle Resources (Release only)"
     )
 
     find_program(MACDEPLOYQT_EXECUTABLE
@@ -548,8 +554,11 @@ if(GENY_OS STREQUAL "macos")
 
     if(MACDEPLOYQT_EXECUTABLE)
         add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
-            COMMAND "${MACDEPLOYQT_EXECUTABLE}" "$<TARGET_BUNDLE_DIR:${PROJECT_NAME}>" -dmg -verbose=3 -qmldir=${CMAKE_CURRENT_SOURCE_DIR}
-            COMMENT "Bundling Qt frameworks and QML modules for macOS"
+            # Run macdeployqt only when building Release/RelWithDebInfo
+            COMMAND $<${GENY_IS_RELEASE}:${MACDEPLOYQT_EXECUTABLE}>
+                    "$<TARGET_BUNDLE_DIR:${PROJECT_NAME}>"
+                    -dmg -verbose=3 -qmldir=${CMAKE_CURRENT_SOURCE_DIR}
+            COMMENT "Bundling Qt frameworks and QML modules for macOS (Release only)"
         )
     else()
         message(WARNING "macdeployqt not found; mac bundle/dmg won't be created automatically.")
@@ -557,20 +566,100 @@ if(GENY_OS STREQUAL "macos")
 endif()
 
 # -------------------------
-# Install rules (standard)
+# Windows resources (icon & version)
+# -------------------------
+if(WIN32)
+    target_sources(${PROJECT_NAME}
+        PRIVATE
+            properties/Windows/app.rc
+    )
+endif()
+
+# -------------------------
+# Windows deploy: windeployqt -> deploy folder, plus copy EXE and xray into deploy
+# -------------------------
+if(WIN32)
+    # try common places then PATH
+    find_program(WINDEPLOYQT_EXECUTABLE
+        NAMES windeployqt.exe windeployqt
+        HINTS
+            "$ENV{QTDIR}/bin"
+            "$ENV{Qt6_DIR}/../../../bin"
+            "C:/Qt/*/*/bin"
+        PATH_SUFFIXES bin
+    )
+
+    if(NOT WINDEPLOYQT_EXECUTABLE)
+        message(WARNING "windeployqt not found. Add your Qt <version>/bin to PATH or set QTDIR/Qt6_DIR. Windows runtime will not be deployed automatically.")
+    else()
+        # Ensure deploy dir exists, run windeployqt --release --qmldir ... --dir <deploy>
+        add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+            COMMAND $<${GENY_IS_RELEASE}:${CMAKE_COMMAND}> -E make_directory "$<TARGET_FILE_DIR:${PROJECT_NAME}>/deploy"
+            COMMAND $<${GENY_IS_RELEASE}:${WINDEPLOYQT_EXECUTABLE}>
+                --release
+                --qmldir "${CMAKE_CURRENT_SOURCE_DIR}"
+                --dir "$<TARGET_FILE_DIR:${PROJECT_NAME}>/deploy"
+                "$<TARGET_FILE:${PROJECT_NAME}>"
+            # Copy EXE into deploy too (some setups keep it outside)
+            COMMAND $<${GENY_IS_RELEASE}:${CMAKE_COMMAND}> -E copy_if_different
+                "$<TARGET_FILE:${PROJECT_NAME}>"
+                "$<TARGET_FILE_DIR:${PROJECT_NAME}>/deploy/$<TARGET_FILE_NAME:${PROJECT_NAME}>"
+            COMMENT "Deploying Qt runtime + QML into deploy/ (Release only)"
+        )
+    endif()
+endif()
+
+# -------------------------
+# Install rules (standard) - used by `cmake --install`
 # -------------------------
 include(GNUInstallDirs)
 install(TARGETS ${PROJECT_NAME}
+    CONFIGURATIONS Release RelWithDebInfo
     BUNDLE DESTINATION .
     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
     LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
 )
 
+# (Optional) Install QML/resources if you want to pick them up via cmake --install
+# install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/ui DESTINATION share/${PROJECT_NAME} FILES_MATCHING PATTERN "*.qml" PATTERN "qmldir")
+# You can add more install rules for bundled resources if needed.
+
+# -------------------------
+# Create a convenient 'dist' target that produces a production zip
+# Usage:
+#   cmake --build . --config Release --target dist
+# Output:
+#   ${CMAKE_BINARY_DIR}/dist/      (installed tree)
+#   ${CMAKE_BINARY_DIR}/${GENY_OUTPUT_NAME}-${PROJECT_VERSION}-${GENY_OS}-${GENY_ARCH}.zip
+# -------------------------
+add_custom_target(dist
+    COMMENT "Create dist/ and zip of Release build (runs cmake --install then zips)."
+)
+
+# The command below uses generator expressions for config name when the target is built with a configuration.
+add_custom_command(TARGET dist POST_BUILD
+    COMMAND ${CMAKE_COMMAND} --install "${CMAKE_BINARY_DIR}" --config $<CONFIG> --prefix "${CMAKE_BINARY_DIR}/dist"
+    COMMAND ${CMAKE_COMMAND} -E tar cfv
+        "${CMAKE_BINARY_DIR}/${GENY_OUTPUT_NAME}-${PROJECT_VERSION}-${GENY_OS}-${GENY_ARCH}.zip"
+        --format=zip
+        "${CMAKE_BINARY_DIR}/dist"
+    COMMENT "Installed Release into ${CMAKE_BINARY_DIR}/dist and created ZIP archive"
+)
+
+# -------------------------
+# CPack: simple ZIP generator (optional)
+# -------------------------
+set(CPACK_GENERATOR "ZIP")
+set(CPACK_PACKAGE_FILE_NAME "${GENY_OUTPUT_NAME}-${PROJECT_VERSION}-${GENY_OS}-${GENY_ARCH}")
+
 # -------------------------
 # Helpful status output
 # -------------------------
 message(STATUS "Build files written to: ${CMAKE_BINARY_DIR}")
-message(STATUS "To inspect produced binary after build run:")
+message(STATUS "To create a production ZIP, run:")
+message(STATUS "  cmake --build . --config Release --target dist")
+message(STATUS "Or run:")
+message(STATUS "  cmake --install . --config Release --prefix ${CMAKE_BINARY_DIR}/dist && cmake -E tar cfv ${CMAKE_BINARY_DIR}/${GENY_OUTPUT_NAME}-${PROJECT_VERSION}-${GENY_OS}-${GENY_ARCH}.zip --format=zip ${CMAKE_BINARY_DIR}/dist")
 
 if(GENY_OS STREQUAL "macos")
     message(STATUS "  file \"${CMAKE_BINARY_DIR}/${GENY_OUTPUT_NAME}.app/Contents/MacOS/${GENY_OUTPUT_NAME}\"  (or check the bundle)")
@@ -578,4 +667,38 @@ else()
     message(STATUS "  file \"${CMAKE_BINARY_DIR}/${GENY_OUTPUT_NAME}\"")
 endif()
 
-# End of CMakeLists.txt
+# -------------------------
+# Windows Installer (NSIS)
+# -------------------------
+if(WIN32)
+    set(CPACK_GENERATOR "NSIS")
+    set(CPACK_PACKAGE_NAME "GenyConnect")
+    set(CPACK_PACKAGE_VENDOR "GenyLeap")
+    set(CPACK_PACKAGE_VERSION "${PROJECT_VERSION}")
+    set(CPACK_PACKAGE_INSTALL_DIRECTORY "GenyConnect")
+
+    set(CPACK_NSIS_DISPLAY_NAME "GenyConnect")
+    set(CPACK_NSIS_PACKAGE_NAME "GenyConnect")
+    set(CPACK_NSIS_ENABLE_UNINSTALL_BEFORE_INSTALL ON)
+
+    set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_SOURCE_DIR}/LICENSE.txt")
+    set(CPACK_RESOURCE_FILE_README  "${CMAKE_SOURCE_DIR}/README.md")
+
+    # Desktop shortcut
+    set(CPACK_NSIS_CREATE_ICONS_EXTRA "
+        CreateShortCut '$DESKTOP\\\\GenyConnect.lnk' '$INSTDIR\\\\GenyConnect.exe'
+    ")
+
+    set(CPACK_NSIS_DELETE_ICONS_EXTRA "
+        Delete '$DESKTOP\\\\GenyConnect.lnk'
+    ")
+endif()
+
+include(CPack)
+
+# Install deployed runtime folder
+install(DIRECTORY
+    "$<TARGET_FILE_DIR:${PROJECT_NAME}>/deploy/"
+    DESTINATION .
+    CONFIGURATIONS Release
+)

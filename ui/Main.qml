@@ -1300,26 +1300,26 @@ ApplicationWindow {
             RowLayout {
                 Layout.fillWidth: true
 
-                Controls.CircleIconButton {
-                    diameter: 62
-                    iconText: ""
-                    iconPixelSize: 0
+                // Controls.CircleIconButton {
+                //     diameter: 62
+                //     iconText: ""
+                //     iconPixelSize: 0
 
-                    Rectangle {
-                        anchors.fill: parent
-                        radius: width * 0.5
-                        color: "transparent"
-                        clip: true
+                //     Rectangle {
+                //         anchors.fill: parent
+                //         radius: width * 0.5
+                //         color: "transparent"
+                //         clip: true
 
-                        Image {
-                            anchors.fill: parent
-                            anchors.margins: 6
-                            source: "qrc:/ui/Resources/image/avatar.svg"
-                            fillMode: Image.PreserveAspectCrop
-                            smooth: true
-                        }
-                    }
-                }
+                //         Image {
+                //             anchors.fill: parent
+                //             anchors.margins: 6
+                //             source: "qrc:/ui/Resources/image/avatar.svg"
+                //             fillMode: Image.PreserveAspectCrop
+                //             smooth: true
+                //         }
+                //     }
+                // }
 
                 Item { Layout.fillWidth: true }
 
@@ -1624,7 +1624,7 @@ ApplicationWindow {
                         x: speedDial.centerX
                         y: speedDial.centerY - 48
                         anchors.left: parent.left
-                        anchors.leftMargin: -128
+                        anchors.leftMargin: -186
                         width: speedDial.innerRadius * 0.62
                         spacing: 2
                         z: 6

@@ -28,23 +28,23 @@ Item {
 
     FontLoader {
         id: fontAwesomeBrand
-        source: "qrc:/ui/Resources/fonts/fa-brands-400.woff2"
+        source: "qrc:/ui/Resources/fonts/fa-brands-400.otf"
     }
 
     FontLoader {
         id: fontAwesomeRegular
-        source: "qrc:/ui/Resources/fonts/fa-solid-900.woff2"
+        source: "qrc:/ui/Resources/fonts/fa-solid-900.otf"
     }
 
 
     FontLoader {
         id: fontAwesomeSolid
-        source: "qrc:/ui/Resources/fonts/fa-solid-900.woff2"
+        source: "qrc:/ui/Resources/fonts/fa-solid-900.otf"
     }
 
     FontLoader {
         id: contentFontRegular
-        source: "qrc:/ui/Resources/fonts/Farhang2-Regular.ttf"
+        source: "qrc:/ui/Resources/fonts/Inter-Regular.ttf"
     }
 
 }
