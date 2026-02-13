@@ -671,10 +671,7 @@ ApplicationWindow {
                 ScrollView {
                     Layout.fillWidth: true
                     Layout.fillHeight: true
-                    ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
-                    ScrollBar.horizontal.interactive: false
                     clip: true
-
                     ColumnLayout {
                         width: aboutPopup.width - 54
                         spacing: 12
