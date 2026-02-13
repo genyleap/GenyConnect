@@ -13,6 +13,12 @@ GenyConnect enables users to establish and manage secure connections through str
 The platform is intentionally **engine-agnostic**, allowing different tunneling backends to be integrated without altering user workflows or expected behavior.
 
 ---
+## Screenshot
+<img width="2240" height="1260" alt="ui-01" src="https://github.com/user-attachments/assets/dd6ca397-e3eb-4102-a909-b13872f2fee7" />
+<img width="2240" height="1260" alt="ui-02" src="https://github.com/user-attachments/assets/637a738c-a299-4f43-aded-7830592e2485" />
+<img width="2240" height="1260" alt="ui-03" src="https://github.com/user-attachments/assets/946b30cc-2a2e-468e-8503-ca8494fff670" />
+
+---
 
 ## Key Capabilities
 
