@@ -18,6 +18,7 @@ module;
 #include <QSet>
 #include <QStandardPaths>
 #include <QTcpSocket>
+#include <QNetworkProxy>
 
 module genyconnect.backend.vpncontroller;
 
