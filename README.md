@@ -1,5 +1,7 @@
-# GenyConnect
+<img width="256" height="256" alt="favicon" src="https://github.com/user-attachments/assets/f1c38539-daa3-40d0-a526-b99ea94e6052" />
 
+---
+# GenyConnect
 GenyConnect is a modern, cross-platform **secure tunneling client** and **VPN** designed for **high performance**, **privacy**, and **precise traffic control**.
 
 It provides a robust orchestration layer for secure network engines, focusing on correctness, observability, and user experience rather than binding itself to any single protocol or implementation.
@@ -11,6 +13,12 @@ It provides a robust orchestration layer for secure network engines, focusing on
 GenyConnect enables users to establish and manage secure connections through structured server profiles and shareable configuration links. Runtime configurations are generated dynamically, connection lifecycles are supervised explicitly, and system state remains fully observable at all times.
 
 The platform is intentionally **engine-agnostic**, allowing different tunneling backends to be integrated without altering user workflows or expected behavior.
+
+---
+## Screenshot
+<img width="2240" height="1260" alt="ui-01" src="https://github.com/user-attachments/assets/dd6ca397-e3eb-4102-a909-b13872f2fee7" />
+<img width="2240" height="1260" alt="ui-02" src="https://github.com/user-attachments/assets/637a738c-a299-4f43-aded-7830592e2485" />
+<img width="2240" height="1260" alt="ui-03" src="https://github.com/user-attachments/assets/946b30cc-2a2e-468e-8503-ca8494fff670" />
 
 ---
 
@@ -43,6 +51,7 @@ The platform is intentionally **engine-agnostic**, allowing different tunneling 
 - The architecture is designed to accommodate VPN protocols without disrupting existing tunneling workflows or user experience.
 
 ---
+![genyconnect-ads](https://github.com/user-attachments/assets/bd259449-9358-424f-849a-710fa62d5cd3)
 
 ## Future Notes
 
@@ -55,3 +64,8 @@ The platform is intentionally **engine-agnostic**, allowing different tunneling 
 - The goal of this direction is not to build a network client alone, but to evolve GenyConnect into an **intelligent connectivity layer** that can align with user identity, decentralized interaction, and token-based ecosystems.
 
 - These capabilities will be introduced progressively, without disrupting the existing tunneling and VPN experience.
+
+## Donation for developer
+GENY or ETH on ERC20: 0x6E99f7564d060AA141dcC47ede34379Bad0cDCCC
+
+BTC: BC1Q2Q7G83V9UXATK0YSPFVCU3YDNMESEU3Y7P9J9N
