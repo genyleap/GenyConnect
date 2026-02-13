@@ -12,10 +12,10 @@ ApplicationWindow {
     id: root
 
     visible: true
-    width: 1366
-    height: 900
-    minimumWidth: 920
-    minimumHeight: 680
+    width: 1280
+    height: 800
+    minimumWidth: 1280
+    minimumHeight: 800
     title: "GenyConnect"
 
     color: "#eceff5"
@@ -27,18 +27,20 @@ ApplicationWindow {
     readonly property string iconGrid: "\uf00a"
     readonly property string iconShield: "\uf3ed"
     readonly property string iconGear: "\uf013"
+    readonly property string iconInfo: "\uf05a"
     readonly property string iconHistory: "\uf1da"
     readonly property string iconClose: "\uf00d"
     readonly property string iconClock: "\uf017"
     readonly property string iconKeyboard: "\uf11c"
+    readonly property string iconImport: "\uf56f"
     readonly property string iconChevronDown: "\uf078"
 
     property string selectedServerLabel: vpnController.currentProfileIndex >= 0
-                                  ? "Selected Profile"
-                                  : "Select Location"
+                                         ? "Selected Profile"
+                                         : "Select Location"
     property string selectedServerMeta: vpnController.currentProfileIndex >= 0
-                                  ? "Profile is selected"
-                                  : "Import and select a profile"
+                                        ? "Profile is selected"
+                                        : "Import and select a profile"
     property string selectedServerFlag: vpnController.currentProfileIndex >= 0 ? "🇺🇸" : "🌐"
 
     property string mapPrimarySource: "qrc:/ui/Resources/image/map.png"
@@ -51,6 +53,7 @@ ApplicationWindow {
     property int lastRxBytesSample: 0
     property int lastTxBytesSample: 0
     property bool rateSampleInitialized: false
+    property string profileSearchQuery: ""
 
     function stateText() {
         if (vpnController.connectionState === ConnectionState.Connecting)
@@ -87,6 +90,47 @@ ApplicationWindow {
         if (text.indexOf("ir") >= 0 || text.indexOf("iran") >= 0 || text.indexOf("tehran") >= 0)
             return "🇮🇷"
         return "🌐"
+    }
+
+    function flagAliases(flagEmoji) {
+        if (flagEmoji === "🇺🇸")
+            return ["us", "usa", "united states", "america", "los angeles", "new york"]
+        if (flagEmoji === "🇬🇧")
+            return ["uk", "united kingdom", "britain", "england", "london"]
+        if (flagEmoji === "🇩🇪")
+            return ["de", "germany", "berlin", "frankfurt"]
+        if (flagEmoji === "🇫🇷")
+            return ["fr", "france", "paris"]
+        if (flagEmoji === "🇮🇹")
+            return ["it", "italy", "milan", "rome"]
+        if (flagEmoji === "🇹🇷")
+            return ["tr", "turkey", "istanbul"]
+        if (flagEmoji === "🇮🇷")
+            return ["ir", "iran", "tehran"]
+        return ["global", "world", "any"]
+    }
+
+    function profileMatchesSearch(displayLabel, protocol, address, security) {
+        const rawQuery = (profileSearchQuery || "").trim()
+        if (rawQuery.length === 0)
+            return true
+
+        const q = rawQuery.toLowerCase()
+        const label = (displayLabel || "")
+        const meta = ((protocol || "") + " " + (address || "") + " " + (security || "")).toLowerCase()
+        if (label.toLowerCase().indexOf(q) >= 0 || meta.indexOf(q) >= 0)
+            return true
+
+        const flag = guessFlag(label)
+        if (rawQuery.indexOf(flag) >= 0 || flag.indexOf(rawQuery) >= 0)
+            return true
+
+        const aliases = flagAliases(flag)
+        for (let i = 0; i < aliases.length; ++i) {
+            if (aliases[i].indexOf(q) >= 0)
+                return true
+        }
+        return false
     }
 
     function updateProfileSelection(label, protocol, address, port, security) {
@@ -357,7 +401,7 @@ ApplicationWindow {
                 downRateBytesPerSec = 0
                 upRateBytesPerSec = 0
             }
-            rateSampleInitialized = false
+            root.rateSampleInitialized = false
         }
     }
 
@@ -367,110 +411,210 @@ ApplicationWindow {
         modal: false
         focus: true
         closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
-        onAboutToShow: root.positionProfilePopup()
-        onOpened: Qt.callLater(root.positionProfilePopup)
+        onAboutToShow: {
+            root.profileSearchQuery = ""
+            root.positionProfilePopup()
+        }
+        onOpened: {
+            profileSearchField.forceActiveFocus()
+            Qt.callLater(root.positionProfilePopup)
+        }
 
         width: 420
         height: 72
         padding: 0
 
         background: Rectangle {
-            radius: 22
+            radius: 24
             color: "#ffffff"
             border.width: 1
-            border.color: "#d8dde8"
+            border.color: "#dbe2ee"
         }
 
-        contentItem: Item {
-            implicitHeight: listView.contentHeight > 0 ? Math.min(listView.contentHeight, 300) : 72
+        contentItem: Rectangle {
+            radius: 24
+            color: "transparent"
+            clip: true
+            implicitHeight: Math.min(356, searchBar.implicitHeight + listView.contentHeight + 18)
 
-            ListView {
-                id: listView
+            ColumnLayout {
                 anchors.fill: parent
+                anchors.margins: 8
+                spacing: 8
                 clip: true
-                model: vpnController.profileModel
-                spacing: 0
 
-                delegate: Rectangle {
-                    required property int index
-                    required property string displayLabel
-                    required property string protocol
-                    required property string address
-                    required property int port
-                    required property string security
+                Rectangle {
+                    id: searchBar
+                    Layout.fillWidth: true
+                    implicitHeight: 64
+                    radius: 14
+                    color: "#f6f9fd"
+                    border.width: 1
+                    border.color: profileSearchField.activeFocus ? "#b7caee" : "#dfe6f1"
+                    Behavior on border.color { ColorAnimation { duration: 120 } }
 
-                    width: listView.width
-                    height: 66
-                    color: hoverArea.containsMouse ? "#f2f5fb" : "transparent"
-
-                    MouseArea {
-                        id: hoverArea
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: {
-                            vpnController.currentProfileIndex = index
-                            root.updateProfileSelection(displayLabel, protocol, address, port, security)
-                            profilePopup.close()
-                        }
-                    }
-
-                    RowLayout {
-                        anchors.fill: parent
-                        anchors.leftMargin: 14
-                        anchors.rightMargin: 14
-                        spacing: 10
-
-                        Text {
-                            text: root.guessFlag(displayLabel)
-                            font.pixelSize: 22
-                        }
-
-                        ColumnLayout {
-                            Layout.fillWidth: true
-                            spacing: 1
-
-                            Text {
-                                text: displayLabel
-                                font.family: FontSystem.getContentFont.name
-                                font.pixelSize: 19
-                                color: "#202634"
-                                elide: Text.ElideRight
-                            }
-
-                            Text {
-                                text: protocol.toUpperCase() + " " + address + ":" + port + ((security || "").length ? " | " + security : "")
-                                font.family: FontSystem.getContentFont.name
-                                font.pixelSize: 12
-                                color: "#8c95a4"
-                                elide: Text.ElideRight
-                            }
-                        }
-                    }
-
-                    Rectangle {
+                    Text {
                         anchors.left: parent.left
-                        anchors.right: parent.right
+                        anchors.leftMargin: 12
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: "\uf002"
+                        color: "#9aa6ba"
+                        font.family: root.faSolid
+                        font.pixelSize: 13
+                    }
+
+                    TextField {
+                        id: profileSearchField
+                        anchors.left: parent.left
+                        anchors.right: clearSearchButton.left
+                        anchors.top: parent.top
                         anchors.bottom: parent.bottom
-                        anchors.leftMargin: 14
-                        anchors.rightMargin: 14
-                        height: 1
-                        color: "#edf1f7"
-                        visible: index < listView.count - 1
+                        anchors.leftMargin: 34
+                        anchors.rightMargin: 4
+                        padding: 0
+                        placeholderText: "Search by profile, country, or flag"
+                        text: root.profileSearchQuery
+                        color: "#1f2a3a"
+                        font.family: FontSystem.getContentFont.name
+                        font.pixelSize: 14
+                        background: null
+                        onTextChanged: {
+                            root.profileSearchQuery = text
+                            Qt.callLater(root.positionProfilePopup)
+                        }
+                    }
+
+                    Text {
+                        id: clearSearchButton
+                        anchors.right: parent.right
+                        anchors.rightMargin: 12
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: root.profileSearchQuery.length > 0 ? root.iconClose : ""
+                        color: "#a0acbe"
+                        font.family: root.faSolid
+                        font.pixelSize: 12
+
+                        MouseArea {
+                            anchors.fill: parent
+                            cursorShape: Qt.PointingHandCursor
+                            enabled: root.profileSearchQuery.length > 0
+                            onClicked: {
+                                profileSearchField.clear()
+                                profileSearchField.forceActiveFocus()
+                            }
+                        }
                     }
                 }
 
-                footer: Item {
-                    width: listView.width
-                    height: listView.count === 0 ? 72 : 0
+                ListView {
+                    id: listView
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: Math.min(contentHeight, 192)
+                    clip: true
+                    model: vpnController.profileModel
+                    spacing: 0
+
+                    delegate: Item {
+                        required property int index
+                        required property string displayLabel
+                        required property string protocol
+                        required property string address
+                        required property int port
+                        required property string security
+
+                        readonly property bool selected: index === vpnController.currentProfileIndex
+                        readonly property bool matched: root.profileMatchesSearch(displayLabel, protocol, address, security)
+                        width: listView.width
+                        height: matched ? 76 : 0
+                        visible: matched
+
+                        Rectangle {
+                            id: rowBg
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+                            anchors.top: parent.top
+                            anchors.topMargin: 2
+                            height: 72
+                            radius: 18
+                            color: selected ? "#eaf2ff" : (hoverArea.containsMouse ? "#f5f8fd" : "#ffffff")
+                            border.width: selected ? 1 : 0
+                            border.color: selected ? "#d2e0f8" : "transparent"
+                            Behavior on color { ColorAnimation { duration: 120 } }
+                            Behavior on border.color { ColorAnimation { duration: 120 } }
+                        }
+
+                        MouseArea {
+                            id: hoverArea
+                            anchors.fill: rowBg
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: {
+                                vpnController.currentProfileIndex = index
+                                root.updateProfileSelection(displayLabel, protocol, address, port, security)
+                                profilePopup.close()
+                            }
+                        }
+
+                        RowLayout {
+                            anchors.fill: rowBg
+                            anchors.leftMargin: 14
+                            anchors.rightMargin: 14
+                            spacing: 10
+
+                            Text {
+                                text: root.guessFlag(displayLabel)
+                                font.pixelSize: 22
+                            }
+
+                            ColumnLayout {
+                                Layout.fillWidth: true
+                                spacing: 1
+
+                                Text {
+                                    text: displayLabel
+                                    font.family: FontSystem.getContentFont.name
+                                    font.pixelSize: 19
+                                    color: "#202634"
+                                    elide: Text.ElideRight
+                                }
+
+                                Text {
+                                    text: protocol.toUpperCase() + " " + address + ":" + port + ((security || "").length ? " | " + security : "")
+                                    font.family: FontSystem.getContentFont.name
+                                    font.pixelSize: 12
+                                    color: "#8c95a4"
+                                    elide: Text.ElideRight
+                                }
+                            }
+                        }
+                    }
+
+                    footer: Item {
+                        width: listView.width
+                        height: listView.count === 0 ? 72 : 0
+
+                        Text {
+                            anchors.centerIn: parent
+                            visible: listView.count === 0
+                            text: "No profiles. Import one first."
+                            color: "#98a0ad"
+                            font.family: FontSystem.getContentFont.name
+                            font.pixelSize: 15
+                        }
+                    }
+                }
+
+                Item {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: (listView.count > 0 && listView.contentHeight <= 1) ? 64 : 0
+                    visible: Layout.preferredHeight > 0
 
                     Text {
                         anchors.centerIn: parent
-                        visible: listView.count === 0
-                        text: "No profiles. Import one first."
-                        color: "#98a0ad"
+                        text: "No matching profile found."
+                        color: "#8f9bad"
                         font.family: FontSystem.getContentFont.name
-                        font.pixelSize: 15
+                        font.pixelSize: 14
                     }
                 }
             }
@@ -479,7 +623,6 @@ ApplicationWindow {
 
     Popup {
         id: settingsPopup
-
         modal: true
         focus: true
         closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
@@ -528,10 +671,12 @@ ApplicationWindow {
                 ScrollView {
                     Layout.fillWidth: true
                     Layout.fillHeight: true
+                    ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
+                    ScrollBar.horizontal.interactive: false
                     clip: true
 
                     ColumnLayout {
-                        width: settingsPopup.width - 54
+                        width: aboutPopup.width - 54
                         spacing: 12
 
                         Rectangle {
@@ -591,8 +736,8 @@ ApplicationWindow {
 
                                 Text {
                                     text: vpnController.useSystemProxy
-                                        ? "Global mode: macOS routes compatible apps through GenyConnect automatically."
-                                        : "Clean mode: macOS proxy stays untouched. Only apps set to 127.0.0.1:10808 use the tunnel."
+                                          ? "Global mode: macOS routes compatible apps through GenyConnect automatically."
+                                          : "Clean mode: macOS proxy stays untouched. Only apps set to 127.0.0.1:10808 use the tunnel."
                                     color: "#7c8697"
                                     font.family: FontSystem.getContentFont.name
                                     font.pixelSize: 13
@@ -706,8 +851,8 @@ ApplicationWindow {
                         Text {
                             Layout.fillWidth: true
                             text: vpnController.useSystemProxy
-                                ? "Recommended: keep this enabled to restore system proxy cleanly after tunnel disconnect."
-                                : "In Clean mode this option is ignored because system proxy remains disabled."
+                                  ? "Recommended: keep this enabled to restore system proxy cleanly after tunnel disconnect."
+                                  : "In Clean mode this option is ignored because system proxy remains disabled."
                             color: "#7f8897"
                             font.family: FontSystem.getContentFont.name
                             font.pixelSize: 12
@@ -796,6 +941,255 @@ ApplicationWindow {
                             placeholderText: "Block Apps"
                             text: vpnController.blockAppRules
                             onTextChanged: vpnController.blockAppRules = text
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    Popup {
+        id: aboutPopup
+
+        modal: true
+        focus: true
+        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+        width: Math.min(root.width - 40, 560)
+        height: Math.min(root.height - 60, 480)
+        x: (root.width - width) * 0.5
+        y: (root.height - height) * 0.5
+        padding: 0
+
+        background: Rectangle {
+            radius: 24
+            color: "#ffffff"
+            border.width: 1
+            border.color: "#d8dde8"
+        }
+
+        contentItem: Item {
+            anchors.fill: parent
+
+            ColumnLayout {
+                anchors.fill: parent
+                anchors.margins: 18
+                spacing: 10
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    Text {
+                        text: "About"
+                        font.family: FontSystem.getContentFont.name
+                        font.pixelSize: 24
+                        font.bold: true
+                        color: "#1f2530"
+                    }
+                    Item { Layout.fillWidth: true }
+                    Controls.CircleIconButton {
+                        diameter: 34
+                        iconText: "×"
+                        iconPixelSize: 20
+                        iconColor: "#8d96a5"
+                        backgroundColor: "#f7f8fb"
+                        borderColor: "#e1e5ed"
+                        onClicked: aboutPopup.close()
+                    }
+                }
+
+                ScrollView {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    clip: true
+
+                    ColumnLayout {
+                        width: aboutPopup.width - 54
+                        spacing: 12
+
+                        // --- App Info ---
+                        Rectangle {
+                            Layout.fillWidth: true
+                            radius: 14
+                            color: "#f7f9fc"
+                            border.width: 1
+                            border.color: "#e0e6f0"
+                            implicitHeight: 64
+
+                            RowLayout {
+                                anchors.fill: parent
+                                anchors.margins: 14
+                                spacing: 10
+
+                                Text {
+                                    text: "GenyConnect"
+                                    color: "#667081"
+                                    font.family: FontSystem.getContentFont.name
+                                    font.pixelSize: 14
+                                }
+
+                                Item { Layout.fillWidth: true }
+
+                                Text {
+                                    text: "Version " + "1.0"
+                                    color: "#2a3240"
+                                    font.family: FontSystem.getContentFont.name
+                                    font.pixelSize: 14
+                                    font.bold: true
+                                }
+                            }
+                        }
+
+                        // --- Developer ---
+                        Rectangle {
+                            Layout.fillWidth: true
+                            radius: 14
+                            color: "#f7f9fc"
+                            border.width: 1
+                            border.color: "#e0e6f0"
+                            implicitHeight: 64
+
+                            RowLayout {
+                                anchors.fill: parent
+                                anchors.margins: 14
+                                spacing: 10
+
+                                Text {
+                                    text: "Developer"
+                                    color: "#667081"
+                                    font.family: FontSystem.getContentFont.name
+                                    font.pixelSize: 14
+                                }
+
+                                Item { Layout.fillWidth: true }
+
+                                Text {
+                                    text: "Genyleap LLC"
+                                    color: "#2a3240"
+                                    font.family: FontSystem.getContentFont.name
+                                    font.pixelSize: 14
+                                    font.bold: true
+                                }
+                            }
+                        }
+
+                        // --- Website ---
+                        Rectangle {
+                            Layout.fillWidth: true
+                            radius: 14
+                            color: "#f7f9fc"
+                            border.width: 1
+                            border.color: "#e0e6f0"
+                            implicitHeight: 64
+
+                            RowLayout {
+                                anchors.fill: parent
+                                anchors.margins: 14
+                                spacing: 10
+
+                                Text {
+                                    text: "Website"
+                                    color: "#667081"
+                                    font.family: FontSystem.getContentFont.name
+                                    font.pixelSize: 14
+                                }
+
+                                Item { Layout.fillWidth: true }
+
+                                Text {
+                                    text: "https://genyleap.com"
+                                    color: "#2a3240"
+                                    font.family: FontSystem.getContentFont.name
+                                    font.pixelSize: 14
+                                    font.bold: true
+                                    font.underline: true
+
+                                    MouseArea {
+                                        anchors.fill: parent
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: Qt.openUrlExternally("https://genyleap.com")
+                                    }
+                                }
+
+                            }
+                        }
+
+                        // --- GitHub ---
+                        Rectangle {
+                            Layout.fillWidth: true
+                            radius: 14
+                            color: "#f7f9fc"
+                            border.width: 1
+                            border.color: "#e0e6f0"
+                            implicitHeight: 64
+
+                            RowLayout {
+                                anchors.fill: parent
+                                anchors.margins: 14
+                                spacing: 10
+
+                                Text {
+                                    text: "Repository"
+                                    color: "#667081"
+                                    font.family: FontSystem.getContentFont.name
+                                    font.pixelSize: 14
+                                }
+
+                                Item { Layout.fillWidth: true }
+
+                                Text {
+                                    text: "https://github.com/genyleap/genyconnect"
+                                    color: "#2a3240"
+                                    font.family: FontSystem.getContentFont.name
+                                    font.pixelSize: 14
+                                    font.bold: true
+                                    font.underline: true
+
+                                    MouseArea {
+                                        anchors.fill: parent
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: Qt.openUrlExternally("https://github.com/genyleap/genyconnect")
+                                    }
+                                }
+                            }
+                        }
+
+                        // --- Email ---
+                        Rectangle {
+                            Layout.fillWidth: true
+                            radius: 14
+                            color: "#f7f9fc"
+                            border.width: 1
+                            border.color: "#e0e6f0"
+                            implicitHeight: 64
+
+                            RowLayout {
+                                anchors.fill: parent
+                                anchors.margins: 14
+                                spacing: 10
+
+                                Text {
+                                    text: "Email"
+                                    color: "#667081"
+                                    font.family: FontSystem.getContentFont.name
+                                    font.pixelSize: 14
+                                }
+
+                                Item { Layout.fillWidth: true }
+
+                                Text {
+                                    text: "support@genyleap.com"
+                                    color: "#2a3240"
+                                    font.family: FontSystem.getContentFont.name
+                                    font.pixelSize: 14
+                                    font.bold: true
+                                    font.underline: true
+
+                                    MouseArea {
+                                        anchors.fill: parent
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: Qt.openUrlExternally("mailto:support@genyleap.com")
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -980,74 +1374,74 @@ ApplicationWindow {
                 Layout.preferredHeight: Math.min(root.height * 0.46, 440)
                 Layout.minimumHeight: 280
 
-                    Item {
-                        id: speedDial
-                        anchors.centerIn: parent
-                        width: Math.min(Math.min(speedTestCenterArea.width * 0.50, speedTestCenterArea.height * 0.98), 430)
-                        height: width
+                Item {
+                    id: speedDial
+                    anchors.centerIn: parent
+                    width: Math.min(Math.min(speedTestCenterArea.width * 0.50, speedTestCenterArea.height * 0.98), 430)
+                    height: width
 
                     readonly property int tickCount: 180
                     readonly property real startDeg: -140
                     readonly property real sweepDeg: 280
                     readonly property real centerX: width * 0.5
                     readonly property real centerY: height * 0.5
-                        readonly property real outerRadius: width * 0.5 - 10
-                        readonly property real innerRadius: width * 0.38
-                        readonly property var scaleLabels: [0, 5, 10, 20, 50, 100, 200]
+                    readonly property real outerRadius: width * 0.5 - 10
+                    readonly property real innerRadius: width * 0.38
+                    readonly property var scaleLabels: [0, 5, 10, 20, 50, 100, 200]
 
-                        Rectangle {
-                            id: dialPulseOuter
-                            width: speedDial.outerRadius * 2 + 16
-                            height: width
-                            radius: width * 0.5
-                            anchors.centerIn: parent
-                            color: "transparent"
-                            border.width: 2
-                            border.color: Qt.rgba(root.gaugeAccentColor().r, root.gaugeAccentColor().g, root.gaugeAccentColor().b, 0.28)
-                            opacity: vpnController.speedTestRunning ? 0.30 : 0.0
-                            scale: vpnController.speedTestRunning ? 1.0 : 0.95
-                            z: 0
+                    Rectangle {
+                        id: dialPulseOuter
+                        width: speedDial.outerRadius * 2 + 16
+                        height: width
+                        radius: width * 0.5
+                        anchors.centerIn: parent
+                        color: "transparent"
+                        border.width: 2
+                        border.color: Qt.rgba(root.gaugeAccentColor().r, root.gaugeAccentColor().g, root.gaugeAccentColor().b, 0.28)
+                        opacity: vpnController.speedTestRunning ? 0.30 : 0.0
+                        scale: vpnController.speedTestRunning ? 1.0 : 0.95
+                        z: 0
 
-                            SequentialAnimation on scale {
-                                running: vpnController.speedTestRunning
-                                loops: Animation.Infinite
-                                NumberAnimation { from: 0.98; to: 1.05; duration: 700; easing.type: Easing.InOutQuad }
-                                NumberAnimation { from: 1.05; to: 0.98; duration: 700; easing.type: Easing.InOutQuad }
-                            }
-                            SequentialAnimation on opacity {
-                                running: vpnController.speedTestRunning
-                                loops: Animation.Infinite
-                                NumberAnimation { from: 0.30; to: 0.10; duration: 700; easing.type: Easing.InOutQuad }
-                                NumberAnimation { from: 0.10; to: 0.30; duration: 700; easing.type: Easing.InOutQuad }
-                            }
+                        SequentialAnimation on scale {
+                            running: vpnController.speedTestRunning
+                            loops: Animation.Infinite
+                            NumberAnimation { from: 0.98; to: 1.05; duration: 700; easing.type: Easing.InOutQuad }
+                            NumberAnimation { from: 1.05; to: 0.98; duration: 700; easing.type: Easing.InOutQuad }
                         }
-
-                        Rectangle {
-                            id: dialPulseInner
-                            width: speedDial.outerRadius * 2 - 8
-                            height: width
-                            radius: width * 0.5
-                            anchors.centerIn: parent
-                            color: "transparent"
-                            border.width: 1
-                            border.color: Qt.rgba(root.gaugeAccentColor().r, root.gaugeAccentColor().g, root.gaugeAccentColor().b, 0.18)
-                            opacity: vpnController.speedTestRunning ? 0.22 : 0.0
-                            scale: vpnController.speedTestRunning ? 1.0 : 0.96
-                            z: 0
-
-                            SequentialAnimation on scale {
-                                running: vpnController.speedTestRunning
-                                loops: Animation.Infinite
-                                NumberAnimation { from: 1.02; to: 0.97; duration: 880; easing.type: Easing.InOutQuad }
-                                NumberAnimation { from: 0.97; to: 1.02; duration: 880; easing.type: Easing.InOutQuad }
-                            }
-                            SequentialAnimation on opacity {
-                                running: vpnController.speedTestRunning
-                                loops: Animation.Infinite
-                                NumberAnimation { from: 0.22; to: 0.08; duration: 880; easing.type: Easing.InOutQuad }
-                                NumberAnimation { from: 0.08; to: 0.22; duration: 880; easing.type: Easing.InOutQuad }
-                            }
+                        SequentialAnimation on opacity {
+                            running: vpnController.speedTestRunning
+                            loops: Animation.Infinite
+                            NumberAnimation { from: 0.30; to: 0.10; duration: 700; easing.type: Easing.InOutQuad }
+                            NumberAnimation { from: 0.10; to: 0.30; duration: 700; easing.type: Easing.InOutQuad }
                         }
+                    }
+
+                    Rectangle {
+                        id: dialPulseInner
+                        width: speedDial.outerRadius * 2 - 8
+                        height: width
+                        radius: width * 0.5
+                        anchors.centerIn: parent
+                        color: "transparent"
+                        border.width: 1
+                        border.color: Qt.rgba(root.gaugeAccentColor().r, root.gaugeAccentColor().g, root.gaugeAccentColor().b, 0.18)
+                        opacity: vpnController.speedTestRunning ? 0.22 : 0.0
+                        scale: vpnController.speedTestRunning ? 1.0 : 0.96
+                        z: 0
+
+                        SequentialAnimation on scale {
+                            running: vpnController.speedTestRunning
+                            loops: Animation.Infinite
+                            NumberAnimation { from: 1.02; to: 0.97; duration: 880; easing.type: Easing.InOutQuad }
+                            NumberAnimation { from: 0.97; to: 1.02; duration: 880; easing.type: Easing.InOutQuad }
+                        }
+                        SequentialAnimation on opacity {
+                            running: vpnController.speedTestRunning
+                            loops: Animation.Infinite
+                            NumberAnimation { from: 0.22; to: 0.08; duration: 880; easing.type: Easing.InOutQuad }
+                            NumberAnimation { from: 0.08; to: 0.22; duration: 880; easing.type: Easing.InOutQuad }
+                        }
+                    }
 
                     Repeater {
                         model: speedDial.tickCount
@@ -1086,8 +1480,8 @@ ApplicationWindow {
                         delegate: Text {
                             required property int index
                             readonly property real ratio: speedDial.scaleLabels.length > 1
-                                ? (index / (speedDial.scaleLabels.length - 1))
-                                : 0.0
+                                                          ? (index / (speedDial.scaleLabels.length - 1))
+                                                          : 0.0
                             readonly property real angle: (speedDial.startDeg + ratio * speedDial.sweepDeg) * Math.PI / 180.0
                             readonly property real radiusValue: speedDial.innerRadius - 30
                             text: speedDial.scaleLabels[index]
@@ -1200,14 +1594,14 @@ ApplicationWindow {
                     }
 
                     RectangularShadow {
-                         anchors.fill: n1
-                         offset.x: -10
-                         offset.y: -5
-                         radius: n1.radius
-                         blur: 16
-                         spread: 0
-                         color: Colors.lightShadow
-                     }
+                        anchors.fill: n1
+                        offset.x: -10
+                        offset.y: -5
+                        radius: n1.radius
+                        blur: 16
+                        spread: 0
+                        color: Colors.lightShadow
+                    }
 
                     Rectangle {
                         id: n1
@@ -1336,8 +1730,8 @@ ApplicationWindow {
                     Layout.preferredHeight: 56
                     radius: 14
                     color: vpnController.speedTestPhase === "Upload" || vpnController.speedTestPhase === "Done"
-                        ? "#eaf2ff"
-                        : "#f5f8fc"
+                           ? "#eaf2ff"
+                           : "#f5f8fc"
                     border.width: 1
                     border.color: "#dce4ef"
 
@@ -1583,35 +1977,35 @@ ApplicationWindow {
             anchors.rightMargin: 20
             spacing: 8
 
-            Controls.CircleIconButton {
-                diameter: 62
-                iconText: ""
-                iconPixelSize: 0
+            // Controls.CircleIconButton {
+            //     diameter: 62
+            //     iconText: ""
+            //     iconPixelSize: 0
 
-                Rectangle {
-                    anchors.fill: parent
-                    radius: width * 0.5
-                    color: "transparent"
-                    clip: true
+            //     Rectangle {
+            //         anchors.fill: parent
+            //         radius: width * 0.5
+            //         color: "transparent"
+            //         clip: true
 
-                    Image {
-                        anchors.fill: parent
-                        anchors.margins: 6
-                        source: "qrc:/ui/Resources/image/avatar.svg"
-                        fillMode: Image.PreserveAspectCrop
-                        smooth: true
-                    }
-                }
-            }
+            //         Image {
+            //             anchors.fill: parent
+            //             anchors.margins: 6
+            //             source: "qrc:/ui/Resources/image/avatar.svg"
+            //             fillMode: Image.PreserveAspectCrop
+            //             smooth: true
+            //         }
+            //     }
+            // }
 
-            Item { Layout.fillWidth: true }
 
             Text {
                 text: "GenyConnect"
                 color: "#1f2430"
                 font.family: FontSystem.getContentFont.name
                 font.pixelSize: 34
-                font.bold: false
+                font.weight: Font.Bold
+                font.bold: true
             }
 
             Item { Layout.fillWidth: true }
@@ -1630,6 +2024,15 @@ ApplicationWindow {
 
                 Controls.CircleIconButton {
                     diameter: 46
+                    iconText: root.iconInfo
+                    iconFontFamily: root.faSolid
+                    iconColor: "#a0a8b5"
+                    iconPixelSize: 18
+                    onClicked: aboutPopup.open()
+                }
+
+                Controls.CircleIconButton {
+                    diameter: 46
                     iconText: root.iconHistory
                     iconFontFamily: root.faSolid
                     iconColor: "#a0a8b5"
@@ -1643,9 +2046,10 @@ ApplicationWindow {
             id: mapContainer
             anchors.horizontalCenter: parent.horizontalCenter
             anchors.top: topBar.bottom
-            anchors.topMargin: 30
+            anchors.topMargin: 22
+            anchors.bottom: actionRow.top
+            anchors.bottomMargin: 20
             width: Math.min(parent.width - 90, 1060)
-            height: width * 0.46
 
             Image {
                 id: mapImage
@@ -1724,6 +2128,7 @@ ApplicationWindow {
                 }
 
                 Rectangle {
+                    id: currentLocation
                     anchors.centerIn: parent
                     width: 22
                     height: 22
@@ -1742,192 +2147,161 @@ ApplicationWindow {
                 }
             }
 
-            Rectangle {
-                x: mapContainer.width * 0.18 - width * 0.5
-                y: mapContainer.height * 0.58 - height * 0.5
-                width: 58
-                height: 58
-                radius: 29
-                color: "#f5f7fa"
-                border.width: 1
-                border.color: "#d8dde7"
-
-                Rectangle {
-                    width: 6
-                    height: 6
-                    radius: 3
-                    anchors.centerIn: parent
-                    color: vpnController.connected ? "#1f9f53" : "#252a34"
-                    Behavior on color { ColorAnimation { duration: 240 } }
-                }
-            }
         }
 
         RowLayout {
             id: actionRow
             anchors.horizontalCenter: parent.horizontalCenter
-            anchors.top: mapContainer.bottom
-            anchors.topMargin: 18
+            anchors.bottom: statusRow.top
+            anchors.bottomMargin: 12
             width: compact ? parent.width - 40 : 820
-            spacing: 14
+            spacing: 0
 
             Rectangle {
-                id: locationCard
+                id: connectControlCard
                 Layout.fillWidth: true
                 height: 84
-                radius: 26
+                radius: 28
                 color: "#ffffff"
                 border.width: 1
-                border.color: vpnController.connected ? "#c8ead8" : (vpnController.busy ? "#f7ddaa" : "#e0e4ec")
+                border.color: vpnController.connected ? "#c8ead8" : (vpnController.busy ? "#f7ddaa" : "#dfe6f1")
                 Behavior on border.color { ColorAnimation { duration: 220 } }
 
-                MouseArea {
+                Rectangle {
                     anchors.fill: parent
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: profilePopup.open()
+                    anchors.topMargin: 8
+                    radius: parent.radius
+                    color: "#1f5ed8"
+                    opacity: 0.08
+                    z: -1
                 }
 
                 RowLayout {
                     anchors.fill: parent
-                    anchors.leftMargin: 16
-                    anchors.rightMargin: 16
-                    spacing: 10
+                    anchors.leftMargin: 10
+                    anchors.rightMargin: 10
+                    anchors.topMargin: 8
+                    anchors.bottomMargin: 8
+                    spacing: 8
 
                     Rectangle {
-                        width: 44
-                        height: 44
-                        radius: 22
-                        color: "#f3f5f9"
-                        border.width: 1
-                        border.color: "#dee3ec"
-
-                        Text {
-                            anchors.centerIn: parent
-                            text: selectedServerFlag
-                            font.pixelSize: 26
-                        }
-                    }
-
-                    Text {
+                        id: locationCard
                         Layout.fillWidth: true
-                        text: selectedServerLabel
-                        color: "#202634"
-                        font.family: FontSystem.getContentFont.name
-                        font.pixelSize: 36 * 0.52
-                        elide: Text.ElideRight
-                    }
+                        Layout.fillHeight: true
+                        radius: 20
+                        color: locationMouse.containsMouse ? "#f6f9fd" : "transparent"
+                        border.width: locationMouse.containsMouse ? 1 : 0
+                        border.color: "#e5eaf3"
+                        Behavior on color { ColorAnimation { duration: 140 } }
 
-                    Controls.SignalBars {
-                        level: vpnController.connected ? 4 : (vpnController.busy ? 2 : 1)
-                    }
-
-                    Text {
-                        text: root.iconChevronDown
-                        color: "#9ea6b5"
-                        font.family: root.faSolid
-                        font.pixelSize: 14
-                    }
-                }
-            }
-
-            Controls.PrimaryActionButton {
-                Layout.preferredWidth: compact ? 240 : 260
-                Layout.fillWidth: false
-                height: 84
-                text: connectButtonText()
-                enabled: vpnController.currentProfileIndex >= 0 || vpnController.connected || vpnController.busy
-                busy: vpnController.busy
-                onClicked: vpnController.toggleConnection()
-            }
-        }
-
-        RowLayout {
-            id: trafficRow
-            anchors.horizontalCenter: parent.horizontalCenter
-            anchors.top: statusRow.bottom
-            anchors.topMargin: 10
-            width: compact ? parent.width - 40 : 820
-            spacing: 14
-
-            Rectangle {
-                Layout.fillWidth: true
-                height: 72
-                radius: 24
-                color: "#ffffff"
-                border.width: 1
-                border.color: "#e0e4ec"
-
-                RowLayout {
-                    anchors.fill: parent
-                    anchors.leftMargin: 18
-                    anchors.rightMargin: 18
-                    spacing: 8
-
-                    Text {
-                        text: "Download"
-                        color: "#8f97a6"
-                        font.family: FontSystem.getContentFont.name
-                        font.pixelSize: 15
-                    }
-
-                    Item { Layout.fillWidth: true }
-
-                    ColumnLayout {
-                        spacing: 0
-                        Text {
-                            text: downloadUsageText()
-                            color: "#202634"
-                            font.family: FontSystem.getContentFont.name
-                            font.pixelSize: 18
-                            font.bold: true
+                        MouseArea {
+                            id: locationMouse
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: profilePopup.open()
                         }
-                        Text {
-                            text: root.downloadRateText()
-                            color: "#738096"
-                            font.family: FontSystem.getContentFont.name
-                            font.pixelSize: 12
+
+                        RowLayout {
+                            anchors.fill: parent
+                            anchors.leftMargin: 12
+                            anchors.rightMargin: 12
+                            spacing: 10
+
+                            Rectangle {
+                                width: 44
+                                height: 44
+                                radius: 22
+                                color: "#f3f5f9"
+                                border.width: 1
+                                border.color: "#dee3ec"
+
+                                Text {
+                                    anchors.centerIn: parent
+                                    text: selectedServerFlag
+                                    font.pixelSize: 26
+                                }
+                            }
+
+                            Text {
+                                Layout.fillWidth: true
+                                text: selectedServerLabel
+                                color: "#202634"
+                                font.family: FontSystem.getContentFont.name
+                                font.pixelSize: 36 * 0.52
+                                elide: Text.ElideRight
+                            }
+
+                            Controls.SignalBars {
+                                level: vpnController.connected ? 4 : (vpnController.busy ? 2 : 1)
+                            }
+
+                            Text {
+                                text: root.iconChevronDown
+                                color: "#9ea6b5"
+                                font.family: root.faSolid
+                                font.pixelSize: 14
+                            }
                         }
                     }
-                }
-            }
 
-            Rectangle {
-                Layout.fillWidth: true
-                height: 72
-                radius: 24
-                color: "#ffffff"
-                border.width: 1
-                border.color: "#e0e4ec"
-
-                RowLayout {
-                    anchors.fill: parent
-                    anchors.leftMargin: 18
-                    anchors.rightMargin: 18
-                    spacing: 8
-
-                    Text {
-                        text: "Upload"
-                        color: "#8f97a6"
-                        font.family: FontSystem.getContentFont.name
-                        font.pixelSize: 15
+                    Rectangle {
+                        width: 1
+                        Layout.fillHeight: true
+                        color: "#e6ebf3"
                     }
 
-                    Item { Layout.fillWidth: true }
-
-                    ColumnLayout {
-                        spacing: 0
-                        Text {
-                            text: uploadUsageText()
-                            color: "#202634"
-                            font.family: FontSystem.getContentFont.name
-                            font.pixelSize: 18
-                            font.bold: true
+                    Rectangle {
+                        id: inlineConnectButton
+                        Layout.preferredWidth: compact ? 228 : 250
+                        Layout.fillHeight: true
+                        radius: 22
+                        border.width: 1
+                        border.color: "#2a63d2"
+                        gradient: Gradient {
+                            GradientStop { position: 0.0; color: "#2f6ff1" }
+                            GradientStop { position: 1.0; color: "#2d65d8" }
                         }
-                        Text {
-                            text: root.uploadRateText()
-                            color: "#738096"
-                            font.family: FontSystem.getContentFont.name
-                            font.pixelSize: 12
+                        opacity: (vpnController.currentProfileIndex >= 0 || vpnController.connected || vpnController.busy) ? 1.0 : 0.55
+                        scale: connectMouse.pressed ? 0.985 : 1.0
+                        Behavior on scale { NumberAnimation { duration: 90 } }
+                        Behavior on opacity { NumberAnimation { duration: 140 } }
+
+                        RowLayout {
+                            anchors.centerIn: parent
+                            spacing: 8
+
+                            Rectangle {
+                                visible: vpnController.busy
+                                width: 8
+                                height: 8
+                                radius: 4
+                                color: "#ffffff"
+                                opacity: 0.85
+
+                                SequentialAnimation on opacity {
+                                    running: vpnController.busy
+                                    loops: Animation.Infinite
+                                    NumberAnimation { from: 0.35; to: 1.0; duration: 420; easing.type: Easing.InOutQuad }
+                                    NumberAnimation { from: 1.0; to: 0.35; duration: 420; easing.type: Easing.InOutQuad }
+                                }
+                            }
+
+                            Text {
+                                text: connectButtonText()
+                                color: "#ffffff"
+                                font.family: FontSystem.getContentFont.name
+                                font.pixelSize: 40 * 0.58
+                                font.bold: true
+                            }
+                        }
+
+                        MouseArea {
+                            id: connectMouse
+                            anchors.fill: parent
+                            enabled: vpnController.currentProfileIndex >= 0 || vpnController.connected || vpnController.busy
+                            cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+                            onClicked: vpnController.toggleConnection()
                         }
                     }
                 }
@@ -1937,132 +2311,264 @@ ApplicationWindow {
         RowLayout {
             id: statusRow
             anchors.horizontalCenter: parent.horizontalCenter
-            anchors.top: actionRow.bottom
-            anchors.topMargin: 12
+            anchors.bottom: infoRow.top
+            anchors.bottomMargin: 25
             width: compact ? parent.width - 40 : 820
-            spacing: 12
+            spacing: 0
 
             Rectangle {
                 Layout.fillWidth: true
-                radius: 16
-                color: root.stateSoftColor()
+                radius: 24
+                implicitHeight: 94
+                color: "#ffffff"
                 border.width: 1
-                border.color: root.statePrimaryColor()
-                implicitHeight: 46
+                border.color: "#dfe6f1"
                 Behavior on color { ColorAnimation { duration: 220 } }
                 Behavior on border.color { ColorAnimation { duration: 220 } }
 
+                Rectangle {
+                    anchors.fill: parent
+                    anchors.margins: 1
+                    radius: 23
+                    gradient: Gradient {
+                        GradientStop { position: 0.0; color: "#fbfdff" }
+                        GradientStop { position: 1.0; color: "#f5f8fd" }
+                    }
+                }
+
                 RowLayout {
                     anchors.fill: parent
-                    anchors.leftMargin: 14
-                    anchors.rightMargin: 14
+                    anchors.leftMargin: 12
+                    anchors.rightMargin: 12
+                    anchors.topMargin: 10
+                    anchors.bottomMargin: 10
                     spacing: 10
 
                     Rectangle {
-                        width: 10
-                        height: 10
-                        radius: 5
-                        color: root.statePrimaryColor()
+                        Layout.preferredWidth: compact ? 162 : 188
+                        Layout.fillHeight: true
+                        radius: 16
+                        color: root.stateSoftColor()
+                        border.width: 1
+                        border.color: root.statePrimaryColor()
                         Behavior on color { ColorAnimation { duration: 220 } }
+                        Behavior on border.color { ColorAnimation { duration: 220 } }
 
-                        SequentialAnimation on opacity {
-                            loops: Animation.Infinite
-                            running: vpnController.connectionState === ConnectionState.Connecting
-                            NumberAnimation { from: 1.0; to: 0.3; duration: 420 }
-                            NumberAnimation { from: 0.3; to: 1.0; duration: 420 }
+                        RowLayout {
+                            anchors.fill: parent
+                            anchors.leftMargin: 12
+                            anchors.rightMargin: 12
+                            spacing: 8
+
+                            Rectangle {
+                                width: 10
+                                height: 10
+                                radius: 5
+                                color: root.statePrimaryColor()
+                                Behavior on color { ColorAnimation { duration: 220 } }
+
+                                SequentialAnimation on opacity {
+                                    loops: Animation.Infinite
+                                    running: vpnController.connectionState === ConnectionState.Connecting
+                                    NumberAnimation { from: 1.0; to: 0.3; duration: 420 }
+                                    NumberAnimation { from: 0.3; to: 1.0; duration: 420 }
+                                }
+                            }
+
+                            ColumnLayout {
+                                spacing: 1
+                                Text {
+                                    text: "Status"
+                                    color: "#6f7f96"
+                                    font.family: FontSystem.getContentFont.name
+                                    font.pixelSize: 11
+                                }
+                                Text {
+                                    text: root.stateText()
+                                    color: "#1f2a37"
+                                    font.family: FontSystem.getContentFont.name
+                                    font.pixelSize: 15
+                                    font.bold: true
+                                }
+                            }
                         }
                     }
 
-                    Text {
-                        text: "Status: " + root.stateText()
-                        color: "#1f2a37"
-                        font.family: FontSystem.getContentFont.name
-                        font.pixelSize: 15
-                        font.bold: true
+                    Rectangle {
+                        width: 1
+                        Layout.fillHeight: true
+                        color: "#e6ebf3"
                     }
 
-                    Item { Layout.fillWidth: true }
+                    Rectangle {
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        radius: 16
+                        color: "#eaf2ff"
+                        border.width: 1
+                        border.color: "#d7e4fb"
 
-                    Text {
-                        text: "DL " + root.downloadRateText() + "  •  UL " + root.uploadRateText()
-                        color: "#5b6678"
-                        font.family: FontSystem.getContentFont.name
-                        font.pixelSize: 14
+                        RowLayout {
+                            anchors.fill: parent
+                            anchors.leftMargin: 12
+                            anchors.rightMargin: 12
+                            spacing: 8
+
+                            Text {
+                                text: "↓"
+                                color: "#2874f0"
+                                font.family: FontSystem.getContentFont.name
+                                font.pixelSize: 18
+                                font.bold: true
+                            }
+
+                            ColumnLayout {
+                                spacing: 1
+                                Text {
+                                    text: "Download"
+                                    color: "#6682ad"
+                                    font.family: FontSystem.getContentFont.name
+                                    font.pixelSize: 11
+                                }
+                                Text {
+                                    text: root.downloadRateText()
+                                    color: "#3f5e93"
+                                    font.family: FontSystem.getContentFont.name
+                                    font.pixelSize: 12
+                                    font.bold: true
+                                }
+                            }
+
+                            Item { Layout.fillWidth: true }
+
+                            Text {
+                                text: downloadUsageText()
+                                color: "#1f2b3d"
+                                font.family: FontSystem.getContentFont.name
+                                font.pixelSize: compact ? 24 : 26
+                                font.bold: true
+                            }
+                        }
+                    }
+
+                    Rectangle {
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        radius: 16
+                        color: "#ecfff3"
+                        border.width: 1
+                        border.color: "#d8efdf"
+
+                        RowLayout {
+                            anchors.fill: parent
+                            anchors.leftMargin: 12
+                            anchors.rightMargin: 12
+                            spacing: 8
+
+                            Text {
+                                text: "↑"
+                                color: "#1ea768"
+                                font.family: FontSystem.getContentFont.name
+                                font.pixelSize: 18
+                                font.bold: true
+                            }
+
+                            ColumnLayout {
+                                spacing: 1
+                                Text {
+                                    text: "Upload"
+                                    color: "#5f9478"
+                                    font.family: FontSystem.getContentFont.name
+                                    font.pixelSize: 11
+                                }
+                                Text {
+                                    text: root.uploadRateText()
+                                    color: "#2e7b58"
+                                    font.family: FontSystem.getContentFont.name
+                                    font.pixelSize: 12
+                                    font.bold: true
+                                }
+                            }
+
+                            Item { Layout.fillWidth: true }
+
+                            Text {
+                                text: uploadUsageText()
+                                color: "#1f2b3d"
+                                font.family: FontSystem.getContentFont.name
+                                font.pixelSize: compact ? 24 : 26
+                                font.bold: true
+                            }
+                        }
                     }
                 }
             }
         }
 
-        Row {
+        RowLayout {
+            id: infoRow
             anchors.horizontalCenter: parent.horizontalCenter
-            anchors.top: trafficRow.bottom
-            anchors.topMargin: 18
-            spacing: 22
+            anchors.bottom: quickActionsRow.top
+            anchors.bottomMargin: 15
+            width: compact ? parent.width - 40 : 820
+            spacing: 18
 
-            Row {
+            Item { Layout.fillWidth: true }
+
+            RowLayout {
                 spacing: 6
+
                 Text {
                     text: "Your IP:"
-                    color: "#1f2430"
+                    color: "#2a3140"
                     font.family: FontSystem.getContentFont.name
-                    font.pixelSize: 18
+                    font.pixelSize: 16
                     font.bold: true
                 }
+
                 Text {
                     text: infoIpText()
-                    color: "#9aa2b0"
+                    color: "#8e98aa"
                     font.family: FontSystem.getContentFont.name
-                    font.pixelSize: 18
+                    font.pixelSize: 16
                 }
             }
 
             Rectangle {
+                Layout.alignment: Qt.AlignVCenter
                 width: 1
-                height: 32
-                color: "#d4d9e3"
+                height: 24
+                color: "#d9dee8"
             }
 
-            Row {
+            RowLayout {
                 spacing: 6
+
                 Text {
                     text: "Your Location:"
-                    color: "#1f2430"
+                    color: "#2a3140"
                     font.family: FontSystem.getContentFont.name
-                    font.pixelSize: 18
+                    font.pixelSize: 16
                     font.bold: true
                 }
+
                 Text {
                     text: infoLocationText()
-                    color: "#9aa2b0"
+                    color: "#8e98aa"
                     font.family: FontSystem.getContentFont.name
-                    font.pixelSize: 18
+                    font.pixelSize: 16
                 }
             }
+
+            Item { Layout.fillWidth: true }
         }
 
         Row {
+            id: quickActionsRow
             anchors.horizontalCenter: parent.horizontalCenter
             anchors.bottom: parent.bottom
             anchors.bottomMargin: 28
             spacing: 20
-
-            Controls.CircleIconButton {
-                diameter: 64
-                iconText: root.iconGrid
-                iconFontFamily: root.faSolid
-                iconPixelSize: 20
-                iconColor: "#97a0b0"
-                onClicked: profilePopup.open()
-            }
-
-            Controls.CircleIconButton {
-                diameter: 64
-                iconText: root.iconShield
-                iconFontFamily: root.faSolid
-                iconPixelSize: 20
-                iconColor: "#97a0b0"
-                onClicked: vpnController.toggleConnection()
-            }
 
             Controls.CircleIconButton {
                 diameter: 64
@@ -2084,7 +2590,7 @@ ApplicationWindow {
 
             Controls.CircleIconButton {
                 diameter: 64
-                iconText: root.iconKeyboard
+                iconText: root.iconImport
                 iconFontFamily: root.faSolid
                 iconPixelSize: 20
                 iconColor: "#97a0b0"

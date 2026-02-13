@@ -11,12 +11,6 @@
 *.gch
 *.pch
 
-# Linker files
-*.ilk
-
-# Debugger Files
-*.pdb
-
 # Compiled Dynamic libraries
 *.so
 *.dylib
@@ -37,5 +31,21 @@
 *.out
 *.app
 
-# debug information files
-*.dwo
+#Extra
+*.VC.db
+*.VC.VC.opendb
+.DS_Store
+Thumbs.db
+.vs
+.idea
+
+# Final Output
+build
+examples
+cmake-build-debug/
+cmake-build-release/
+third-party/
+dynamics/
+CMakeLists.txt.user
+.qtcreator
+TODO.txt

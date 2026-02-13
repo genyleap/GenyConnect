@@ -264,6 +264,7 @@ set_source_files_properties(${qml_singletons} PROPERTIES QT_QML_SINGLETON_TYPE T
 
 set(genyconnect_image_assets
     ui/Resources/image/avatar.svg
+    ui/Resources/image/favicon.png
 )
 if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/ui/Resources/image/map.png")
     list(APPEND genyconnect_image_assets ui/Resources/image/map.png)
