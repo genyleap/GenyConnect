@@ -51,7 +51,10 @@ public:
         AddressRole,               //!< Host/address.
         PortRole,                  //!< Port number.
         SecurityRole,              //!< Security mode.
-        DisplayLabelRole           //!< Pre-formatted label.
+        DisplayLabelRole,          //!< Pre-formatted label.
+        PingMsRole,                //!< Last ping in milliseconds.
+        PingTextRole,              //!< Formatted ping label.
+        PingingRole                //!< True while ping is in progress.
     };
 
     /**
@@ -120,6 +123,22 @@ public:
      * @return True when removal succeeds.
      */
     bool removeAt(int row);
+
+    /**
+     * @brief Update profile ping state for a row.
+     * @param row Row index.
+     * @param pinging True while ping probe is running.
+     * @return True on success.
+     */
+    bool setPinging(int row, bool pinging);
+
+    /**
+     * @brief Update profile ping result for a row.
+     * @param row Row index.
+     * @param pingMs Measured ping in ms, or negative if unavailable.
+     * @return True on success.
+     */
+    bool setPingResult(int row, int pingMs);
 
 private:
     /**

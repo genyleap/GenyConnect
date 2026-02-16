@@ -1,5 +1,6 @@
 module;
 #include <QClipboard>
+#include <QDateTime>
 #include <QDir>
 #include <QElapsedTimer>
 #include <QFile>
@@ -30,6 +31,8 @@ constexpr int kSpeedTestTickIntervalMs = 120;
 constexpr int kSpeedTestPingSamples = 4;
 constexpr int kSpeedTestMaxAttemptsPerPhase = 12;
 constexpr int kSpeedTestHistoryMaxItems = 20;
+constexpr int kProfilePingTimeoutMs = 3200;
+constexpr int kProfilePingStaggerMs = 140;
 
 QList<QUrl> speedTestPingUrls()
 {
@@ -281,6 +284,11 @@ bool VpnController::loggingEnabled() const
     return m_loggingEnabled;
 }
 
+bool VpnController::autoPingProfiles() const
+{
+    return m_autoPingProfiles;
+}
+
 void VpnController::setXrayExecutablePath(const QString& path)
 {
     const QString normalized = path.trimmed();
@@ -315,6 +323,21 @@ void VpnController::setLoggingEnabled(bool enabled)
     }
     emit loggingEnabledChanged();
     saveSettings();
+}
+
+void VpnController::setAutoPingProfiles(bool enabled)
+{
+    if (m_autoPingProfiles == enabled) {
+        return;
+    }
+
+    m_autoPingProfiles = enabled;
+    emit autoPingProfilesChanged();
+    saveSettings();
+
+    if (m_autoPingProfiles) {
+        pingAllProfiles();
+    }
 }
 
 bool VpnController::useSystemProxy() const
@@ -506,6 +529,9 @@ bool VpnController::importProfileLink(const QString& link)
 
     const int importedIndex = m_profileModel.indexOfId(profile.id);
     setCurrentProfileIndex(importedIndex);
+    if (m_autoPingProfiles && importedIndex >= 0) {
+        pingProfile(importedIndex);
+    }
 
     if (!m_lastError.isEmpty()) {
         setLastError(QString());
@@ -519,20 +545,106 @@ bool VpnController::importProfileLink(const QString& link)
 
 bool VpnController::removeProfile(int row)
 {
+    const int previousIndex = m_currentProfileIndex;
     if (!m_profileModel.removeAt(row)) {
         return false;
     }
 
-    if (m_currentProfileIndex >= m_profileModel.rowCount()) {
-        setCurrentProfileIndex(m_profileModel.rowCount() - 1);
-    }
-
-    if (m_profileModel.rowCount() == 0) {
+    const int rowCount = m_profileModel.rowCount();
+    if (rowCount == 0) {
         setCurrentProfileIndex(-1);
+    } else if (previousIndex == row) {
+        setCurrentProfileIndex(qMin(row, rowCount - 1));
+    } else if (row < previousIndex) {
+        setCurrentProfileIndex(previousIndex - 1);
+    } else if (m_currentProfileIndex >= rowCount) {
+        setCurrentProfileIndex(rowCount - 1);
     }
 
     saveProfiles();
     return true;
+}
+
+void VpnController::pingProfile(int row)
+{
+    const auto profile = m_profileModel.profileAt(row);
+    if (!profile.has_value()) {
+        return;
+    }
+
+    const QString address = profile->address.trimmed();
+    const quint16 port = profile->port;
+    const QString profileId = profile->id;
+    const int currentRow = m_profileModel.indexOfId(profileId);
+    if (currentRow < 0) {
+        return;
+    }
+
+    if (address.isEmpty() || port == 0) {
+        m_profileModel.setPingResult(currentRow, -1);
+        return;
+    }
+
+    m_profileModel.setPinging(currentRow, true);
+
+    auto *socket = new QTcpSocket(this);
+    socket->setProperty("_geny_ping_done", false);
+    socket->setProperty("_geny_ping_start_ms", QDateTime::currentMSecsSinceEpoch());
+
+    auto finishPing = [this, socket, profileId](int pingMs) mutable {
+        if (socket->property("_geny_ping_done").toBool()) {
+            return;
+        }
+        socket->setProperty("_geny_ping_done", true);
+
+        const int rowNow = m_profileModel.indexOfId(profileId);
+        if (rowNow >= 0) {
+            m_profileModel.setPingResult(rowNow, pingMs);
+        }
+
+        socket->abort();
+        socket->deleteLater();
+    };
+
+    connect(socket, &QTcpSocket::connected, socket, [finishPing, socket]() mutable {
+        const qint64 startedAt = socket->property("_geny_ping_start_ms").toLongLong();
+        const qint64 elapsedMs = qMax<qint64>(1, QDateTime::currentMSecsSinceEpoch() - startedAt);
+        finishPing(static_cast<int>(elapsedMs));
+    });
+
+    connect(socket, &QTcpSocket::errorOccurred, socket, [finishPing](QAbstractSocket::SocketError) mutable {
+        finishPing(-1);
+    });
+
+    QTimer::singleShot(kProfilePingTimeoutMs, socket, [socket, finishPing]() mutable {
+        if (socket->property("_geny_ping_done").toBool()) {
+            return;
+        }
+        if (socket->state() == QAbstractSocket::ConnectedState) {
+            return;
+        }
+        finishPing(-1);
+    });
+
+    socket->connectToHost(address, port);
+}
+
+void VpnController::pingAllProfiles()
+{
+    const int count = m_profileModel.rowCount();
+    for (int row = 0; row < count; ++row) {
+        const auto profile = m_profileModel.profileAt(row);
+        if (!profile.has_value()) {
+            continue;
+        }
+        const QString profileId = profile->id;
+        QTimer::singleShot(row * kProfilePingStaggerMs, this, [this, profileId]() {
+            const int rowNow = m_profileModel.indexOfId(profileId);
+            if (rowNow >= 0) {
+                pingProfile(rowNow);
+            }
+        });
+    }
 }
 
 void VpnController::connectToProfile(int row)
@@ -1008,10 +1120,10 @@ void VpnController::onSpeedTestTick()
         if (elapsedMs <= 0 && m_speedTestPhaseTimer.isValid()) {
             elapsedMs = m_speedTestPhaseTimer.elapsed();
         }
-        const double visualValue = qBound(2.0, (static_cast<double>(elapsedMs) * 0.12) + 2.0, 120.0);
-        m_speedTestCurrentMbps = visualValue;
-        if (visualValue > m_speedTestPeakMbps) {
-            m_speedTestPeakMbps = visualValue;
+        const double pingMs = static_cast<double>(qMax<qint64>(1, elapsedMs));
+        m_speedTestCurrentMbps = pingMs;
+        if (pingMs > m_speedTestPeakMbps) {
+            m_speedTestPeakMbps = pingMs;
         }
         emit speedTestChanged();
         return;
@@ -1106,6 +1218,7 @@ void VpnController::onSpeedTestFinished()
             ++m_speedTestPingSampleCount;
             const qint64 elapsedMs = m_speedTestRequestTimer.isValid() ? m_speedTestRequestTimer.elapsed() : 0;
             m_speedTestPingTotalMs += qMax<qint64>(elapsedMs, 1);
+            m_speedTestCurrentMbps = static_cast<double>(qMax<qint64>(elapsedMs, 1));
         }
         if (m_speedTestPingSampleCount >= kSpeedTestPingSamples) {
             m_speedTestPingMs = static_cast<int>(m_speedTestPingTotalMs / m_speedTestPingSampleCount);
@@ -1752,6 +1865,9 @@ void VpnController::loadProfiles()
     }
 
     m_profileModel.setProfiles(loadedProfiles);
+    if (m_autoPingProfiles && !loadedProfiles.isEmpty()) {
+        QTimer::singleShot(50, this, [this]() { pingAllProfiles(); });
+    }
 }
 
 void VpnController::saveProfiles() const
@@ -1776,6 +1892,7 @@ void VpnController::loadSettings()
     QSettings settings;
     m_xrayExecutablePath = settings.value(QStringLiteral("xray/executablePath")).toString().trimmed();
     m_loggingEnabled = settings.value(QStringLiteral("logs/enabled"), true).toBool();
+    m_autoPingProfiles = settings.value(QStringLiteral("profiles/autoPing"), true).toBool();
     m_currentProfileIndex = settings.value(QStringLiteral("profiles/currentIndex"), -1).toInt();
     m_useSystemProxy = settings.value(QStringLiteral("network/useSystemProxy"), false).toBool();
     if (settings.contains(QStringLiteral("network/autoDisableSystemProxyOnDisconnect"))) {
@@ -1798,6 +1915,7 @@ void VpnController::saveSettings() const
     QSettings settings;
     settings.setValue(QStringLiteral("xray/executablePath"), m_xrayExecutablePath);
     settings.setValue(QStringLiteral("logs/enabled"), m_loggingEnabled);
+    settings.setValue(QStringLiteral("profiles/autoPing"), m_autoPingProfiles);
     settings.setValue(QStringLiteral("profiles/currentIndex"), m_currentProfileIndex);
     settings.setValue(QStringLiteral("network/useSystemProxy"), m_useSystemProxy);
     settings.setValue(

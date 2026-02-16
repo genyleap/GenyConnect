@@ -4,6 +4,7 @@ module;
 #include <QModelIndex>
 #include <QString>
 #include <QVariant>
+#include <Qt>
 
 #include <optional>
 
@@ -46,6 +47,17 @@ QVariant ServerProfileModel::data(const QModelIndex& index, int role) const
         return profile.security;
     case DisplayLabelRole:
         return profile.displayLabel();
+    case PingMsRole:
+        return profile.lastPingMs;
+    case PingTextRole:
+        if (profile.pingInProgress) {
+            return QStringLiteral("Pinging...");
+        }
+        return profile.lastPingMs >= 0
+            ? QStringLiteral("%1 ms").arg(profile.lastPingMs)
+            : QStringLiteral("--");
+    case PingingRole:
+        return profile.pingInProgress;
     default:
         return {};
     }
@@ -61,6 +73,9 @@ QHash<int, QByteArray> ServerProfileModel::roleNames() const
         {PortRole, "port"},
         {SecurityRole, "security"},
         {DisplayLabelRole, "displayLabel"},
+        {PingMsRole, "pingMs"},
+        {PingTextRole, "pingText"},
+        {PingingRole, "pinging"},
     };
 }
 
@@ -129,6 +144,42 @@ bool ServerProfileModel::removeAt(int row)
     beginRemoveRows(QModelIndex(), row, row);
     m_profiles.removeAt(row);
     endRemoveRows();
+    return true;
+}
+
+bool ServerProfileModel::setPinging(int row, bool pinging)
+{
+    if (row < 0 || row >= m_profiles.size()) {
+        return false;
+    }
+
+    auto& profile = m_profiles[row];
+    if (profile.pingInProgress == pinging) {
+        return true;
+    }
+
+    profile.pingInProgress = pinging;
+    const QModelIndex modelIndex = index(row, 0);
+    emit dataChanged(modelIndex, modelIndex, {PingTextRole, PingingRole});
+    return true;
+}
+
+bool ServerProfileModel::setPingResult(int row, int pingMs)
+{
+    if (row < 0 || row >= m_profiles.size()) {
+        return false;
+    }
+
+    auto& profile = m_profiles[row];
+    const int normalizedPing = pingMs >= 0 ? pingMs : -1;
+    if (profile.lastPingMs == normalizedPing && !profile.pingInProgress) {
+        return true;
+    }
+
+    profile.lastPingMs = normalizedPing;
+    profile.pingInProgress = false;
+    const QModelIndex modelIndex = index(row, 0);
+    emit dataChanged(modelIndex, modelIndex, {PingMsRole, PingTextRole, PingingRole});
     return true;
 }
 

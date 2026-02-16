@@ -98,6 +98,7 @@ GENYCONNECT_MODULE_EXPORT class VpnController : public QObject
     Q_PROPERTY(QString xrayExecutablePath READ xrayExecutablePath WRITE setXrayExecutablePath NOTIFY xrayExecutablePathChanged)
     Q_PROPERTY(QString xrayVersion READ xrayVersion NOTIFY xrayVersionChanged)
     Q_PROPERTY(bool loggingEnabled READ loggingEnabled WRITE setLoggingEnabled NOTIFY loggingEnabledChanged)
+    Q_PROPERTY(bool autoPingProfiles READ autoPingProfiles WRITE setAutoPingProfiles NOTIFY autoPingProfilesChanged)
     Q_PROPERTY(bool useSystemProxy READ useSystemProxy WRITE setUseSystemProxy NOTIFY useSystemProxyChanged)
     Q_PROPERTY(
         bool autoDisableSystemProxyOnDisconnect
@@ -279,6 +280,12 @@ public:
     bool loggingEnabled() const;
 
     /**
+     * @brief Whether profile list auto-pings endpoints.
+     * @return Auto-ping flag.
+     */
+    bool autoPingProfiles() const;
+
+    /**
      * @brief Set custom Xray executable path.
      * @param path Executable path.
      */
@@ -289,6 +296,12 @@ public:
      * @param enabled New logging state.
      */
     void setLoggingEnabled(bool enabled);
+
+    /**
+     * @brief Enable/disable automatic profile endpoint ping.
+     * @param enabled New auto-ping state.
+     */
+    void setAutoPingProfiles(bool enabled);
 
     /**
      * @brief Whether system proxy should be managed on connect.
@@ -431,6 +444,17 @@ public:
     Q_INVOKABLE bool removeProfile(int row);
 
     /**
+     * @brief Start endpoint ping for one profile row.
+     * @param row Row index.
+     */
+    Q_INVOKABLE void pingProfile(int row);
+
+    /**
+     * @brief Start endpoint ping for all profiles.
+     */
+    Q_INVOKABLE void pingAllProfiles();
+
+    /**
      * @brief Connect to profile row.
      * @param row Row index.
      */
@@ -511,6 +535,8 @@ signals:
     void xrayVersionChanged();
     //! Emitted when logging flag changes.
     void loggingEnabledChanged();
+    //! Emitted when profile auto-ping flag changes.
+    void autoPingProfilesChanged();
     //! Emitted when system-proxy usage flag changes.
     void useSystemProxyChanged();
     //! Emitted when auto-disable proxy flag changes.
@@ -714,6 +740,7 @@ private:
     QString m_xrayExecutablePath;
     QString m_xrayVersion = QStringLiteral("Unknown");
     bool m_loggingEnabled = true;
+    bool m_autoPingProfiles = true;
     bool m_useSystemProxy = false;
     bool m_autoDisableSystemProxyOnDisconnect = false;
     bool m_whitelistMode = false;

@@ -59,6 +59,8 @@ export struct ServerProfile {
 
     QString originalLink;     //!< Original imported share link.
     QJsonObject extra;        //!< Extensible free-form metadata.
+    int lastPingMs = -1;      //!< Latest measured endpoint TCP latency in milliseconds.
+    bool pingInProgress = false; //!< True while profile endpoint ping is in progress.
 
     /**
      * @brief Validate essential endpoint/profile fields.

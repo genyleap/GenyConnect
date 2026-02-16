@@ -34,6 +34,7 @@ ApplicationWindow {
     readonly property string iconKeyboard: "\uf11c"
     readonly property string iconImport: "\uf56f"
     readonly property string iconChevronDown: "\uf078"
+    readonly property string iconTrash: "\uf1f8"
 
     property string selectedServerLabel: vpnController.currentProfileIndex >= 0
                                          ? "Selected Profile"
@@ -189,17 +190,26 @@ ApplicationWindow {
         return "#eef2f7"
     }
 
+    function speedGaugeStops() {
+        if (vpnController.speedTestPhase === "Ping")
+            return [0, 50, 100, 200, 500, 1000, 2000]
+        return [0, 5, 10, 20, 50, 100, 200]
+    }
+
     function speedGaugeMaxMbps() {
-        return 200.0
+        const stops = speedGaugeStops()
+        return stops.length > 0 ? stops[stops.length - 1] : 200.0
     }
 
     function speedGaugeValue() {
         const maxMbps = speedGaugeMaxMbps()
         if (vpnController.speedTestRunning) {
             if (vpnController.speedTestPhase === "Ping") {
+                if (vpnController.speedTestCurrentMbps > 0)
+                    return Math.min(vpnController.speedTestCurrentMbps, maxMbps)
                 if (vpnController.speedTestPingMs >= 0)
                     return Math.min(vpnController.speedTestPingMs, maxMbps)
-                return Math.min(30.0, 5.0 + (speedPhaseProgress() * 25.0))
+                return Math.min(120.0, 18.0 + (speedPhaseProgress() * 102.0))
             }
             return Math.min(Math.max(vpnController.speedTestCurrentMbps, 0.0), maxMbps)
         }
@@ -208,7 +218,7 @@ ApplicationWindow {
     }
 
     function speedGaugeProgress() {
-        const stops = [0, 5, 10, 20, 50, 100, 200]
+        const stops = speedGaugeStops()
         const value = Math.max(0.0, Math.min(speedGaugeValue(), stops[stops.length - 1]))
         for (let i = 0; i < stops.length - 1; ++i) {
             if (value <= stops[i + 1]) {
@@ -259,6 +269,8 @@ ApplicationWindow {
 
     function speedGaugeNumberText() {
         if (vpnController.speedTestPhase === "Ping") {
+            if (vpnController.speedTestCurrentMbps > 0)
+                return Math.round(vpnController.speedTestCurrentMbps) + ""
             if (vpnController.speedTestPingMs >= 0)
                 return vpnController.speedTestPingMs + ""
             return Math.round(speedGaugeValue()) + ""
@@ -333,7 +345,7 @@ ApplicationWindow {
 
         const margin = 12
         const popupWidth = locationCard.width
-        const popupHeight = Math.min(profilePopup.contentItem.implicitHeight, 300)
+        const popupHeight = Math.min(profilePopup.contentItem.implicitHeight, 360)
 
         const downPos = locationCard.mapToItem(root.contentItem, 0, locationCard.height + 8)
         const upPos = locationCard.mapToItem(root.contentItem, 0, -popupHeight - 8)
@@ -414,6 +426,8 @@ ApplicationWindow {
         onAboutToShow: {
             root.profileSearchQuery = ""
             root.positionProfilePopup()
+            if (vpnController.autoPingProfiles)
+                vpnController.pingAllProfiles()
         }
         onOpened: {
             profileSearchField.forceActiveFocus()
@@ -435,7 +449,7 @@ ApplicationWindow {
             radius: 24
             color: "transparent"
             clip: true
-            implicitHeight: Math.min(356, searchBar.implicitHeight + listView.contentHeight + 18)
+            implicitHeight: Math.min(408, searchBar.implicitHeight + listView.contentHeight + 72)
 
             ColumnLayout {
                 anchors.fill: parent
@@ -506,6 +520,79 @@ ApplicationWindow {
                     }
                 }
 
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 8
+
+                    Rectangle {
+                        Layout.preferredWidth: 132
+                        Layout.preferredHeight: 36
+                        radius: 12
+                        color: addProfileMouse.containsMouse ? "#2f6ff1" : "#3f7cf3"
+                        border.width: 1
+                        border.color: "#2f6ff1"
+                        Behavior on color { ColorAnimation { duration: 120 } }
+
+                        Text {
+                            anchors.centerIn: parent
+                            text: "Add Profile"
+                            color: "#ffffff"
+                            font.family: FontSystem.getContentFont.name
+                            font.pixelSize: 13
+                            font.bold: true
+                        }
+
+                        MouseArea {
+                            id: addProfileMouse
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: {
+                                profilePopup.close()
+                                importPopup.open()
+                            }
+                        }
+                    }
+
+                    Rectangle {
+                        Layout.preferredWidth: 112
+                        Layout.preferredHeight: 36
+                        radius: 12
+                        color: pingAllMouse.containsMouse ? "#f2f6fd" : "#f7f9fd"
+                        border.width: 1
+                        border.color: "#d7dfec"
+                        opacity: listView.count > 0 ? 1.0 : 0.55
+                        Behavior on color { ColorAnimation { duration: 120 } }
+
+                        Text {
+                            anchors.centerIn: parent
+                            text: "Ping All"
+                            color: "#4b5d78"
+                            font.family: FontSystem.getContentFont.name
+                            font.pixelSize: 13
+                            font.bold: true
+                        }
+
+                        MouseArea {
+                            id: pingAllMouse
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            enabled: listView.count > 0
+                            cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+                            onClicked: vpnController.pingAllProfiles()
+                        }
+                    }
+
+                    Item { Layout.fillWidth: true }
+
+                    Text {
+                        text: vpnController.autoPingProfiles ? "Auto ping ON" : "Auto ping OFF"
+                        color: vpnController.autoPingProfiles ? "#278c59" : "#8b97aa"
+                        font.family: FontSystem.getContentFont.name
+                        font.pixelSize: 12
+                    }
+                }
+
                 ListView {
                     id: listView
                     Layout.fillWidth: true
@@ -521,11 +608,14 @@ ApplicationWindow {
                         required property string address
                         required property int port
                         required property string security
+                        required property string pingText
+                        required property bool pinging
+                        required property int pingMs
 
                         readonly property bool selected: index === vpnController.currentProfileIndex
                         readonly property bool matched: root.profileMatchesSearch(displayLabel, protocol, address, security)
                         width: listView.width
-                        height: matched ? 76 : 0
+                        height: matched ? 84 : 0
                         visible: matched
 
                         Rectangle {
@@ -534,8 +624,8 @@ ApplicationWindow {
                             anchors.right: parent.right
                             anchors.top: parent.top
                             anchors.topMargin: 2
-                            height: 72
-                            radius: 18
+                            height: 80
+                            radius: 16
                             color: selected ? "#eaf2ff" : (hoverArea.containsMouse ? "#f5f8fd" : "#ffffff")
                             border.width: selected ? 1 : 0
                             border.color: selected ? "#d2e0f8" : "transparent"
@@ -584,6 +674,87 @@ ApplicationWindow {
                                     font.pixelSize: 12
                                     color: "#8c95a4"
                                     elide: Text.ElideRight
+                                }
+                            }
+
+                            ColumnLayout {
+                                spacing: 4
+
+                                RowLayout {
+                                    spacing: 6
+                                    Item { Layout.fillWidth: true; }
+
+                                    Text {
+                                        text: pingText
+                                        color: pinging ? "#f59e0b" : (pingMs >= 0 ? "#2b6dcf" : "#9aa4b6")
+                                        font.family: FontSystem.getContentFont.name
+                                        font.pixelSize: 12
+                                        font.bold: true
+                                        horizontalAlignment: Text.AlignRight
+                                    }
+
+                                    Rectangle {
+                                        width: 30
+                                        height: 30
+                                        radius: 15
+                                        color: pingButtonMouse.containsMouse ? "#edf4ff" : "#f7f9fd"
+                                        border.width: 1
+                                        border.color: "#dbe3ef"
+
+                                        Text {
+                                            anchors.centerIn: parent
+                                            text: root.iconClock
+                                            font.family: root.faSolid
+                                            font.pixelSize: 12
+                                            color: "#5e6f89"
+                                        }
+
+                                        MouseArea {
+                                            id: pingButtonMouse
+                                            anchors.fill: parent
+                                            hoverEnabled: true
+                                            cursorShape: Qt.PointingHandCursor
+                                            onClicked: function(mouse) {
+                                                mouse.accepted = true
+                                                vpnController.pingProfile(index)
+                                            }
+                                        }
+                                    }
+
+                                    Rectangle {
+                                        width: 30
+                                        height: 30
+                                        radius: 15
+                                        color: removeButtonMouse.containsMouse ? "#fff0f0" : "#fff6f6"
+                                        border.width: 1
+                                        border.color: "#f2cdcd"
+
+                                        Text {
+                                            anchors.centerIn: parent
+                                            text: root.iconTrash
+                                            font.family: root.faSolid
+                                            font.pixelSize: 12
+                                            color: "#cb4f4f"
+                                        }
+
+                                        MouseArea {
+                                            id: removeButtonMouse
+                                            anchors.fill: parent
+                                            hoverEnabled: true
+                                            cursorShape: Qt.PointingHandCursor
+                                            onClicked: function(mouse) {
+                                                mouse.accepted = true
+                                                if (vpnController.removeProfile(index)) {
+                                                    if (vpnController.currentProfileIndex < 0) {
+                                                        root.selectedServerLabel = "Select Location"
+                                                        root.selectedServerMeta = "Import and select a profile"
+                                                        root.selectedServerFlag = "🌐"
+                                                    }
+                                                    Qt.callLater(root.positionProfilePopup)
+                                                }
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -842,6 +1013,31 @@ ApplicationWindow {
                                 font.family: FontSystem.getContentFont.name
                                 font.pixelSize: 14
                                 wrapMode: Text.WordWrap
+                            }
+                        }
+
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: 10
+
+                            Switch {
+                                checked: vpnController.autoPingProfiles
+                                onToggled: vpnController.autoPingProfiles = checked
+                            }
+
+                            Text {
+                                Layout.fillWidth: true
+                                text: "Auto ping profile endpoints"
+                                color: "#334155"
+                                font.family: FontSystem.getContentFont.name
+                                font.pixelSize: 14
+                                wrapMode: Text.WordWrap
+                            }
+
+                            Controls.Button {
+                                text: "Ping Now"
+                                Layout.fillWidth: false
+                                onClicked: vpnController.pingAllProfiles()
                             }
                         }
 
@@ -1384,7 +1580,7 @@ ApplicationWindow {
                     readonly property real centerY: height * 0.5
                     readonly property real outerRadius: width * 0.5 - 10
                     readonly property real innerRadius: width * 0.38
-                    readonly property var scaleLabels: [0, 5, 10, 20, 50, 100, 200]
+                    readonly property var scaleLabels: root.speedGaugeStops()
 
                     Rectangle {
                         id: dialPulseOuter
