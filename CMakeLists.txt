@@ -44,8 +44,16 @@ set(GENYCONNECT_CODESIGN_IDENTITY "-" CACHE STRING
 set(GENYCONNECT_CODESIGN_ENTITLEMENTS "" CACHE FILEPATH
     "Optional entitlements plist path for codesign (usually empty).")
 
+# Windows deploy (INSTALL step; required for CPack NSIS/ZIP to include dependencies)
+option(GENYCONNECT_WINDOWS_INSTALL_DEPLOY
+  "Run windeployqt during install() so CPack packages all Qt/QML dependencies" ON)
+option(GENYCONNECT_WINDEPLOYQT_COMPILER_RUNTIME
+  "Pass --compiler-runtime to windeployqt to bundle MSVC runtime" ON)
+option(GENYCONNECT_WINDEPLOYQT_TRANSLATIONS
+  "Include Qt translations via windeployqt" OFF)
+
 # Bundle docs at installer/package root
-option(GENYCONNECT_BUNDLE_DOCS "Install README.txt and LICENSE.txt at package root" ON)
+option(GENYCONNECT_BUNDLE_DOCS "Install README and LICENSE at package root + NSIS wizard" ON)
 
 # macdeployqt toggles
 option(GENYCONNECT_MACDEPLOYQT_ALWAYS_OVERWRITE "Pass -always-overwrite to macdeployqt" ON)
@@ -265,7 +273,6 @@ qt_standard_project_setup(REQUIRES 6.8)
 # macOS RPATH policy to avoid noisy -delete_rpath during CPack install step
 # -------------------------
 if(APPLE)
-  # Ensure the runtime search path is relative to the app bundle
   set(CMAKE_INSTALL_RPATH "@executable_path/../Frameworks")
   set(CMAKE_BUILD_RPATH   "@executable_path/../Frameworks")
   set(CMAKE_BUILD_WITH_INSTALL_RPATH ON)
@@ -312,7 +319,6 @@ qt_add_executable(GenyConnectUpdater
 target_link_libraries(GenyConnectUpdater PRIVATE Qt6::Core)
 set_target_properties(GenyConnectUpdater PROPERTIES OUTPUT_NAME "GenyConnectUpdater")
 
-# Ensure helper is built before the main app POST_BUILD deploy runs
 if(APPLE)
   add_dependencies(${PROJECT_NAME} GenyConnectUpdater)
   set_target_properties(GenyConnectUpdater PROPERTIES MACOSX_BUNDLE FALSE)
@@ -615,14 +621,21 @@ endif()
 # -----------------------------------------------------------------------------
 include(GNUInstallDirs)
 
+# Windows: put exe at package root (.)
+if(WIN32)
+  set(_GENY_WIN_RUNTIME_DEST ".")
+else()
+  set(_GENY_WIN_RUNTIME_DEST "${CMAKE_INSTALL_BINDIR}")
+endif()
+
 install(TARGETS ${PROJECT_NAME}
   CONFIGURATIONS Release RelWithDebInfo
   BUNDLE  DESTINATION .
-  RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+  RUNTIME DESTINATION "${_GENY_WIN_RUNTIME_DEST}"
   LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
 )
 
-# Put updater inside app on macOS, otherwise next to exe
+# Put updater inside app on macOS, otherwise next to exe (root on Windows)
 if(APPLE)
   install(TARGETS GenyConnectUpdater
     CONFIGURATIONS Release RelWithDebInfo
@@ -631,7 +644,7 @@ if(APPLE)
 else()
   install(TARGETS GenyConnectUpdater
     CONFIGURATIONS Release RelWithDebInfo
-    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+    RUNTIME DESTINATION "${_GENY_WIN_RUNTIME_DEST}"
   )
 endif()
 
@@ -647,7 +660,7 @@ if(GENYCONNECT_BUNDLED_XRAY_PATH)
   elseif(WIN32)
     install(FILES "${GENYCONNECT_BUNDLED_XRAY_PATH}"
       CONFIGURATIONS Release RelWithDebInfo
-      DESTINATION ${CMAKE_INSTALL_BINDIR}
+      DESTINATION "${_GENY_WIN_RUNTIME_DEST}"
       RENAME "xray-core.exe"
       PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE
     )
@@ -662,24 +675,100 @@ if(GENYCONNECT_BUNDLED_XRAY_PATH)
 endif()
 
 # -----------------------------------------------------------------------------
-# README.txt + LICENSE.txt at package root
+# Windows deploy: run windeployqt on the *install tree* so CPack includes deps
 # -----------------------------------------------------------------------------
-if(GENYCONNECT_BUNDLE_DOCS)
-  set(GENY_README_TXT  "${CMAKE_CURRENT_SOURCE_DIR}/README.txt")
-  set(GENY_LICENSE_TXT "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE.txt")
+if(WIN32 AND GENYCONNECT_WINDOWS_INSTALL_DEPLOY)
 
-  if(EXISTS "${GENY_README_TXT}")
-    install(FILES "${GENY_README_TXT}"
-      CONFIGURATIONS Release RelWithDebInfo
-      DESTINATION "."
-    )
+  find_program(WINDEPLOYQT_EXECUTABLE
+    NAMES windeployqt
+    HINTS
+      "$ENV{QTDIR}/bin"
+      "${Qt6_DIR}/../../../bin"
+      "C:/Qt/*/*/bin"
+  )
+
+  if(NOT WINDEPLOYQT_EXECUTABLE)
+    message(FATAL_ERROR "windeployqt not found. Set QTDIR or make sure Qt bin is in PATH.")
   endif()
 
-  if(EXISTS "${GENY_LICENSE_TXT}")
-    install(FILES "${GENY_LICENSE_TXT}"
-      CONFIGURATIONS Release RelWithDebInfo
-      DESTINATION "."
-    )
+  # Root layout: exe at $ENV{DESTDIR}${CMAKE_INSTALL_PREFIX}/GenyConnect.exe (no bin/)
+  install(CODE
+    "message(STATUS \"[deploy] Running windeployqt for GenyConnect (install tree, root layout)\")\n
+     set(_root \"\$ENV{DESTDIR}\${CMAKE_INSTALL_PREFIX}\")\n
+     file(TO_CMAKE_PATH \"\${_root}\" _root)\n
+     set(_exe \"\${_root}/${GENY_OUTPUT_NAME}.exe\")\n
+     if(NOT EXISTS \"\${_exe}\")\n
+       message(FATAL_ERROR \"[deploy] Installed exe not found: \${_exe}\")\n
+     endif()\n
+     set(_args \"\${_exe}\" \"--qmldir\" \"${CMAKE_CURRENT_SOURCE_DIR}\" \"--dir\" \"\${_root}\" \"--verbose\" \"2\" \"--release\")\n
+     if(${GENYCONNECT_WINDEPLOYQT_COMPILER_RUNTIME})\n
+       list(APPEND _args \"--compiler-runtime\")\n
+     endif()\n
+     if(${GENYCONNECT_WINDEPLOYQT_TRANSLATIONS})\n
+       list(APPEND _args \"--translations\")\n
+     else()\n
+       list(APPEND _args \"--no-translations\")\n
+     endif()\n
+     execute_process(\n
+       COMMAND \"${WINDEPLOYQT_EXECUTABLE}\" \${_args}\n
+       RESULT_VARIABLE _res\n
+       OUTPUT_VARIABLE _out\n
+       ERROR_VARIABLE  _err\n
+     )\n
+     if(NOT _res EQUAL 0)\n
+       message(FATAL_ERROR \"[deploy] windeployqt failed (code=\${_res})\\n\${_out}\\n\${_err}\")\n
+     endif()\n
+     message(STATUS \"[deploy] windeployqt done. Output dir: \${_root}\")\n"
+  )
+endif()
+
+# -----------------------------------------------------------------------------
+# README + LICENSE at package root + NSIS wizard License Agreement + optional post-install README open
+# -----------------------------------------------------------------------------
+set(CPACK_MONOLITHIC_INSTALL ON)
+
+set(_GENY_DOC_README_SRC "")
+set(_GENY_DOC_LICENSE_SRC "")
+
+if(GENYCONNECT_BUNDLE_DOCS)
+  foreach(p
+      "${CMAKE_CURRENT_SOURCE_DIR}/README.txt"
+      "${CMAKE_CURRENT_SOURCE_DIR}/README.md"
+      "${CMAKE_CURRENT_SOURCE_DIR}/README"
+  )
+    if(EXISTS "${p}")
+      set(_GENY_DOC_README_SRC "${p}")
+      break()
+    endif()
+  endforeach()
+
+  foreach(p
+      "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE.txt"
+      "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE"
+      "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE.md"
+      "${CMAKE_CURRENT_SOURCE_DIR}/COPYING"
+  )
+    if(EXISTS "${p}")
+      set(_GENY_DOC_LICENSE_SRC "${p}")
+      break()
+    endif()
+  endforeach()
+
+  # Always provide plain-text files for NSIS pages (best compatibility)
+  if(_GENY_DOC_README_SRC)
+    set(_GENY_DOC_README_TXT "${CMAKE_BINARY_DIR}/NSIS_README.txt")
+    configure_file("${_GENY_DOC_README_SRC}" "${_GENY_DOC_README_TXT}" COPYONLY)
+    install(FILES "${_GENY_DOC_README_TXT}" DESTINATION "." RENAME "README.txt")
+  else()
+    message(WARNING "No README file found to bundle.")
+  endif()
+
+  if(_GENY_DOC_LICENSE_SRC)
+    set(_GENY_DOC_LICENSE_TXT "${CMAKE_BINARY_DIR}/NSIS_LICENSE.txt")
+    configure_file("${_GENY_DOC_LICENSE_SRC}" "${_GENY_DOC_LICENSE_TXT}" COPYONLY)
+    install(FILES "${_GENY_DOC_LICENSE_TXT}" DESTINATION "." RENAME "LICENSE.txt")
+  else()
+    message(WARNING "No LICENSE file found to bundle.")
   endif()
 endif()
 
@@ -698,6 +787,50 @@ set(CPACK_PACKAGING_INSTALL_PREFIX     "/")
 
 if(WIN32)
   set(CPACK_GENERATOR "NSIS;ZIP")
+  set(CPACK_NSIS_DISPLAY_NAME "${PROJECT_NAME}")
+  set(CPACK_NSIS_PACKAGE_NAME "${PROJECT_NAME}")
+  set(CPACK_NSIS_INSTALL_ROOT "$PROGRAMFILES64")
+  set(CPACK_PACKAGE_INSTALL_DIRECTORY "${PROJECT_NAME}")
+
+  # -------------------------
+  # Shortcuts (Desktop + Start Menu)
+  # -------------------------
+  set(_GENY_EXE "${GENY_OUTPUT_NAME}.exe")
+
+  # Start Menu links list (also used by CPack internally)
+  set(CPACK_NSIS_MENU_LINKS
+    "${_GENY_EXE}" "${PROJECT_NAME}"
+  )
+
+  # Create shortcuts during install
+  set(CPACK_NSIS_CREATE_ICONS_EXTRA
+    "CreateShortCut \\\"$DESKTOP\\\\${PROJECT_NAME}.lnk\\\" \\\"$INSTDIR\\\\${_GENY_EXE}\\\"\n"
+    "CreateDirectory \\\"$SMPROGRAMS\\\\$STARTMENU_FOLDER\\\"\n"
+    "CreateShortCut \\\"$SMPROGRAMS\\\\$STARTMENU_FOLDER\\\\${PROJECT_NAME}.lnk\\\" \\\"$INSTDIR\\\\${_GENY_EXE}\\\"\n"
+    "CreateShortCut \\\"$SMPROGRAMS\\\\$STARTMENU_FOLDER\\\\Uninstall ${PROJECT_NAME}.lnk\\\" \\\"$INSTDIR\\\\Uninstall.exe\\\"\n"
+  )
+
+  # Remove shortcuts during uninstall
+  set(CPACK_NSIS_DELETE_ICONS_EXTRA
+    "Delete \\\"$DESKTOP\\\\${PROJECT_NAME}.lnk\\\"\n"
+    "Delete \\\"$SMPROGRAMS\\\\$STARTMENU_FOLDER\\\\${PROJECT_NAME}.lnk\\\"\n"
+    "Delete \\\"$SMPROGRAMS\\\\$STARTMENU_FOLDER\\\\Uninstall ${PROJECT_NAME}.lnk\\\"\n"
+    "RMDir  \\\"$SMPROGRAMS\\\\$STARTMENU_FOLDER\\\"\n"
+  )
+
+  # -------------------------
+  # NSIS wizard: License Agreement page
+  # -------------------------
+  if(EXISTS "${CMAKE_BINARY_DIR}/NSIS_LICENSE.txt")
+    set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_BINARY_DIR}/NSIS_LICENSE.txt")
+  endif()
+
+  # Optional: open README after install completes
+  if(EXISTS "${CMAKE_BINARY_DIR}/NSIS_README.txt")
+    set(CPACK_NSIS_EXTRA_INSTALL_COMMANDS
+      "ExecShell \\\"open\\\" \\\"$INSTDIR\\\\README.txt\\\""
+    )
+  endif()
 elseif(APPLE)
   set(CPACK_GENERATOR "DragNDrop")
 else()
