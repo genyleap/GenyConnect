@@ -277,6 +277,19 @@ qt_add_executable(${PROJECT_NAME}
 
 set_target_properties(${PROJECT_NAME} PROPERTIES OUTPUT_NAME "${GENY_OUTPUT_NAME}")
 
+qt_add_executable(GenyConnectUpdater
+    src/updaterhelper/main.cpp
+)
+
+target_link_libraries(GenyConnectUpdater
+    PRIVATE
+    Qt6::Core
+)
+
+set_target_properties(GenyConnectUpdater PROPERTIES
+    OUTPUT_NAME "GenyConnectUpdater"
+)
+
 if(GENYCONNECT_USE_MODULES)
     set_property(TARGET ${PROJECT_NAME} PROPERTY CXX_SCAN_FOR_MODULES ON)
 endif()
@@ -312,6 +325,9 @@ if(GENY_OS STREQUAL "macos")
         MACOSX_BUNDLE_BUNDLE_VERSION ${PROJECT_VERSION}
         MACOSX_BUNDLE_SHORT_VERSION_STRING ${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}
         MACOSX_BUNDLE_ICON_FILE "GenyConnect.icns"
+    )
+    set_target_properties(GenyConnectUpdater PROPERTIES
+        MACOSX_BUNDLE FALSE
     )
 else()
     set_target_properties(${PROJECT_NAME} PROPERTIES
@@ -544,6 +560,25 @@ if(GENYCONNECT_BUNDLED_XRAY_PATH)
                 WORLD_READ WORLD_EXECUTE
         )
     endif()
+endif()
+
+# -------------------------
+# Bundle/copy updater helper after build
+# -------------------------
+if(GENY_OS STREQUAL "macos")
+    add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "$<TARGET_FILE:GenyConnectUpdater>"
+            "$<TARGET_BUNDLE_DIR:${PROJECT_NAME}>/Contents/MacOS/GenyConnectUpdater"
+        COMMENT "Bundling updater helper into macOS app bundle"
+    )
+else()
+    add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "$<TARGET_FILE:GenyConnectUpdater>"
+            "$<TARGET_FILE_DIR:${PROJECT_NAME}>/$<TARGET_FILE_NAME:GenyConnectUpdater>"
+        COMMENT "Copying updater helper next to app executable"
+    )
 endif()
 
 # -------------------------

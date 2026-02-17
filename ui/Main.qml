@@ -55,6 +55,7 @@ ApplicationWindow {
     property int lastTxBytesSample: 0
     property bool rateSampleInitialized: false
     property string profileSearchQuery: ""
+    property string notifiedUpdateVersion: ""
 
     function stateText() {
         if (vpnController.connectionState === ConnectionState.Connecting)
@@ -141,6 +142,21 @@ ApplicationWindow {
         selectedServerMeta = (protocol || "").toUpperCase() + "  " + (address || "") + ":" + port
         if ((security || "").length > 0)
             selectedServerMeta += "  |  " + security
+    }
+
+    function syncSelectedProfileFromController() {
+        if (vpnController.currentProfileIndex < 0) {
+            selectedServerLabel = "Select Location"
+            selectedServerMeta = "Import and select a profile"
+            selectedServerFlag = "🌐"
+            return
+        }
+
+        const label = (vpnController.currentProfileLabel() || "").trim()
+        const subtitle = (vpnController.currentProfileSubtitle() || "").trim()
+        selectedServerLabel = label.length > 0 ? label : "Selected Profile"
+        selectedServerMeta = subtitle.length > 0 ? subtitle : "Profile is selected"
+        selectedServerFlag = guessFlag(selectedServerLabel)
     }
 
     function infoIpText() {
@@ -375,6 +391,7 @@ ApplicationWindow {
     Component.onCompleted: {
         AppGlobals.appWindow = root
         AppGlobals.mainRect = root.contentItem
+        syncSelectedProfileFromController()
     }
 
     Timer {
@@ -414,6 +431,84 @@ ApplicationWindow {
                 upRateBytesPerSec = 0
             }
             root.rateSampleInitialized = false
+        }
+        function onCurrentProfileIndexChanged() {
+            root.syncSelectedProfileFromController()
+        }
+    }
+
+    Connections {
+        target: updater
+        function onChanged() {
+            if (!updater.updateAvailable || updater.latestVersion.length === 0)
+                return
+            if (notifiedUpdateVersion === updater.latestVersion)
+                return
+            notifiedUpdateVersion = updater.latestVersion
+            updateNoticePopup.open()
+        }
+    }
+
+    Popup {
+        id: updateNoticePopup
+        modal: false
+        focus: true
+        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+        padding: 0
+        width: Math.min(420, root.width - 24)
+        x: root.width - width - 16
+        y: 16
+        z: 200
+
+        background: Rectangle {
+            radius: 16
+            color: "#ffffff"
+            border.width: 1
+            border.color: "#d6dfec"
+        }
+
+        contentItem: ColumnLayout {
+            anchors.fill: parent
+            anchors.margins: 14
+            spacing: 10
+
+            Text {
+                Layout.fillWidth: true
+                text: "Update Available"
+                color: "#1f2a3a"
+                font.family: FontSystem.getContentFont.name
+                font.pixelSize: 16
+                font.bold: true
+            }
+
+            Text {
+                Layout.fillWidth: true
+                text: "GenyConnect " + updater.latestVersion + " is available. You're on " + updater.appVersion + "."
+                color: "#667385"
+                font.family: FontSystem.getContentFont.name
+                font.pixelSize: 13
+                wrapMode: Text.WordWrap
+            }
+
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 8
+
+                Controls.Button {
+                    text: "Later"
+                    Layout.fillWidth: true
+                    onClicked: updateNoticePopup.close()
+                }
+
+                Controls.Button {
+                    text: "Open Updates"
+                    Layout.fillWidth: true
+                    onClicked: {
+                        updateNoticePopup.close()
+                        settingsPopup.open()
+                    }
+                }
+            }
         }
     }
 
@@ -745,11 +840,7 @@ ApplicationWindow {
                                             onClicked: function(mouse) {
                                                 mouse.accepted = true
                                                 if (vpnController.removeProfile(index)) {
-                                                    if (vpnController.currentProfileIndex < 0) {
-                                                        root.selectedServerLabel = "Select Location"
-                                                        root.selectedServerMeta = "Import and select a profile"
-                                                        root.selectedServerFlag = "🌐"
-                                                    }
+                                                    root.syncSelectedProfileFromController()
                                                     Qt.callLater(root.positionProfilePopup)
                                                 }
                                             }
@@ -954,12 +1045,18 @@ ApplicationWindow {
                                     }
 
                                     Controls.Button {
-                                        text: updater.downloadedFilePath.length > 0 ? "Open Installer" : "Download"
+                                        text: updater.downloadedFilePath.length > 0
+                                              ? (updater.canInstallDownloadedUpdate ? "Install & Restart" : "Open Installer")
+                                              : "Download"
                                         enabled: updater.updateAvailable && !updater.checking
                                         Layout.fillWidth: true
                                         onClicked: {
                                             if (updater.downloadedFilePath.length > 0) {
-                                                updater.openDownloadedUpdate()
+                                                if (updater.canInstallDownloadedUpdate) {
+                                                    updater.installDownloadedUpdate()
+                                                } else {
+                                                    updater.openDownloadedUpdate()
+                                                }
                                             } else {
                                                 updater.downloadUpdate()
                                             }

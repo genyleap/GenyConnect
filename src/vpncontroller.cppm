@@ -519,6 +519,18 @@ public:
     Q_INVOKABLE QString currentProfileAddress() const;
 
     /**
+     * @brief Return selected profile display label.
+     * @return Profile name or empty when unavailable.
+     */
+    Q_INVOKABLE QString currentProfileLabel() const;
+
+    /**
+     * @brief Return selected profile subtitle text.
+     * @return Protocol/address/security summary or empty when unavailable.
+     */
+    Q_INVOKABLE QString currentProfileSubtitle() const;
+
+    /**
      * @brief Copy buffered logs to clipboard.
      */
     Q_INVOKABLE void copyLogsToClipboard() const;
@@ -745,6 +757,7 @@ private:
     QElapsedTimer m_speedTestSampleTimer;
 
     int m_currentProfileIndex = -1;
+    QString m_currentProfileId;
 
     QString m_xrayExecutablePath;
     QString m_xrayVersion = QStringLiteral("Unknown");

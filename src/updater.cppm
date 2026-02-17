@@ -45,6 +45,7 @@ export class Updater : public QObject
     Q_PROPERTY(double downloadProgress READ downloadProgress NOTIFY changed)
     Q_PROPERTY(QString releaseUrl READ releaseUrl NOTIFY changed)
     Q_PROPERTY(QString downloadedFilePath READ downloadedFilePath NOTIFY changed)
+    Q_PROPERTY(bool canInstallDownloadedUpdate READ canInstallDownloadedUpdate NOTIFY changed)
 
 public:
     /**
@@ -117,6 +118,7 @@ public:
      * @return File path string.
      */
     QString downloadedFilePath() const;
+    bool canInstallDownloadedUpdate() const;
 
     /**
      * @brief Check latest release metadata.
@@ -135,6 +137,7 @@ public:
      * @return True when open request dispatched.
      */
     Q_INVOKABLE bool openDownloadedUpdate();
+    Q_INVOKABLE bool installDownloadedUpdate();
 
     /**
      * @brief Open release page in browser.
@@ -175,6 +178,8 @@ private:
      * @return True if an asset was selected.
      */
     static bool selectBestReleaseAsset(const QJsonArray& assets, QString *assetUrl, QString *assetName);
+    static QString fileSha256Hex(const QString& path);
+    static bool isSelfInstallSupportedAsset(const QString& path);
 
     QString m_appVersion = QStringLiteral("0.0.0");
     bool m_checking = false;

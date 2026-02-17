@@ -3,16 +3,22 @@ module;
 #include <QDesktopServices>
 #include <QDir>
 #include <QFile>
+#include <QByteArrayView>
 #include <QFileInfo>
+#include <QFileDevice>
+#include <QCryptographicHash>
 #include <QJsonDocument>
+#include <QJsonArray>
 #include <QJsonObject>
 #include <QJsonParseError>
 #include <QJsonValue>
 #include <QNetworkReply>
 #include <QNetworkRequest>
+#include <QProcess>
 #include <QRegularExpression>
 #include <QStandardPaths>
 #include <QSysInfo>
+#include <QTimer>
 #include <QUrl>
 #include <QVector>
 
@@ -43,6 +49,36 @@ QVector<int> parseVersionParts(const QString& version)
         parts.append(m.captured(1).toInt());
     }
     return parts;
+}
+
+QString appUpdaterHelperPath()
+{
+#if defined(Q_OS_WIN)
+    return QDir(QCoreApplication::applicationDirPath()).filePath(QStringLiteral("GenyConnectUpdater.exe"));
+#else
+    return QDir(QCoreApplication::applicationDirPath()).filePath(QStringLiteral("GenyConnectUpdater"));
+#endif
+}
+
+bool copyWithOverwrite(const QString& fromPath, const QString& toPath)
+{
+    if (QFileInfo::exists(toPath) && !QFile::remove(toPath)) {
+        return false;
+    }
+    return QFile::copy(fromPath, toPath);
+}
+
+bool looksLikeManualInstaller(const QString& path)
+{
+    const QString lower = QFileInfo(path).fileName().toLower();
+    return lower.endsWith(QStringLiteral(".dmg"))
+        || lower.endsWith(QStringLiteral(".pkg"))
+        || lower.endsWith(QStringLiteral(".msi"))
+        || lower.endsWith(QStringLiteral(".zip"))
+        || lower.endsWith(QStringLiteral(".tar.gz"))
+        || lower.endsWith(QStringLiteral(".tar.xz"))
+        || lower.endsWith(QStringLiteral(".deb"))
+        || lower.endsWith(QStringLiteral(".rpm"));
 }
 }
 
@@ -139,6 +175,11 @@ QString Updater::releaseUrl() const
 QString Updater::downloadedFilePath() const
 {
     return m_downloadedFilePath;
+}
+
+bool Updater::canInstallDownloadedUpdate() const
+{
+    return isSelfInstallSupportedAsset(m_downloadedFilePath);
 }
 
 void Updater::checkForUpdates(bool userInitiated)
@@ -241,6 +282,107 @@ bool Updater::openDownloadedUpdate()
         return false;
     }
     return QDesktopServices::openUrl(QUrl::fromLocalFile(path));
+}
+
+bool Updater::installDownloadedUpdate()
+{
+    const QString sourcePath = m_downloadedFilePath.trimmed();
+    if (sourcePath.isEmpty() || !QFileInfo::exists(sourcePath)) {
+        m_error = QStringLiteral("Downloaded update file was not found.");
+        m_status = QStringLiteral("Install failed.");
+        emit changed();
+        return false;
+    }
+
+    if (looksLikeManualInstaller(sourcePath)) {
+        m_status = QStringLiteral("This asset requires manual install. Opening installer...");
+        m_error.clear();
+        emit changed();
+        return openDownloadedUpdate();
+    }
+
+    const QString helperPath = appUpdaterHelperPath();
+    if (!QFileInfo::exists(helperPath)) {
+        m_error = QStringLiteral("Updater helper executable not found.");
+        m_status = QStringLiteral("Install failed.");
+        emit changed();
+        return false;
+    }
+
+    const QString appDir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
+    if (appDir.trimmed().isEmpty()) {
+        m_error = QStringLiteral("Could not resolve app data directory.");
+        m_status = QStringLiteral("Install failed.");
+        emit changed();
+        return false;
+    }
+
+    const QString updateDir = QDir(appDir).filePath(QStringLiteral("updates"));
+    QDir().mkpath(updateDir);
+
+    const QString sourceName = QFileInfo(sourcePath).fileName();
+    const QString stagedPath = QDir(updateDir).filePath(QStringLiteral("staged-%1").arg(sourceName));
+    if (!copyWithOverwrite(sourcePath, stagedPath)) {
+        m_error = QStringLiteral("Failed to stage update file.");
+        m_status = QStringLiteral("Install failed.");
+        emit changed();
+        return false;
+    }
+
+    const QString stagedHash = fileSha256Hex(stagedPath);
+    if (stagedHash.isEmpty()) {
+        QFile::remove(stagedPath);
+        m_error = QStringLiteral("Failed to hash staged update file.");
+        m_status = QStringLiteral("Install failed.");
+        emit changed();
+        return false;
+    }
+
+    const QString currentExe = QCoreApplication::applicationFilePath();
+    const QString backupPath = currentExe + QStringLiteral(".backup.old");
+    const QString jobPath = QDir(updateDir).filePath(
+        QStringLiteral("update-job-%1.json").arg(QString::number(QDateTime::currentMSecsSinceEpoch()))
+    );
+
+    QJsonObject job;
+    job.insert(QStringLiteral("pid"), static_cast<qint64>(QCoreApplication::applicationPid()));
+    job.insert(QStringLiteral("current_executable"), currentExe);
+    job.insert(QStringLiteral("staged_executable"), stagedPath);
+    job.insert(QStringLiteral("backup_executable"), backupPath);
+    job.insert(QStringLiteral("working_directory"), QCoreApplication::applicationDirPath());
+    job.insert(QStringLiteral("expected_sha256"), stagedHash);
+    job.insert(QStringLiteral("cleanup_source_on_success"), true);
+    job.insert(QStringLiteral("timeout_ms"), 45000);
+    job.insert(QStringLiteral("args"), QJsonArray());
+
+    QFile jobFile(jobPath);
+    if (!jobFile.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+        QFile::remove(stagedPath);
+        m_error = QStringLiteral("Failed to write update job file.");
+        m_status = QStringLiteral("Install failed.");
+        emit changed();
+        return false;
+    }
+    jobFile.write(QJsonDocument(job).toJson(QJsonDocument::Indented));
+    jobFile.close();
+
+    const bool launched = QProcess::startDetached(helperPath, {QStringLiteral("--job"), jobPath});
+    if (!launched) {
+        QFile::remove(jobPath);
+        QFile::remove(stagedPath);
+        m_error = QStringLiteral("Failed to launch updater helper.");
+        m_status = QStringLiteral("Install failed.");
+        emit changed();
+        return false;
+    }
+
+    m_error.clear();
+    m_status = QStringLiteral("Installing update and restarting...");
+    emit systemLog(QStringLiteral("[Updater] Handed off update to helper process."));
+    emit changed();
+
+    QTimer::singleShot(250, qApp, []() { QCoreApplication::quit(); });
+    return true;
 }
 
 bool Updater::openReleasePage()
@@ -551,4 +693,41 @@ bool Updater::selectBestReleaseAsset(const QJsonArray& assets, QString *assetUrl
     *assetUrl = bestUrl;
     *assetName = bestName;
     return true;
+}
+
+QString Updater::fileSha256Hex(const QString& path)
+{
+    QFile file(path);
+    if (!file.open(QIODevice::ReadOnly)) {
+        return {};
+    }
+
+    QCryptographicHash hash(QCryptographicHash::Sha256);
+    QByteArray buffer;
+    buffer.resize(1024 * 1024);
+    while (!file.atEnd()) {
+        const qint64 readBytes = file.read(buffer.data(), buffer.size());
+        if (readBytes < 0) {
+            return {};
+        }
+        if (readBytes > 0) {
+            hash.addData(QByteArrayView(buffer.constData(), static_cast<qsizetype>(readBytes)));
+        }
+    }
+    return QString::fromLatin1(hash.result().toHex());
+}
+
+bool Updater::isSelfInstallSupportedAsset(const QString& path)
+{
+    if (path.trimmed().isEmpty()) {
+        return false;
+    }
+    const QFileInfo info(path);
+    if (!info.exists()) {
+        return false;
+    }
+    if (info.isDir()) {
+        return info.fileName().toLower().endsWith(QStringLiteral(".app"));
+    }
+    return !looksLikeManualInstaller(path);
 }

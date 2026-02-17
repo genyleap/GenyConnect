@@ -136,9 +136,18 @@ VpnController::VpnController(QObject *parent)
 
     if (m_profileModel.rowCount() == 0) {
         m_currentProfileIndex = -1;
+    } else if (!m_currentProfileId.trimmed().isEmpty()) {
+        const int resolvedIndex = m_profileModel.indexOfId(m_currentProfileId.trimmed());
+        if (resolvedIndex >= 0) {
+            m_currentProfileIndex = resolvedIndex;
+        } else if (m_currentProfileIndex < 0 || m_currentProfileIndex >= m_profileModel.rowCount()) {
+            m_currentProfileIndex = 0;
+        }
     } else if (m_currentProfileIndex < 0 || m_currentProfileIndex >= m_profileModel.rowCount()) {
         m_currentProfileIndex = 0;
     }
+    const auto startupProfile = m_profileModel.profileAt(m_currentProfileIndex);
+    m_currentProfileId = startupProfile.has_value() ? startupProfile->id.trimmed() : QString();
 
     QTimer::singleShot(1500, this, [this]() {
         m_updater.checkForUpdates(false);
@@ -267,6 +276,8 @@ void VpnController::setCurrentProfileIndex(int index)
     }
 
     m_currentProfileIndex = index;
+    const auto profile = m_profileModel.profileAt(m_currentProfileIndex);
+    m_currentProfileId = profile.has_value() ? profile->id.trimmed() : QString();
     emit currentProfileIndexChanged();
     saveSettings();
 }
@@ -987,6 +998,30 @@ QString VpnController::currentProfileAddress() const
         return {};
     }
     return profile->address.trimmed();
+}
+
+QString VpnController::currentProfileLabel() const
+{
+    const auto profile = m_profileModel.profileAt(m_currentProfileIndex);
+    if (!profile.has_value()) {
+        return {};
+    }
+    return profile->name.trimmed();
+}
+
+QString VpnController::currentProfileSubtitle() const
+{
+    const auto profile = m_profileModel.profileAt(m_currentProfileIndex);
+    if (!profile.has_value()) {
+        return {};
+    }
+
+    QString subtitle = QStringLiteral("%1  %2:%3")
+        .arg(profile->protocol.toUpper(), profile->address, QString::number(profile->port));
+    if (!profile->security.trimmed().isEmpty()) {
+        subtitle += QStringLiteral("  |  %1").arg(profile->security.trimmed());
+    }
+    return subtitle;
 }
 
 void VpnController::copyLogsToClipboard() const
@@ -1906,6 +1941,7 @@ void VpnController::loadSettings()
     m_loggingEnabled = settings.value(QStringLiteral("logs/enabled"), true).toBool();
     m_autoPingProfiles = settings.value(QStringLiteral("profiles/autoPing"), true).toBool();
     m_currentProfileIndex = settings.value(QStringLiteral("profiles/currentIndex"), -1).toInt();
+    m_currentProfileId = settings.value(QStringLiteral("profiles/currentId")).toString().trimmed();
     m_useSystemProxy = settings.value(QStringLiteral("network/useSystemProxy"), false).toBool();
     if (settings.contains(QStringLiteral("network/autoDisableSystemProxyOnDisconnect"))) {
         m_autoDisableSystemProxyOnDisconnect =
@@ -1929,6 +1965,7 @@ void VpnController::saveSettings() const
     settings.setValue(QStringLiteral("logs/enabled"), m_loggingEnabled);
     settings.setValue(QStringLiteral("profiles/autoPing"), m_autoPingProfiles);
     settings.setValue(QStringLiteral("profiles/currentIndex"), m_currentProfileIndex);
+    settings.setValue(QStringLiteral("profiles/currentId"), m_currentProfileId);
     settings.setValue(QStringLiteral("network/useSystemProxy"), m_useSystemProxy);
     settings.setValue(
         QStringLiteral("network/autoDisableSystemProxyOnDisconnect"),
