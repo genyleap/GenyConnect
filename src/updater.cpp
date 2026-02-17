@@ -1,0 +1,554 @@
+module;
+#include <QCoreApplication>
+#include <QDesktopServices>
+#include <QDir>
+#include <QFile>
+#include <QFileInfo>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QJsonParseError>
+#include <QJsonValue>
+#include <QNetworkReply>
+#include <QNetworkRequest>
+#include <QRegularExpression>
+#include <QStandardPaths>
+#include <QSysInfo>
+#include <QUrl>
+#include <QVector>
+
+#include <limits>
+
+module genyconnect.backend.updater;
+
+namespace {
+const QUrl kReleaseApiUrl(QStringLiteral("https://api.github.com/repos/genyleap/GenyConnect/releases/latest"));
+const QString kReleasesPageUrl = QStringLiteral("https://github.com/genyleap/GenyConnect/releases");
+
+QString normalizeVersionToken(const QString& version)
+{
+    QString cleaned = version.trimmed();
+    if (cleaned.startsWith(QStringLiteral("v"), Qt::CaseInsensitive)) {
+        cleaned.remove(0, 1);
+    }
+    return cleaned;
+}
+
+QVector<int> parseVersionParts(const QString& version)
+{
+    QVector<int> parts;
+    const QRegularExpression numberRx(QStringLiteral("(\\d+)"));
+    QRegularExpressionMatchIterator it = numberRx.globalMatch(version);
+    while (it.hasNext()) {
+        const QRegularExpressionMatch m = it.next();
+        parts.append(m.captured(1).toInt());
+    }
+    return parts;
+}
+}
+
+Updater::Updater(QObject *parent)
+    : QObject(parent)
+{
+    m_releaseUrl = kReleasesPageUrl;
+    const QString runtimeVersion = QCoreApplication::applicationVersion().trimmed();
+    if (!runtimeVersion.isEmpty()) {
+        m_appVersion = runtimeVersion;
+    }
+}
+
+Updater::~Updater()
+{
+    if (m_checkReply != nullptr) {
+        QObject::disconnect(m_checkReply, nullptr, this, nullptr);
+        m_checkReply->abort();
+        m_checkReply->deleteLater();
+        m_checkReply = nullptr;
+    }
+    if (m_downloadReply != nullptr) {
+        QObject::disconnect(m_downloadReply, nullptr, this, nullptr);
+        m_downloadReply->abort();
+        m_downloadReply->deleteLater();
+        m_downloadReply = nullptr;
+    }
+    if (m_downloadFile != nullptr) {
+        if (m_downloadFile->isOpen()) {
+            m_downloadFile->close();
+        }
+        m_downloadFile->deleteLater();
+        m_downloadFile = nullptr;
+    }
+}
+
+QString Updater::appVersion() const
+{
+    return m_appVersion;
+}
+
+void Updater::setAppVersion(const QString& version)
+{
+    const QString normalized = version.trimmed().isEmpty() ? QStringLiteral("0.0.0") : version.trimmed();
+    if (m_appVersion == normalized) {
+        return;
+    }
+    m_appVersion = normalized;
+    emit changed();
+}
+
+bool Updater::checking() const
+{
+    return m_checking;
+}
+
+bool Updater::updateAvailable() const
+{
+    return m_updateAvailable;
+}
+
+QString Updater::latestVersion() const
+{
+    return m_latestVersion;
+}
+
+QString Updater::status() const
+{
+    return m_status;
+}
+
+QString Updater::error() const
+{
+    return m_error;
+}
+
+double Updater::downloadProgress() const
+{
+    if (m_downloadTotal <= 0) {
+        return 0.0;
+    }
+    return qBound(
+        0.0,
+        static_cast<double>(m_downloadReceived) / static_cast<double>(m_downloadTotal),
+        1.0
+    );
+}
+
+QString Updater::releaseUrl() const
+{
+    return m_releaseUrl;
+}
+
+QString Updater::downloadedFilePath() const
+{
+    return m_downloadedFilePath;
+}
+
+void Updater::checkForUpdates(bool userInitiated)
+{
+    if (m_checking || m_checkReply != nullptr || m_downloadReply != nullptr) {
+        return;
+    }
+
+    m_userInitiatedCheck = userInitiated;
+    m_checking = true;
+    m_error.clear();
+    m_status = QStringLiteral("Checking for updates...");
+    emit changed();
+
+    QNetworkRequest request(kReleaseApiUrl);
+    request.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::NoLessSafeRedirectPolicy);
+    request.setRawHeader("User-Agent", "GenyConnect-Updater/1.0");
+    request.setRawHeader("Accept", "application/vnd.github+json");
+    request.setTransferTimeout(12000);
+
+    m_checkReply = m_networkManager.get(request);
+    connect(m_checkReply, &QNetworkReply::finished, this, &Updater::onCheckFinished);
+}
+
+bool Updater::downloadUpdate()
+{
+    if (m_checking || m_downloadReply != nullptr) {
+        return false;
+    }
+
+    if (!m_updateAvailable || m_assetUrl.trimmed().isEmpty()) {
+        m_error = QStringLiteral("No downloadable update asset is available.");
+        m_status = QStringLiteral("Download unavailable.");
+        emit changed();
+        return false;
+    }
+
+    const QString downloadsDir = QStandardPaths::writableLocation(QStandardPaths::DownloadLocation);
+    const QString baseDir = downloadsDir.isEmpty()
+        ? QStandardPaths::writableLocation(QStandardPaths::TempLocation)
+        : downloadsDir;
+    if (baseDir.isEmpty()) {
+        m_error = QStringLiteral("Could not resolve download directory.");
+        m_status = QStringLiteral("Download failed.");
+        emit changed();
+        return false;
+    }
+
+    QDir().mkpath(baseDir);
+    const QString fallbackName = QStringLiteral("genyconnect-update-%1.bin")
+        .arg(m_latestVersion.isEmpty() ? QStringLiteral("latest") : m_latestVersion);
+    const QString fileName = m_assetName.trimmed().isEmpty() ? fallbackName : m_assetName.trimmed();
+    m_downloadedFilePath = QDir(baseDir).filePath(fileName);
+
+    if (m_downloadFile != nullptr) {
+        if (m_downloadFile->isOpen()) {
+            m_downloadFile->close();
+        }
+        m_downloadFile->deleteLater();
+        m_downloadFile = nullptr;
+    }
+
+    m_downloadFile = new QFile(m_downloadedFilePath, this);
+    if (!m_downloadFile->open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+        m_error = QStringLiteral("Failed to create update file: %1").arg(m_downloadedFilePath);
+        m_status = QStringLiteral("Download failed.");
+        m_downloadFile->deleteLater();
+        m_downloadFile = nullptr;
+        emit changed();
+        return false;
+    }
+
+    m_downloadReceived = 0;
+    m_downloadTotal = 0;
+    m_checking = true;
+    m_error.clear();
+    m_status = QStringLiteral("Downloading update...");
+    emit changed();
+
+    QNetworkRequest request {QUrl(m_assetUrl)};
+    request.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::NoLessSafeRedirectPolicy);
+    request.setRawHeader("User-Agent", "GenyConnect-Updater/1.0");
+    request.setTransferTimeout(30000);
+
+    m_downloadReply = m_networkManager.get(request);
+    connect(m_downloadReply, &QNetworkReply::readyRead, this, &Updater::onDownloadReadyRead);
+    connect(m_downloadReply, &QNetworkReply::downloadProgress, this, &Updater::onDownloadProgress);
+    connect(m_downloadReply, &QNetworkReply::finished, this, &Updater::onDownloadFinished);
+
+    emit systemLog(QStringLiteral("[Updater] Downloading %1").arg(fileName));
+    return true;
+}
+
+bool Updater::openDownloadedUpdate()
+{
+    const QString path = m_downloadedFilePath.trimmed();
+    if (path.isEmpty() || !QFileInfo::exists(path)) {
+        m_error = QStringLiteral("Downloaded update file was not found.");
+        emit changed();
+        return false;
+    }
+    return QDesktopServices::openUrl(QUrl::fromLocalFile(path));
+}
+
+bool Updater::openReleasePage()
+{
+    if (m_releaseUrl.trimmed().isEmpty()) {
+        return QDesktopServices::openUrl(QUrl(kReleasesPageUrl));
+    }
+    return QDesktopServices::openUrl(QUrl(m_releaseUrl));
+}
+
+void Updater::onCheckFinished()
+{
+    if (m_checkReply == nullptr) {
+        return;
+    }
+
+    QNetworkReply *reply = m_checkReply;
+    m_checkReply = nullptr;
+    m_checking = false;
+
+    const bool hadError = (reply->error() != QNetworkReply::NoError);
+    const int statusCode = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+    const QByteArray payload = reply->readAll();
+    const QString networkError = reply->errorString().trimmed();
+    reply->deleteLater();
+
+    if (hadError) {
+        QJsonParseError statusParseError;
+        const QJsonDocument statusDoc = QJsonDocument::fromJson(payload, &statusParseError);
+        QString apiMessage;
+        if (statusParseError.error == QJsonParseError::NoError && statusDoc.isObject()) {
+            apiMessage = statusDoc.object().value(QStringLiteral("message")).toString().trimmed();
+        }
+
+        if (statusCode == 404 || apiMessage.compare(QStringLiteral("Not Found"), Qt::CaseInsensitive) == 0) {
+            m_updateAvailable = false;
+            m_latestVersion.clear();
+            m_assetUrl.clear();
+            m_assetName.clear();
+            m_downloadedFilePath.clear();
+            m_downloadReceived = 0;
+            m_downloadTotal = 0;
+            m_error.clear();
+            m_status = QStringLiteral("No published release yet. Current version %1.").arg(m_appVersion);
+            if (m_userInitiatedCheck) {
+                emit systemLog(QStringLiteral("[Updater] %1").arg(m_status));
+            }
+            m_userInitiatedCheck = false;
+            emit changed();
+            return;
+        }
+
+        m_updateAvailable = false;
+        m_error = networkError.isEmpty()
+            ? QStringLiteral("Failed to check updates.")
+            : networkError;
+        m_status = QStringLiteral("Update check failed.");
+        if (m_userInitiatedCheck) {
+            emit systemLog(QStringLiteral("[Updater] %1").arg(m_error));
+        }
+        m_userInitiatedCheck = false;
+        emit changed();
+        return;
+    }
+
+    QJsonParseError parseError;
+    const QJsonDocument doc = QJsonDocument::fromJson(payload, &parseError);
+    if (parseError.error != QJsonParseError::NoError || !doc.isObject()) {
+        m_updateAvailable = false;
+        m_error = QStringLiteral("Release metadata parse failed.");
+        m_status = QStringLiteral("Update check failed.");
+        m_userInitiatedCheck = false;
+        emit changed();
+        return;
+    }
+
+    const QJsonObject root = doc.object();
+    const QString latestRaw = root.value(QStringLiteral("tag_name")).toString().trimmed();
+    const QString latest = normalizeVersionToken(latestRaw);
+    m_releaseUrl = root.value(QStringLiteral("html_url")).toString().trimmed();
+    m_latestVersion = latest;
+    m_error.clear();
+    m_assetUrl.clear();
+    m_assetName.clear();
+    m_downloadedFilePath.clear();
+    m_downloadReceived = 0;
+    m_downloadTotal = 0;
+
+    const QJsonArray assets = root.value(QStringLiteral("assets")).toArray();
+    selectBestReleaseAsset(assets, &m_assetUrl, &m_assetName);
+
+    if (latest.isEmpty()) {
+        m_updateAvailable = false;
+        m_status = QStringLiteral("No version info in release feed.");
+    } else if (isVersionNewer(m_appVersion, latest)) {
+        m_updateAvailable = true;
+        m_status = QStringLiteral("Update available: %1").arg(latest);
+        emit systemLog(QStringLiteral("[Updater] %1").arg(m_status));
+    } else {
+        m_updateAvailable = false;
+        m_status = QStringLiteral("You are up to date (%1).").arg(m_appVersion);
+        if (m_userInitiatedCheck) {
+            emit systemLog(QStringLiteral("[Updater] %1").arg(m_status));
+        }
+    }
+
+    m_userInitiatedCheck = false;
+    emit changed();
+}
+
+void Updater::onDownloadReadyRead()
+{
+    if (m_downloadReply == nullptr || m_downloadFile == nullptr) {
+        return;
+    }
+
+    const QByteArray chunk = m_downloadReply->readAll();
+    if (chunk.isEmpty()) {
+        return;
+    }
+
+    const qint64 written = m_downloadFile->write(chunk);
+    if (written != chunk.size()) {
+        m_downloadReply->abort();
+    }
+}
+
+void Updater::onDownloadProgress(qint64 received, qint64 total)
+{
+    m_downloadReceived = qMax<qint64>(0, received);
+    m_downloadTotal = qMax<qint64>(0, total);
+    emit changed();
+}
+
+void Updater::onDownloadFinished()
+{
+    if (m_downloadReply == nullptr) {
+        return;
+    }
+
+    QNetworkReply *reply = m_downloadReply;
+    m_downloadReply = nullptr;
+
+    const bool hadError = (reply->error() != QNetworkReply::NoError);
+    const QString errorText = reply->errorString().trimmed();
+    reply->deleteLater();
+
+    if (m_downloadFile != nullptr) {
+        m_downloadFile->flush();
+        m_downloadFile->close();
+    }
+
+    m_checking = false;
+
+    if (hadError) {
+        if (m_downloadFile != nullptr) {
+            m_downloadFile->remove();
+            m_downloadFile->deleteLater();
+            m_downloadFile = nullptr;
+        }
+        m_error = errorText.isEmpty()
+            ? QStringLiteral("Update download failed.")
+            : errorText;
+        m_status = QStringLiteral("Download failed.");
+        emit systemLog(QStringLiteral("[Updater] %1").arg(m_error));
+        emit changed();
+        return;
+    }
+
+    if (m_downloadFile != nullptr) {
+        m_downloadFile->deleteLater();
+        m_downloadFile = nullptr;
+    }
+
+    m_error.clear();
+    m_status = QStringLiteral("Update downloaded. Open installer to continue.");
+    m_downloadReceived = m_downloadTotal > 0 ? m_downloadTotal : m_downloadReceived;
+    emit systemLog(QStringLiteral("[Updater] %1").arg(m_status));
+    emit changed();
+}
+
+bool Updater::isVersionNewer(const QString& currentVersion, const QString& candidateVersion)
+{
+    const QVector<int> current = parseVersionParts(normalizeVersionToken(currentVersion));
+    const QVector<int> candidate = parseVersionParts(normalizeVersionToken(candidateVersion));
+    const int maxCount = qMax(current.size(), candidate.size());
+
+    for (int i = 0; i < maxCount; ++i) {
+        const int cur = (i < current.size()) ? current.at(i) : 0;
+        const int next = (i < candidate.size()) ? candidate.at(i) : 0;
+        if (next > cur) {
+            return true;
+        }
+        if (next < cur) {
+            return false;
+        }
+    }
+    return false;
+}
+
+bool Updater::selectBestReleaseAsset(const QJsonArray& assets, QString *assetUrl, QString *assetName)
+{
+    if (assetUrl == nullptr || assetName == nullptr) {
+        return false;
+    }
+
+    *assetUrl = QString();
+    *assetName = QString();
+    if (assets.isEmpty()) {
+        return false;
+    }
+
+    const QString arch = QSysInfo::currentCpuArchitecture().toLower();
+#if defined(Q_OS_MACOS)
+    constexpr bool isMac = true;
+    constexpr bool isWin = false;
+    constexpr bool isLinux = false;
+#elif defined(Q_OS_WIN)
+    constexpr bool isMac = false;
+    constexpr bool isWin = true;
+    constexpr bool isLinux = false;
+#else
+    constexpr bool isMac = false;
+    constexpr bool isWin = false;
+    constexpr bool isLinux = true;
+#endif
+
+    int bestScore = std::numeric_limits<int>::min();
+    QString bestUrl;
+    QString bestName;
+
+    for (const QJsonValue& entry : assets) {
+        if (!entry.isObject()) {
+            continue;
+        }
+        const QJsonObject obj = entry.toObject();
+        const QString name = obj.value(QStringLiteral("name")).toString().trimmed();
+        const QString url = obj.value(QStringLiteral("browser_download_url")).toString().trimmed();
+        if (name.isEmpty() || url.isEmpty()) {
+            continue;
+        }
+
+        const QString lower = name.toLower();
+        int score = 0;
+        if (lower.contains(QStringLiteral("genyconnect"))) {
+            score += 25;
+        }
+
+        if (isMac) {
+            if (lower.contains(QStringLiteral("mac")) || lower.contains(QStringLiteral("darwin")) || lower.contains(QStringLiteral("osx"))) {
+                score += 40;
+            }
+            if (lower.endsWith(QStringLiteral(".dmg"))) {
+                score += 35;
+            } else if (lower.endsWith(QStringLiteral(".pkg"))) {
+                score += 25;
+            } else if (lower.endsWith(QStringLiteral(".zip"))) {
+                score += 10;
+            }
+        } else if (isWin) {
+            if (lower.contains(QStringLiteral("win")) || lower.contains(QStringLiteral("windows"))) {
+                score += 40;
+            }
+            if (lower.endsWith(QStringLiteral(".exe")) || lower.endsWith(QStringLiteral(".msi"))) {
+                score += 35;
+            } else if (lower.endsWith(QStringLiteral(".zip"))) {
+                score += 10;
+            }
+        } else if (isLinux) {
+            if (lower.contains(QStringLiteral("linux"))) {
+                score += 40;
+            }
+            if (lower.endsWith(QStringLiteral(".appimage")) || lower.endsWith(QStringLiteral(".deb")) || lower.endsWith(QStringLiteral(".rpm"))) {
+                score += 35;
+            } else if (lower.endsWith(QStringLiteral(".tar.gz")) || lower.endsWith(QStringLiteral(".zip"))) {
+                score += 15;
+            }
+        }
+
+        const bool armArch = arch.contains(QStringLiteral("arm")) || arch.contains(QStringLiteral("aarch64"));
+        if (armArch) {
+            if (lower.contains(QStringLiteral("arm64")) || lower.contains(QStringLiteral("aarch64"))) {
+                score += 25;
+            }
+        } else {
+            if (lower.contains(QStringLiteral("x64")) || lower.contains(QStringLiteral("x86_64")) || lower.contains(QStringLiteral("amd64"))) {
+                score += 25;
+            }
+        }
+
+        if (score > bestScore) {
+            bestScore = score;
+            bestUrl = url;
+            bestName = name;
+        }
+    }
+
+    if (bestUrl.isEmpty()) {
+        const QJsonObject firstObj = assets.first().toObject();
+        bestName = firstObj.value(QStringLiteral("name")).toString().trimmed();
+        bestUrl = firstObj.value(QStringLiteral("browser_download_url")).toString().trimmed();
+    }
+
+    if (bestUrl.isEmpty()) {
+        return false;
+    }
+
+    *assetUrl = bestUrl;
+    *assetName = bestName;
+    return true;
+}

@@ -250,6 +250,7 @@ set(GENYCONNECT_MODULE_IFS
     src/serverprofile.cppm
     src/serverprofilemodel.cppm
     src/linkparser.cppm
+    src/updater.cppm
     src/xrayconfigbuilder.cppm
     src/systemproxymanager.cppm
     src/xrayprocessmanager.cppm
@@ -260,6 +261,7 @@ set(GENYCONNECT_IMPL_SOURCES
     src/serverprofile.cpp
     src/serverprofilemodel.cpp
     src/linkparser.cpp
+    src/updater.cpp
     src/xrayconfigbuilder.cpp
     src/systemproxymanager.cpp
     src/xrayprocessmanager.cpp

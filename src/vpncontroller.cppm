@@ -36,6 +36,7 @@ import genyconnect.backend.connectionstate;
 import genyconnect.backend.serverprofile;
 import genyconnect.backend.serverprofilemodel;
 import genyconnect.backend.systemproxymanager;
+import genyconnect.backend.updater;
 import genyconnect.backend.xrayconfigbuilder;
 import genyconnect.backend.xrayprocessmanager;
 #endif
@@ -47,6 +48,7 @@ enum class ConnectionState;
 struct ServerProfile;
 class ServerProfileModel;
 class SystemProxyManager;
+class Updater;
 class XrayProcessManager;
 class XrayConfigBuilder {
 public:
@@ -94,6 +96,7 @@ GENYCONNECT_MODULE_EXPORT class VpnController : public QObject
 
     Q_PROPERTY(int currentProfileIndex READ currentProfileIndex WRITE setCurrentProfileIndex NOTIFY currentProfileIndexChanged)
     Q_PROPERTY(QObject *profileModel READ profileModel CONSTANT)
+    Q_PROPERTY(QObject *updater READ updater CONSTANT)
 
     Q_PROPERTY(QString xrayExecutablePath READ xrayExecutablePath WRITE setXrayExecutablePath NOTIFY xrayExecutablePathChanged)
     Q_PROPERTY(QString xrayVersion READ xrayVersion NOTIFY xrayVersionChanged)
@@ -260,6 +263,12 @@ public:
      * @return Pointer to profile model.
      */
     QObject *profileModel();
+
+    /**
+     * @brief Access updater object for QML binding.
+     * @return Pointer to updater service.
+     */
+    QObject *updater();
 
     /**
      * @brief Configured Xray executable path.
@@ -758,6 +767,7 @@ private:
     QString m_runtimeConfigPath;
 
     ServerProfileModel m_profileModel;
+    Updater m_updater;
     SystemProxyManager m_systemProxyManager;
     XrayProcessManager m_processManager;
     XrayConfigBuilder::BuildOptions m_buildOptions;

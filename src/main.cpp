@@ -30,6 +30,7 @@ int main(int argc, char *argv[])
 
     QQmlApplicationEngine engine;
     engine.rootContext()->setContextProperty(QStringLiteral("vpnController"), &vpnController);
+    engine.rootContext()->setContextProperty(QStringLiteral("updater"), vpnController.updater());
 
     QObject::connect(
         &engine,

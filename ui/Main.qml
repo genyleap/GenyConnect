@@ -881,6 +881,103 @@ ApplicationWindow {
 
                         Rectangle {
                             Layout.fillWidth: true
+                            implicitHeight: updateColumn.implicitHeight + 24
+                            radius: 14
+                            color: "#f7f9fc"
+                            border.width: 1
+                            border.color: "#e0e6f0"
+
+                            ColumnLayout {
+                                id: updateColumn
+                                anchors.fill: parent
+                                anchors.margins: 14
+                                spacing: 8
+
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 8
+
+                                    Text {
+                                        text: "App Updates"
+                                        color: "#2a3240"
+                                        font.family: FontSystem.getContentFont.name
+                                        font.pixelSize: 15
+                                        font.bold: true
+                                    }
+
+                                    Item { Layout.fillWidth: true }
+
+                                    Text {
+                                        text: "Current " + updater.appVersion
+                                        color: "#677385"
+                                        font.family: FontSystem.getContentFont.name
+                                        font.pixelSize: 13
+                                    }
+                                }
+
+                                Text {
+                                    Layout.fillWidth: true
+                                    text: updater.status
+                                    color: updater.error.length > 0 ? "#c44a4a"
+                                                                    : (updater.updateAvailable ? "#1f7a51" : "#5f6f88")
+                                    font.family: FontSystem.getContentFont.name
+                                    font.pixelSize: 13
+                                    wrapMode: Text.WordWrap
+                                }
+
+                                Text {
+                                    Layout.fillWidth: true
+                                    visible: updater.updateAvailable && updater.latestVersion.length > 0
+                                    text: "Latest " + updater.latestVersion
+                                    color: "#7f8897"
+                                    font.family: FontSystem.getContentFont.name
+                                    font.pixelSize: 12
+                                }
+
+                                ProgressBar {
+                                    Layout.fillWidth: true
+                                    visible: updater.checking
+                                    from: 0
+                                    to: 1
+                                    value: updater.downloadProgress
+                                }
+
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 8
+
+                                    Controls.Button {
+                                        text: updater.checking ? "Checking..." : "Check Now"
+                                        enabled: !updater.checking
+                                        Layout.fillWidth: true
+                                        onClicked: updater.checkForUpdates(true)
+                                    }
+
+                                    Controls.Button {
+                                        text: updater.downloadedFilePath.length > 0 ? "Open Installer" : "Download"
+                                        enabled: updater.updateAvailable && !updater.checking
+                                        Layout.fillWidth: true
+                                        onClicked: {
+                                            if (updater.downloadedFilePath.length > 0) {
+                                                updater.openDownloadedUpdate()
+                                            } else {
+                                                updater.downloadUpdate()
+                                            }
+                                        }
+                                    }
+
+                                    Controls.Button {
+                                        text: "Release Page"
+                                        enabled: updater.releaseUrl.length > 0
+                                        Layout.fillWidth: true
+                                        onClicked: updater.openReleasePage()
+                                    }
+                                }
+                            }
+                        }
+
+                        Rectangle {
+                            Layout.fillWidth: true
                             implicitHeight: modeColumn.implicitHeight + 24
                             Layout.preferredHeight: implicitHeight
                             radius: 16
@@ -1222,7 +1319,7 @@ ApplicationWindow {
                                 Item { Layout.fillWidth: true }
 
                                 Text {
-                                    text: "Version " + (Qt.application.version || "0.0.0")
+                                    text: "Version " + updater.appVersion
                                     color: "#2a3240"
                                     font.family: FontSystem.getContentFont.name
                                     font.pixelSize: 14

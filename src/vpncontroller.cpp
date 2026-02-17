@@ -1,5 +1,6 @@
 module;
 #include <QClipboard>
+#include <QCoreApplication>
 #include <QDateTime>
 #include <QDir>
 #include <QElapsedTimer>
@@ -119,9 +120,11 @@ VpnController::VpnController(QObject *parent)
     connect(&m_processManager, &XrayProcessManager::errorOccurred, this, &VpnController::onProcessError);
     connect(&m_processManager, &XrayProcessManager::logLine, this, &VpnController::onLogLine);
     connect(&m_processManager, &XrayProcessManager::trafficChanged, this, &VpnController::onTrafficUpdated);
+    connect(&m_updater, &Updater::systemLog, this, &VpnController::appendSystemLog);
 
     loadSettings();
     loadProfiles();
+    m_updater.setAppVersion(QCoreApplication::applicationVersion());
 
     const QString bundledXrayPath = detectDefaultXrayPath();
     if (!bundledXrayPath.isEmpty()) {
@@ -136,6 +139,10 @@ VpnController::VpnController(QObject *parent)
     } else if (m_currentProfileIndex < 0 || m_currentProfileIndex >= m_profileModel.rowCount()) {
         m_currentProfileIndex = 0;
     }
+
+    QTimer::singleShot(1500, this, [this]() {
+        m_updater.checkForUpdates(false);
+    });
 }
 
 VpnController::~VpnController()
@@ -267,6 +274,11 @@ void VpnController::setCurrentProfileIndex(int index)
 QObject *VpnController::profileModel()
 {
     return &m_profileModel;
+}
+
+QObject *VpnController::updater()
+{
+    return &m_updater;
 }
 
 QString VpnController::xrayExecutablePath() const
