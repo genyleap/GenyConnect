@@ -5,7 +5,7 @@ cmake_minimum_required(VERSION 3.28)
 # -----------------------------------------------------------------------------
 
 set(PROJECT_NAME "GenyConnect")
-project(${PROJECT_NAME} VERSION 1.0.0 LANGUAGES CXX)
+project(${PROJECT_NAME} VERSION 1.0.256 LANGUAGES CXX)
 
 if(POLICY CMP0155)
     cmake_policy(SET CMP0155 NEW)
@@ -291,6 +291,10 @@ target_link_libraries(${PROJECT_NAME}
     Qt6::Qml
     Qt6::Quick
     Qt6::QuickControls2
+)
+
+target_compile_definitions(${PROJECT_NAME}
+    PRIVATE APP_VERSION="${PROJECT_VERSION}"
 )
 
 # -------------------------

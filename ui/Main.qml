@@ -1222,7 +1222,7 @@ ApplicationWindow {
                                 Item { Layout.fillWidth: true }
 
                                 Text {
-                                    text: "Version " + "1.0"
+                                    text: "Version " + (Qt.application.version || "0.0.0")
                                     color: "#2a3240"
                                     font.family: FontSystem.getContentFont.name
                                     font.pixelSize: 14

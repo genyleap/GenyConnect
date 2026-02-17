@@ -11,6 +11,11 @@ int main(int argc, char *argv[])
     QCoreApplication::setOrganizationName(QStringLiteral("GenyConnect"));
     QCoreApplication::setOrganizationDomain(QStringLiteral("genyconnect.local"));
     QCoreApplication::setApplicationName(QStringLiteral("GenyConnect"));
+#ifdef APP_VERSION
+    QCoreApplication::setApplicationVersion(QStringLiteral(APP_VERSION));
+#else
+    QCoreApplication::setApplicationVersion(QStringLiteral("0.0.0"));
+#endif
 
     qmlRegisterUncreatableMetaObject(
         connectionStateMetaObject(),

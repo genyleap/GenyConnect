@@ -1,4 +1,4 @@
-<img width="256" height="256" alt="favicon" src="https://github.com/user-attachments/assets/f1c38539-daa3-40d0-a526-b99ea94e6052" />
+![genyconnect-cover](https://github.com/user-attachments/assets/a65daa50-b9ce-46e4-a23b-7886b1c41258)
 
 ---
 # GenyConnect
@@ -51,7 +51,6 @@ The platform is intentionally **engine-agnostic**, allowing different tunneling 
 - The architecture is designed to accommodate VPN protocols without disrupting existing tunneling workflows or user experience.
 
 ---
-![genyconnect-ads](https://github.com/user-attachments/assets/bd259449-9358-424f-849a-710fa62d5cd3)
 
 ## Future Notes
 
