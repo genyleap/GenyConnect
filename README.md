@@ -15,6 +15,21 @@ GenyConnect enables users to establish and manage secure connections through str
 The platform is intentionally **engine-agnostic**, allowing different tunneling backends to be integrated without altering user workflows or expected behavior.
 
 ---
+
+## ❤️ Support Development
+
+If GenyConnect helps you, consider supporting its continued development.
+
+**Crypto Donations**
+
+- **GENY / ETH (ERC20)**  
+  `0x6E99f7564d060AA141dcC47ede34379Bad0cDCCC`
+
+- **BTC**  
+  `BC1Q2Q7G83V9UXATK0YSPFVCU3YDNMESEU3Y7P9J9N`
+
+Your support keeps the project alive and evolving.
+---
 ## Screenshot
 <img width="2240" height="1260" alt="ui-01" src="https://github.com/user-attachments/assets/dd6ca397-e3eb-4102-a909-b13872f2fee7" />
 <img width="2240" height="1260" alt="ui-02" src="https://github.com/user-attachments/assets/637a738c-a299-4f43-aded-7830592e2485" />
@@ -63,8 +78,3 @@ The platform is intentionally **engine-agnostic**, allowing different tunneling 
 - The goal of this direction is not to build a network client alone, but to evolve GenyConnect into an **intelligent connectivity layer** that can align with user identity, decentralized interaction, and token-based ecosystems.
 
 - These capabilities will be introduced progressively, without disrupting the existing tunneling and VPN experience.
-
-## Donation for developer
-GENY or ETH on ERC20: 0x6E99f7564d060AA141dcC47ede34379Bad0cDCCC
-
-BTC: BC1Q2Q7G83V9UXATK0YSPFVCU3YDNMESEU3Y7P9J9N
