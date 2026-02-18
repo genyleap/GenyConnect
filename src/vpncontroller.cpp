@@ -1,4 +1,5 @@
 module;
+#include <QAbstractItemModel>
 #include <QClipboard>
 #include <QCoreApplication>
 #include <QDateTime>
@@ -11,16 +12,20 @@ module;
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QMetaObject>
 #include <QNetworkReply>
 #include <QNetworkRequest>
+#include <QNetworkProxy>
+#include <QPointer>
 #include <QProcess>
 #include <QRegularExpression>
 #include <QSaveFile>
 #include <QSettings>
 #include <QSet>
 #include <QStandardPaths>
+#include <QTimer>
 #include <QTcpSocket>
-#include <QNetworkProxy>
+#include <QtConcurrent/QtConcurrentRun>
 
 module genyconnect.backend.vpncontroller;
 
@@ -34,6 +39,64 @@ constexpr int kSpeedTestMaxAttemptsPerPhase = 12;
 constexpr int kSpeedTestHistoryMaxItems = 20;
 constexpr int kProfilePingTimeoutMs = 3200;
 constexpr int kProfilePingStaggerMs = 140;
+constexpr int kSubscriptionFetchTimeoutMs = 15000;
+
+QByteArray decodeFlexibleBase64(const QByteArray& rawInput)
+{
+    QByteArray raw = rawInput.trimmed();
+    raw.replace('-', '+');
+    raw.replace('_', '/');
+    const int padding = raw.size() % 4;
+    if (padding > 0) {
+        raw.append(QByteArray(4 - padding, '='));
+    }
+
+    QByteArray decoded = QByteArray::fromBase64(raw, QByteArray::AbortOnBase64DecodingErrors);
+    if (!decoded.isEmpty()) {
+        return decoded;
+    }
+
+    return QByteArray::fromBase64(rawInput.trimmed(), QByteArray::AbortOnBase64DecodingErrors);
+}
+
+QStringList extractShareLinks(const QString& text)
+{
+    QStringList links;
+    const QString normalized = text;
+    const QStringList lines = normalized.split(QRegularExpression(QStringLiteral("[\\r\\n]+")), Qt::SkipEmptyParts);
+    for (QString line : lines) {
+        line = line.trimmed();
+        if (line.isEmpty()) {
+            continue;
+        }
+
+        const QStringList tokens = line.split(QRegularExpression(QStringLiteral("[\\s,]+")), Qt::SkipEmptyParts);
+        for (const QString& token : tokens) {
+            const QString candidate = token.trimmed();
+            if (candidate.startsWith(QStringLiteral("vmess://"), Qt::CaseInsensitive)
+                || candidate.startsWith(QStringLiteral("vless://"), Qt::CaseInsensitive)) {
+                links.append(candidate);
+            }
+        }
+    }
+    links.removeDuplicates();
+    return links;
+}
+
+QStringList extractSubscriptionLinks(const QByteArray& payload)
+{
+    const QString plain = QString::fromUtf8(payload).trimmed();
+    QStringList links = extractShareLinks(plain);
+    if (!links.isEmpty()) {
+        return links;
+    }
+
+    const QByteArray decoded = decodeFlexibleBase64(payload);
+    if (decoded.isEmpty()) {
+        return {};
+    }
+    return extractShareLinks(QString::fromUtf8(decoded));
+}
 
 QList<QUrl> speedTestPingUrls()
 {
@@ -92,6 +155,65 @@ double mbpsFromBytes(qint64 bytes, qint64 elapsedMs)
     const qint64 safeElapsedMs = qMax<qint64>(1, elapsedMs);
     return (static_cast<double>(bytes) * 8.0 * 1000.0) / (safeElapsedMs * 1024.0 * 1024.0);
 }
+
+bool checkLocalProxyConnectivitySync(quint16 socksPort, QString *errorMessage)
+{
+    QTcpSocket socket;
+    socket.connectToHost(QHostAddress::LocalHost, socksPort);
+    if (!socket.waitForConnected(2500)) {
+        if (errorMessage) {
+            *errorMessage = QStringLiteral("Local mixed proxy port is not reachable.");
+        }
+        return false;
+    }
+
+    static const QByteArray connectRequest(
+        "CONNECT 1.1.1.1:443 HTTP/1.1\r\n"
+        "Host: 1.1.1.1:443\r\n"
+        "Proxy-Connection: Keep-Alive\r\n\r\n"
+    );
+
+    if (socket.write(connectRequest) <= 0 || !socket.waitForBytesWritten(1500)) {
+        if (errorMessage) {
+            *errorMessage = QStringLiteral("Failed to write proxy CONNECT request.");
+        }
+        return false;
+    }
+
+    QByteArray response;
+    QElapsedTimer timer;
+    timer.start();
+
+    while (!response.contains("\r\n\r\n") && timer.elapsed() < 5000) {
+        const int remaining = static_cast<int>(5000 - timer.elapsed());
+        if (remaining <= 0 || !socket.waitForReadyRead(remaining)) {
+            break;
+        }
+        response.append(socket.readAll());
+        if (response.size() > 4096) {
+            break;
+        }
+    }
+
+    const int lineEnd = response.indexOf("\r\n");
+    QString firstLine;
+    if (lineEnd > 0) {
+        firstLine = QString::fromUtf8(response.left(lineEnd)).trimmed();
+    } else {
+        firstLine = QString::fromUtf8(response).trimmed();
+    }
+
+    const bool ok = firstLine.startsWith(QStringLiteral("HTTP/1.1 200"))
+        || firstLine.startsWith(QStringLiteral("HTTP/1.0 200"));
+
+    if (!ok && errorMessage) {
+        *errorMessage = firstLine.isEmpty()
+            ? QStringLiteral("No proxy response for CONNECT test.")
+            : QStringLiteral("CONNECT response: %1").arg(firstLine);
+    }
+
+    return ok;
+}
 }
 
 VpnController::VpnController(QObject *parent)
@@ -101,6 +223,7 @@ VpnController::VpnController(QObject *parent)
     QDir().mkpath(m_dataDirectory);
 
     m_profilesPath = QDir(m_dataDirectory).filePath(QStringLiteral("profiles.json"));
+    m_subscriptionsPath = QDir(m_dataDirectory).filePath(QStringLiteral("subscriptions.json"));
     m_runtimeConfigPath = QDir(m_dataDirectory).filePath(QStringLiteral("xray-runtime-config.json"));
 
     m_buildOptions.socksPort = 10808;
@@ -121,9 +244,14 @@ VpnController::VpnController(QObject *parent)
     connect(&m_processManager, &XrayProcessManager::logLine, this, &VpnController::onLogLine);
     connect(&m_processManager, &XrayProcessManager::trafficChanged, this, &VpnController::onTrafficUpdated);
     connect(&m_updater, &Updater::systemLog, this, &VpnController::appendSystemLog);
+    connect(&m_profileModel, &QAbstractItemModel::rowsInserted, this, [this]() { recomputeProfileStats(); });
+    connect(&m_profileModel, &QAbstractItemModel::rowsRemoved, this, [this]() { recomputeProfileStats(); });
+    connect(&m_profileModel, &QAbstractItemModel::modelReset, this, [this]() { recomputeProfileStats(); });
+    connect(&m_profileModel, &QAbstractItemModel::dataChanged, this, [this]() { recomputeProfileStats(); });
 
     loadSettings();
     loadProfiles();
+    loadSubscriptions();
     m_updater.setAppVersion(QCoreApplication::applicationVersion());
 
     const QString bundledXrayPath = detectDefaultXrayPath();
@@ -148,6 +276,7 @@ VpnController::VpnController(QObject *parent)
     }
     const auto startupProfile = m_profileModel.profileAt(m_currentProfileIndex);
     m_currentProfileId = startupProfile.has_value() ? startupProfile->id.trimmed() : QString();
+    recomputeProfileStats();
 
     QTimer::singleShot(1500, this, [this]() {
         m_updater.checkForUpdates(false);
@@ -310,6 +439,41 @@ bool VpnController::loggingEnabled() const
 bool VpnController::autoPingProfiles() const
 {
     return m_autoPingProfiles;
+}
+
+QStringList VpnController::subscriptions() const
+{
+    return m_subscriptions;
+}
+
+bool VpnController::subscriptionBusy() const
+{
+    return m_subscriptionBusy;
+}
+
+QString VpnController::subscriptionMessage() const
+{
+    return m_subscriptionMessage;
+}
+
+int VpnController::profileCount() const
+{
+    return m_profileCount;
+}
+
+int VpnController::bestPingMs() const
+{
+    return m_bestPingMs;
+}
+
+int VpnController::worstPingMs() const
+{
+    return m_worstPingMs;
+}
+
+double VpnController::profileScore() const
+{
+    return m_profileScore;
 }
 
 void VpnController::setXrayExecutablePath(const QString& path)
@@ -532,7 +696,6 @@ bool VpnController::importProfileLink(const QString& link)
     auto parsed = LinkParser::parse(link, &error);
     if (!parsed.has_value()) {
         setLastError(error);
-        setConnectionState(ConnectionState::Error);
         return false;
     }
 
@@ -544,7 +707,6 @@ bool VpnController::importProfileLink(const QString& link)
 
     if (!m_profileModel.addProfile(profile)) {
         setLastError(QStringLiteral("Failed to add imported profile."));
-        setConnectionState(ConnectionState::Error);
         return false;
     }
 
@@ -564,6 +726,274 @@ bool VpnController::importProfileLink(const QString& link)
     }
 
     return true;
+}
+
+int VpnController::importProfileBatch(const QString& text)
+{
+    const QStringList links = extractSubscriptionLinks(text.toUtf8());
+    if (links.isEmpty()) {
+        setLastError(QStringLiteral("No supported VMESS/VLESS links found in input."));
+        return 0;
+    }
+
+    int lastImportedIndex = -1;
+    const int importCount = importLinks(links, &lastImportedIndex);
+
+    if (importCount <= 0) {
+        setLastError(QStringLiteral("No valid profiles were imported from input."));
+        return 0;
+    }
+
+    saveProfiles();
+    if (m_currentProfileIndex < 0 && lastImportedIndex >= 0) {
+        setCurrentProfileIndex(lastImportedIndex);
+    }
+    if (m_autoPingProfiles) {
+        pingAllProfiles();
+    }
+
+    appendSystemLog(QStringLiteral("[Import] Imported %1 profile(s).").arg(importCount));
+    if (!m_lastError.isEmpty()) {
+        setLastError(QString());
+    }
+    if (m_connectionState == ConnectionState::Error) {
+        setConnectionState(ConnectionState::Disconnected);
+    }
+    return importCount;
+}
+
+bool VpnController::addSubscription(const QString& url)
+{
+    const QString trimmedUrl = url.trimmed();
+    const QUrl parsedUrl(trimmedUrl);
+    if (!parsedUrl.isValid() || (parsedUrl.scheme() != QStringLiteral("http") && parsedUrl.scheme() != QStringLiteral("https"))) {
+        setLastError(QStringLiteral("Subscription URL must be a valid http(s) link."));
+        return false;
+    }
+
+    if (m_subscriptionBusy) {
+        setLastError(QStringLiteral("Another subscription operation is already running."));
+        return false;
+    }
+
+    const bool alreadyExists = m_subscriptions.contains(trimmedUrl, Qt::CaseInsensitive);
+    if (!alreadyExists) {
+        m_subscriptions.append(trimmedUrl);
+        saveSubscriptions();
+        emit subscriptionsChanged();
+    }
+
+    beginSubscriptionOperation(QStringLiteral("Fetching subscription..."));
+    startSubscriptionFetch(trimmedUrl, false);
+    return true;
+}
+
+int VpnController::refreshSubscriptions()
+{
+    if (m_subscriptionBusy) {
+        appendSystemLog(QStringLiteral("[Subscription] Another subscription operation is already running."));
+        return 0;
+    }
+
+    if (m_subscriptions.isEmpty()) {
+        const QString message = QStringLiteral("No saved subscriptions.");
+        appendSystemLog(QStringLiteral("[Subscription] %1").arg(message));
+        m_subscriptionMessage = message;
+        emit subscriptionStateChanged();
+        return 0;
+    }
+
+    m_subscriptionRefreshQueue = m_subscriptions;
+    m_subscriptionRefreshSuccessCount = 0;
+    m_subscriptionRefreshFailCount = 0;
+    beginSubscriptionOperation(QStringLiteral("Refreshing subscriptions..."));
+    startSubscriptionFetch(m_subscriptionRefreshQueue.takeFirst(), true);
+    return m_subscriptions.size();
+}
+
+int VpnController::importLinks(const QStringList& links, int *lastImportedIndex)
+{
+    int importCount = 0;
+    int lastIndex = -1;
+    for (const QString& linkLine : links) {
+        QString parseError;
+        auto parsed = LinkParser::parse(linkLine, &parseError);
+        if (!parsed.has_value()) {
+            continue;
+        }
+
+        auto profile = parsed.value();
+        if (profile.name.trimmed().isEmpty()) {
+            profile.name = QStringLiteral("%1 %2")
+                .arg(profile.protocol.toUpper(), profile.address);
+        }
+        if (m_profileModel.addProfile(profile)) {
+            ++importCount;
+            lastIndex = m_profileModel.indexOfId(profile.id);
+        }
+    }
+
+    if (lastImportedIndex != nullptr) {
+        *lastImportedIndex = lastIndex;
+    }
+    return importCount;
+}
+
+void VpnController::beginSubscriptionOperation(const QString& message)
+{
+    m_subscriptionBusy = true;
+    m_subscriptionMessage = message;
+    emit subscriptionStateChanged();
+}
+
+void VpnController::endSubscriptionOperation(const QString& message)
+{
+    m_subscriptionBusy = false;
+    m_subscriptionMessage = message;
+    emit subscriptionStateChanged();
+}
+
+void VpnController::startSubscriptionFetch(const QString& url, bool fromRefresh)
+{
+    const QUrl parsedUrl(url);
+    if (!parsedUrl.isValid()) {
+        if (fromRefresh) {
+            ++m_subscriptionRefreshFailCount;
+            if (!m_subscriptionRefreshQueue.isEmpty()) {
+                startSubscriptionFetch(m_subscriptionRefreshQueue.takeFirst(), true);
+            } else {
+                finishRefreshSubscriptions();
+            }
+        } else {
+            endSubscriptionOperation(QStringLiteral("Invalid subscription URL."));
+        }
+        return;
+    }
+
+    QNetworkRequest request(parsedUrl);
+    request.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::NoLessSafeRedirectPolicy);
+    request.setTransferTimeout(kSubscriptionFetchTimeoutMs);
+    request.setRawHeader("User-Agent", "GenyConnect-Subscription/1.0");
+
+    QNetworkReply* reply = m_subscriptionNetworkManager.get(request);
+    connect(reply, &QNetworkReply::finished, this, [this, reply, url, fromRefresh]() {
+        const bool hadError = (reply->error() != QNetworkReply::NoError);
+        QByteArray payload;
+        if (reply->isOpen()) {
+            payload = reply->readAll();
+        }
+        const QString netError = reply->errorString().trimmed();
+        reply->deleteLater();
+
+        int importedCount = 0;
+        if (!hadError) {
+            const QStringList links = extractSubscriptionLinks(payload);
+            int lastImportedIndex = -1;
+            importedCount = importLinks(links, &lastImportedIndex);
+            if (importedCount > 0) {
+                saveProfiles();
+                if (m_currentProfileIndex < 0 && lastImportedIndex >= 0) {
+                    setCurrentProfileIndex(lastImportedIndex);
+                }
+                if (m_autoPingProfiles) {
+                    pingAllProfiles();
+                }
+                appendSystemLog(QStringLiteral("[Subscription] Imported %1 profile(s) from %2.")
+                    .arg(importedCount)
+                    .arg(url));
+                if (!m_lastError.isEmpty()) {
+                    setLastError(QString());
+                }
+                if (m_connectionState == ConnectionState::Error) {
+                    setConnectionState(ConnectionState::Disconnected);
+                }
+            }
+        }
+
+        if (fromRefresh) {
+            if (importedCount > 0) {
+                ++m_subscriptionRefreshSuccessCount;
+            } else {
+                ++m_subscriptionRefreshFailCount;
+                appendSystemLog(QStringLiteral("[Subscription] Refresh failed for %1: %2")
+                    .arg(url, hadError ? netError : QStringLiteral("no valid profiles")));
+            }
+            if (!m_subscriptionRefreshQueue.isEmpty()) {
+                startSubscriptionFetch(m_subscriptionRefreshQueue.takeFirst(), true);
+                return;
+            }
+            finishRefreshSubscriptions();
+            return;
+        }
+
+        if (importedCount > 0) {
+            endSubscriptionOperation(QStringLiteral("Imported %1 profile(s).").arg(importedCount));
+            return;
+        }
+
+        const QString message = hadError
+            ? (netError.isEmpty()
+                ? QStringLiteral("Failed to fetch subscription URL.")
+                : QStringLiteral("Subscription fetch failed: %1").arg(netError))
+            : QStringLiteral("Subscription payload has no supported VMESS/VLESS links.");
+        appendSystemLog(QStringLiteral("[Subscription] %1").arg(message));
+        setLastError(message);
+        endSubscriptionOperation(message);
+    });
+}
+
+void VpnController::finishRefreshSubscriptions()
+{
+    const QString message = QStringLiteral("Refresh complete. Success: %1, failed: %2.")
+        .arg(m_subscriptionRefreshSuccessCount)
+        .arg(m_subscriptionRefreshFailCount);
+    appendSystemLog(QStringLiteral("[Subscription] %1").arg(message));
+    endSubscriptionOperation(message);
+}
+
+void VpnController::recomputeProfileStats()
+{
+    const int count = m_profileModel.rowCount();
+    int best = -1;
+    int worst = -1;
+    int successCount = 0;
+    qint64 sumPing = 0;
+
+    for (int i = 0; i < count; ++i) {
+        const auto profile = m_profileModel.profileAt(i);
+        if (!profile.has_value()) {
+            continue;
+        }
+        if (profile->lastPingMs >= 0) {
+            const int ping = profile->lastPingMs;
+            best = (best < 0) ? ping : qMin(best, ping);
+            worst = (worst < 0) ? ping : qMax(worst, ping);
+            sumPing += ping;
+            ++successCount;
+        }
+    }
+
+    double score = 0.0;
+    if (count > 0 && successCount > 0) {
+        const double avgPing = static_cast<double>(sumPing) / static_cast<double>(successCount);
+        const double availability = static_cast<double>(successCount) / static_cast<double>(count);
+        const double latencyComponent = qMax(0.0, 1.0 - (avgPing / 800.0)) * 3.0;
+        const double availabilityComponent = availability * 2.0;
+        score = qBound(0.0, latencyComponent + availabilityComponent, 5.0);
+    }
+
+    if (m_profileCount == count
+        && m_bestPingMs == best
+        && m_worstPingMs == worst
+        && qFuzzyCompare(m_profileScore, score)) {
+        return;
+    }
+
+    m_profileCount = count;
+    m_bestPingMs = best;
+    m_worstPingMs = worst;
+    m_profileScore = score;
+    emit profileStatsChanged();
 }
 
 bool VpnController::removeProfile(int row)
@@ -586,6 +1016,22 @@ bool VpnController::removeProfile(int row)
 
     saveProfiles();
     return true;
+}
+
+int VpnController::removeAllProfiles()
+{
+    const int removedCount = m_profileModel.rowCount();
+    if (removedCount <= 0) {
+        return 0;
+    }
+
+    m_profileModel.setProfiles({});
+    setCurrentProfileIndex(-1);
+    m_currentProfileId.clear();
+    saveProfiles();
+    saveSettings();
+    appendSystemLog(QStringLiteral("[Profile] Removed all profiles."));
+    return removedCount;
 }
 
 void VpnController::pingProfile(int row)
@@ -1220,11 +1666,15 @@ void VpnController::onSpeedTestTick()
 
 void VpnController::onSpeedTestReadyRead()
 {
-    if (!m_speedTestRunning || m_speedTestReply == nullptr) {
+    auto *reply = qobject_cast<QNetworkReply*>(sender());
+    if (!m_speedTestRunning || m_speedTestReply == nullptr || reply == nullptr || reply != m_speedTestReply) {
+        return;
+    }
+    if (!reply->isOpen()) {
         return;
     }
 
-    const QByteArray chunk = m_speedTestReply->readAll();
+    const QByteArray chunk = reply->readAll();
     if (!chunk.isEmpty()) {
         m_speedTestBytesReceived += chunk.size();
         m_speedTestPhaseBytes += chunk.size();
@@ -1408,83 +1858,45 @@ void VpnController::runProxySelfCheck()
     if (!connected()) {
         return;
     }
+    const quint16 socksPort = m_buildOptions.socksPort;
+    const bool useSystemProxyMode = m_useSystemProxy;
+    const QPointer<VpnController> guard(this);
 
-    QString error;
-    if (checkLocalProxyConnectivity(&error)) {
-        appendSystemLog(QStringLiteral("[System] Proxy self-test passed (127.0.0.1:%1 is forwarding traffic).")
-            .arg(m_buildOptions.socksPort));
-        if (!m_useSystemProxy) {
-            appendSystemLog(QStringLiteral("[System] Clean mode note: macOS system traffic is NOT auto-routed in this mode."));
+    [[maybe_unused]] auto proxySelfCheckFuture = QtConcurrent::run([guard, socksPort, useSystemProxyMode]() {
+        QString error;
+        const bool ok = checkLocalProxyConnectivitySync(socksPort, &error);
+        if (!guard) {
+            return;
         }
-        return;
-    }
 
-    appendSystemLog(QStringLiteral("[System] Proxy self-test failed: %1").arg(error));
-    if (m_useSystemProxy) {
-        appendSystemLog(QStringLiteral("[System] Hint: verify macOS active interface proxy state and retry with admin approval."));
-    } else {
-        appendSystemLog(QStringLiteral("[System] Hint: Clean mode requires apps to use 127.0.0.1:%1 manually.")
-            .arg(m_buildOptions.socksPort));
-    }
+        QMetaObject::invokeMethod(guard.data(), [guard, socksPort, useSystemProxyMode, ok, error]() {
+            if (!guard || !guard->connected()) {
+                return;
+            }
+
+            if (ok) {
+                guard->appendSystemLog(QStringLiteral("[System] Proxy self-test passed (127.0.0.1:%1 is forwarding traffic).")
+                    .arg(socksPort));
+                if (!useSystemProxyMode) {
+                    guard->appendSystemLog(QStringLiteral("[System] Clean mode note: macOS system traffic is NOT auto-routed in this mode."));
+                }
+                return;
+            }
+
+            guard->appendSystemLog(QStringLiteral("[System] Proxy self-test failed: %1").arg(error));
+            if (useSystemProxyMode) {
+                guard->appendSystemLog(QStringLiteral("[System] Hint: verify system proxy state and retry with proper permissions."));
+            } else {
+                guard->appendSystemLog(QStringLiteral("[System] Hint: Clean mode requires apps to use 127.0.0.1:%1 manually.")
+                    .arg(socksPort));
+            }
+        }, Qt::QueuedConnection);
+    });
 }
 
 bool VpnController::checkLocalProxyConnectivity(QString *errorMessage) const
 {
-    QTcpSocket socket;
-    socket.connectToHost(QHostAddress::LocalHost, m_buildOptions.socksPort);
-    if (!socket.waitForConnected(2500)) {
-        if (errorMessage) {
-            *errorMessage = QStringLiteral("Local mixed proxy port is not reachable.");
-        }
-        return false;
-    }
-
-    static const QByteArray connectRequest(
-        "CONNECT 1.1.1.1:443 HTTP/1.1\r\n"
-        "Host: 1.1.1.1:443\r\n"
-        "Proxy-Connection: Keep-Alive\r\n\r\n"
-    );
-
-    if (socket.write(connectRequest) <= 0 || !socket.waitForBytesWritten(1500)) {
-        if (errorMessage) {
-            *errorMessage = QStringLiteral("Failed to write proxy CONNECT request.");
-        }
-        return false;
-    }
-
-    QByteArray response;
-    QElapsedTimer timer;
-    timer.start();
-
-    while (!response.contains("\r\n\r\n") && timer.elapsed() < 5000) {
-        const int remaining = static_cast<int>(5000 - timer.elapsed());
-        if (remaining <= 0 || !socket.waitForReadyRead(remaining)) {
-            break;
-        }
-        response.append(socket.readAll());
-        if (response.size() > 4096) {
-            break;
-        }
-    }
-
-    const int lineEnd = response.indexOf("\r\n");
-    QString firstLine;
-    if (lineEnd > 0) {
-        firstLine = QString::fromUtf8(response.left(lineEnd)).trimmed();
-    } else {
-        firstLine = QString::fromUtf8(response).trimmed();
-    }
-
-    const bool ok = firstLine.startsWith(QStringLiteral("HTTP/1.1 200"))
-        || firstLine.startsWith(QStringLiteral("HTTP/1.0 200"));
-
-    if (!ok && errorMessage) {
-        *errorMessage = firstLine.isEmpty()
-            ? QStringLiteral("No proxy response for CONNECT test.")
-            : QStringLiteral("CONNECT response: %1").arg(firstLine);
-    }
-
-    return ok;
+    return checkLocalProxyConnectivitySync(m_buildOptions.socksPort, errorMessage);
 }
 
 bool VpnController::detectProcessRoutingSupport()
@@ -1917,6 +2329,34 @@ void VpnController::loadProfiles()
     }
 }
 
+void VpnController::loadSubscriptions()
+{
+    QFile file(m_subscriptionsPath);
+    if (!file.exists()) {
+        return;
+    }
+    if (!file.open(QIODevice::ReadOnly)) {
+        return;
+    }
+
+    QJsonParseError parseError;
+    const QJsonDocument doc = QJsonDocument::fromJson(file.readAll(), &parseError);
+    if (parseError.error != QJsonParseError::NoError || !doc.isArray()) {
+        return;
+    }
+
+    QStringList loaded;
+    for (const QJsonValue& value : doc.array()) {
+        const QString url = value.toString().trimmed();
+        const QUrl parsedUrl(url);
+        if (parsedUrl.isValid() && (parsedUrl.scheme() == QStringLiteral("http") || parsedUrl.scheme() == QStringLiteral("https"))) {
+            loaded.append(url);
+        }
+    }
+    loaded.removeDuplicates();
+    m_subscriptions = loaded;
+}
+
 void VpnController::saveProfiles() const
 {
     QJsonArray arr;
@@ -1930,6 +2370,21 @@ void VpnController::saveProfiles() const
         return;
     }
 
+    file.write(QJsonDocument(arr).toJson(QJsonDocument::Indented));
+    file.commit();
+}
+
+void VpnController::saveSubscriptions() const
+{
+    QJsonArray arr;
+    for (const QString& url : m_subscriptions) {
+        arr.append(url);
+    }
+
+    QSaveFile file(m_subscriptionsPath);
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+        return;
+    }
     file.write(QJsonDocument(arr).toJson(QJsonDocument::Indented));
     file.commit();
 }

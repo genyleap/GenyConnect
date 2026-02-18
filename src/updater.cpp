@@ -405,7 +405,10 @@ void Updater::onCheckFinished()
 
     const bool hadError = (reply->error() != QNetworkReply::NoError);
     const int statusCode = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
-    const QByteArray payload = reply->readAll();
+    QByteArray payload;
+    if (reply->isOpen()) {
+        payload = reply->readAll();
+    }
     const QString networkError = reply->errorString().trimmed();
     reply->deleteLater();
 
@@ -473,6 +476,9 @@ void Updater::onCheckFinished()
 
     const QJsonArray assets = root.value(QStringLiteral("assets")).toArray();
     selectBestReleaseAsset(assets, &m_assetUrl, &m_assetName);
+    if (!m_assetName.isEmpty()) {
+        emit systemLog(QStringLiteral("[Updater] Selected asset: %1").arg(m_assetName));
+    }
 
     if (latest.isEmpty()) {
         m_updateAvailable = false;
@@ -495,11 +501,15 @@ void Updater::onCheckFinished()
 
 void Updater::onDownloadReadyRead()
 {
-    if (m_downloadReply == nullptr || m_downloadFile == nullptr) {
+    auto *reply = qobject_cast<QNetworkReply*>(sender());
+    if (m_downloadReply == nullptr || m_downloadFile == nullptr || reply == nullptr || reply != m_downloadReply) {
+        return;
+    }
+    if (!reply->isOpen()) {
         return;
     }
 
-    const QByteArray chunk = m_downloadReply->readAll();
+    const QByteArray chunk = reply->readAll();
     if (chunk.isEmpty()) {
         return;
     }
@@ -626,13 +636,61 @@ bool Updater::selectBestReleaseAsset(const QJsonArray& assets, QString *assetUrl
         }
 
         const QString lower = name.toLower();
+        const bool mentionsMac = lower.contains(QStringLiteral("mac"))
+            || lower.contains(QStringLiteral("darwin"))
+            || lower.contains(QStringLiteral("osx"));
+        const bool mentionsWin = lower.contains(QStringLiteral("win"))
+            || lower.contains(QStringLiteral("windows"));
+        const bool mentionsLinux = lower.contains(QStringLiteral("linux"))
+            || lower.contains(QStringLiteral("appimage"))
+            || lower.contains(QStringLiteral(".deb"))
+            || lower.contains(QStringLiteral(".rpm"));
+
+        // Hard filter when asset explicitly targets a different platform.
+        if (isWin && mentionsMac) {
+            continue;
+        }
+        if (isWin && mentionsLinux) {
+            continue;
+        }
+        if (isMac && mentionsWin) {
+            continue;
+        }
+        if (isMac && mentionsLinux) {
+            continue;
+        }
+        if (isLinux && mentionsWin) {
+            continue;
+        }
+        if (isLinux && mentionsMac) {
+            continue;
+        }
+
+        const bool assetArm = lower.contains(QStringLiteral("arm64")) || lower.contains(QStringLiteral("aarch64"));
+        const bool assetX86 = lower.contains(QStringLiteral("x64"))
+            || lower.contains(QStringLiteral("x86_64"))
+            || lower.contains(QStringLiteral("amd64"))
+            || lower.contains(QStringLiteral("x86-64"));
+        const bool hostArm = arch.contains(QStringLiteral("arm")) || arch.contains(QStringLiteral("aarch64"));
+
+        // Hard filter when asset explicitly targets a different architecture.
+        if (hostArm && assetX86 && !assetArm) {
+            continue;
+        }
+        if (!hostArm && assetArm && !assetX86) {
+            continue;
+        }
+
         int score = 0;
         if (lower.contains(QStringLiteral("genyconnect"))) {
             score += 25;
         }
+        if (lower.contains(QStringLiteral("selfupdate"))) {
+            score += 30;
+        }
 
         if (isMac) {
-            if (lower.contains(QStringLiteral("mac")) || lower.contains(QStringLiteral("darwin")) || lower.contains(QStringLiteral("osx"))) {
+            if (mentionsMac) {
                 score += 40;
             }
             if (lower.endsWith(QStringLiteral(".dmg"))) {
@@ -643,7 +701,7 @@ bool Updater::selectBestReleaseAsset(const QJsonArray& assets, QString *assetUrl
                 score += 10;
             }
         } else if (isWin) {
-            if (lower.contains(QStringLiteral("win")) || lower.contains(QStringLiteral("windows"))) {
+            if (mentionsWin) {
                 score += 40;
             }
             if (lower.endsWith(QStringLiteral(".exe")) || lower.endsWith(QStringLiteral(".msi"))) {
@@ -652,7 +710,7 @@ bool Updater::selectBestReleaseAsset(const QJsonArray& assets, QString *assetUrl
                 score += 10;
             }
         } else if (isLinux) {
-            if (lower.contains(QStringLiteral("linux"))) {
+            if (mentionsLinux) {
                 score += 40;
             }
             if (lower.endsWith(QStringLiteral(".appimage")) || lower.endsWith(QStringLiteral(".deb")) || lower.endsWith(QStringLiteral(".rpm"))) {
@@ -662,13 +720,12 @@ bool Updater::selectBestReleaseAsset(const QJsonArray& assets, QString *assetUrl
             }
         }
 
-        const bool armArch = arch.contains(QStringLiteral("arm")) || arch.contains(QStringLiteral("aarch64"));
-        if (armArch) {
-            if (lower.contains(QStringLiteral("arm64")) || lower.contains(QStringLiteral("aarch64"))) {
+        if (hostArm) {
+            if (assetArm) {
                 score += 25;
             }
         } else {
-            if (lower.contains(QStringLiteral("x64")) || lower.contains(QStringLiteral("x86_64")) || lower.contains(QStringLiteral("amd64"))) {
+            if (assetX86) {
                 score += 25;
             }
         }

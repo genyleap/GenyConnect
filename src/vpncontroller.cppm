@@ -102,6 +102,13 @@ GENYCONNECT_MODULE_EXPORT class VpnController : public QObject
     Q_PROPERTY(QString xrayVersion READ xrayVersion NOTIFY xrayVersionChanged)
     Q_PROPERTY(bool loggingEnabled READ loggingEnabled WRITE setLoggingEnabled NOTIFY loggingEnabledChanged)
     Q_PROPERTY(bool autoPingProfiles READ autoPingProfiles WRITE setAutoPingProfiles NOTIFY autoPingProfilesChanged)
+    Q_PROPERTY(QStringList subscriptions READ subscriptions NOTIFY subscriptionsChanged)
+    Q_PROPERTY(bool subscriptionBusy READ subscriptionBusy NOTIFY subscriptionStateChanged)
+    Q_PROPERTY(QString subscriptionMessage READ subscriptionMessage NOTIFY subscriptionStateChanged)
+    Q_PROPERTY(int profileCount READ profileCount NOTIFY profileStatsChanged)
+    Q_PROPERTY(int bestPingMs READ bestPingMs NOTIFY profileStatsChanged)
+    Q_PROPERTY(int worstPingMs READ worstPingMs NOTIFY profileStatsChanged)
+    Q_PROPERTY(double profileScore READ profileScore NOTIFY profileStatsChanged)
     Q_PROPERTY(bool useSystemProxy READ useSystemProxy WRITE setUseSystemProxy NOTIFY useSystemProxyChanged)
     Q_PROPERTY(
         bool autoDisableSystemProxyOnDisconnect
@@ -293,6 +300,13 @@ public:
      * @return Auto-ping flag.
      */
     bool autoPingProfiles() const;
+    QStringList subscriptions() const;
+    bool subscriptionBusy() const;
+    QString subscriptionMessage() const;
+    int profileCount() const;
+    int bestPingMs() const;
+    int worstPingMs() const;
+    double profileScore() const;
 
     /**
      * @brief Set custom Xray executable path.
@@ -446,11 +460,35 @@ public:
     Q_INVOKABLE bool importProfileLink(const QString& link);
 
     /**
+     * @brief Import multiple profiles from plain/base64 subscription text.
+     * @param text Raw text that may contain many vmess/vless links.
+     * @return Number of imported/updated profiles.
+     */
+    Q_INVOKABLE int importProfileBatch(const QString& text);
+    /**
+     * @brief Add subscription URL and import its profiles.
+     * @param url Subscription endpoint URL.
+     * @return True when at least one profile is imported.
+     */
+    Q_INVOKABLE bool addSubscription(const QString& url);
+
+    /**
+     * @brief Refresh all saved subscriptions.
+     * @return Number of successfully refreshed subscription URLs.
+     */
+    Q_INVOKABLE int refreshSubscriptions();
+
+    /**
      * @brief Remove profile row.
      * @param row Row index.
      * @return True when removal succeeds.
      */
     Q_INVOKABLE bool removeProfile(int row);
+    /**
+     * @brief Remove all stored profiles.
+     * @return Number of removed profiles.
+     */
+    Q_INVOKABLE int removeAllProfiles();
 
     /**
      * @brief Start endpoint ping for one profile row.
@@ -558,6 +596,9 @@ signals:
     void loggingEnabledChanged();
     //! Emitted when profile auto-ping flag changes.
     void autoPingProfilesChanged();
+    void subscriptionsChanged();
+    void subscriptionStateChanged();
+    void profileStatsChanged();
     //! Emitted when system-proxy usage flag changes.
     void useSystemProxyChanged();
     //! Emitted when auto-disable proxy flag changes.
@@ -717,6 +758,14 @@ private:
      * @brief Persist current profiles to disk.
      */
     void saveProfiles() const;
+    void loadSubscriptions();
+    void saveSubscriptions() const;
+    int importLinks(const QStringList& links, int *lastImportedIndex = nullptr);
+    void beginSubscriptionOperation(const QString& message);
+    void endSubscriptionOperation(const QString& message);
+    void startSubscriptionFetch(const QString& url, bool fromRefresh);
+    void finishRefreshSubscriptions();
+    void recomputeProfileStats();
 
     /**
      * @brief Load persistent controller settings.
@@ -763,6 +812,16 @@ private:
     QString m_xrayVersion = QStringLiteral("Unknown");
     bool m_loggingEnabled = true;
     bool m_autoPingProfiles = true;
+    QStringList m_subscriptions;
+    bool m_subscriptionBusy = false;
+    QString m_subscriptionMessage;
+    QStringList m_subscriptionRefreshQueue;
+    int m_subscriptionRefreshSuccessCount = 0;
+    int m_subscriptionRefreshFailCount = 0;
+    int m_profileCount = 0;
+    int m_bestPingMs = -1;
+    int m_worstPingMs = -1;
+    double m_profileScore = 0.0;
     bool m_useSystemProxy = false;
     bool m_autoDisableSystemProxyOnDisconnect = false;
     bool m_whitelistMode = false;
@@ -777,6 +836,7 @@ private:
 
     QString m_dataDirectory;
     QString m_profilesPath;
+    QString m_subscriptionsPath;
     QString m_runtimeConfigPath;
 
     ServerProfileModel m_profileModel;
@@ -787,6 +847,7 @@ private:
     QTimer m_statsPollTimer;
     QTimer m_speedTestTimer;
     QNetworkAccessManager m_speedTestNetworkManager;
+    QNetworkAccessManager m_subscriptionNetworkManager;
     QNetworkReply *m_speedTestReply = nullptr;
     bool m_statsPolling = false;
     int m_statsQueryFailureCount = 0;

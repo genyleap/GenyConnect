@@ -78,12 +78,7 @@ bool XrayProcessManager::start(const QString& configPath, QString *errorMessage)
     }
 
     m_process.start();
-
-    if (!m_process.waitForStarted(5000)) {
-        setError(errorMessage, QStringLiteral("Failed to start xray-core: %1").arg(m_process.errorString()));
-        return false;
-    }
-
+    Q_UNUSED(errorMessage)
     return true;
 }
 

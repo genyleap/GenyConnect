@@ -135,6 +135,13 @@ ApplicationWindow {
         return false
     }
 
+    function profileScoreStars() {
+        const rounded = Math.max(0, Math.min(5, Math.round(vpnController.profileScore)))
+        const full = "★★★★★".slice(0, rounded)
+        const empty = "☆☆☆☆☆".slice(0, 5 - rounded)
+        return full + empty
+    }
+
     function updateProfileSelection(label, protocol, address, port, security) {
         const cleanLabel = (label || "").trim()
         selectedServerLabel = cleanLabel.length > 0 ? cleanLabel : "Selected Profile"
@@ -356,12 +363,13 @@ ApplicationWindow {
     }
 
     function positionProfilePopup() {
-        if (!locationCard || !profilePopup || !profilePopup.contentItem)
+        if (!locationCard || !profilePopup || !profilePopupContent)
             return
 
         const margin = 12
-        const popupWidth = locationCard.width
-        const popupHeight = Math.min(profilePopup.contentItem.implicitHeight, 360)
+        const popupWidth = Math.max(420, Math.min(locationCard.width, root.width - (margin * 2)))
+        const idealHeight = Math.min(profilePopupContent.implicitHeight, Math.floor(root.height * 0.68))
+        const popupHeight = Math.max(220, idealHeight)
 
         const downPos = locationCard.mapToItem(root.contentItem, 0, locationCard.height + 8)
         const upPos = locationCard.mapToItem(root.contentItem, 0, -popupHeight - 8)
@@ -382,7 +390,7 @@ ApplicationWindow {
         if (py < margin)
             py = margin
 
-        profilePopup.width = popupWidth
+        profilePopup.width = popupWidth * 1.5
         profilePopup.height = popupHeight
         profilePopup.x = px
         profilePopup.y = py
@@ -456,6 +464,7 @@ ApplicationWindow {
         closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
         padding: 0
         width: Math.min(420, root.width - 24)
+        height: 128
         x: root.width - width - 16
         y: 16
         z: 200
@@ -472,13 +481,36 @@ ApplicationWindow {
             anchors.margins: 14
             spacing: 10
 
-            Text {
+            RowLayout {
                 Layout.fillWidth: true
-                text: "Update Available"
-                color: "#1f2a3a"
-                font.family: FontSystem.getContentFont.name
-                font.pixelSize: 16
-                font.bold: true
+                spacing: 10
+
+                Rectangle {
+                    width: 26
+                    height: 26
+                    radius: 13
+                    color: "#eaf2ff"
+                    border.width: 1
+                    border.color: "#c8d9f7"
+
+                    Text {
+                        anchors.centerIn: parent
+                        text: "↑"
+                        color: "#2f6de2"
+                        font.family: FontSystem.getContentFont.name
+                        font.pixelSize: 15
+                        font.bold: true
+                    }
+                }
+
+                Text {
+                    Layout.fillWidth: true
+                    text: "Update Available"
+                    color: "#1f2a3a"
+                    font.family: FontSystem.getContentFont.name
+                    font.pixelSize: 16
+                    font.bold: true
+                }
             }
 
             Text {
@@ -495,12 +527,17 @@ ApplicationWindow {
                 spacing: 8
 
                 Controls.Button {
+                    implicitHeight: 32
+                    implicitWidth: 86
+
                     text: "Later"
                     Layout.fillWidth: true
                     onClicked: updateNoticePopup.close()
                 }
 
                 Controls.Button {
+                    implicitHeight: 32
+                    implicitWidth: 86
                     text: "Open Updates"
                     Layout.fillWidth: true
                     onClicked: {
@@ -529,33 +566,35 @@ ApplicationWindow {
             Qt.callLater(root.positionProfilePopup)
         }
 
-        width: 420
-        height: 72
-        padding: 0
-
         background: Rectangle {
-            radius: 24
+            radius: 22
             color: "#ffffff"
             border.width: 1
             border.color: "#dbe2ee"
         }
 
-        contentItem: Rectangle {
-            radius: 24
-            color: "transparent"
+        contentItem: Item {
+            id: profilePopupContent
             clip: true
-            implicitHeight: Math.min(408, searchBar.implicitHeight + listView.contentHeight + 72)
+            implicitHeight: 16
+                            + searchBar.implicitHeight
+                            + 8
+                            + actionsRow.implicitHeight
+                            + 8
+                            + statsFlow.implicitHeight
+                            + 10
+                            + Math.min(Math.max(listView.contentHeight, 96), 310)
+                            + 16
 
             ColumnLayout {
                 anchors.fill: parent
-                anchors.margins: 8
+                anchors.margins: 10
                 spacing: 8
-                clip: true
 
                 Rectangle {
                     id: searchBar
                     Layout.fillWidth: true
-                    implicitHeight: 64
+                    implicitHeight: 58
                     radius: 14
                     color: "#f6f9fd"
                     border.width: 1
@@ -616,11 +655,12 @@ ApplicationWindow {
                 }
 
                 RowLayout {
+                    id: actionsRow
                     Layout.fillWidth: true
                     spacing: 8
 
                     Rectangle {
-                        Layout.preferredWidth: 132
+                        Layout.preferredWidth: 116
                         Layout.preferredHeight: 36
                         radius: 12
                         color: addProfileMouse.containsMouse ? "#2f6ff1" : "#3f7cf3"
@@ -650,7 +690,36 @@ ApplicationWindow {
                     }
 
                     Rectangle {
-                        Layout.preferredWidth: 112
+                        Layout.preferredWidth: 106
+                        Layout.preferredHeight: 36
+                        radius: 12
+                        color: clearAllMouse.containsMouse ? "#fff0f0" : "#fff6f6"
+                        border.width: 1
+                        border.color: "#f2cdcd"
+                        opacity: listView.count > 0 ? 1.0 : 0.55
+                        Behavior on color { ColorAnimation { duration: 120 } }
+
+                        Text {
+                            anchors.centerIn: parent
+                            text: "Delete All"
+                            color: "#cb4f4f"
+                            font.family: FontSystem.getContentFont.name
+                            font.pixelSize: 13
+                            font.bold: true
+                        }
+
+                        MouseArea {
+                            id: clearAllMouse
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            enabled: listView.count > 0
+                            cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+                            onClicked: clearProfilesPopup.open()
+                        }
+                    }
+
+                    Rectangle {
+                        Layout.preferredWidth: 96
                         Layout.preferredHeight: 36
                         radius: 12
                         color: pingAllMouse.containsMouse ? "#f2f6fd" : "#f7f9fd"
@@ -678,114 +747,304 @@ ApplicationWindow {
                         }
                     }
 
-                    Item { Layout.fillWidth: true }
+                    Rectangle {
+                        Layout.preferredWidth: 112
+                        Layout.preferredHeight: 36
+                        radius: 12
+                        color: refreshSubsMouse.containsMouse ? "#f2f6fd" : "#f7f9fd"
+                        border.width: 1
+                        border.color: "#d7dfec"
+                        opacity: vpnController.subscriptions.length > 0 ? 1.0 : 0.55
+                        Behavior on color { ColorAnimation { duration: 120 } }
 
-                    Text {
-                        text: vpnController.autoPingProfiles ? "Auto ping ON" : "Auto ping OFF"
-                        color: vpnController.autoPingProfiles ? "#278c59" : "#8b97aa"
-                        font.family: FontSystem.getContentFont.name
-                        font.pixelSize: 12
-                    }
-                }
-
-                ListView {
-                    id: listView
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: Math.min(contentHeight, 192)
-                    clip: true
-                    model: vpnController.profileModel
-                    spacing: 0
-
-                    delegate: Item {
-                        required property int index
-                        required property string displayLabel
-                        required property string protocol
-                        required property string address
-                        required property int port
-                        required property string security
-                        required property string pingText
-                        required property bool pinging
-                        required property int pingMs
-
-                        readonly property bool selected: index === vpnController.currentProfileIndex
-                        readonly property bool matched: root.profileMatchesSearch(displayLabel, protocol, address, security)
-                        width: listView.width
-                        height: matched ? 84 : 0
-                        visible: matched
-
-                        Rectangle {
-                            id: rowBg
-                            anchors.left: parent.left
-                            anchors.right: parent.right
-                            anchors.top: parent.top
-                            anchors.topMargin: 2
-                            height: 80
-                            radius: 16
-                            color: selected ? "#eaf2ff" : (hoverArea.containsMouse ? "#f5f8fd" : "#ffffff")
-                            border.width: selected ? 1 : 0
-                            border.color: selected ? "#d2e0f8" : "transparent"
-                            Behavior on color { ColorAnimation { duration: 120 } }
-                            Behavior on border.color { ColorAnimation { duration: 120 } }
+                        Text {
+                            anchors.centerIn: parent
+                            text: "Refresh Subs"
+                            color: "#4b5d78"
+                            font.family: FontSystem.getContentFont.name
+                            font.pixelSize: 13
+                            font.bold: true
                         }
 
                         MouseArea {
-                            id: hoverArea
-                            anchors.fill: rowBg
+                            id: refreshSubsMouse
+                            anchors.fill: parent
                             hoverEnabled: true
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: {
-                                vpnController.currentProfileIndex = index
-                                root.updateProfileSelection(displayLabel, protocol, address, port, security)
-                                profilePopup.close()
-                            }
+                            enabled: vpnController.subscriptions.length > 0 && !vpnController.subscriptionBusy
+                            cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+                            onClicked: vpnController.refreshSubscriptions()
                         }
+                    }
 
-                        RowLayout {
-                            anchors.fill: rowBg
-                            anchors.leftMargin: 14
-                            anchors.rightMargin: 14
-                            spacing: 10
+                    Item { Layout.fillWidth: true }
 
-                            Text {
-                                text: root.guessFlag(displayLabel)
-                                font.pixelSize: 22
+                    BusyIndicator {
+                        Layout.preferredWidth: 16
+                        Layout.preferredHeight: 16
+                        running: vpnController.subscriptionBusy
+                        visible: vpnController.subscriptionBusy
+                    }
+
+                    Text {
+                        Layout.preferredWidth: Math.min(profilePopup.width * 0.45, 280)
+                        text: vpnController.subscriptionMessage
+                        visible: text.length > 0
+                        color: vpnController.subscriptionBusy ? "#2b6dcf" : "#6f7f95"
+                        font.family: FontSystem.getContentFont.name
+                        font.pixelSize: 12
+                        elide: Text.ElideRight
+                    }
+                }
+
+                Flow {
+                    id: statsFlow
+                    Layout.fillWidth: true
+                    spacing: 6
+
+                    Rectangle {
+                        radius: 11
+                        height: 24
+                        color: vpnController.autoPingProfiles ? "#e8f7ef" : "#eef2f8"
+                        border.width: 1
+                        border.color: vpnController.autoPingProfiles ? "#b9e3c8" : "#d9e0ed"
+                        width: autoPingText.implicitWidth + 18
+
+                        Text {
+                            id: autoPingText
+                            anchors.centerIn: parent
+                            text: vpnController.autoPingProfiles ? "Auto Ping ON" : "Auto Ping OFF"
+                            color: vpnController.autoPingProfiles ? "#278c59" : "#7b8799"
+                            font.family: FontSystem.getContentFont.name
+                            font.pixelSize: 11
+                            font.bold: true
+                        }
+                    }
+
+                    Rectangle {
+                        radius: 11
+                        height: 24
+                        color: "#f3f6fb"
+                        border.width: 1
+                        border.color: "#d9e0ed"
+                        width: subsText.implicitWidth + 18
+
+                        Text {
+                            id: subsText
+                            anchors.centerIn: parent
+                            text: "Subs " + vpnController.subscriptions.length
+                            color: "#667487"
+                            font.family: FontSystem.getContentFont.name
+                            font.pixelSize: 11
+                            font.bold: true
+                        }
+                    }
+
+                    Rectangle {
+                        radius: 11
+                        height: 24
+                        color: "#f3f6fb"
+                        border.width: 1
+                        border.color: "#d9e0ed"
+                        width: profilesText.implicitWidth + 18
+
+                        Text {
+                            id: profilesText
+                            anchors.centerIn: parent
+                            text: "Profiles " + vpnController.profileCount
+                            color: "#667487"
+                            font.family: FontSystem.getContentFont.name
+                            font.pixelSize: 11
+                            font.bold: true
+                        }
+                    }
+
+                    Rectangle {
+                        radius: 11
+                        height: 24
+                        color: "#f3f6fb"
+                        border.width: 1
+                        border.color: "#d9e0ed"
+                        width: bestText.implicitWidth + 18
+
+                        Text {
+                            id: bestText
+                            anchors.centerIn: parent
+                            text: "Best " + (vpnController.bestPingMs >= 0 ? (vpnController.bestPingMs + " ms") : "--")
+                            color: "#667487"
+                            font.family: FontSystem.getContentFont.name
+                            font.pixelSize: 11
+                            font.bold: true
+                        }
+                    }
+
+                    Rectangle {
+                        radius: 11
+                        height: 24
+                        color: "#f3f6fb"
+                        border.width: 1
+                        border.color: "#d9e0ed"
+                        width: worstText.implicitWidth + 18
+
+                        Text {
+                            id: worstText
+                            anchors.centerIn: parent
+                            text: "Worst " + (vpnController.worstPingMs >= 0 ? (vpnController.worstPingMs + " ms") : "--")
+                            color: "#667487"
+                            font.family: FontSystem.getContentFont.name
+                            font.pixelSize: 11
+                            font.bold: true
+                        }
+                    }
+
+                    Rectangle {
+                        radius: 11
+                        height: 24
+                        color: "#fff5e9"
+                        border.width: 1
+                        border.color: "#f4d9b1"
+                        width: scoreText.implicitWidth + 18
+
+                        Text {
+                            id: scoreText
+                            anchors.centerIn: parent
+                            text: "Score " + root.profileScoreStars()
+                            color: "#9c6b1f"
+                            font.family: FontSystem.getContentFont.name
+                            font.pixelSize: 11
+                            font.bold: true
+                        }
+                    }
+                }
+
+                Rectangle {
+                    id: listContainer
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    Layout.preferredHeight: Math.min(Math.max(listView.contentHeight, 100), 300)
+                    radius: 16
+                    color: "#f9fbff"
+                    border.width: 1
+                    border.color: "#e4eaf4"
+
+                    ListView {
+                        id: listView
+                        anchors.fill: parent
+                        anchors.margins: 6
+                        clip: true
+                        model: vpnController.profileModel
+                        spacing: 6
+                        ScrollBar.vertical: ScrollBar {
+                            policy: ScrollBar.AsNeeded
+                        }
+                        onContentHeightChanged: Qt.callLater(root.positionProfilePopup)
+                        onCountChanged: Qt.callLater(root.positionProfilePopup)
+
+                        delegate: Item {
+                            required property int index
+                            required property string displayLabel
+                            required property string protocol
+                            required property string address
+                            required property int port
+                            required property string security
+                            required property string pingText
+                            required property bool pinging
+                            required property int pingMs
+
+                            readonly property bool selected: index === vpnController.currentProfileIndex
+                            readonly property bool matched: root.profileMatchesSearch(displayLabel, protocol, address, security)
+                            width: listView.width
+                            height: matched ? 72 : 0
+                            visible: matched
+
+                            Rectangle {
+                                id: rowBg
+                                anchors.fill: parent
+                                radius: 14
+                                color: selected ? "#eaf2ff" : (hoverArea.containsMouse ? "#f5f8fd" : "#ffffff")
+                                border.width: 1
+                                border.color: selected ? "#d2e0f8" : "#e7edf6"
+                                Behavior on color { ColorAnimation { duration: 120 } }
+                                Behavior on border.color { ColorAnimation { duration: 120 } }
                             }
 
-                            ColumnLayout {
-                                Layout.fillWidth: true
-                                spacing: 1
-
-                                Text {
-                                    text: displayLabel
-                                    font.family: FontSystem.getContentFont.name
-                                    font.pixelSize: 19
-                                    color: "#202634"
-                                    elide: Text.ElideRight
-                                }
-
-                                Text {
-                                    text: protocol.toUpperCase() + " " + address + ":" + port + ((security || "").length ? " | " + security : "")
-                                    font.family: FontSystem.getContentFont.name
-                                    font.pixelSize: 12
-                                    color: "#8c95a4"
-                                    elide: Text.ElideRight
+                            MouseArea {
+                                id: hoverArea
+                                anchors.fill: rowBg
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: {
+                                    vpnController.currentProfileIndex = index
+                                    root.updateProfileSelection(displayLabel, protocol, address, port, security)
+                                    profilePopup.close()
                                 }
                             }
 
-                            ColumnLayout {
-                                spacing: 4
+                            RowLayout {
+                                anchors.fill: rowBg
+                                anchors.leftMargin: 12
+                                anchors.rightMargin: 10
+                                spacing: 10
 
-                                RowLayout {
-                                    spacing: 6
-                                    Item { Layout.fillWidth: true; }
+                                Rectangle {
+                                    Layout.preferredWidth: 38
+                                    Layout.preferredHeight: 38
+                                    radius: 19
+                                    color: "#f3f6fb"
+                                    border.width: 1
+                                    border.color: "#dde4ef"
 
                                     Text {
-                                        text: pingText
-                                        color: pinging ? "#f59e0b" : (pingMs >= 0 ? "#2b6dcf" : "#9aa4b6")
+                                        anchors.centerIn: parent
+                                        text: root.guessFlag(displayLabel)
+                                        font.pixelSize: 21
+                                    }
+                                }
+
+                                ColumnLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 2
+
+                                    Text {
+                                        text: displayLabel
+                                        font.family: FontSystem.getContentFont.name
+                                        font.pixelSize: 14
+                                        color: "#202634"
+                                        elide: Text.ElideRight
+                                    }
+
+                                    Text {
+                                        text: protocol.toUpperCase() + " " + address + ":" + port + ((security || "").length ? " | " + security : "")
                                         font.family: FontSystem.getContentFont.name
                                         font.pixelSize: 12
-                                        font.bold: true
-                                        horizontalAlignment: Text.AlignRight
+                                        color: "#8c95a4"
+                                        elide: Text.ElideRight
+                                    }
+                                }
+
+                                RowLayout {
+                                    Layout.preferredWidth: 256
+                                    Layout.alignment: Qt.AlignVCenter
+                                    spacing: 6
+
+                                    Item { Layout.fillWidth: true; }
+
+                                    Rectangle {
+                                        Layout.preferredWidth: 64
+                                        Layout.fillWidth: false
+                                        Layout.preferredHeight: 30
+                                        radius: 10
+                                        color: pinging ? "#fff5e8" : "#eff5ff"
+                                        border.width: 1
+                                        border.color: pinging ? "#f9d9a8" : "#d8e4f8"
+
+                                        Text {
+                                            anchors.centerIn: parent
+                                            text: pingText
+                                            color: pinging ? "#d18b22" : (pingMs >= 0 ? "#2b6dcf" : "#9aa4b6")
+                                            font.family: FontSystem.getContentFont.name
+                                            font.pixelSize: 12
+                                            font.bold: true
+                                        }
                                     }
 
                                     Rectangle {
@@ -809,10 +1068,7 @@ ApplicationWindow {
                                             anchors.fill: parent
                                             hoverEnabled: true
                                             cursorShape: Qt.PointingHandCursor
-                                            onClicked: function(mouse) {
-                                                mouse.accepted = true
-                                                vpnController.pingProfile(index)
-                                            }
+                                            onClicked: vpnController.pingProfile(index)
                                         }
                                     }
 
@@ -837,8 +1093,7 @@ ApplicationWindow {
                                             anchors.fill: parent
                                             hoverEnabled: true
                                             cursorShape: Qt.PointingHandCursor
-                                            onClicked: function(mouse) {
-                                                mouse.accepted = true
+                                            onClicked: {
                                                 if (vpnController.removeProfile(index)) {
                                                     root.syncSelectedProfileFromController()
                                                     Qt.callLater(root.positionProfilePopup)
@@ -851,32 +1106,84 @@ ApplicationWindow {
                         }
                     }
 
-                    footer: Item {
-                        width: listView.width
-                        height: listView.count === 0 ? 72 : 0
-
-                        Text {
-                            anchors.centerIn: parent
-                            visible: listView.count === 0
-                            text: "No profiles. Import one first."
-                            color: "#98a0ad"
-                            font.family: FontSystem.getContentFont.name
-                            font.pixelSize: 15
-                        }
-                    }
-                }
-
-                Item {
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: (listView.count > 0 && listView.contentHeight <= 1) ? 64 : 0
-                    visible: Layout.preferredHeight > 0
-
                     Text {
+                        id: emptyState
                         anchors.centerIn: parent
-                        text: "No matching profile found."
+                        visible: listView.count === 0 || (listView.count > 0 && listView.contentHeight < 2)
+                        text: listView.count === 0
+                              ? "No profiles. Import one first."
+                              : "No matching profile found."
                         color: "#8f9bad"
                         font.family: FontSystem.getContentFont.name
                         font.pixelSize: 14
+                    }
+                }
+            }
+        }
+    }
+
+    Popup {
+        id: clearProfilesPopup
+        modal: true
+        focus: true
+        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+        width: Math.min(root.width - 40, 420)
+        height: 210
+        x: (root.width - width) * 0.5
+        y: (root.height - height) * 0.5
+        padding: 0
+
+        background: Rectangle {
+            radius: 20
+            color: "#ffffff"
+            border.width: 1
+            border.color: "#d8dde8"
+        }
+
+        contentItem: ColumnLayout {
+            anchors.fill: parent
+            anchors.margins: 18
+            spacing: 10
+
+            Text {
+                text: "Delete all profiles?"
+                color: "#1f2530"
+                font.family: FontSystem.getContentFont.name
+                font.pixelSize: 24
+                font.bold: true
+            }
+
+            Text {
+                Layout.fillWidth: true
+                text: "This removes all imported profiles from GenyConnect. This action cannot be undone."
+                color: "#6a778b"
+                font.family: FontSystem.getContentFont.name
+                font.pixelSize: 13
+                wrapMode: Text.WordWrap
+            }
+
+            Item { Layout.fillHeight: true }
+
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 10
+
+                Controls.Button {
+                    Layout.fillWidth: true
+                    text: "Cancel"
+                    onClicked: clearProfilesPopup.close()
+                }
+
+                Controls.Button {
+                    Layout.fillWidth: true
+                    text: "Delete All"
+                    onClicked: {
+                        const removed = vpnController.removeAllProfiles()
+                        clearProfilesPopup.close()
+                        if (removed > 0) {
+                            root.syncSelectedProfileFromController()
+                            Qt.callLater(root.positionProfilePopup)
+                        }
                     }
                 }
             }
@@ -888,7 +1195,7 @@ ApplicationWindow {
         modal: true
         focus: true
         closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
-        width: Math.min(root.width - 40, 560)
+        width: Math.min(root.width - 30, 550)
         height: Math.min(root.height - 60, 720)
         x: (root.width - width) * 0.5
         y: (root.height - height) * 0.5
@@ -911,6 +1218,7 @@ ApplicationWindow {
 
                 RowLayout {
                     Layout.fillWidth: true
+                    Layout.rightMargin: 64
                     Text {
                         text: "Settings"
                         font.family: FontSystem.getContentFont.name
@@ -928,14 +1236,18 @@ ApplicationWindow {
                         borderColor: "#e1e5ed"
                         onClicked: settingsPopup.close()
                     }
+                     Item { Layout.fillWidth: true }
                 }
 
                 ScrollView {
-                    Layout.fillWidth: true
+                    Layout.fillWidth: false
                     Layout.fillHeight: true
-                    clip: true
+                    // clip: true
+                    ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
+                    ScrollBar.vertical.policy: ScrollBar.AlwaysOn
+
                     ColumnLayout {
-                        width: aboutPopup.width - 54
+                        width: aboutPopup.width
                         spacing: 12
 
                         Rectangle {
@@ -1098,8 +1410,8 @@ ApplicationWindow {
 
                                 Text {
                                     text: vpnController.useSystemProxy
-                                          ? "Global mode: macOS routes compatible apps through GenyConnect automatically."
-                                          : "Clean mode: macOS proxy stays untouched. Only apps set to 127.0.0.1:10808 use the tunnel."
+                                          ? "Global mode: " + osNameText() + " routes compatible apps through GenyConnect automatically."
+                                          : "Clean mode: " + osNameText() + " proxy stays untouched. Only apps set to 127.0.0.1:10808 use the tunnel."
                                     color: "#7c8697"
                                     font.family: FontSystem.getContentFont.name
                                     font.pixelSize: 13
@@ -1282,10 +1594,19 @@ ApplicationWindow {
                             font.pixelSize: 14
                         }
 
+                        Text {
+                            Layout.fillWidth: true
+                            text: "Use comma or new line between values. Domain formats: example.com, full:example.com, domain:example.com, regexp:.*\\\\.example\\\\.com$, geosite:category-ads-all."
+                            wrapMode: Text.Wrap
+                            color: "#8a95a8"
+                            font.family: FontSystem.getContentFont.name
+                            font.pixelSize: 12
+                        }
+
                         Controls.TextArea {
                             Layout.fillWidth: true
                             Layout.preferredHeight: 74
-                            placeholderText: "Tunnel Domains"
+                            placeholderText: "Tunnel Domains\nexample.com\ndomain:youtube.com\nregexp:.*\\\\.openai\\\\.com$"
                             text: vpnController.proxyDomainRules
                             onTextChanged: vpnController.proxyDomainRules = text
                         }
@@ -1293,7 +1614,7 @@ ApplicationWindow {
                         Controls.TextArea {
                             Layout.fillWidth: true
                             Layout.preferredHeight: 74
-                            placeholderText: "Direct Domains"
+                            placeholderText: "Direct Domains\nfull:localhost\ngeosite:private\nexample.org"
                             text: vpnController.directDomainRules
                             onTextChanged: vpnController.directDomainRules = text
                         }
@@ -1301,15 +1622,28 @@ ApplicationWindow {
                         Controls.TextArea {
                             Layout.fillWidth: true
                             Layout.preferredHeight: 74
-                            placeholderText: "Block Domains"
+                            placeholderText: "Block Domains\ngeosite:category-ads-all\nregexp:.*ads.*"
                             text: vpnController.blockDomainRules
                             onTextChanged: vpnController.blockDomainRules = text
+                        }
+
+                        Text {
+                            Layout.fillWidth: true
+                            text: vpnController.processRoutingSupported
+                                  ? "App rules are supported on this xray-core build."
+                                  : "App rules require xray-core 26.1.23+ (current build does not support process routing)."
+                            wrapMode: Text.Wrap
+                            color: vpnController.processRoutingSupported ? "#8a95a8" : "#d97706"
+                            font.family: FontSystem.getContentFont.name
+                            font.pixelSize: 12
                         }
 
                         Controls.TextArea {
                             Layout.fillWidth: true
                             Layout.preferredHeight: 66
-                            placeholderText: "Tunnel Apps"
+                            enabled: vpnController.processRoutingSupported
+                            opacity: enabled ? 1.0 : 0.6
+                            placeholderText: "Tunnel Apps\nTelegram\nchrome.exe\ncom.apple.Safari"
                             text: vpnController.proxyAppRules
                             onTextChanged: vpnController.proxyAppRules = text
                         }
@@ -1317,7 +1651,9 @@ ApplicationWindow {
                         Controls.TextArea {
                             Layout.fillWidth: true
                             Layout.preferredHeight: 66
-                            placeholderText: "Direct Apps"
+                            enabled: vpnController.processRoutingSupported
+                            opacity: enabled ? 1.0 : 0.6
+                            placeholderText: "Direct Apps\nFinder\nexplorer.exe\nfirefox"
                             text: vpnController.directAppRules
                             onTextChanged: vpnController.directAppRules = text
                         }
@@ -1325,7 +1661,9 @@ ApplicationWindow {
                         Controls.TextArea {
                             Layout.fillWidth: true
                             Layout.preferredHeight: 66
-                            placeholderText: "Block Apps"
+                            enabled: vpnController.processRoutingSupported
+                            opacity: enabled ? 1.0 : 0.6
+                            placeholderText: "Block Apps\nsteam.exe\nDiscord\ncom.apple.Music"
                             text: vpnController.blockAppRules
                             onTextChanged: vpnController.blockAppRules = text
                         }
@@ -1337,12 +1675,11 @@ ApplicationWindow {
 
     Popup {
         id: aboutPopup
-
         modal: true
         focus: true
         closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
-        width: Math.min(root.width - 40, 560)
-        height: Math.min(root.height - 60, 480)
+        width: Math.min(root.width - 40, 510)
+        height: Math.min(root.height - 30, 480)
         x: (root.width - width) * 0.5
         y: (root.height - height) * 0.5
         padding: 0
@@ -1386,10 +1723,11 @@ ApplicationWindow {
                 ScrollView {
                     Layout.fillWidth: true
                     Layout.fillHeight: true
-                    clip: true
+                    clip: false
 
                     ColumnLayout {
-                        width: aboutPopup.width - 54
+                        anchors.fill: parent
+                        width: aboutPopup.width
                         spacing: 12
 
                         // --- App Info ---
@@ -2292,6 +2630,7 @@ ApplicationWindow {
             }
         }
     }
+
     Popup {
         id: importPopup
 
@@ -2299,7 +2638,7 @@ ApplicationWindow {
         focus: true
         closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
         width: Math.min(root.width - 40, 640)
-        height: 280
+        height: 248
         x: (root.width - width) * 0.5
         y: (root.height - height) * 0.5
         padding: 0
@@ -2328,19 +2667,55 @@ ApplicationWindow {
                 id: importTextArea
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                placeholderText: "Paste vless:// or vmess:// link"
+                placeholderText: "Paste vmess/vless, batch list, base64 subscription payload, or https subscription URL"
                 text: root.importDraft
                 onTextChanged: root.importDraft = text
             }
 
             RowLayout {
                 Layout.fillWidth: true
+                spacing: 8
+
+                BusyIndicator {
+                    running: vpnController.subscriptionBusy
+                    visible: vpnController.subscriptionBusy
+                    implicitWidth: 18
+                    implicitHeight: 18
+                }
+
+                Text {
+                    Layout.fillWidth: true
+                    text: vpnController.subscriptionBusy
+                          ? (vpnController.subscriptionMessage.length > 0
+                             ? vpnController.subscriptionMessage
+                             : "Working...")
+                          : (vpnController.subscriptionMessage.length > 0
+                             ? vpnController.subscriptionMessage
+                             : "")
+                    color: vpnController.subscriptionBusy ? "#2b6dcf" : "#6f7f95"
+                    font.family: FontSystem.getContentFont.name
+                    font.pixelSize: 12
+                    elide: Text.ElideRight
+                }
+            }
+
+            RowLayout {
+                Layout.fillWidth: true
                 Item { Layout.fillWidth: true }
                 Controls.Button {
-                    text: "Import"
+                    implicitWidth: 256
+                    text: vpnController.subscriptionBusy ? "Please wait..." : "Import / Add Subscription"
                     Layout.fillWidth: false
+                    enabled: !vpnController.subscriptionBusy
                     onClicked: {
-                        if (vpnController.importProfileLink(importTextArea.text.trim())) {
+                        const raw = importTextArea.text.trim()
+                        if (raw.length === 0)
+                            return
+                        const isSub = raw.startsWith("http://") || raw.startsWith("https://")
+                        const imported = isSub ? (vpnController.addSubscription(raw) ? 1 : 0)
+                                               : vpnController.importProfileBatch(raw)
+                        const ok = imported > 0
+                        if (ok) {
                             root.importDraft = ""
                             importTextArea.text = ""
                             importPopup.close()
