@@ -6,7 +6,10 @@ import QtQuick.Controls
 QtObject {
     id: styleObject
 
-    readonly property int radius : 15
+    readonly property int radius : 28
+    readonly property int padding : 8
+    readonly property int outerRadius : 28
+    readonly property int innerRadius : 20
 
     property bool lightMode: {
         if (!AppGlobals.appWindow)
@@ -69,7 +72,7 @@ QtObject {
 
     // Header and footer
     readonly property color header: lightMode ? "#ddd9f1" : "#222222"
-    readonly property color footer: lightMode ? "#0e121b" : "#111111"
+    readonly property color footer: lightMode ? "#ddd9f1" : "#222222"
 
     // Status colors
     readonly property color primary: lightMode ? "#6e707b" : "#a0a0a0"

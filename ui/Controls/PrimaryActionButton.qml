@@ -37,7 +37,7 @@ Item {
             text: root.text
             color: "#ffffff"
             font.family: FontSystem.getContentFont.name
-            font.pixelSize: 44 * 0.6
+            font.pixelSize: 44 * 0.4
             font.bold: true
         }
     }

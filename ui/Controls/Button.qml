@@ -104,7 +104,7 @@ T.Button {
         implicitWidth: control.width
         implicitHeight: control.height
         Layout.fillWidth: true
-        radius: width
+        radius: Colors.outerRadius
         color: control.isDefault ? Colors.primaryBack : "transparent"
         border.width: control.isDefault ? 0 : 1
         border.color: control.isDefault ? "transparent" : Colors.secondry

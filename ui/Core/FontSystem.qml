@@ -12,6 +12,7 @@ Item {
     property alias getContentFont: contentFontRegular
     property alias getContentFontRegular: contentFontRegular
     property alias getContentFontMedium: contentFontRegular
+    property alias getContentFontBold: contentFontBold
     property alias getFontSize: fontSize
 
     QtObject {
@@ -45,6 +46,11 @@ Item {
     FontLoader {
         id: contentFontRegular
         source: "qrc:/ui/Resources/fonts/Inter-Regular.ttf"
+    }
+
+    FontLoader {
+        id: contentFontBold
+        source: "qrc:/ui/Resources/fonts/Inter-Bold.ttf"
     }
 
 }

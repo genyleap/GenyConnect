@@ -12,11 +12,11 @@ ApplicationWindow {
     id: root
 
     visible: true
-    width: 1280
+    width: 1200
     height: 800
-    minimumWidth: 1280
+    minimumWidth: 1200
     minimumHeight: 800
-    title: "GenyConnect"
+    title: "GenyConnect (Build " +  updater.appVersion + ") - " + osNameText()
 
     color: "#eceff5"
     font.family: FontSystem.getContentFont.name
@@ -27,14 +27,18 @@ ApplicationWindow {
     readonly property string iconGrid: "\uf00a"
     readonly property string iconShield: "\uf3ed"
     readonly property string iconGear: "\uf013"
+    readonly property string iconSetting: "\uf1de"
     readonly property string iconInfo: "\uf05a"
     readonly property string iconHistory: "\uf1da"
     readonly property string iconClose: "\uf00d"
-    readonly property string iconClock: "\uf017"
+    readonly property string iconSpeed: "\uf625"
+    readonly property string iconPing: "\ue06f"
     readonly property string iconKeyboard: "\uf11c"
     readonly property string iconImport: "\uf56f"
     readonly property string iconChevronDown: "\uf078"
     readonly property string iconTrash: "\uf1f8"
+    readonly property string iconPlus: "\uf067"
+    readonly property string iconMinus: "\uf068"
 
     property string selectedServerLabel: vpnController.currentProfileIndex >= 0
                                          ? "Selected Profile"
@@ -56,6 +60,13 @@ ApplicationWindow {
     property bool rateSampleInitialized: false
     property string profileSearchQuery: ""
     property string notifiedUpdateVersion: ""
+    property string subscriptionGroupDraft: "General"
+    property bool importWaitingForSubscription: false
+    property string importStatusText: ""
+    property string importStatusKind: "idle"
+
+    opacity: 0
+    Behavior on opacity { NumberAnimation { duration: 420; easing.type: Easing.OutCubic } }
 
     function stateText() {
         if (vpnController.connectionState === ConnectionState.Connecting)
@@ -112,14 +123,108 @@ ApplicationWindow {
         return ["global", "world", "any"]
     }
 
-    function profileMatchesSearch(displayLabel, protocol, address, security) {
+    function normalizeProfileGroup(rawGroup) {
+        const text = (rawGroup || "").trim()
+        if (text.length === 0)
+            return "General"
+        if (text.toLowerCase() === "all")
+            return "General"
+        return text
+    }
+
+    function profileGroupVisible(groupName) {
+        if (!profileGroupEnabled(groupName))
+            return false
+        const current = (vpnController.currentProfileGroup || "All").trim().toLowerCase()
+        if (current.length === 0 || current === "all")
+            return true
+        return normalizeProfileGroup(groupName).toLowerCase() === current
+    }
+
+    function importSelectableGroups() {
+        const rawGroups = vpnController.profileGroups || []
+        const names = []
+        const seen = {}
+        for (let i = 0; i < rawGroups.length; ++i) {
+            const name = (rawGroups[i] || "").trim()
+            if (name.length === 0 || name.toLowerCase() === "all")
+                continue
+            const key = name.toLowerCase()
+            if (seen[key] !== true) {
+                seen[key] = true
+                names.push(name)
+            }
+        }
+        if (seen["general"] !== true)
+            names.unshift("General")
+        return names
+    }
+
+    function normalizeImportGroupName(rawGroup) {
+        const typed = (rawGroup || "").trim()
+        const fallback = "General"
+        if (typed.length === 0 || typed.toLowerCase() === "all")
+            return fallback
+
+        const existing = importSelectableGroups()
+        const key = typed.toLowerCase()
+        for (let i = 0; i < existing.length; ++i) {
+            const candidate = (existing[i] || "").trim()
+            if (candidate.toLowerCase() === key)
+                return candidate
+        }
+        return typed
+    }
+
+    function isProtectedGroup(groupName) {
+        const name = (groupName || "").trim().toLowerCase()
+        return name === "all" || name === "general"
+    }
+
+    function findProfileGroupItem(groupName) {
+        const normalized = normalizeProfileGroup(groupName).toLowerCase()
+        const items = vpnController.profileGroupItems || []
+        for (let i = 0; i < items.length; ++i) {
+            const item = items[i]
+            if (((item.name || "").toLowerCase()) === normalized)
+                return item
+        }
+        return null
+    }
+
+    function profileGroupBadgeText(groupName) {
+        const item = findProfileGroupItem(groupName)
+        if (!item || !item.badge)
+            return ""
+        return (item.badge || "").trim()
+    }
+
+    function profileGroupEnabled(groupName) {
+        const item = findProfileGroupItem(groupName)
+        if (!item)
+            return true
+        return item.enabled !== false
+    }
+
+    function profileGroupExclusive(groupName) {
+        const item = findProfileGroupItem(groupName)
+        if (!item)
+            return false
+        return item.exclusive === true
+    }
+
+    function profileMatchesSearch(displayLabel, protocol, address, security, groupName, sourceName) {
         const rawQuery = (profileSearchQuery || "").trim()
         if (rawQuery.length === 0)
             return true
 
         const q = rawQuery.toLowerCase()
         const label = (displayLabel || "")
-        const meta = ((protocol || "") + " " + (address || "") + " " + (security || "")).toLowerCase()
+        const meta = ((protocol || "")
+                      + " " + (address || "")
+                      + " " + (security || "")
+                      + " " + (groupName || "")
+                      + " " + (sourceName || "")).toLowerCase()
         if (label.toLowerCase().indexOf(q) >= 0 || meta.indexOf(q) >= 0)
             return true
 
@@ -140,6 +245,27 @@ ApplicationWindow {
         const full = "★★★★★".slice(0, rounded)
         const empty = "☆☆☆☆☆".slice(0, 5 - rounded)
         return full + empty
+    }
+
+    function subscriptionsInCurrentGroup() {
+        const group = (vpnController.currentProfileGroup || "All").trim().toLowerCase()
+        const items = vpnController.subscriptionItems || []
+        if (group.length === 0 || group === "all") {
+            let enabledCount = 0
+            for (let i = 0; i < items.length; ++i) {
+                if (profileGroupEnabled(items[i].group))
+                    enabledCount += 1
+            }
+            return enabledCount
+        }
+
+        let count = 0
+        for (let i = 0; i < items.length; ++i) {
+            const itemGroup = normalizeProfileGroup(items[i].group).toLowerCase()
+            if (itemGroup === group && profileGroupEnabled(items[i].group))
+                count += 1
+        }
+        return count
     }
 
     function updateProfileSelection(label, protocol, address, port, security) {
@@ -397,6 +523,7 @@ ApplicationWindow {
     }
 
     Component.onCompleted: {
+        opacity = 1
         AppGlobals.appWindow = root
         AppGlobals.mainRect = root.contentItem
         syncSelectedProfileFromController()
@@ -468,6 +595,31 @@ ApplicationWindow {
         x: root.width - width - 16
         y: 16
         z: 200
+
+        anchors.centerIn: Overlay.overlay
+        transformOrigin: Item.Center
+
+        scale: 0.9
+
+        enter: Transition {
+            NumberAnimation {
+                property: "scale"
+                from: 0.92
+                to: 1.0
+                duration: Animations.fast * 1.15
+                easing.type: Easing.OutCubic
+            }
+        }
+
+        exit: Transition {
+            NumberAnimation {
+                property: "scale"
+                from: 1.0
+                to: 0.94
+                duration: Animations.fast * 0.9
+                easing.type: Easing.InCubic
+            }
+        }
 
         background: Rectangle {
             radius: 16
@@ -566,6 +718,28 @@ ApplicationWindow {
             Qt.callLater(root.positionProfilePopup)
         }
 
+        scale: 0.9
+
+        enter: Transition {
+            NumberAnimation {
+                property: "scale"
+                from: 0.92
+                to: 1.0
+                duration: Animations.fast * 1.15
+                easing.type: Easing.OutCubic
+            }
+        }
+
+        exit: Transition {
+            NumberAnimation {
+                property: "scale"
+                from: 1.0
+                to: 0.94
+                duration: Animations.fast * 0.9
+                easing.type: Easing.InCubic
+            }
+        }
+
         background: Rectangle {
             radius: 22
             color: "#ffffff"
@@ -580,6 +754,9 @@ ApplicationWindow {
                             + searchBar.implicitHeight
                             + 8
                             + actionsRow.implicitHeight
+                            + 8
+                            + groupRow.implicitHeight
+                            + (groupOptionsRow.visible ? (8 + groupOptionsRow.implicitHeight) : 0)
                             + 8
                             + statsFlow.implicitHeight
                             + 10
@@ -620,7 +797,7 @@ ApplicationWindow {
                         anchors.leftMargin: 34
                         anchors.rightMargin: 4
                         padding: 0
-                        placeholderText: "Search by profile, country, or flag"
+                        placeholderText: "Search by profile, country, or IP"
                         text: root.profileSearchQuery
                         color: "#1f2a3a"
                         font.family: FontSystem.getContentFont.name
@@ -674,7 +851,7 @@ ApplicationWindow {
                             color: "#ffffff"
                             font.family: FontSystem.getContentFont.name
                             font.pixelSize: 13
-                            font.bold: true
+                            font.bold: false
                         }
 
                         MouseArea {
@@ -705,7 +882,7 @@ ApplicationWindow {
                             color: "#cb4f4f"
                             font.family: FontSystem.getContentFont.name
                             font.pixelSize: 13
-                            font.bold: true
+                            font.bold: false
                         }
 
                         MouseArea {
@@ -730,11 +907,13 @@ ApplicationWindow {
 
                         Text {
                             anchors.centerIn: parent
-                            text: "Ping All"
+                            text: (vpnController.currentProfileGroup || "All").toLowerCase() === "all"
+                                  ? "Ping All"
+                                  : "Ping Group"
                             color: "#4b5d78"
                             font.family: FontSystem.getContentFont.name
                             font.pixelSize: 13
-                            font.bold: true
+                            font.bold: false
                         }
 
                         MouseArea {
@@ -759,11 +938,14 @@ ApplicationWindow {
 
                         Text {
                             anchors.centerIn: parent
-                            text: "Refresh Subs"
+                            text: (vpnController.currentProfileGroup || "All") === "All"
+                                  ? "Refresh Subs"
+                                  : "Refresh Group"
                             color: "#4b5d78"
+                            opacity: vpnController.subscriptionBusy ? 0.5 : 1.0
                             font.family: FontSystem.getContentFont.name
                             font.pixelSize: 13
-                            font.bold: true
+                            font.bold: false
                         }
 
                         MouseArea {
@@ -772,11 +954,18 @@ ApplicationWindow {
                             hoverEnabled: true
                             enabled: vpnController.subscriptions.length > 0 && !vpnController.subscriptionBusy
                             cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
-                            onClicked: vpnController.refreshSubscriptions()
+                            onClicked: {
+                                const current = (vpnController.currentProfileGroup || "All")
+                                if (current === "All") {
+                                    vpnController.refreshSubscriptions()
+                                } else {
+                                    vpnController.refreshSubscriptionsByGroup(current)
+                                }
+                            }
                         }
                     }
 
-                    Item { Layout.fillWidth: true }
+                    // Item { Layout.fillWidth: true }
 
                     BusyIndicator {
                         Layout.preferredWidth: 16
@@ -785,14 +974,187 @@ ApplicationWindow {
                         visible: vpnController.subscriptionBusy
                     }
 
+                    Item { Layout.fillWidth: true }
+
+
+                    // Text {
+                    //     Layout.preferredWidth: Math.min(profilePopup.width * 0.45, 280)
+                    //     text: vpnController.subscriptionMessage
+                    //     visible: text.length > 0
+                    //     color: vpnController.subscriptionBusy
+                    //            ? "#2b6dcf"
+                    //            : ((text.toLowerCase().indexOf("fail") >= 0 || text.toLowerCase().indexOf("error") >= 0)
+                    //               ? "#bf4d4d"
+                    //               : "#6f7f95")
+                    //     font.family: FontSystem.getContentFont.name
+                    //     font.pixelSize: 12
+                    //     elide: Text.ElideRight
+                    // }
+                }
+
+                RowLayout {
+                    id: groupRow
+                    Layout.fillWidth: true
+                    spacing: 8
+
                     Text {
-                        Layout.preferredWidth: Math.min(profilePopup.width * 0.45, 280)
-                        text: vpnController.subscriptionMessage
-                        visible: text.length > 0
-                        color: vpnController.subscriptionBusy ? "#2b6dcf" : "#6f7f95"
+                        text: "Group"
+                        color: "#6b778a"
                         font.family: FontSystem.getContentFont.name
                         font.pixelSize: 12
-                        elide: Text.ElideRight
+                    }
+
+                    Controls.ComboBox {
+                        id: groupFilterCombo
+                        Layout.preferredWidth: Math.min(profilePopup.width * 0.45, 320)
+                        Layout.preferredHeight: 34
+                        model: vpnController.profileGroupItems
+                        leftPadding: 10
+                        rightPadding: 30
+
+                        function groupNameAt(i) {
+                            const items = vpnController.profileGroupItems || []
+                            if (i < 0 || i >= items.length)
+                                return ""
+                            const item = items[i]
+                            return (item && item.name) ? item.name : ""
+                        }
+
+                        function syncIndexFromController() {
+                            const groups = vpnController.profileGroupItems || []
+                            const current = (vpnController.currentProfileGroup || "All").toLowerCase()
+                            for (let i = 0; i < groups.length; ++i) {
+                                const name = ((groups[i] && groups[i].name) ? groups[i].name : "").toLowerCase()
+                                if (name === current) {
+                                    if (currentIndex !== i)
+                                        currentIndex = i
+                                    return
+                                }
+                            }
+                            if (groups.length > 0 && currentIndex !== 0)
+                                currentIndex = 0
+                        }
+
+                        onActivated: {
+                            const name = groupNameAt(currentIndex)
+                            if (name.length > 0)
+                                vpnController.currentProfileGroup = name
+                            Qt.callLater(root.positionProfilePopup)
+                        }
+
+                        Component.onCompleted: syncIndexFromController()
+
+                        Connections {
+                            target: vpnController
+                            function onProfileGroupsChanged() { groupFilterCombo.syncIndexFromController() }
+                            function onProfileGroupOptionsChanged() { groupFilterCombo.syncIndexFromController() }
+                            function onCurrentProfileGroupChanged() { groupFilterCombo.syncIndexFromController() }
+                        }
+                    }
+
+                    Rectangle {
+                        radius: 10
+                        height: 30
+                        width: visibleProfilesText.implicitWidth + 16
+                        color: "#eef4ff"
+                        border.width: 1
+                        border.color: "#d8e4f8"
+
+                        Text {
+                            id: visibleProfilesText
+                            anchors.centerIn: parent
+                            text: "Visible " + vpnController.filteredProfileCount
+                            color: "#5f6f86"
+                            font.family: FontSystem.getContentFont.name
+                            font.pixelSize: 11
+                        }
+                    }
+
+                    Item { Layout.fillWidth: true }
+                }
+
+                RowLayout {
+                    id: groupOptionsRow
+                    Layout.fillWidth: true
+                    spacing: 8
+                    visible: (groupFilterCombo.groupNameAt(groupFilterCombo.currentIndex) || "All").toLowerCase() !== "all"
+
+                    Rectangle {
+                        Layout.fillWidth: true
+                        implicitHeight: 38
+                        radius: 12
+                        color: "#f7f9fd"
+                        border.width: 1
+                        border.color: "#dce4f2"
+
+                        RowLayout {
+                            anchors.fill: parent
+                            anchors.leftMargin: 10
+                            anchors.rightMargin: 10
+                            spacing: 10
+
+                            Text {
+                                text: "Enabled"
+                                color: "#5f6f86"
+                                font.family: FontSystem.getContentFont.name
+                                font.pixelSize: 12
+                            }
+
+                            Switch {
+                                checked: root.profileGroupEnabled(groupFilterCombo.groupNameAt(groupFilterCombo.currentIndex))
+                                onToggled: vpnController.setProfileGroupEnabled(groupFilterCombo.groupNameAt(groupFilterCombo.currentIndex), checked)
+                            }
+
+                            Text {
+                                text: "Exclusive"
+                                color: "#5f6f86"
+                                font.family: FontSystem.getContentFont.name
+                                font.pixelSize: 12
+                            }
+
+                            Switch {
+                                checked: root.profileGroupExclusive(groupFilterCombo.groupNameAt(groupFilterCombo.currentIndex))
+                                onToggled: vpnController.setProfileGroupExclusive(groupFilterCombo.groupNameAt(groupFilterCombo.currentIndex), checked)
+                            }
+
+                            Rectangle {
+                                Layout.preferredWidth: 132
+                                Layout.preferredHeight: 28
+                                radius: 9
+                                color: "#ffffff"
+                                border.width: 1
+                                border.color: "#d5deec"
+
+                                TextField {
+                                    id: groupBadgeField
+                                    anchors.fill: parent
+                                    anchors.leftMargin: 8
+                                    anchors.rightMargin: 8
+                                    padding: 0
+                                    clip: true
+                                    placeholderText: "Badge"
+                                    text: root.profileGroupBadgeText(groupFilterCombo.groupNameAt(groupFilterCombo.currentIndex))
+                                    color: "#3b4a61"
+                                    font.family: FontSystem.getContentFont.name
+                                    font.pixelSize: 12
+                                    background: null
+                                    onEditingFinished: {
+                                        vpnController.setProfileGroupBadge(groupFilterCombo.groupNameAt(groupFilterCombo.currentIndex), text)
+                                    }
+                                }
+                            }
+
+                            Text {
+                                visible: root.profileGroupBadgeText(groupFilterCombo.groupNameAt(groupFilterCombo.currentIndex)).length > 0
+                                text: "• " + root.profileGroupBadgeText(groupFilterCombo.groupNameAt(groupFilterCombo.currentIndex))
+                                color: "#4d6691"
+                                font.family: FontSystem.getContentFont.name
+                                font.pixelSize: 12
+                                font.bold: true
+                            }
+
+                            Item { Layout.fillWidth: true }
+                        }
                     }
                 }
 
@@ -816,7 +1178,7 @@ ApplicationWindow {
                             color: vpnController.autoPingProfiles ? "#278c59" : "#7b8799"
                             font.family: FontSystem.getContentFont.name
                             font.pixelSize: 11
-                            font.bold: true
+                            font.bold: false
                         }
                     }
 
@@ -831,11 +1193,30 @@ ApplicationWindow {
                         Text {
                             id: subsText
                             anchors.centerIn: parent
-                            text: "Subs " + vpnController.subscriptions.length
+                            text: "Subs " + subscriptionsInCurrentGroup() + "/" + vpnController.subscriptions.length
                             color: "#667487"
                             font.family: FontSystem.getContentFont.name
                             font.pixelSize: 11
-                            font.bold: true
+                            font.bold: false
+                        }
+                    }
+
+                    Rectangle {
+                        radius: 11
+                        height: 24
+                        color: "#edf5ff"
+                        border.width: 1
+                        border.color: "#d9e6fb"
+                        width: groupText.implicitWidth + 18
+
+                        Text {
+                            id: groupText
+                            anchors.centerIn: parent
+                            text: "Group " + (vpnController.currentProfileGroup || "All")
+                            color: "#5f7290"
+                            font.family: FontSystem.getContentFont.name
+                            font.pixelSize: 11
+                            font.bold: false
                         }
                     }
 
@@ -854,7 +1235,7 @@ ApplicationWindow {
                             color: "#667487"
                             font.family: FontSystem.getContentFont.name
                             font.pixelSize: 11
-                            font.bold: true
+                            font.bold: false
                         }
                     }
 
@@ -873,7 +1254,7 @@ ApplicationWindow {
                             color: "#667487"
                             font.family: FontSystem.getContentFont.name
                             font.pixelSize: 11
-                            font.bold: true
+                            font.bold: false
                         }
                     }
 
@@ -892,7 +1273,7 @@ ApplicationWindow {
                             color: "#667487"
                             font.family: FontSystem.getContentFont.name
                             font.pixelSize: 11
-                            font.bold: true
+                            font.bold: false
                         }
                     }
 
@@ -911,7 +1292,7 @@ ApplicationWindow {
                             color: "#9c6b1f"
                             font.family: FontSystem.getContentFont.name
                             font.pixelSize: 11
-                            font.bold: true
+                            font.bold: false
                         }
                     }
                 }
@@ -932,7 +1313,7 @@ ApplicationWindow {
                         anchors.margins: 6
                         clip: true
                         model: vpnController.profileModel
-                        spacing: 6
+                        spacing: 0
                         ScrollBar.vertical: ScrollBar {
                             policy: ScrollBar.AsNeeded
                         }
@@ -946,19 +1327,30 @@ ApplicationWindow {
                             required property string address
                             required property int port
                             required property string security
+                            required property string groupName
+                            required property string sourceName
                             required property string pingText
                             required property bool pinging
                             required property int pingMs
 
                             readonly property bool selected: index === vpnController.currentProfileIndex
-                            readonly property bool matched: root.profileMatchesSearch(displayLabel, protocol, address, security)
-                            width: listView.width
-                            height: matched ? 72 : 0
+                            readonly property string normalizedGroup: root.normalizeProfileGroup(groupName)
+                            readonly property string groupBadge: root.profileGroupBadgeText(groupName)
+                            readonly property bool groupExclusive: root.profileGroupExclusive(groupName)
+                            readonly property bool matched: root.profileGroupVisible(groupName)
+                                                          && root.profileMatchesSearch(displayLabel, protocol, address, security, groupName, sourceName)
+                            width: listView.width - 16
+                            height: matched ? 84 : 0
                             visible: matched
 
                             Rectangle {
                                 id: rowBg
-                                anchors.fill: parent
+                                anchors.left: parent.left
+                                anchors.right: parent.right
+                                anchors.top: parent.top
+                                anchors.bottom: parent.bottom
+                                anchors.topMargin: 3
+                                anchors.bottomMargin: 3
                                 radius: 14
                                 color: selected ? "#eaf2ff" : (hoverArea.containsMouse ? "#f5f8fd" : "#ffffff")
                                 border.width: 1
@@ -982,7 +1374,7 @@ ApplicationWindow {
                             RowLayout {
                                 anchors.fill: rowBg
                                 anchors.leftMargin: 12
-                                anchors.rightMargin: 10
+                                anchors.rightMargin: 12
                                 spacing: 10
 
                                 Rectangle {
@@ -1006,7 +1398,8 @@ ApplicationWindow {
 
                                     Text {
                                         text: displayLabel
-                                        font.family: FontSystem.getContentFont.name
+                                        font.family: FontSystem.getContentFontBold.name
+                                        font.weight: Font.Bold
                                         font.pixelSize: 14
                                         color: "#202634"
                                         elide: Text.ElideRight
@@ -1017,6 +1410,17 @@ ApplicationWindow {
                                         font.family: FontSystem.getContentFont.name
                                         font.pixelSize: 12
                                         color: "#8c95a4"
+                                        elide: Text.ElideRight
+                                    }
+
+                                    Text {
+                                        text: (sourceName || "Manual import")
+                                              + "  •  " + normalizedGroup
+                                              + (groupExclusive ? "  •  Exclusive" : "")
+                                              + (groupBadge.length > 0 ? "  •  " + groupBadge : "")
+                                        font.family: FontSystem.getContentFont.name
+                                        font.pixelSize: 11
+                                        color: "#7b889d"
                                         elide: Text.ElideRight
                                     }
                                 }
@@ -1043,7 +1447,7 @@ ApplicationWindow {
                                             color: pinging ? "#d18b22" : (pingMs >= 0 ? "#2b6dcf" : "#9aa4b6")
                                             font.family: FontSystem.getContentFont.name
                                             font.pixelSize: 12
-                                            font.bold: true
+                                            font.bold: false
                                         }
                                     }
 
@@ -1057,7 +1461,7 @@ ApplicationWindow {
 
                                         Text {
                                             anchors.centerIn: parent
-                                            text: root.iconClock
+                                            text: root.iconPing
                                             font.family: root.faSolid
                                             font.pixelSize: 12
                                             color: "#5e6f89"
@@ -1133,6 +1537,31 @@ ApplicationWindow {
         y: (root.height - height) * 0.5
         padding: 0
 
+        anchors.centerIn: Overlay.overlay
+        transformOrigin: Item.Center
+
+        scale: 0.9
+
+        enter: Transition {
+            NumberAnimation {
+                property: "scale"
+                from: 0.92
+                to: 1.0
+                duration: Animations.fast * 1.15
+                easing.type: Easing.OutCubic
+            }
+        }
+
+        exit: Transition {
+            NumberAnimation {
+                property: "scale"
+                from: 1.0
+                to: 0.94
+                duration: Animations.fast * 0.9
+                easing.type: Easing.InCubic
+            }
+        }
+
         background: Rectangle {
             radius: 20
             color: "#ffffff"
@@ -1196,10 +1625,35 @@ ApplicationWindow {
         focus: true
         closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
         width: Math.min(root.width - 30, 550)
-        height: Math.min(root.height - 60, 720)
-        x: (root.width - width) * 0.5
-        y: (root.height - height) * 0.5
+        height: Math.min(root.height - 60, 620)
+        x: (root.width - width)
+        y: (root.height - height)
         padding: 0
+
+        anchors.centerIn: Overlay.overlay
+        transformOrigin: Item.Center
+
+        scale: 0.9
+
+        enter: Transition {
+            NumberAnimation {
+                property: "scale"
+                from: 0.92
+                to: 1.0
+                duration: Animations.fast * 1.15
+                easing.type: Easing.OutCubic
+            }
+        }
+
+        exit: Transition {
+            NumberAnimation {
+                property: "scale"
+                from: 1.0
+                to: 0.94
+                duration: Animations.fast * 0.9
+                easing.type: Easing.InCubic
+            }
+        }
 
         background: Rectangle {
             radius: 24
@@ -1221,9 +1675,9 @@ ApplicationWindow {
                     Layout.rightMargin: 64
                     Text {
                         text: "Settings"
-                        font.family: FontSystem.getContentFont.name
+                        font.family: FontSystem.getContentFontBold.name
+                        font.weight: Font.Bold
                         font.pixelSize: 24
-                        font.bold: true
                         color: "#1f2530"
                     }
                     Item { Layout.fillWidth: true }
@@ -1236,56 +1690,20 @@ ApplicationWindow {
                         borderColor: "#e1e5ed"
                         onClicked: settingsPopup.close()
                     }
-                     Item { Layout.fillWidth: true }
+                    Item { Layout.fillWidth: true }
                 }
 
                 ScrollView {
                     Layout.fillWidth: false
                     Layout.fillHeight: true
-                    // clip: true
-                    ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
-                    ScrollBar.vertical.policy: ScrollBar.AlwaysOn
-
                     ColumnLayout {
                         width: aboutPopup.width
                         spacing: 12
 
                         Rectangle {
                             Layout.fillWidth: true
-                            radius: 14
-                            color: "#f7f9fc"
-                            border.width: 1
-                            border.color: "#e0e6f0"
-                            implicitHeight: 64
-
-                            RowLayout {
-                                anchors.fill: parent
-                                anchors.margins: 14
-                                spacing: 10
-
-                                Text {
-                                    text: "xray-core"
-                                    color: "#667081"
-                                    font.family: FontSystem.getContentFont.name
-                                    font.pixelSize: 14
-                                }
-
-                                Item { Layout.fillWidth: true }
-
-                                Text {
-                                    text: "Version " + vpnController.xrayVersion
-                                    color: "#2a3240"
-                                    font.family: FontSystem.getContentFont.name
-                                    font.pixelSize: 14
-                                    font.bold: true
-                                }
-                            }
-                        }
-
-                        Rectangle {
-                            Layout.fillWidth: true
                             implicitHeight: updateColumn.implicitHeight + 24
-                            radius: 14
+                            radius: Colors.innerRadius
                             color: "#f7f9fc"
                             border.width: 1
                             border.color: "#e0e6f0"
@@ -1377,6 +1795,7 @@ ApplicationWindow {
 
                                     Controls.Button {
                                         text: "Release Page"
+                                        isDefault: false
                                         enabled: updater.releaseUrl.length > 0
                                         Layout.fillWidth: true
                                         onClicked: updater.openReleasePage()
@@ -1387,9 +1806,41 @@ ApplicationWindow {
 
                         Rectangle {
                             Layout.fillWidth: true
+                            radius: Colors.innerRadius
+                            color: "#f7f9fc"
+                            border.width: 1
+                            border.color: "#e0e6f0"
+                            implicitHeight: 64
+
+                            RowLayout {
+                                anchors.fill: parent
+                                anchors.margins: 14
+                                spacing: 10
+
+                                Text {
+                                    text: "xray-core"
+                                    color: "#667081"
+                                    font.family: FontSystem.getContentFont.name
+                                    font.pixelSize: 14
+                                }
+
+                                Item { Layout.fillWidth: true }
+
+                                Text {
+                                    text: "Version " + vpnController.xrayVersion
+                                    color: "#2a3240"
+                                    font.family: FontSystem.getContentFont.name
+                                    font.pixelSize: 14
+                                    font.bold: true
+                                }
+                            }
+                        }
+
+                        Rectangle {
+                            Layout.fillWidth: true
                             implicitHeight: modeColumn.implicitHeight + 24
                             Layout.preferredHeight: implicitHeight
-                            radius: 16
+                            radius: Colors.innerRadius
                             color: "#f7f9fc"
                             border.width: 1
                             border.color: "#e0e6f0"
@@ -1411,7 +1862,9 @@ ApplicationWindow {
                                 Text {
                                     text: vpnController.useSystemProxy
                                           ? "Global mode: " + osNameText() + " routes compatible apps through GenyConnect automatically."
-                                          : "Clean mode: " + osNameText() + " proxy stays untouched. Only apps set to 127.0.0.1:10808 use the tunnel."
+                                          : (vpnController.tunMode
+                                             ? "TUN mode: " + osNameText() + " routes system traffic through Xray TUN without changing proxy settings."
+                                             : "Clean mode: " + osNameText() + " proxy stays untouched. Only apps set to 127.0.0.1:10808 use the tunnel.")
                                     color: "#7c8697"
                                     font.family: FontSystem.getContentFont.name
                                     font.pixelSize: 13
@@ -1426,25 +1879,26 @@ ApplicationWindow {
                                     Rectangle {
                                         Layout.fillWidth: true
                                         Layout.preferredHeight: 50
-                                        radius: 12
-                                        color: vpnController.useSystemProxy ? "#2f6ff1" : "#ffffff"
+                                        radius: Colors.outerRadius
+                                        color: (vpnController.useSystemProxy && !vpnController.tunMode) ? "#2f6ff1" : "#ffffff"
                                         border.width: 1
-                                        border.color: vpnController.useSystemProxy ? "#2f6ff1" : "#d9e0ec"
+                                        border.color: (vpnController.useSystemProxy && !vpnController.tunMode) ? "#2f6ff1" : "#d9e0ec"
 
                                         Text {
                                             anchors.centerIn: parent
                                             text: "Global Mode"
-                                            color: vpnController.useSystemProxy ? "#ffffff" : "#344053"
+                                            color: (vpnController.useSystemProxy && !vpnController.tunMode) ? "#ffffff" : "#344053"
                                             font.family: FontSystem.getContentFont.name
                                             font.pixelSize: 14
-                                            font.bold: vpnController.useSystemProxy
+                                            font.bold: vpnController.useSystemProxy && !vpnController.tunMode
                                         }
 
                                         MouseArea {
                                             anchors.fill: parent
-                                            enabled: !vpnController.useSystemProxy
+                                            enabled: !vpnController.useSystemProxy || vpnController.tunMode
                                             cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
                                             onClicked: {
+                                                vpnController.tunMode = false
                                                 vpnController.useSystemProxy = true
                                                 vpnController.autoDisableSystemProxyOnDisconnect = true
                                             }
@@ -1454,27 +1908,56 @@ ApplicationWindow {
                                     Rectangle {
                                         Layout.fillWidth: true
                                         Layout.preferredHeight: 50
-                                        radius: 12
-                                        color: !vpnController.useSystemProxy ? "#2f6ff1" : "#ffffff"
+                                        radius: Colors.outerRadius
+                                        color: (!vpnController.useSystemProxy && !vpnController.tunMode) ? "#2f6ff1" : "#ffffff"
                                         border.width: 1
-                                        border.color: !vpnController.useSystemProxy ? "#2f6ff1" : "#d9e0ec"
+                                        border.color: (!vpnController.useSystemProxy && !vpnController.tunMode) ? "#2f6ff1" : "#d9e0ec"
 
                                         Text {
                                             anchors.centerIn: parent
                                             text: "Clean Mode"
-                                            color: !vpnController.useSystemProxy ? "#ffffff" : "#344053"
+                                            color: (!vpnController.useSystemProxy && !vpnController.tunMode) ? "#ffffff" : "#344053"
                                             font.family: FontSystem.getContentFont.name
                                             font.pixelSize: 14
-                                            font.bold: !vpnController.useSystemProxy
+                                            font.bold: !vpnController.useSystemProxy && !vpnController.tunMode
                                         }
 
                                         MouseArea {
                                             anchors.fill: parent
-                                            enabled: vpnController.useSystemProxy
+                                            enabled: vpnController.useSystemProxy || vpnController.tunMode
+                                            cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+                                            onClicked: {
+                                                vpnController.tunMode = false
+                                                vpnController.useSystemProxy = false
+                                                vpnController.autoDisableSystemProxyOnDisconnect = true
+                                            }
+                                        }
+                                    }
+
+                                    Rectangle {
+                                        Layout.fillWidth: true
+                                        Layout.preferredHeight: 50
+                                        radius: Colors.outerRadius
+                                        color: vpnController.tunMode ? "#2f6ff1" : "#ffffff"
+                                        border.width: 1
+                                        border.color: vpnController.tunMode ? "#2f6ff1" : "#d9e0ec"
+
+                                        Text {
+                                            anchors.centerIn: parent
+                                            text: "TUN Mode"
+                                            color: vpnController.tunMode ? "#ffffff" : "#344053"
+                                            font.family: FontSystem.getContentFont.name
+                                            font.pixelSize: 14
+                                            font.bold: vpnController.tunMode
+                                        }
+
+                                        MouseArea {
+                                            anchors.fill: parent
+                                            enabled: !vpnController.tunMode
                                             cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
                                             onClicked: {
                                                 vpnController.useSystemProxy = false
-                                                vpnController.autoDisableSystemProxyOnDisconnect = true
+                                                vpnController.tunMode = true
                                             }
                                         }
                                     }
@@ -1489,7 +1972,7 @@ ApplicationWindow {
                             Switch {
                                 id: autoDisableSwitch
                                 checked: vpnController.autoDisableSystemProxyOnDisconnect
-                                enabled: vpnController.useSystemProxy
+                                enabled: vpnController.useSystemProxy && !vpnController.tunMode
                                 onToggled: vpnController.autoDisableSystemProxyOnDisconnect = checked
                             }
 
@@ -1541,7 +2024,9 @@ ApplicationWindow {
                             }
 
                             Controls.Button {
-                                text: "Ping Now"
+                                text: (vpnController.currentProfileGroup || "All").toLowerCase() === "all"
+                                      ? "Ping All Now"
+                                      : "Ping Group Now"
                                 Layout.fillWidth: false
                                 onClicked: vpnController.pingAllProfiles()
                             }
@@ -1549,9 +2034,11 @@ ApplicationWindow {
 
                         Text {
                             Layout.fillWidth: true
-                            text: vpnController.useSystemProxy
-                                  ? "Recommended: keep this enabled to restore system proxy cleanly after tunnel disconnect."
-                                  : "In Clean mode this option is ignored because system proxy remains disabled."
+                            text: vpnController.tunMode
+                                  ? "TUN mode does not change OS proxy settings. If connect fails, run app with elevated privileges."
+                                  : (vpnController.useSystemProxy
+                                     ? "Recommended: keep this enabled to restore system proxy cleanly after tunnel disconnect."
+                                     : "In Clean mode this option is ignored because system proxy remains disabled.")
                             color: "#7f8897"
                             font.family: FontSystem.getContentFont.name
                             font.pixelSize: 12
@@ -1576,6 +2063,7 @@ ApplicationWindow {
                         }
 
                         Button {
+                            isDefault: false
                             text: "Reset System Proxy Now"
                             Layout.fillWidth: true
                             onClicked: vpnController.cleanSystemProxy()
@@ -1668,6 +2156,7 @@ ApplicationWindow {
                             onTextChanged: vpnController.blockAppRules = text
                         }
                     }
+
                 }
             }
         }
@@ -1679,10 +2168,34 @@ ApplicationWindow {
         focus: true
         closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
         width: Math.min(root.width - 40, 510)
-        height: Math.min(root.height - 30, 480)
+        height: Math.min(root.height - 30, 540)
         x: (root.width - width) * 0.5
         y: (root.height - height) * 0.5
         padding: 0
+
+        anchors.centerIn: Overlay.overlay
+        transformOrigin: Item.Center
+        scale: 0.9
+
+        enter: Transition {
+            NumberAnimation {
+                property: "scale"
+                from: 0.92
+                to: 1.0
+                duration: Animations.fast * 1.15
+                easing.type: Easing.OutCubic
+            }
+        }
+
+        exit: Transition {
+            NumberAnimation {
+                property: "scale"
+                from: 1.0
+                to: 0.94
+                duration: Animations.fast * 0.9
+                easing.type: Easing.InCubic
+            }
+        }
 
         background: Rectangle {
             radius: 24
@@ -1703,9 +2216,9 @@ ApplicationWindow {
                     Layout.fillWidth: true
                     Text {
                         text: "About"
-                        font.family: FontSystem.getContentFont.name
+                        font.family: FontSystem.getContentFontBold.name
+                        font.weight: Font.Bold
                         font.pixelSize: 24
-                        font.bold: true
                         color: "#1f2530"
                     }
                     Item { Layout.fillWidth: true }
@@ -1758,7 +2271,7 @@ ApplicationWindow {
                                     color: "#2a3240"
                                     font.family: FontSystem.getContentFont.name
                                     font.pixelSize: 14
-                                    font.bold: true
+                                    font.bold: false
                                 }
                             }
                         }
@@ -1791,7 +2304,7 @@ ApplicationWindow {
                                     color: "#2a3240"
                                     font.family: FontSystem.getContentFont.name
                                     font.pixelSize: 14
-                                    font.bold: true
+                                    font.bold: false
                                 }
                             }
                         }
@@ -1824,7 +2337,7 @@ ApplicationWindow {
                                     color: "#2a3240"
                                     font.family: FontSystem.getContentFont.name
                                     font.pixelSize: 14
-                                    font.bold: true
+                                    font.bold: false
                                     font.underline: true
 
                                     MouseArea {
@@ -1865,7 +2378,7 @@ ApplicationWindow {
                                     color: "#2a3240"
                                     font.family: FontSystem.getContentFont.name
                                     font.pixelSize: 14
-                                    font.bold: true
+                                    font.bold: false
                                     font.underline: true
 
                                     MouseArea {
@@ -1876,6 +2389,47 @@ ApplicationWindow {
                                 }
                             }
                         }
+
+                        // --- Creator ---
+                        Rectangle {
+                            Layout.fillWidth: true
+                            radius: 14
+                            color: "#f7f9fc"
+                            border.width: 1
+                            border.color: "#e0e6f0"
+                            implicitHeight: 64
+
+                            RowLayout {
+                                anchors.fill: parent
+                                anchors.margins: 14
+                                spacing: 10
+
+                                Text {
+                                    text: "Creator's Telegram"
+                                    color: "#667081"
+                                    font.family: FontSystem.getContentFont.name
+                                    font.pixelSize: 14
+                                }
+
+                                Item { Layout.fillWidth: true }
+
+                                Text {
+                                    text: "https://t.me/compezeth"
+                                    color: "#2a3240"
+                                    font.family: FontSystem.getContentFont.name
+                                    font.pixelSize: 14
+                                    font.bold: false
+                                    font.underline: true
+
+                                    MouseArea {
+                                        anchors.fill: parent
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: Qt.openUrlExternally("https://t.me/compezeth")
+                                    }
+                                }
+                            }
+                        }
+
 
                         // --- Email ---
                         Rectangle {
@@ -1892,7 +2446,7 @@ ApplicationWindow {
                                 spacing: 10
 
                                 Text {
-                                    text: "Email"
+                                    text: "Support Email"
                                     color: "#667081"
                                     font.family: FontSystem.getContentFont.name
                                     font.pixelSize: 14
@@ -1905,7 +2459,7 @@ ApplicationWindow {
                                     color: "#2a3240"
                                     font.family: FontSystem.getContentFont.name
                                     font.pixelSize: 14
-                                    font.bold: true
+                                    font.bold: false
                                     font.underline: true
 
                                     MouseArea {
@@ -1934,6 +2488,30 @@ ApplicationWindow {
         y: (root.height - height) * 0.5
         padding: 0
 
+        anchors.centerIn: Overlay.overlay
+        transformOrigin: Item.Center
+        scale: 0.9
+
+        enter: Transition {
+            NumberAnimation {
+                property: "scale"
+                from: 0.92
+                to: 1.0
+                duration: Animations.fast * 1.15
+                easing.type: Easing.OutCubic
+            }
+        }
+
+        exit: Transition {
+            NumberAnimation {
+                property: "scale"
+                from: 1.0
+                to: 0.94
+                duration: Animations.fast * 0.9
+                easing.type: Easing.InCubic
+            }
+        }
+
         background: Rectangle {
             radius: 24
             color: "#ffffff"
@@ -1949,10 +2527,10 @@ ApplicationWindow {
             RowLayout {
                 Layout.fillWidth: true
                 Text {
-                    text: "xray-core Logs"
-                    font.family: FontSystem.getContentFont.name
+                    text: "Connection History"
+                    font.family: FontSystem.getContentFontBold.name
+                    font.weight: Font.Bold
                     font.pixelSize: 24
-                    font.bold: true
                     color: "#1f2530"
                 }
                 Item { Layout.fillWidth: true }
@@ -2016,6 +2594,30 @@ ApplicationWindow {
         y: 0
         padding: 0
 
+        anchors.centerIn: Overlay.overlay
+        transformOrigin: Item.Center
+        scale: 1.0
+
+        enter: Transition {
+            NumberAnimation {
+                property: "scale"
+                from: 0.92
+                to: 1.0
+                duration: Animations.fast * 1.15
+                easing.type: Easing.OutCubic
+            }
+        }
+
+        exit: Transition {
+            NumberAnimation {
+                property: "scale"
+                from: 1.0
+                to: 0.94
+                duration: Animations.fast * 0.9
+                easing.type: Easing.InCubic
+            }
+        }
+
         background: Rectangle {
             color: root.color
         }
@@ -2028,34 +2630,12 @@ ApplicationWindow {
             RowLayout {
                 Layout.fillWidth: true
 
-                // Controls.CircleIconButton {
-                //     diameter: 62
-                //     iconText: ""
-                //     iconPixelSize: 0
-
-                //     Rectangle {
-                //         anchors.fill: parent
-                //         radius: width * 0.5
-                //         color: "transparent"
-                //         clip: true
-
-                //         Image {
-                //             anchors.fill: parent
-                //             anchors.margins: 6
-                //             source: "qrc:/ui/Resources/image/avatar.svg"
-                //             fillMode: Image.PreserveAspectCrop
-                //             smooth: true
-                //         }
-                //     }
-                // }
-
-                Item { Layout.fillWidth: true }
-
                 Text {
                     text: "Speed Test"
-                    font.family: FontSystem.getContentFont.name
-                    font.pixelSize: 46
-                    color: "#1f2530"
+                    color: Colors.textPrimary
+                    font.family: FontSystem.getContentFontBold.name
+                    font.weight: Font.Bold
+                    font.pixelSize: 24
                 }
 
                 Item { Layout.fillWidth: true }
@@ -2065,21 +2645,13 @@ ApplicationWindow {
 
                     Controls.CircleIconButton {
                         diameter: 46
-                        iconText: root.iconGear
+                        iconText: root.iconSetting
                         iconFontFamily: root.faSolid
                         iconColor: "#a0a8b5"
                         iconPixelSize: 18
                         onClicked: settingsPopup.open()
                     }
 
-                    Controls.CircleIconButton {
-                        diameter: 46
-                        iconText: root.iconHistory
-                        iconFontFamily: root.faSolid
-                        iconColor: speedTestPopup.showHistory ? "#4f5f79" : "#a0a8b5"
-                        iconPixelSize: 18
-                        onClicked: speedTestPopup.showHistory = !speedTestPopup.showHistory
-                    }
 
                     Controls.CircleIconButton {
                         diameter: 46
@@ -2352,7 +2924,7 @@ ApplicationWindow {
                         x: speedDial.centerX
                         y: speedDial.centerY - 48
                         anchors.left: parent.left
-                        anchors.leftMargin: -186
+                        anchors.leftMargin: -220
                         width: speedDial.innerRadius * 0.62
                         spacing: 2
                         z: 6
@@ -2483,8 +3055,8 @@ ApplicationWindow {
 
             Controls.PrimaryActionButton {
                 Layout.alignment: Qt.AlignHCenter
-                width: 260
-                height: 68
+                width: 172
+                height: 48
                 text: vpnController.speedTestRunning ? "Cancel" : "Start Test"
                 enabled: vpnController.speedTestRunning || vpnController.connectionState !== ConnectionState.Connecting
                 onClicked: {
@@ -2565,7 +3137,7 @@ ApplicationWindow {
 
             Rectangle {
                 Layout.fillWidth: true
-                Layout.preferredHeight: speedTestPopup.showHistory ? 136 : 42
+                Layout.preferredHeight: speedTestPopup.showHistory ? 86 : 42
                 radius: 16
                 color: "#f7f9fc"
                 border.width: 1
@@ -2636,12 +3208,57 @@ ApplicationWindow {
 
         modal: true
         focus: true
-        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
-        width: Math.min(root.width - 40, 640)
-        height: 248
+        property string selectedManageGroup: ""
+        readonly property bool hasExplicitGroup: ((subscriptionGroupCombo.editText || "").trim().length > 0)
+        readonly property string targetGroupName: root.normalizeImportGroupName(
+                                                     (subscriptionGroupCombo.editText
+                                                      || subscriptionGroupCombo.currentText
+                                                      || root.subscriptionGroupDraft))
+        closePolicy: vpnController.subscriptionBusy
+                     ? Popup.NoAutoClose
+                     : (Popup.CloseOnEscape | Popup.CloseOnPressOutside)
+        width: Math.min(root.width - 40, 700)
+        height: 630
         x: (root.width - width) * 0.5
         y: (root.height - height) * 0.5
         padding: 0
+
+        anchors.centerIn: Overlay.overlay
+        transformOrigin: Item.Center
+        scale: 0.9
+        onAboutToShow: {
+            const currentGroup = (vpnController.currentProfileGroup || "All")
+            if (!root.subscriptionGroupDraft || root.subscriptionGroupDraft.trim().length === 0
+                    || root.subscriptionGroupDraft.trim().toLowerCase() === "all") {
+                root.subscriptionGroupDraft = currentGroup === "All" ? "General" : currentGroup
+            }
+            subscriptionGroupCombo.editText = root.subscriptionGroupDraft
+            selectedManageGroup = targetGroupName
+            root.importWaitingForSubscription = false
+            root.importStatusKind = "idle"
+            root.importStatusText = ""
+        }
+        onClosed: root.importWaitingForSubscription = false
+
+        enter: Transition {
+            NumberAnimation {
+                property: "scale"
+                from: 0.92
+                to: 1.0
+                duration: Animations.fast * 1.15
+                easing.type: Easing.OutCubic
+            }
+        }
+
+        exit: Transition {
+            NumberAnimation {
+                property: "scale"
+                from: 1.0
+                to: 0.94
+                duration: Animations.fast * 0.9
+                easing.type: Easing.InCubic
+            }
+        }
 
         background: Rectangle {
             radius: 24
@@ -2650,17 +3267,503 @@ ApplicationWindow {
             border.color: "#d8dde8"
         }
 
+        Connections {
+            target: vpnController
+            function onSubscriptionStateChanged() {
+                if (!importPopup.visible || !root.importWaitingForSubscription || vpnController.subscriptionBusy)
+                    return
+
+                root.importWaitingForSubscription = false
+                const msg = (vpnController.subscriptionMessage || "").trim()
+                const lower = msg.toLowerCase()
+                const success = lower.indexOf("imported") >= 0
+                root.importStatusKind = success ? "success" : "error"
+                root.importStatusText = msg.length > 0
+                                      ? msg
+                                      : (success ? "Import completed." : "Import failed.")
+                if (success) {
+                    root.importDraft = ""
+                    importTextArea.text = ""
+                }
+            }
+        }
+
         contentItem: ColumnLayout {
             anchors.fill: parent
             anchors.margins: 18
-            spacing: 10
+            spacing: 12
+
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 8
+
+                Text {
+                    text: "Import Profiles"
+                    font.family: FontSystem.getContentFontBold.name
+                    font.weight: Font.Bold
+                    font.pixelSize: 24
+                    color: "#1f2530"
+                }
+
+                Item { Layout.fillWidth: true }
+
+                Controls.CircleIconButton {
+                    diameter: 32
+                    iconText: root.iconClose
+                    iconFontFamily: root.faSolid
+                    iconPixelSize: 13
+                    iconColor: "#94a3b8"
+                    enabled: !vpnController.subscriptionBusy
+                    onClicked: importPopup.close()
+                }
+            }
 
             Text {
-                text: "Import Profile"
+                Layout.fillWidth: true
+                text: "Paste vmess/vless, batch text, base64 payload, or an https subscription URL. Existing groups are reusable and customizable."
+                color: "#6f7f95"
                 font.family: FontSystem.getContentFont.name
-                font.pixelSize: 24
-                font.bold: true
-                color: "#1f2530"
+                font.pixelSize: 12
+                wrapMode: Text.WordWrap
+            }
+
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 8
+
+                ComboBox {
+                    id: subscriptionGroupCombo
+                    Layout.fillWidth: true
+                    editable: true
+                    model: root.importSelectableGroups()
+                    currentIndex: -1
+                    leftPadding: 10
+                    rightPadding: 34
+                    font.family: FontSystem.getContentFont.name
+                    font.pixelSize: 13
+
+                    contentItem: TextField {
+                        id: subscriptionGroupEditor
+                        text: subscriptionGroupCombo.editText
+                        placeholderText: "Group name (type new or choose existing)"
+                        color: "#1f2a3a"
+                        font.family: FontSystem.getContentFont.name
+                        font.pixelSize: 13
+                        selectedTextColor: "#ffffff"
+                        selectionColor: "#3f7cf3"
+                        selectByMouse: true
+                        leftPadding: 0
+                        rightPadding: 0
+                        topPadding: 0
+                        bottomPadding: 0
+                        background: null
+                        onTextEdited: {
+                            subscriptionGroupCombo.editText = text
+                            root.subscriptionGroupDraft = text
+                        }
+                    }
+
+                    indicator: Text {
+                        text: root.iconChevronDown
+                        font.family: root.faSolid
+                        font.pixelSize: 11
+                        color: "#93a2b7"
+                        anchors.right: parent.right
+                        anchors.rightMargin: 10
+                        anchors.verticalCenter: parent.verticalCenter
+                    }
+
+                    background: Rectangle {
+                        radius: 12
+                        color: "#f7f9fd"
+                        border.width: 1
+                        border.color: subscriptionGroupCombo.activeFocus ? "#b9ccee" : "#d9e1ef"
+                    }
+
+                    popup: Popup {
+                        y: subscriptionGroupCombo.height + 6
+                        width: subscriptionGroupCombo.width
+                        implicitHeight: Math.min(contentItem.implicitHeight + 10, 220)
+                        padding: 5
+                        background: Rectangle {
+                            radius: 12
+                            color: "#ffffff"
+                            border.width: 1
+                            border.color: "#d9e2f0"
+                        }
+                        contentItem: ListView {
+                            clip: true
+                            model: subscriptionGroupCombo.popup.visible ? subscriptionGroupCombo.delegateModel : null
+                            currentIndex: subscriptionGroupCombo.highlightedIndex
+                            spacing: 2
+                            ScrollBar.vertical: ScrollBar { }
+                        }
+                    }
+
+                    delegate: ItemDelegate {
+                        width: ListView.view.width
+                        height: 34
+                        text: modelData
+                        font.family: FontSystem.getContentFont.name
+                        font.pixelSize: 13
+                        leftPadding: 10
+                        background: Rectangle {
+                            radius: 10
+                            color: highlighted ? "#edf4ff" : "transparent"
+                        }
+                    }
+
+                    onEditTextChanged: {
+                        if (subscriptionGroupEditor.text !== editText) {
+                            subscriptionGroupEditor.text = editText
+                        }
+                        root.subscriptionGroupDraft = editText
+                    }
+                    onActivated: {
+                        if ((currentText || "").length > 0) {
+                            editText = currentText
+                            root.subscriptionGroupDraft = editText
+                        }
+                    }
+                }
+
+                Controls.CircleIconButton {
+                    diameter: 32
+                    iconText: root.iconPlus
+                    iconFontFamily: root.faSolid
+                    iconPixelSize: 12
+                    iconColor: "#2b6dcf"
+                    enabled: !vpnController.subscriptionBusy
+                    onClicked: {
+                        const groupName = root.normalizeImportGroupName(subscriptionGroupCombo.editText)
+                        if (vpnController.ensureProfileGroup(groupName)) {
+                            subscriptionGroupCombo.editText = groupName
+                            root.subscriptionGroupDraft = groupName
+                            importPopup.selectedManageGroup = groupName
+                            root.importStatusKind = "success"
+                            root.importStatusText = "Group '" + groupName + "' is ready."
+                        } else {
+                            root.importStatusKind = "error"
+                            root.importStatusText = "Group name is not valid."
+                        }
+                    }
+                }
+
+                Controls.CircleIconButton {
+                    diameter: 32
+                    iconText: root.iconMinus
+                    iconFontFamily: root.faSolid
+                    iconPixelSize: 12
+                    iconColor: "#cb4f4f"
+                    enabled: !vpnController.subscriptionBusy
+                             && !root.isProtectedGroup(root.normalizeImportGroupName(subscriptionGroupCombo.editText))
+                    onClicked: {
+                        const groupName = root.normalizeImportGroupName(subscriptionGroupCombo.editText)
+                        if (vpnController.removeProfileGroup(groupName)) {
+                            subscriptionGroupCombo.editText = "General"
+                            root.subscriptionGroupDraft = "General"
+                            importPopup.selectedManageGroup = "General"
+                            root.importStatusKind = "success"
+                            root.importStatusText = "Group '" + groupName + "' removed."
+                        } else {
+                            root.importStatusKind = "error"
+                            root.importStatusText = "Cannot remove this group."
+                        }
+                    }
+                }
+            }
+
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 8
+
+                Rectangle {
+                    radius: 10
+                    height: 28
+                    width: groupStateText.implicitWidth + 18
+                    color: root.profileGroupEnabled(subscriptionGroupCombo.editText) ? "#e8f7ef" : "#fff0f0"
+                    border.width: 1
+                    border.color: root.profileGroupEnabled(subscriptionGroupCombo.editText) ? "#b7e4cb" : "#f2c6c6"
+
+                    Text {
+                        id: groupStateText
+                        anchors.centerIn: parent
+                        text: root.profileGroupEnabled(subscriptionGroupCombo.editText) ? "Group Enabled" : "Group Disabled"
+                        color: root.profileGroupEnabled(subscriptionGroupCombo.editText) ? "#2c8b57" : "#bf4d4d"
+                        font.family: FontSystem.getContentFont.name
+                        font.pixelSize: 11
+                    }
+                }
+
+                Rectangle {
+                    Layout.fillWidth: true
+                    implicitHeight: 38
+                    radius: 12
+                    color: "#f7f9fd"
+                    border.width: 1
+                    border.color: "#dce4f2"
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        anchors.leftMargin: 10
+                        anchors.rightMargin: 10
+                        spacing: 10
+
+                        Switch {
+                            checked: root.profileGroupEnabled(subscriptionGroupCombo.editText)
+                            onToggled: {
+                                const groupName = root.normalizeImportGroupName(subscriptionGroupCombo.editText)
+                                vpnController.setProfileGroupEnabled(groupName, checked)
+                            }
+                            text: "Enabled"
+                        }
+
+                        Switch {
+                            checked: root.profileGroupExclusive(subscriptionGroupCombo.editText)
+                            onToggled: {
+                                const groupName = root.normalizeImportGroupName(subscriptionGroupCombo.editText)
+                                vpnController.setProfileGroupExclusive(groupName, checked)
+                            }
+                            text: "Exclusive"
+                        }
+
+                        Rectangle {
+                            Layout.preferredWidth: 128
+                            Layout.preferredHeight: 28
+                            radius: 9
+                            color: "#ffffff"
+                            border.width: 1
+                            border.color: "#d5deec"
+
+                            TextField {
+                                id: importGroupBadgeField
+                                anchors.fill: parent
+                                anchors.leftMargin: 8
+                                anchors.rightMargin: 8
+                                padding: 0
+                                clip: true
+                                placeholderText: "Badge"
+                                text: root.profileGroupBadgeText(subscriptionGroupCombo.editText)
+                                color: "#3b4a61"
+                                font.family: FontSystem.getContentFont.name
+                                font.pixelSize: 12
+                                background: null
+                                onEditingFinished: {
+                                    const groupName = root.normalizeImportGroupName(subscriptionGroupCombo.editText)
+                                    vpnController.setProfileGroupBadge(groupName, text)
+                                }
+                            }
+                        }
+
+                        Text {
+                            visible: root.profileGroupBadgeText(subscriptionGroupCombo.editText).length > 0
+                            text: "• " + root.profileGroupBadgeText(subscriptionGroupCombo.editText)
+                            color: "#4d6691"
+                            font.family: FontSystem.getContentFont.name
+                            font.pixelSize: 12
+                            font.bold: true
+                        }
+                    }
+                }
+
+                Item { Layout.fillWidth: true }
+
+                Text {
+                    text: "Groups: " + root.importSelectableGroups().length
+                    color: "#90a0b5"
+                    font.family: FontSystem.getContentFont.name
+                    font.pixelSize: 11
+                }
+            }
+
+            Rectangle {
+                Layout.fillWidth: true
+                implicitHeight: 36
+                radius: 10
+                color: "#eef4ff"
+                border.width: 1
+                border.color: "#d2def4"
+
+                RowLayout {
+                    anchors.fill: parent
+                    anchors.leftMargin: 10
+                    anchors.rightMargin: 10
+                    spacing: 8
+
+                    Text {
+                        text: "Import Target Group:"
+                        color: "#5f6f86"
+                        font.family: FontSystem.getContentFont.name
+                        font.pixelSize: 12
+                    }
+
+                    Text {
+                        Layout.fillWidth: true
+                        text: importPopup.targetGroupName
+                        color: "#2c5eaf"
+                        font.family: FontSystem.getContentFontBold.name
+                        font.pixelSize: 12
+                        elide: Text.ElideRight
+                    }
+
+                    Text {
+                        text: "All pasted profiles/subscriptions will be saved here."
+                        color: "#7d8ea7"
+                        font.family: FontSystem.getContentFont.name
+                        font.pixelSize: 11
+                    }
+                }
+            }
+
+            Rectangle {
+                Layout.fillWidth: true
+                Layout.preferredHeight: 232
+                radius: 12
+                color: "#f7f9fd"
+                border.width: 1
+                border.color: "#d8e1ef"
+
+                ColumnLayout {
+                    anchors.fill: parent
+                    anchors.margins: 8
+                    spacing: 6
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        Text {
+                            text: "Manage Groups"
+                            color: "#5f6f86"
+                            font.family: FontSystem.getContentFontBold.name
+                            font.pixelSize: 12
+                        }
+                        Item { Layout.fillWidth: true }
+                        Controls.Button {
+                            Layout.fillWidth: false
+                            implicitWidth: 130
+                            implicitHeight: 28
+                            isDefault: false
+                            text: "Remove All Groups"
+                            enabled: !vpnController.subscriptionBusy && root.importSelectableGroups().length > 1
+                            onClicked: vpnController.removeAllProfileGroups()
+                        }
+                    }
+
+                    ListView {
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        clip: true
+                        spacing: 4
+                        model: vpnController.profileGroupItems
+                        boundsBehavior: Flickable.StopAtBounds
+
+                        delegate: Rectangle {
+                            required property var modelData
+                            readonly property string groupName: (typeof name !== "undefined" && name !== null
+                                                                  && String(name).trim().length > 0)
+                                                                 ? String(name)
+                                                                 : ((modelData && modelData.name) ? String(modelData.name) : "")
+                            readonly property bool groupEnabled: (typeof enabled !== "undefined")
+                                                                 ? (enabled !== false)
+                                                                 : !(modelData && modelData.enabled === false)
+                            readonly property bool groupExclusive: (typeof exclusive !== "undefined")
+                                                                   ? (exclusive === true)
+                                                                   : (modelData && modelData.exclusive === true)
+                            readonly property string groupBadge: (typeof badge !== "undefined" && badge !== null)
+                                                                  ? String(badge)
+                                                                  : ((modelData && modelData.badge) ? String(modelData.badge) : "")
+                            readonly property bool selectedGroup: importPopup.selectedManageGroup.toLowerCase() === groupName.toLowerCase()
+
+                            width: ListView.view.width - 16
+                            height: groupName.toLowerCase() === "all" ? 0 : 64
+                            visible: groupName.toLowerCase() !== "all"
+                            radius: 10
+                            color: selectedGroup ? "#eaf2ff" : "#ffffff"
+                            border.width: selectedGroup ? 2 : 1
+                            border.color: selectedGroup ? "#3d7ae6" : "#dee6f3"
+
+                            RowLayout {
+                                anchors.fill: parent
+                                anchors.leftMargin: 8
+                                anchors.rightMargin: 8
+                                spacing: 8
+
+                                Item {
+                                    Layout.preferredWidth: 128
+                                    Layout.fillHeight: true
+                                    implicitHeight: 28
+                                    MouseArea {
+                                        anchors.fill: parent
+                                        hoverEnabled: true
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: {
+                                            importPopup.selectedManageGroup = groupName
+                                            subscriptionGroupCombo.editText = groupName
+                                            root.subscriptionGroupDraft = groupName
+                                        }
+                                    }
+
+                                    Text {
+                                        anchors.fill: parent
+                                        text: groupName
+                                        color: "#2b3648"
+                                        font.family: FontSystem.getContentFont.name
+                                        font.pixelSize: 12
+                                        elide: Text.ElideRight
+                                        verticalAlignment: Text.AlignVCenter
+                                    }
+                                }
+
+                                Switch {
+                                    Layout.fillWidth: false
+                                    text: "Enabled"
+                                    checked: groupEnabled
+                                    onToggled: vpnController.setProfileGroupEnabled(groupName, checked)
+                                }
+
+                                Switch {
+                                    Layout.fillWidth: false
+                                    text: "Exclusive"
+                                    checked: groupExclusive
+                                    enabled: groupEnabled
+                                    onToggled: vpnController.setProfileGroupExclusive(groupName, checked)
+                                }
+
+                                Item { Layout.fillWidth: true }
+
+                                TextField {
+                                    Layout.fillWidth: true
+                                    placeholderText: "Badge"
+                                    text: groupBadge
+                                    selectByMouse: true
+                                    color: "#3b4a61"
+                                    font.family: FontSystem.getContentFont.name
+                                    font.pixelSize: 12
+                                    background: Rectangle {
+                                        radius: 8
+                                        color: "#f8fbff"
+                                        border.width: 1
+                                        border.color: "#d5deec"
+                                    }
+                                    onEditingFinished: vpnController.setProfileGroupBadge(groupName, text)
+                                }
+
+
+                                Controls.CircleIconButton {
+                                    diameter: 24
+                                    iconText: root.iconTrash
+                                    iconFontFamily: root.faSolid
+                                    iconPixelSize: 10
+                                    iconColor: "#cb4f4f"
+                                    enabled: !root.isProtectedGroup(groupName)
+                                    onClicked: vpnController.removeProfileGroup(groupName)
+                                }
+                            }
+
+                        }
+
+                        ScrollBar.vertical: ScrollBar { }
+                    }
+                }
             }
 
             Controls.TextArea {
@@ -2688,37 +3791,84 @@ ApplicationWindow {
                     text: vpnController.subscriptionBusy
                           ? (vpnController.subscriptionMessage.length > 0
                              ? vpnController.subscriptionMessage
-                             : "Working...")
-                          : (vpnController.subscriptionMessage.length > 0
-                             ? vpnController.subscriptionMessage
-                             : "")
-                    color: vpnController.subscriptionBusy ? "#2b6dcf" : "#6f7f95"
+                             : "Importing from subscription...")
+                          : (root.importStatusText.length > 0
+                             ? root.importStatusText
+                             : (vpnController.subscriptionMessage.length > 0 ? vpnController.subscriptionMessage : ""))
+                    color: vpnController.subscriptionBusy
+                           ? "#2b6dcf"
+                           : (root.importStatusKind === "success"
+                              ? "#2c8b57"
+                              : (root.importStatusKind === "error" ? "#c65050" : "#6f7f95"))
                     font.family: FontSystem.getContentFont.name
                     font.pixelSize: 12
                     elide: Text.ElideRight
                 }
             }
 
+            ProgressBar {
+                Layout.fillWidth: true
+                visible: vpnController.subscriptionBusy
+                indeterminate: true
+                value: vpnController.subscriptionBusy ? 0.5 : 0.0
+            }
+
             RowLayout {
                 Layout.fillWidth: true
-                Item { Layout.fillWidth: true }
+
                 Controls.Button {
-                    implicitWidth: 256
-                    text: vpnController.subscriptionBusy ? "Please wait..." : "Import / Add Subscription"
+                    implicitWidth: 128
+                    isDefault: false
+                    text: vpnController.subscriptionBusy ? "Working..." : "Close"
                     Layout.fillWidth: false
                     enabled: !vpnController.subscriptionBusy
+                    onClicked: importPopup.close()
+                }
+
+                Item { Layout.fillWidth: true }
+
+                Controls.Button {
+                    implicitWidth: 256
+                    isDefault: true
+                    text: vpnController.subscriptionBusy ? "Please wait..." : "Import / Add Subscription"
+                    Layout.fillWidth: false
+                    enabled: !vpnController.subscriptionBusy && importPopup.hasExplicitGroup
                     onClicked: {
                         const raw = importTextArea.text.trim()
-                        if (raw.length === 0)
+                        if (raw.length === 0) {
+                            root.importStatusKind = "error"
+                            root.importStatusText = "Paste a profile/subscription before importing."
                             return
+                        }
+                        const subGroup = importPopup.targetGroupName
+                        root.subscriptionGroupDraft = subGroup
+                        if ((subscriptionGroupCombo.editText || "").trim() !== subGroup)
+                            subscriptionGroupCombo.editText = subGroup
                         const isSub = raw.startsWith("http://") || raw.startsWith("https://")
-                        const imported = isSub ? (vpnController.addSubscription(raw) ? 1 : 0)
-                                               : vpnController.importProfileBatch(raw)
-                        const ok = imported > 0
-                        if (ok) {
+                        if (!isSub && subGroup.length > 0)
+                            vpnController.currentProfileGroup = subGroup
+                        if (isSub) {
+                            const started = vpnController.addSubscription(raw, "", subGroup)
+                            if (started) {
+                                root.importWaitingForSubscription = true
+                                root.importStatusKind = "busy"
+                                root.importStatusText = "Downloading subscription and importing profiles..."
+                            } else {
+                                root.importStatusKind = "error"
+                                root.importStatusText = (vpnController.lastError || "Failed to start subscription import.")
+                            }
+                            return
+                        }
+
+                        const imported = vpnController.importProfileBatch(raw)
+                        if (imported > 0) {
+                            root.importStatusKind = "success"
+                            root.importStatusText = "Imported " + imported + " profile(s)."
                             root.importDraft = ""
                             importTextArea.text = ""
-                            importPopup.close()
+                        } else {
+                            root.importStatusKind = "error"
+                            root.importStatusText = vpnController.lastError || "No profiles were imported."
                         }
                     }
                 }
@@ -2762,12 +3912,10 @@ ApplicationWindow {
 
 
             Text {
-                text: "GenyConnect"
-                color: "#1f2430"
-                font.family: FontSystem.getContentFont.name
-                font.pixelSize: 34
-                font.weight: Font.Bold
-                font.bold: true
+                text: "<strong>GENY</strong>CONNECT"
+                color: Colors.textPrimary
+                font.family: FontSystem.getContentFontBold.name
+                font.pixelSize: 24
             }
 
             Item { Layout.fillWidth: true }
@@ -2777,7 +3925,7 @@ ApplicationWindow {
 
                 Controls.CircleIconButton {
                     diameter: 46
-                    iconText: root.iconGear
+                    iconText: root.iconSetting
                     iconFontFamily: root.faSolid
                     iconColor: "#a0a8b5"
                     iconPixelSize: 18
@@ -2845,8 +3993,8 @@ ApplicationWindow {
             }
 
             Item {
-                x: mapContainer.width * 0.53 - width * 0.5
-                y: mapContainer.height * 0.48 - height * 0.5
+                x: mapContainer.width * 0.57 - width * 0.5
+                y: mapContainer.height * 0.43 - height * 0.5
                 width: 26
                 height: 26
 
@@ -2894,11 +4042,12 @@ ApplicationWindow {
                     anchors.centerIn: parent
                     width: 22
                     height: 22
-                    radius: 11
+                    radius: width
                     color: root.statePrimaryColor()
-                    border.width: 3
-                    border.color: "#f7f7fa"
-                    Behavior on color { ColorAnimation { duration: 240 } }
+                    border.width: 2
+                    border.color: Colors.primary
+
+                    Behavior on color { ColorAnimation { duration: Animations.slow } }
 
                     SequentialAnimation on scale {
                         loops: Animation.Infinite
@@ -2906,33 +4055,53 @@ ApplicationWindow {
                         NumberAnimation { from: 1.0; to: 1.24; duration: 460; easing.type: Easing.InOutQuad }
                         NumberAnimation { from: 1.24; to: 1.0; duration: 460; easing.type: Easing.InOutQuad }
                     }
+
+                    Rectangle {
+                        width: 6
+                        height: 6
+                        radius: width
+                        anchors.centerIn: parent
+                    }
                 }
             }
-
         }
 
-        RowLayout {
+        Item {
             id: actionRow
             anchors.horizontalCenter: parent.horizontalCenter
             anchors.bottom: statusRow.top
             anchors.bottomMargin: 12
-            width: compact ? parent.width - 40 : 820
-            spacing: 0
+
+            width: compact ? parent.width - 40 : 720
+            height: 84
+
+            RectangularShadow {
+                anchors.fill: connectControlCard
+                offset.x: 0
+                offset.y: 0
+                radius: connectControlCard.radius
+                blur: 64
+                spread: 3
+                color: Colors.lightShadow
+            }
 
             Rectangle {
                 id: connectControlCard
-                Layout.fillWidth: true
+                anchors.fill: parent
                 height: 84
-                radius: 28
+                radius: Colors.outerRadius
                 color: "#ffffff"
                 border.width: 1
-                border.color: vpnController.connected ? "#c8ead8" : (vpnController.busy ? "#f7ddaa" : "#dfe6f1")
-                Behavior on border.color { ColorAnimation { duration: 220 } }
+                z: 2
+                border.color: vpnController.connected
+                              ? "#c8ead8"
+                              : (vpnController.busy ? "#f7ddaa" : Colors.borderDeactivated)
+                Behavior on border.color { ColorAnimation { duration: Animations.fast } }
 
                 Rectangle {
                     anchors.fill: parent
                     anchors.topMargin: 8
-                    radius: parent.radius
+                    radius: Colors.radius
                     color: "#1f5ed8"
                     opacity: 0.08
                     z: -1
@@ -2944,16 +4113,16 @@ ApplicationWindow {
                     anchors.rightMargin: 10
                     anchors.topMargin: 8
                     anchors.bottomMargin: 8
-                    spacing: 8
+                    spacing: Colors.padding
 
                     Rectangle {
                         id: locationCard
                         Layout.fillWidth: true
                         Layout.fillHeight: true
-                        radius: 20
-                        color: locationMouse.containsMouse ? "#f6f9fd" : "transparent"
+                        radius: Colors.innerRadius
+                        color: locationMouse.containsMouse ? Colors.backgroundItemActivated : Colors.background
                         border.width: locationMouse.containsMouse ? 1 : 0
-                        border.color: "#e5eaf3"
+                        border.color: Colors.borderActivated
                         Behavior on color { ColorAnimation { duration: 140 } }
 
                         MouseArea {
@@ -2973,8 +4142,8 @@ ApplicationWindow {
                             Rectangle {
                                 width: 44
                                 height: 44
-                                radius: 22
-                                color: "#f3f5f9"
+                                radius: Colors.innerRadius
+                                color: Colors.backgroundItemActivated
                                 border.width: 1
                                 border.color: "#dee3ec"
 
@@ -2988,8 +4157,9 @@ ApplicationWindow {
                             Text {
                                 Layout.fillWidth: true
                                 text: selectedServerLabel
-                                color: "#202634"
-                                font.family: FontSystem.getContentFont.name
+                                color: Colors.primaryBack
+                                font.family: FontSystem.getContentFontBold.name
+                                font.weight: Font.Bold
                                 font.pixelSize: 36 * 0.52
                                 elide: Text.ElideRight
                             }
@@ -3017,9 +4187,7 @@ ApplicationWindow {
                         id: inlineConnectButton
                         Layout.preferredWidth: compact ? 228 : 250
                         Layout.fillHeight: true
-                        radius: 22
-                        border.width: 1
-                        border.color: "#2a63d2"
+                        radius: Colors.innerRadius
                         gradient: Gradient {
                             GradientStop { position: 0.0; color: "#2f6ff1" }
                             GradientStop { position: 1.0; color: "#2d65d8" }
@@ -3070,33 +4238,36 @@ ApplicationWindow {
             }
         }
 
-        RowLayout {
+        Item {
             id: statusRow
             anchors.horizontalCenter: parent.horizontalCenter
             anchors.bottom: infoRow.top
             anchors.bottomMargin: 25
-            width: compact ? parent.width - 40 : 820
-            spacing: 0
+
+            width: compact ? parent.width - 40 : 720
+            height: 94
+
+            RectangularShadow {
+                anchors.fill: statusCard
+                offset.x: 0
+                offset.y: 0
+                radius: statusCard.radius
+                blur: 64
+                spread: 3
+                color: Colors.lightShadow
+            }
 
             Rectangle {
-                Layout.fillWidth: true
-                radius: 24
+                id: statusCard
+                anchors.fill: parent
                 implicitHeight: 94
+                radius: Colors.outerRadius
                 color: "#ffffff"
                 border.width: 1
-                border.color: "#dfe6f1"
+                border.color: Colors.borderDeactivated
                 Behavior on color { ColorAnimation { duration: 220 } }
                 Behavior on border.color { ColorAnimation { duration: 220 } }
-
-                Rectangle {
-                    anchors.fill: parent
-                    anchors.margins: 1
-                    radius: 23
-                    gradient: Gradient {
-                        GradientStop { position: 0.0; color: "#fbfdff" }
-                        GradientStop { position: 1.0; color: "#f5f8fd" }
-                    }
-                }
+                z: 2
 
                 RowLayout {
                     anchors.fill: parent
@@ -3104,12 +4275,12 @@ ApplicationWindow {
                     anchors.rightMargin: 12
                     anchors.topMargin: 10
                     anchors.bottomMargin: 10
-                    spacing: 10
+                    spacing: Colors.padding
 
                     Rectangle {
-                        Layout.preferredWidth: compact ? 162 : 188
+                        Layout.preferredWidth: root.compact ? 162 : 188
                         Layout.fillHeight: true
-                        radius: 16
+                        radius: Colors.innerRadius
                         color: root.stateSoftColor()
                         border.width: 1
                         border.color: root.statePrimaryColor()
@@ -3120,7 +4291,7 @@ ApplicationWindow {
                             anchors.fill: parent
                             anchors.leftMargin: 12
                             anchors.rightMargin: 12
-                            spacing: 8
+                            spacing: Colors.padding
 
                             Rectangle {
                                 width: 10
@@ -3143,13 +4314,13 @@ ApplicationWindow {
                                     text: "Status"
                                     color: "#6f7f96"
                                     font.family: FontSystem.getContentFont.name
-                                    font.pixelSize: 11
+                                    font.pixelSize: Typography.h6
                                 }
                                 Text {
                                     text: root.stateText()
                                     color: "#1f2a37"
                                     font.family: FontSystem.getContentFont.name
-                                    font.pixelSize: 15
+                                    font.pixelSize: Typography.t2
                                     font.bold: true
                                 }
                             }
@@ -3165,7 +4336,7 @@ ApplicationWindow {
                     Rectangle {
                         Layout.fillWidth: true
                         Layout.fillHeight: true
-                        radius: 16
+                        radius: Colors.innerRadius
                         color: "#eaf2ff"
                         border.width: 1
                         border.color: "#d7e4fb"
@@ -3187,16 +4358,16 @@ ApplicationWindow {
                             ColumnLayout {
                                 spacing: 1
                                 Text {
-                                    text: "Download"
+                                    text: "Receive"
                                     color: "#6682ad"
                                     font.family: FontSystem.getContentFont.name
-                                    font.pixelSize: 11
+                                    font.pixelSize: Typography.h6
                                 }
                                 Text {
                                     text: root.downloadRateText()
                                     color: "#3f5e93"
                                     font.family: FontSystem.getContentFont.name
-                                    font.pixelSize: 12
+                                    font.pixelSize: Typography.t3
                                     font.bold: true
                                 }
                             }
@@ -3207,16 +4378,19 @@ ApplicationWindow {
                                 text: downloadUsageText()
                                 color: "#1f2b3d"
                                 font.family: FontSystem.getContentFont.name
-                                font.pixelSize: compact ? 24 : 26
-                                font.bold: true
+                                font.pixelSize: Typography.h2
+                                font.bold: false
                             }
+
+                            Item { Layout.preferredWidth: 5 }
+
                         }
                     }
 
                     Rectangle {
                         Layout.fillWidth: true
                         Layout.fillHeight: true
-                        radius: 16
+                        radius: Colors.innerRadius
                         color: "#ecfff3"
                         border.width: 1
                         border.color: "#d8efdf"
@@ -3238,16 +4412,16 @@ ApplicationWindow {
                             ColumnLayout {
                                 spacing: 1
                                 Text {
-                                    text: "Upload"
+                                    text: "Send"
                                     color: "#5f9478"
                                     font.family: FontSystem.getContentFont.name
-                                    font.pixelSize: 11
+                                    font.pixelSize: Typography.h6
                                 }
                                 Text {
                                     text: root.uploadRateText()
                                     color: "#2e7b58"
                                     font.family: FontSystem.getContentFont.name
-                                    font.pixelSize: 12
+                                    font.pixelSize: Typography.t3
                                     font.bold: true
                                 }
                             }
@@ -3258,9 +4432,12 @@ ApplicationWindow {
                                 text: uploadUsageText()
                                 color: "#1f2b3d"
                                 font.family: FontSystem.getContentFont.name
-                                font.pixelSize: compact ? 24 : 26
-                                font.bold: true
+                                font.pixelSize: Typography.h2
+                                font.bold: false
                             }
+
+                            Item { Layout.preferredWidth: 5 }
+
                         }
                     }
                 }
@@ -3271,7 +4448,7 @@ ApplicationWindow {
             id: infoRow
             anchors.horizontalCenter: parent.horizontalCenter
             anchors.bottom: quickActionsRow.top
-            anchors.bottomMargin: 15
+            anchors.bottomMargin: 32
             width: compact ? parent.width - 40 : 820
             spacing: 18
 
@@ -3329,12 +4506,12 @@ ApplicationWindow {
             id: quickActionsRow
             anchors.horizontalCenter: parent.horizontalCenter
             anchors.bottom: parent.bottom
-            anchors.bottomMargin: 28
+            anchors.bottomMargin: 86
             spacing: 20
 
             Controls.CircleIconButton {
                 diameter: 64
-                iconText: root.iconGear
+                iconText: root.iconSetting
                 iconFontFamily: root.faSolid
                 iconPixelSize: 20
                 iconColor: "#97a0b0"
@@ -3343,7 +4520,7 @@ ApplicationWindow {
 
             Controls.CircleIconButton {
                 diameter: 64
-                iconText: root.iconClock
+                iconText: root.iconSpeed
                 iconFontFamily: root.faSolid
                 iconPixelSize: 20
                 iconColor: "#97a0b0"
@@ -3360,16 +4537,42 @@ ApplicationWindow {
             }
         }
 
-        Text {
-            anchors.right: parent.right
-            anchors.bottom: parent.bottom
-            anchors.rightMargin: 14
-            anchors.bottomMargin: 10
-            text: stateText()
-            color: root.statePrimaryColor()
-            font.family: FontSystem.getContentFont.name
-            font.pixelSize: 15
-            Behavior on color { ColorAnimation { duration: 220 } }
+        Item { Layout.fillHeight: true; }
+
+    }
+
+    footer: Rectangle {
+        id: footer
+        width: parent.width
+        height: 48
+        color: Colors.pageground
+        border.width: 1
+        border.color: Colors.borderActivated
+
+        RowLayout {
+            anchors.fill: parent
+
+            Item { Layout.preferredWidth: 10; }
+
+            Text {
+                text: "Build: v" + updater.appVersion
+                color: Colors.textSecondary
+                font.family: FontSystem.getContentFont.name
+                font.pixelSize: Typography.t2
+                Behavior on color { ColorAnimation { duration: 220 } }
+            }
+
+            Item { Layout.fillWidth: true; }
+
+            Text {
+                text: stateText()
+                color: root.statePrimaryColor()
+                font.family: FontSystem.getContentFont.name
+                font.pixelSize: Typography.t2
+                Behavior on color { ColorAnimation { duration: 220 } }
+            }
+
+            Item { Layout.preferredWidth: 10; }
         }
     }
 }

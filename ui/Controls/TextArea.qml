@@ -8,7 +8,7 @@ T.TextArea {
     property color fillColor: Colors.backgroundItemActivated
     property color strokeColor: Colors.borderActivated
     property color focusColor: Colors.secondry
-    property int cornerRadius: 10
+    property int cornerRadius: 14
 
     font.family: FontSystem.getContentFont.name
     font.pixelSize: Typography.t2
