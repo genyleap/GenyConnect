@@ -58,6 +58,9 @@ export struct ServerProfile {
     bool allowInsecure = false; //!< Allow insecure certificate mode.
 
     QString originalLink;     //!< Original imported share link.
+    QString groupName;        //!< Logical group/category name (for filtering).
+    QString sourceName;       //!< Human-readable source/subscription name.
+    QString sourceId;         //!< Stable source identifier.
     QJsonObject extra;        //!< Extensible free-form metadata.
     int lastPingMs = -1;      //!< Latest measured endpoint TCP latency in milliseconds.
     bool pingInProgress = false; //!< True while profile endpoint ping is in progress.

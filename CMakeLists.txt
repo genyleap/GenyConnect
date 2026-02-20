@@ -19,7 +19,7 @@ cmake_minimum_required(VERSION 3.28)
 # -----------------------------------------------------------------------------
 
 set(PROJECT_NAME "GenyConnect")
-project(${PROJECT_NAME} VERSION 1.0.256 LANGUAGES CXX)
+project(${PROJECT_NAME} VERSION 1.1.32 LANGUAGES CXX)
 
 if(POLICY CMP0155)
   cmake_policy(SET CMP0155 NEW)
@@ -35,6 +35,7 @@ option(GENYCONNECT_USE_MODULES          "Enable C++20 modules" ON)
 option(GENYCONNECT_LLVM_AUTO_SCAN       "Auto-detect LLVM/clang for modules" ON)
 option(GENYCONNECT_QT_AUTO_SCAN         "Auto-detect Qt installation prefix" ON)
 option(GENYCONNECT_AUTO_DOWNLOAD_XRAY   "Automatically download and bundle xray-core" ON)
+option(GENYCONNECT_AUTO_DOWNLOAD_WINTUN "Automatically download official wintun.dll on Windows if missing" ON)
 
 # macOS deploy/sign (POST_BUILD)
 option(GENYCONNECT_MACOS_POSTBUILD_DEPLOY   "Run macdeployqt on the build .app in POST_BUILD (recommended)" ON)
@@ -56,20 +57,25 @@ option(GENYCONNECT_WINDEPLOYQT_TRANSLATIONS
 option(GENYCONNECT_BUNDLE_DOCS "Install README and LICENSE at package root + NSIS wizard" ON)
 
 # macdeployqt toggles
-option(GENYCONNECT_MACDEPLOYQT_ALWAYS_OVERWRITE "Pass -always-overwrite to macdeployqt" ON)
+option(GENYCONNECT_MACDEPLOYQT_ALWAYS_OVERWRITE "Pass -always-overwrite to macdeployqt" OFF)
 option(GENYCONNECT_MACDEPLOYQT_NO_STRIP         "Pass -no-strip to macdeployqt" OFF)
+
+set(GENYCONNECT_TARGET_BUILD_ARCH "arm64" CACHE STRING "Override target arch for output build (arm64|x86_64)")
 
 set(GENYCONNECT_XRAY_VERSION      "v26.2.6" CACHE STRING   "Xray-core release tag (e.g. v26.2.6)")
 set(GENYCONNECT_XRAY_ASSET_NAME   ""        CACHE STRING   "Optional explicit Xray release asset name override")
 set(GENYCONNECT_BUNDLED_XRAY_PATH ""        CACHE FILEPATH "Path to prebuilt xray-core binary to bundle with app")
+set(GENYCONNECT_BUNDLED_WINTUN_PATH ""      CACHE FILEPATH "Path to wintun.dll to bundle with Windows xray-core")
+set(GENYCONNECT_WINTUN_VERSION "0.14.1" CACHE STRING "Wintun version for fallback download (Windows)")
+set(GENYCONNECT_WINTUN_URL "" CACHE STRING "Optional explicit wintun zip URL override")
 
 set(GENYCONNECT_TARGET_OS   "" CACHE STRING "Override target OS for output naming (macos|linux|windows)")
-set(GENYCONNECT_TARGET_ARCH "" CACHE STRING "Override target arch for output naming (arm64|x86_64)")
+set(GENYCONNECT_TARGET_ARCH "${GENYCONNECT_TARGET_BUILD_ARCH}" CACHE STRING "Override target arch for output naming (arm64|x86_64)")
 set(GENYCONNECT_OUTPUT_NAME "" CACHE STRING "Optional explicit output name (overrides generated name)")
 
 # If you want arm64 on Apple Silicon, keep this. Universal: "arm64;x86_64".
 if(APPLE AND NOT DEFINED CMAKE_OSX_ARCHITECTURES)
-  set(CMAKE_OSX_ARCHITECTURES "x86_64" CACHE STRING "Build architecture")
+  set(CMAKE_OSX_ARCHITECTURES "${GENYCONNECT_TARGET_BUILD_ARCH}" CACHE STRING "Build architecture")
 endif()
 
 # -------------------------
@@ -275,7 +281,9 @@ qt_standard_project_setup(REQUIRES 6.8)
 if(APPLE)
   set(CMAKE_INSTALL_RPATH "@executable_path/../Frameworks")
   set(CMAKE_BUILD_RPATH   "@executable_path/../Frameworks")
-  set(CMAKE_BUILD_WITH_INSTALL_RPATH ON)
+  # Keep build-tree binaries runnable from Qt Creator by preserving build-time
+  # linker rpaths to the Qt SDK. Install/package steps still use install rpath.
+  set(CMAKE_BUILD_WITH_INSTALL_RPATH OFF)
   set(CMAKE_INSTALL_RPATH_USE_LINK_PATH OFF)
 endif()
 
@@ -319,9 +327,38 @@ qt_add_executable(GenyConnectUpdater
 target_link_libraries(GenyConnectUpdater PRIVATE Qt6::Core)
 set_target_properties(GenyConnectUpdater PROPERTIES OUTPUT_NAME "GenyConnectUpdater")
 
+qt_add_executable(GenyConnectTunHelper
+  src/tunhelper/main.cpp
+)
+target_link_libraries(GenyConnectTunHelper PRIVATE Qt6::Core Qt6::Network)
+set_target_properties(GenyConnectTunHelper PROPERTIES OUTPUT_NAME "GenyConnectTunHelper")
+
+if(WIN32 AND MSVC)
+  target_link_options(GenyConnectUpdater PRIVATE
+    "/MANIFESTUAC:level='requireAdministrator' uiAccess='false'"
+  )
+  target_link_options(GenyConnectTunHelper PRIVATE
+    "/MANIFESTUAC:level='requireAdministrator' uiAccess='false'"
+  )
+endif()
+
 if(APPLE)
   add_dependencies(${PROJECT_NAME} GenyConnectUpdater)
+  add_dependencies(${PROJECT_NAME} GenyConnectTunHelper)
   set_target_properties(GenyConnectUpdater PROPERTIES MACOSX_BUNDLE FALSE)
+  set_target_properties(GenyConnectTunHelper PROPERTIES MACOSX_BUNDLE FALSE)
+
+  add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_BUNDLE_DIR:${PROJECT_NAME}>/Contents/MacOS"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "$<TARGET_FILE:GenyConnectUpdater>"
+            "$<TARGET_BUNDLE_DIR:${PROJECT_NAME}>/Contents/MacOS/GenyConnectUpdater"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "$<TARGET_FILE:GenyConnectTunHelper>"
+            "$<TARGET_BUNDLE_DIR:${PROJECT_NAME}>/Contents/MacOS/GenyConnectTunHelper"
+    COMMENT "Copy helper binaries into app bundle"
+    VERBATIM
+  )
 endif()
 
 if(GENYCONNECT_USE_MODULES)
@@ -382,6 +419,7 @@ set(qml_core
 set(qml_controls
   ui/Controls/Card.qml
   ui/Controls/Button.qml
+  ui/Controls/ComboBox.qml
   ui/Controls/Label.qml
   ui/Controls/TextField.qml
   ui/Controls/TextArea.qml
@@ -421,6 +459,7 @@ qt_add_resources(${PROJECT_NAME} GenyConnectAssets
   PREFIX /
   FILES
     ui/Resources/fonts/Inter-Regular.ttf
+    ui/Resources/fonts/Inter-Bold.ttf
     ui/Resources/fonts/fa-brands-400.otf
     ui/Resources/fonts/fa-regular-400.otf
     ui/Resources/fonts/fa-solid-900.otf
@@ -543,6 +582,109 @@ if(GENYCONNECT_AUTO_DOWNLOAD_XRAY AND NOT GENYCONNECT_BUNDLED_XRAY_PATH)
 
     set(GENYCONNECT_BUNDLED_XRAY_PATH "${_geny_xray_extracted_bin}")
     message(STATUS "Using auto-downloaded Xray-core binary: ${GENYCONNECT_BUNDLED_XRAY_PATH}")
+
+    if(_geny_xray_platform STREQUAL "windows")
+      set(_geny_wintun_candidate "${_geny_xray_extract_dir}/wintun.dll")
+      if(EXISTS "${_geny_wintun_candidate}")
+        set(GENYCONNECT_BUNDLED_WINTUN_PATH "${_geny_wintun_candidate}")
+        message(STATUS "Using auto-downloaded wintun.dll: ${GENYCONNECT_BUNDLED_WINTUN_PATH}")
+      else()
+        file(GLOB_RECURSE _geny_wintun_matches "${_geny_xray_extract_dir}/*wintun.dll")
+        if(_geny_wintun_matches)
+          list(GET _geny_wintun_matches 0 _geny_wintun_first)
+          set(GENYCONNECT_BUNDLED_WINTUN_PATH "${_geny_wintun_first}")
+          message(STATUS "Using discovered wintun.dll: ${GENYCONNECT_BUNDLED_WINTUN_PATH}")
+        else()
+          set(GENYCONNECT_BUNDLED_WINTUN_PATH "")
+          message(WARNING "wintun.dll was not found in Xray archive. Windows TUN mode may fail.")
+        endif()
+      endif()
+    endif()
+  endif()
+endif()
+
+if(WIN32 AND GENYCONNECT_AUTO_DOWNLOAD_WINTUN AND NOT GENYCONNECT_BUNDLED_WINTUN_PATH)
+  if(GENY_ARCH STREQUAL "arm64")
+    set(_geny_wintun_arch_dir "arm64")
+  else()
+    set(_geny_wintun_arch_dir "amd64")
+  endif()
+
+  if(GENYCONNECT_WINTUN_URL)
+    set(_geny_wintun_url "${GENYCONNECT_WINTUN_URL}")
+  else()
+    set(_geny_wintun_url "https://www.wintun.net/builds/wintun-${GENYCONNECT_WINTUN_VERSION}.zip")
+  endif()
+
+  set(_geny_wintun_cache_dir   "${CMAKE_BINARY_DIR}/_deps/wintun")
+  set(_geny_wintun_archive     "${_geny_wintun_cache_dir}/wintun-${GENYCONNECT_WINTUN_VERSION}.zip")
+  set(_geny_wintun_extract_dir "${_geny_wintun_cache_dir}/extract-${GENYCONNECT_WINTUN_VERSION}-${_geny_wintun_arch_dir}")
+  file(MAKE_DIRECTORY "${_geny_wintun_cache_dir}")
+
+  if(NOT EXISTS "${_geny_wintun_archive}")
+    message(STATUS "Downloading Wintun: ${_geny_wintun_url}")
+    file(DOWNLOAD
+      "${_geny_wintun_url}"
+      "${_geny_wintun_archive}"
+      STATUS _geny_wintun_download_status
+      SHOW_PROGRESS
+      TLS_VERIFY ON
+    )
+    list(GET _geny_wintun_download_status 0 _geny_wintun_download_code)
+    list(GET _geny_wintun_download_status 1 _geny_wintun_download_message)
+    if(NOT _geny_wintun_download_code EQUAL 0)
+      message(FATAL_ERROR "Failed to download Wintun: ${_geny_wintun_download_message}")
+    endif()
+  else()
+    message(STATUS "Using cached Wintun archive: ${_geny_wintun_archive}")
+  endif()
+
+  file(REMOVE_RECURSE "${_geny_wintun_extract_dir}")
+  file(MAKE_DIRECTORY "${_geny_wintun_extract_dir}")
+  execute_process(
+    COMMAND ${CMAKE_COMMAND} -E tar xf "${_geny_wintun_archive}"
+    WORKING_DIRECTORY "${_geny_wintun_extract_dir}"
+    RESULT_VARIABLE _geny_wintun_extract_result
+    ERROR_VARIABLE  _geny_wintun_extract_err
+  )
+  if(NOT _geny_wintun_extract_result EQUAL 0)
+    message(FATAL_ERROR "Failed to extract Wintun archive: ${_geny_wintun_extract_err}")
+  endif()
+
+  set(_geny_wintun_candidate "${_geny_wintun_extract_dir}/wintun/bin/${_geny_wintun_arch_dir}/wintun.dll")
+  if(NOT EXISTS "${_geny_wintun_candidate}")
+    file(GLOB_RECURSE _geny_wintun_matches "${_geny_wintun_extract_dir}/*/bin/${_geny_wintun_arch_dir}/wintun.dll")
+    if(_geny_wintun_matches)
+      list(GET _geny_wintun_matches 0 _geny_wintun_candidate)
+    endif()
+  endif()
+
+  if(EXISTS "${_geny_wintun_candidate}")
+    set(GENYCONNECT_BUNDLED_WINTUN_PATH "${_geny_wintun_candidate}")
+    message(STATUS "Using fallback Wintun DLL: ${GENYCONNECT_BUNDLED_WINTUN_PATH}")
+  else()
+    message(FATAL_ERROR "wintun.dll not found in Wintun archive for arch '${_geny_wintun_arch_dir}'.")
+  endif()
+endif()
+
+if(WIN32)
+  if(GENYCONNECT_BUNDLED_XRAY_PATH)
+    add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+      COMMAND ${CMAKE_COMMAND} -E copy_if_different
+              "${GENYCONNECT_BUNDLED_XRAY_PATH}"
+              "$<TARGET_FILE_DIR:${PROJECT_NAME}>/xray-core.exe"
+      COMMENT "Copy xray-core.exe beside GenyConnect for local Windows runs"
+      VERBATIM
+    )
+  endif()
+  if(GENYCONNECT_BUNDLED_WINTUN_PATH)
+    add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+      COMMAND ${CMAKE_COMMAND} -E copy_if_different
+              "${GENYCONNECT_BUNDLED_WINTUN_PATH}"
+              "$<TARGET_FILE_DIR:${PROJECT_NAME}>/wintun.dll"
+      COMMENT "Copy wintun.dll beside GenyConnect for local Windows TUN runs"
+      VERBATIM
+    )
   endif()
 endif()
 
@@ -579,6 +721,7 @@ if(APPLE AND GENYCONNECT_MACOS_POSTBUILD_DEPLOY)
   endif()
 
   set(_codesign_common "--force" "--deep" "--sign" "${GENYCONNECT_CODESIGN_IDENTITY}")
+
   set(_codesign_ent "")
   if(GENYCONNECT_CODESIGN_ENTITLEMENTS AND EXISTS "${GENYCONNECT_CODESIGN_ENTITLEMENTS}")
     set(_codesign_ent "--entitlements" "${GENYCONNECT_CODESIGN_ENTITLEMENTS}")
@@ -590,6 +733,9 @@ if(APPLE AND GENYCONNECT_MACOS_POSTBUILD_DEPLOY)
     COMMAND $<${GENY_IS_RELEASE}:${CMAKE_COMMAND}> -E copy_if_different
             "$<TARGET_FILE:GenyConnectUpdater>"
             "${_bundle_macos}/GenyConnectUpdater"
+    COMMAND $<${GENY_IS_RELEASE}:${CMAKE_COMMAND}> -E copy_if_different
+            "$<TARGET_FILE:GenyConnectTunHelper>"
+            "${_bundle_macos}/GenyConnectTunHelper"
 
     COMMAND $<${GENY_IS_RELEASE}:${CMAKE_COMMAND}> -E echo "Bundling xray (if available)..."
     COMMAND $<$<AND:${GENY_IS_RELEASE},$<BOOL:${GENYCONNECT_BUNDLED_XRAY_PATH}>>:${CMAKE_COMMAND}> -E copy_if_different
@@ -602,6 +748,7 @@ if(APPLE AND GENYCONNECT_MACOS_POSTBUILD_DEPLOY)
             -verbose=3
             -qmldir=${CMAKE_CURRENT_SOURCE_DIR}
             -executable=${_bundle_macos}/GenyConnectUpdater
+            -executable=${_bundle_macos}/GenyConnectTunHelper
             ${_macdeployqt_args}
 
     COMMAND $<${GENY_IS_RELEASE}:${CMAKE_COMMAND}> -E echo "Codesigning after macdeployqt..."
@@ -641,8 +788,16 @@ if(APPLE)
     CONFIGURATIONS Release RelWithDebInfo
     RUNTIME DESTINATION "${GENY_OUTPUT_NAME}.app/Contents/MacOS"
   )
+  install(TARGETS GenyConnectTunHelper
+    CONFIGURATIONS Release RelWithDebInfo
+    RUNTIME DESTINATION "${GENY_OUTPUT_NAME}.app/Contents/MacOS"
+  )
 else()
   install(TARGETS GenyConnectUpdater
+    CONFIGURATIONS Release RelWithDebInfo
+    RUNTIME DESTINATION "${_GENY_WIN_RUNTIME_DEST}"
+  )
+  install(TARGETS GenyConnectTunHelper
     CONFIGURATIONS Release RelWithDebInfo
     RUNTIME DESTINATION "${_GENY_WIN_RUNTIME_DEST}"
   )
@@ -672,6 +827,15 @@ if(GENYCONNECT_BUNDLED_XRAY_PATH)
       PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE
     )
   endif()
+endif()
+
+if(WIN32 AND GENYCONNECT_BUNDLED_WINTUN_PATH)
+  install(FILES "${GENYCONNECT_BUNDLED_WINTUN_PATH}"
+    CONFIGURATIONS Release RelWithDebInfo
+    DESTINATION "${_GENY_WIN_RUNTIME_DEST}"
+    RENAME "wintun.dll"
+    PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE
+  )
 endif()
 
 # -----------------------------------------------------------------------------
@@ -721,6 +885,7 @@ if(WIN32 AND GENYCONNECT_WINDOWS_INSTALL_DEPLOY)
      message(STATUS \"[deploy] windeployqt done. Output dir: \${_root}\")\n"
   )
 endif()
+
 
 # -----------------------------------------------------------------------------
 # README + LICENSE at package root + NSIS wizard License Agreement + optional post-install README open

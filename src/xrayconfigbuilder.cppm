@@ -41,6 +41,10 @@ public:
         QString logLevel = QStringLiteral("warning"); //!< Runtime log level.
         bool enableMux = false;                 //!< Enable outbound mux.
         bool enableStatsApi = true;             //!< Enable stats API and policy.
+        bool enableTun = false;                 //!< Enable system-level TUN inbound.
+        bool tunAutoRoute = true;               //!< Auto-manage host routes for TUN.
+        bool tunStrictRoute = true;             //!< Prevent route bypass leaks when possible.
+        QString tunInterfaceName;               //!< Optional explicit interface name (macOS: utunN).
         bool whitelistMode = false;             //!< Enable whitelist-first routing mode.
         bool enableProcessRouting = false;      //!< Enable process-based rules.
         QStringList proxyDomains;               //!< Domain rules to tunnel.

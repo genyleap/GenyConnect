@@ -18,11 +18,19 @@ module;
 #include <QRegularExpression>
 #include <QStandardPaths>
 #include <QSysInfo>
+#include <QTemporaryFile>
 #include <QTimer>
 #include <QUrl>
 #include <QVector>
 
 #include <limits>
+
+#if defined(Q_OS_WIN)
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#endif
 
 module genyconnect.backend.updater;
 
@@ -80,6 +88,45 @@ bool looksLikeManualInstaller(const QString& path)
         || lower.endsWith(QStringLiteral(".deb"))
         || lower.endsWith(QStringLiteral(".rpm"));
 }
+
+bool startUpdaterHelperDetached(const QString& helperPath, const QString& jobPath, QString *errorOut)
+{
+#if defined(Q_OS_WIN)
+    const QString nativeHelper = QDir::toNativeSeparators(helperPath);
+    const QString nativeJob = QDir::toNativeSeparators(jobPath);
+    const bool launchedDirect = QProcess::startDetached(helperPath, {QStringLiteral("--job"), jobPath});
+    if (launchedDirect) {
+        return true;
+    }
+
+    const QString args = QStringLiteral("--job \"%1\"").arg(nativeJob);
+    const int rc = static_cast<int>(reinterpret_cast<qintptr>(
+        ShellExecuteW(
+            nullptr,
+            L"runas",
+            reinterpret_cast<LPCWSTR>(nativeHelper.utf16()),
+            reinterpret_cast<LPCWSTR>(args.utf16()),
+            nullptr,
+            SW_SHOWNORMAL
+        )
+    ));
+    if (rc <= 32) {
+        if (errorOut != nullptr) {
+            *errorOut = (rc == 1223)
+                ? QStringLiteral("Administrator permission was denied.")
+                : QStringLiteral("Failed to launch updater helper (code %1).").arg(rc);
+        }
+        return false;
+    }
+    return true;
+#else
+    const bool launched = QProcess::startDetached(helperPath, {QStringLiteral("--job"), jobPath});
+    if (!launched && errorOut != nullptr) {
+        *errorOut = QStringLiteral("Failed to launch updater helper.");
+    }
+    return launched;
+#endif
+}
 }
 
 Updater::Updater(QObject *parent)
@@ -90,6 +137,7 @@ Updater::Updater(QObject *parent)
     if (!runtimeVersion.isEmpty()) {
         m_appVersion = runtimeVersion;
     }
+    consumePendingUpdateStatus();
 }
 
 Updater::~Updater()
@@ -184,6 +232,8 @@ bool Updater::canInstallDownloadedUpdate() const
 
 void Updater::checkForUpdates(bool userInitiated)
 {
+    consumePendingUpdateStatus();
+
     if (m_checking || m_checkReply != nullptr || m_downloadReply != nullptr) {
         return;
     }
@@ -202,6 +252,64 @@ void Updater::checkForUpdates(bool userInitiated)
 
     m_checkReply = m_networkManager.get(request);
     connect(m_checkReply, &QNetworkReply::finished, this, &Updater::onCheckFinished);
+}
+
+void Updater::consumePendingUpdateStatus()
+{
+    const QString appDataDir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
+    if (appDataDir.trimmed().isEmpty()) {
+        return;
+    }
+
+    QDir updatesDir(QDir(appDataDir).filePath(QStringLiteral("updates")));
+    if (!updatesDir.exists()) {
+        return;
+    }
+
+    const QFileInfoList statusFiles = updatesDir.entryInfoList(
+        QStringList() << QStringLiteral("update-job-*.json.status.json"),
+        QDir::Files,
+        QDir::Time | QDir::Reversed
+    );
+    if (statusFiles.isEmpty()) {
+        return;
+    }
+
+    const QFileInfo latest = statusFiles.last();
+    QFile statusFile(latest.absoluteFilePath());
+    if (!statusFile.open(QIODevice::ReadOnly)) {
+        return;
+    }
+
+    QJsonParseError parseError;
+    const QJsonDocument doc = QJsonDocument::fromJson(statusFile.readAll(), &parseError);
+    statusFile.close();
+    if (parseError.error != QJsonParseError::NoError || !doc.isObject()) {
+        QFile::remove(latest.absoluteFilePath());
+        return;
+    }
+
+    const QJsonObject root = doc.object();
+    const bool ok = root.value(QStringLiteral("ok")).toBool(false);
+    const QString message = root.value(QStringLiteral("message")).toString().trimmed();
+    if (ok) {
+        m_error.clear();
+        m_status = message.isEmpty()
+            ? QStringLiteral("Update applied successfully.")
+            : QStringLiteral("Update: %1").arg(message);
+        emit systemLog(QStringLiteral("[Updater] %1").arg(m_status));
+    } else {
+        m_error = message.isEmpty()
+            ? QStringLiteral("Updater helper failed.")
+            : message;
+        m_status = QStringLiteral("Install failed.");
+        emit systemLog(QStringLiteral("[Updater] Install failed: %1").arg(m_error));
+    }
+    emit changed();
+
+    for (const QFileInfo& fileInfo : statusFiles) {
+        QFile::remove(fileInfo.absoluteFilePath());
+    }
 }
 
 bool Updater::downloadUpdate()
@@ -339,6 +447,21 @@ bool Updater::installDownloadedUpdate()
     }
 
     const QString currentExe = QCoreApplication::applicationFilePath();
+#if defined(Q_OS_WIN)
+    bool installDirWritable = true;
+    {
+        const QString exeDir = QFileInfo(currentExe).absolutePath();
+        QTemporaryFile probe(QDir(exeDir).filePath(QStringLiteral(".__geny_write_probe_XXXXXX.tmp")));
+        probe.setAutoRemove(true);
+        if (!probe.open()) {
+            installDirWritable = false;
+            emit systemLog(QStringLiteral(
+                "[Updater] Install folder is not writable. Will request Administrator permission."));
+        } else {
+            probe.close();
+        }
+    }
+#endif
     const QString backupPath = currentExe + QStringLiteral(".backup.old");
     const QString jobPath = QDir(updateDir).filePath(
         QStringLiteral("update-job-%1.json").arg(QString::number(QDateTime::currentMSecsSinceEpoch()))
@@ -366,18 +489,27 @@ bool Updater::installDownloadedUpdate()
     jobFile.write(QJsonDocument(job).toJson(QJsonDocument::Indented));
     jobFile.close();
 
-    const bool launched = QProcess::startDetached(helperPath, {QStringLiteral("--job"), jobPath});
-    if (!launched) {
+    QString launchError;
+    if (!startUpdaterHelperDetached(helperPath, jobPath, &launchError)) {
         QFile::remove(jobPath);
         QFile::remove(stagedPath);
-        m_error = QStringLiteral("Failed to launch updater helper.");
+        m_error = launchError.isEmpty() ? QStringLiteral("Failed to launch updater helper.") : launchError;
         m_status = QStringLiteral("Install failed.");
+        emit systemLog(QStringLiteral("[Updater] %1").arg(m_error));
         emit changed();
         return false;
     }
 
     m_error.clear();
+#if defined(Q_OS_WIN)
+    if (!installDirWritable) {
+        m_status = QStringLiteral("Waiting for Administrator approval to install update...");
+    } else {
+        m_status = QStringLiteral("Installing update and restarting...");
+    }
+#else
     m_status = QStringLiteral("Installing update and restarting...");
+#endif
     emit systemLog(QStringLiteral("[Updater] Handed off update to helper process."));
     emit changed();
 
@@ -605,7 +737,10 @@ bool Updater::selectBestReleaseAsset(const QJsonArray& assets, QString *assetUrl
         return false;
     }
 
-    const QString arch = QSysInfo::currentCpuArchitecture().toLower();
+    QString arch = QSysInfo::buildCpuArchitecture().toLower();
+    if (arch.isEmpty()) {
+        arch = QSysInfo::currentCpuArchitecture().toLower();
+    }
 #if defined(Q_OS_MACOS)
     constexpr bool isMac = true;
     constexpr bool isWin = false;

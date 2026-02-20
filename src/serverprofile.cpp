@@ -61,6 +61,9 @@ QJsonObject ServerProfile::toJson() const
 
     json[QStringLiteral("allowInsecure")] = allowInsecure;
     json[QStringLiteral("originalLink")] = originalLink;
+    json[QStringLiteral("groupName")] = groupName;
+    json[QStringLiteral("sourceName")] = sourceName;
+    json[QStringLiteral("sourceId")] = sourceId;
     json[QStringLiteral("extra")] = extra;
 
     return json;
@@ -95,6 +98,9 @@ std::optional<ServerProfile> ServerProfile::fromJson(const QJsonObject& json)
 
     profile.allowInsecure = json.value(QStringLiteral("allowInsecure")).toBool(false);
     profile.originalLink = json.value(QStringLiteral("originalLink")).toString().trimmed();
+    profile.groupName = json.value(QStringLiteral("groupName")).toString().trimmed();
+    profile.sourceName = json.value(QStringLiteral("sourceName")).toString().trimmed();
+    profile.sourceId = json.value(QStringLiteral("sourceId")).toString().trimmed();
     profile.extra = json.value(QStringLiteral("extra")).toObject();
 
     if (profile.id.isEmpty()) {

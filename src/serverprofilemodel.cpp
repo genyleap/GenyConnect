@@ -47,6 +47,10 @@ QVariant ServerProfileModel::data(const QModelIndex& index, int role) const
         return profile.security;
     case DisplayLabelRole:
         return profile.displayLabel();
+    case GroupRole:
+        return profile.groupName;
+    case SourceRole:
+        return profile.sourceName;
     case PingMsRole:
         return profile.lastPingMs;
     case PingTextRole:
@@ -73,6 +77,8 @@ QHash<int, QByteArray> ServerProfileModel::roleNames() const
         {PortRole, "port"},
         {SecurityRole, "security"},
         {DisplayLabelRole, "displayLabel"},
+        {GroupRole, "groupName"},
+        {SourceRole, "sourceName"},
         {PingMsRole, "pingMs"},
         {PingTextRole, "pingText"},
         {PingingRole, "pinging"},
@@ -185,15 +191,30 @@ bool ServerProfileModel::setPingResult(int row, int pingMs)
 
 int ServerProfileModel::findEquivalentProfile(const ServerProfile& candidate) const
 {
+    const QString candidateProtocol = candidate.protocol.trimmed();
+    const QString candidateAddress = candidate.address.trimmed();
+    const QString candidateUserId = candidate.userId.trimmed();
+    const QString candidateLink = candidate.originalLink.trimmed();
+
     for (int i = 0; i < m_profiles.size(); ++i) {
         const auto &existing = m_profiles.at(i);
-        const bool sameIdentity =
-            existing.protocol == candidate.protocol
-            && existing.address == candidate.address
-            && existing.port == candidate.port
-            && existing.userId == candidate.userId;
+        const QString existingProtocol = existing.protocol.trimmed();
+        const QString existingAddress = existing.address.trimmed();
+        const QString existingUserId = existing.userId.trimmed();
+        const QString existingLink = existing.originalLink.trimmed();
 
-        if (sameIdentity || (!candidate.id.isEmpty() && existing.id == candidate.id)) {
+        const bool sameIdentity =
+            existingProtocol.compare(candidateProtocol, Qt::CaseInsensitive) == 0
+            && existingAddress.compare(candidateAddress, Qt::CaseInsensitive) == 0
+            && existing.port == candidate.port
+            && existingUserId.compare(candidateUserId, Qt::CaseInsensitive) == 0;
+        const bool sameOriginalLink =
+            !candidateLink.isEmpty()
+            && existingLink.compare(candidateLink, Qt::CaseSensitive) == 0;
+
+        if (sameIdentity
+            || sameOriginalLink
+            || (!candidate.id.isEmpty() && existing.id == candidate.id)) {
             return i;
         }
     }

@@ -2,6 +2,7 @@ module;
 #include <QFileInfo>
 #include <QProcess>
 #include <QRegularExpression>
+#include <QTimer>
 
 module genyconnect.backend.xrayprocessmanager;
 
@@ -89,9 +90,20 @@ void XrayProcessManager::stop(int timeoutMs)
     }
 
     m_process.terminate();
+    if (timeoutMs <= 0) {
+        QTimer::singleShot(2000, this, [this]() {
+            if (isRunning()) {
+                m_process.kill();
+            }
+        });
+        return;
+    }
+
     if (!m_process.waitForFinished(timeoutMs)) {
         m_process.kill();
-        m_process.waitForFinished(2000);
+        if (timeoutMs > 0) {
+            m_process.waitForFinished(2000);
+        }
     }
 }
 

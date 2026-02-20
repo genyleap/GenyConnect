@@ -180,6 +180,7 @@ private:
     static bool selectBestReleaseAsset(const QJsonArray& assets, QString *assetUrl, QString *assetName);
     static QString fileSha256Hex(const QString& path);
     static bool isSelfInstallSupportedAsset(const QString& path);
+    void consumePendingUpdateStatus();
 
     QString m_appVersion = QStringLiteral("0.0.0");
     bool m_checking = false;

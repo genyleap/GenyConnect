@@ -1,6 +1,7 @@
 module;
 #include <QJsonArray>
 #include <QStringList>
+#include <QtGlobal>
 
 module genyconnect.backend.xrayconfigbuilder;
 
@@ -27,6 +28,40 @@ QJsonObject buildMixedInbound(quint16 port)
     };
 
     return inbound;
+}
+
+QJsonObject buildTunInbound(const XrayConfigBuilder::BuildOptions& options)
+{
+    QString tunStack = QStringLiteral("system");
+#if defined(Q_OS_LINUX)
+    tunStack = QStringLiteral("gvisor");
+#endif
+
+    QJsonObject settings {
+        {QStringLiteral("address"), QJsonArray {
+            QStringLiteral("172.19.0.1/30"),
+            QStringLiteral("fd00:1234:5678::1/126")
+        }},
+        {QStringLiteral("mtu"), 1500},
+        {QStringLiteral("stack"), tunStack},
+        {QStringLiteral("autoRoute"), options.tunAutoRoute},
+        {QStringLiteral("strictRoute"), options.tunStrictRoute},
+        {QStringLiteral("sniff"), true}
+    };
+
+#if defined(Q_OS_MACOS)
+    // Xray on macOS requires explicit utunN naming.
+    const QString tunName = options.tunInterfaceName.trimmed().isEmpty()
+        ? QStringLiteral("utun9")
+        : options.tunInterfaceName.trimmed();
+    settings.insert(QStringLiteral("name"), tunName);
+#endif
+
+    return QJsonObject {
+        {QStringLiteral("tag"), QStringLiteral("tun-in")},
+        {QStringLiteral("protocol"), QStringLiteral("tun")},
+        {QStringLiteral("settings"), settings}
+    };
 }
 
 QJsonObject buildApiInbound(quint16 port)
@@ -222,6 +257,9 @@ QJsonObject XrayConfigBuilder::build(const ServerProfile& profile, const BuildOp
 {
     QJsonArray inbounds;
     inbounds.append(buildMixedInbound(options.socksPort));
+    if (options.enableTun) {
+        inbounds.append(buildTunInbound(options));
+    }
     if (options.enableStatsApi) {
         inbounds.append(buildApiInbound(options.apiPort));
     }

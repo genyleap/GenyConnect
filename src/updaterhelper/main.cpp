@@ -160,6 +160,33 @@ bool copyWithOverwrite(const QString& fromPath, const QString& toPath)
     return QFile::copy(fromPath, toPath);
 }
 
+#if defined(Q_OS_WIN)
+bool removeWithRetry(const QString& path, int attempts = 40, int delayMs = 150)
+{
+    for (int i = 0; i < attempts; ++i) {
+        if (!QFileInfo::exists(path)) {
+            return true;
+        }
+        if (QFile::remove(path)) {
+            return true;
+        }
+        QThread::msleep(static_cast<unsigned long>(delayMs));
+    }
+    return !QFileInfo::exists(path);
+}
+
+bool renameWithRetry(const QString& fromPath, const QString& toPath, int attempts = 40, int delayMs = 150)
+{
+    for (int i = 0; i < attempts; ++i) {
+        if (QFile::rename(fromPath, toPath)) {
+            return true;
+        }
+        QThread::msleep(static_cast<unsigned long>(delayMs));
+    }
+    return false;
+}
+#endif
+
 bool replaceFileAtomically(const QString& currentPath, const QString& stagedPath, const QString& backupPath, QString* errorOut)
 {
     if (!QFileInfo::exists(stagedPath)) {
@@ -169,14 +196,26 @@ bool replaceFileAtomically(const QString& currentPath, const QString& stagedPath
         return false;
     }
 
-    if (QFileInfo::exists(backupPath) && !QFile::remove(backupPath)) {
+    if (QFileInfo::exists(backupPath)
+#if defined(Q_OS_WIN)
+        && !removeWithRetry(backupPath)
+#else
+        && !QFile::remove(backupPath)
+#endif
+    ) {
         if (errorOut != nullptr) {
             *errorOut = QStringLiteral("Could not remove stale backup.");
         }
         return false;
     }
 
-    if (!QFile::rename(currentPath, backupPath)) {
+    bool movedCurrentToBackup = false;
+#if defined(Q_OS_WIN)
+    movedCurrentToBackup = renameWithRetry(currentPath, backupPath);
+#else
+    movedCurrentToBackup = QFile::rename(currentPath, backupPath);
+#endif
+    if (!movedCurrentToBackup) {
         if (!copyWithOverwrite(currentPath, backupPath) || !QFile::remove(currentPath)) {
             if (errorOut != nullptr) {
                 *errorOut = QStringLiteral("Could not move current executable to backup.");
@@ -185,17 +224,32 @@ bool replaceFileAtomically(const QString& currentPath, const QString& stagedPath
         }
     }
 
-    if (!QFile::rename(stagedPath, currentPath)) {
+    bool movedStagedToCurrent = false;
+#if defined(Q_OS_WIN)
+    movedStagedToCurrent = renameWithRetry(stagedPath, currentPath);
+#else
+    movedStagedToCurrent = QFile::rename(stagedPath, currentPath);
+#endif
+    if (!movedStagedToCurrent) {
         if (!copyWithOverwrite(stagedPath, currentPath)) {
+#if defined(Q_OS_WIN)
+            renameWithRetry(backupPath, currentPath);
+#else
             QFile::rename(backupPath, currentPath);
+#endif
             if (errorOut != nullptr) {
                 *errorOut = QStringLiteral("Could not place staged executable.");
             }
             return false;
         }
+#if defined(Q_OS_WIN)
+        removeWithRetry(stagedPath);
+#else
         QFile::remove(stagedPath);
+#endif
     }
 
+#if !defined(Q_OS_WIN)
     QFile currentFile(currentPath);
     if (!currentFile.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner
                                   | QFileDevice::ReadGroup | QFileDevice::ExeGroup
@@ -207,6 +261,7 @@ bool replaceFileAtomically(const QString& currentPath, const QString& stagedPath
         }
         return false;
     }
+#endif
 
     return true;
 }

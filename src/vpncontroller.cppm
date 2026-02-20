@@ -20,6 +20,8 @@
  */
 
 module;
+#include <QByteArray>
+#include <QJsonObject>
 #include <QObject>
 #include <QElapsedTimer>
 #include <QNetworkAccessManager>
@@ -29,6 +31,7 @@ module;
 #include <QStringList>
 #include <QTimer>
 #include <QUrl>
+#include <QVariantList>
 
 #ifndef Q_MOC_RUN
 export module genyconnect.backend.vpncontroller;
@@ -103,13 +106,19 @@ GENYCONNECT_MODULE_EXPORT class VpnController : public QObject
     Q_PROPERTY(bool loggingEnabled READ loggingEnabled WRITE setLoggingEnabled NOTIFY loggingEnabledChanged)
     Q_PROPERTY(bool autoPingProfiles READ autoPingProfiles WRITE setAutoPingProfiles NOTIFY autoPingProfilesChanged)
     Q_PROPERTY(QStringList subscriptions READ subscriptions NOTIFY subscriptionsChanged)
+    Q_PROPERTY(QVariantList subscriptionItems READ subscriptionItems NOTIFY subscriptionsChanged)
     Q_PROPERTY(bool subscriptionBusy READ subscriptionBusy NOTIFY subscriptionStateChanged)
     Q_PROPERTY(QString subscriptionMessage READ subscriptionMessage NOTIFY subscriptionStateChanged)
+    Q_PROPERTY(QStringList profileGroups READ profileGroups NOTIFY profileGroupsChanged)
+    Q_PROPERTY(QVariantList profileGroupItems READ profileGroupItems NOTIFY profileGroupOptionsChanged)
+    Q_PROPERTY(QString currentProfileGroup READ currentProfileGroup WRITE setCurrentProfileGroup NOTIFY currentProfileGroupChanged)
     Q_PROPERTY(int profileCount READ profileCount NOTIFY profileStatsChanged)
+    Q_PROPERTY(int filteredProfileCount READ filteredProfileCount NOTIFY profileStatsChanged)
     Q_PROPERTY(int bestPingMs READ bestPingMs NOTIFY profileStatsChanged)
     Q_PROPERTY(int worstPingMs READ worstPingMs NOTIFY profileStatsChanged)
     Q_PROPERTY(double profileScore READ profileScore NOTIFY profileStatsChanged)
     Q_PROPERTY(bool useSystemProxy READ useSystemProxy WRITE setUseSystemProxy NOTIFY useSystemProxyChanged)
+    Q_PROPERTY(bool tunMode READ tunMode WRITE setTunMode NOTIFY tunModeChanged)
     Q_PROPERTY(
         bool autoDisableSystemProxyOnDisconnect
         READ autoDisableSystemProxyOnDisconnect
@@ -300,13 +309,52 @@ public:
      * @return Auto-ping flag.
      */
     bool autoPingProfiles() const;
+
+    /**
+     * @brief Saved subscription URLs (legacy-compatible list).
+     * @return URL list.
+     */
     QStringList subscriptions() const;
+
+    /**
+     * @brief Structured subscription entries (id/name/group/url).
+     * @return Variant list of subscription maps.
+     */
+    QVariantList subscriptionItems() const;
     bool subscriptionBusy() const;
     QString subscriptionMessage() const;
+
+    /**
+     * @brief Available profile groups/categories.
+     * @return Group names including `All`.
+     */
+    QStringList profileGroups() const;
+    QVariantList profileGroupItems() const;
+
+    /**
+     * @brief Currently active group filter for profile listing.
+     * @return Group name (`All` means unfiltered).
+     */
+    QString currentProfileGroup() const;
     int profileCount() const;
+
+    /**
+     * @brief Number of profiles visible under current group filter.
+     * @return Filtered profile count.
+     */
+    int filteredProfileCount() const;
     int bestPingMs() const;
     int worstPingMs() const;
     double profileScore() const;
+    Q_INVOKABLE bool isProfileGroupEnabled(const QString& groupName) const;
+    Q_INVOKABLE bool isProfileGroupExclusive(const QString& groupName) const;
+    Q_INVOKABLE QString profileGroupBadge(const QString& groupName) const;
+    Q_INVOKABLE void setProfileGroupEnabled(const QString& groupName, bool enabled);
+    Q_INVOKABLE void setProfileGroupExclusive(const QString& groupName, bool exclusive);
+    Q_INVOKABLE void setProfileGroupBadge(const QString& groupName, const QString& badge);
+    Q_INVOKABLE bool ensureProfileGroup(const QString& groupName);
+    Q_INVOKABLE bool removeProfileGroup(const QString& groupName);
+    Q_INVOKABLE int removeAllProfileGroups();
 
     /**
      * @brief Set custom Xray executable path.
@@ -327,16 +375,24 @@ public:
     void setAutoPingProfiles(bool enabled);
 
     /**
+     * @brief Set active group filter for profiles/subscription actions.
+     * @param groupName Group name (`All` to clear filtering).
+     */
+    void setCurrentProfileGroup(const QString& groupName);
+
+    /**
      * @brief Whether system proxy should be managed on connect.
      * @return Proxy mode flag.
      */
     bool useSystemProxy() const;
+    bool tunMode() const;
 
     /**
      * @brief Set system proxy management mode.
      * @param enabled Enable or disable system proxy mode.
      */
     void setUseSystemProxy(bool enabled);
+    void setTunMode(bool enabled);
 
     /**
      * @brief Whether proxy is auto-disabled on disconnect.
@@ -470,13 +526,24 @@ public:
      * @param url Subscription endpoint URL.
      * @return True when at least one profile is imported.
      */
-    Q_INVOKABLE bool addSubscription(const QString& url);
+    Q_INVOKABLE bool addSubscription(
+        const QString& url,
+        const QString& name = QString(),
+        const QString& group = QString()
+    );
 
     /**
      * @brief Refresh all saved subscriptions.
      * @return Number of successfully refreshed subscription URLs.
      */
     Q_INVOKABLE int refreshSubscriptions();
+
+    /**
+     * @brief Refresh only subscriptions within one group.
+     * @param group Group/category name.
+     * @return Number of queued subscription URLs in that group.
+     */
+    Q_INVOKABLE int refreshSubscriptionsByGroup(const QString& group);
 
     /**
      * @brief Remove profile row.
@@ -599,8 +666,12 @@ signals:
     void subscriptionsChanged();
     void subscriptionStateChanged();
     void profileStatsChanged();
+    void profileGroupsChanged();
+    void profileGroupOptionsChanged();
+    void currentProfileGroupChanged();
     //! Emitted when system-proxy usage flag changes.
     void useSystemProxyChanged();
+    void tunModeChanged();
     //! Emitted when auto-disable proxy flag changes.
     void autoDisableSystemProxyOnDisconnectChanged();
     //! Emitted when whitelist flag changes.
@@ -635,6 +706,21 @@ private slots:
     void onSpeedTestFinished();
 
 private:
+    struct SubscriptionEntry {
+        QString id;
+        QString name;
+        QString group;
+        QString url;
+    };
+
+    struct ProfileGroupOptions {
+        QString key;
+        QString name;
+        bool enabled = true;
+        bool exclusive = false;
+        QString badge;
+    };
+
     /**
      * @brief Set connection state and emit change when needed.
      * @param state New state.
@@ -734,6 +820,21 @@ private:
      * @return True on successful query/parse.
      */
     bool queryTrafficStatsFromApi(qint64 *uplinkBytes, qint64 *downlinkBytes, QString *errorMessage);
+    QString privilegedTunHelperPath() const;
+    bool ensurePrivilegedTunHelper(QString *errorMessage);
+    bool sendPrivilegedTunHelperRequest(
+        const QJsonObject& request,
+        QJsonObject *response,
+        QString *errorMessage,
+        int timeoutMs = 4000
+    );
+    void shutdownPrivilegedTunHelper();
+    bool requestElevationForTun(QString *errorMessage);
+    bool startPrivilegedTunProcess(QString *errorMessage);
+    bool stopPrivilegedTunProcess(QString *errorMessage);
+    void pollPrivilegedTunLogs();
+    bool applyMacTunRoutes(QString *errorMessage);
+    void clearMacTunRoutes();
 
     /**
      * @brief Write generated runtime config file for selected profile.
@@ -760,12 +861,26 @@ private:
     void saveProfiles() const;
     void loadSubscriptions();
     void saveSubscriptions() const;
-    int importLinks(const QStringList& links, int *lastImportedIndex = nullptr);
+    int importLinks(
+        const QStringList& links,
+        const QString& sourceId = QString(),
+        const QString& sourceName = QString(),
+        const QString& groupName = QString(),
+        int *lastImportedIndex = nullptr
+    );
     void beginSubscriptionOperation(const QString& message);
     void endSubscriptionOperation(const QString& message);
-    void startSubscriptionFetch(const QString& url, bool fromRefresh);
+    void startSubscriptionFetch(const SubscriptionEntry& entry, bool fromRefresh);
     void finishRefreshSubscriptions();
+    void refreshProfileGroups();
+    static QString normalizeGroupName(const QString& groupName);
+    static QString normalizeGroupKey(const QString& groupName);
+    static QString deriveSubscriptionName(const QString& url);
     void recomputeProfileStats();
+    void scheduleLogsChanged();
+    int profileGroupOptionsIndex(const QString& groupName) const;
+    ProfileGroupOptions profileGroupOptionsFor(const QString& groupName) const;
+    void upsertProfileGroupOptions(const ProfileGroupOptions& options, bool save = true);
 
     /**
      * @brief Load persistent controller settings.
@@ -812,17 +927,22 @@ private:
     QString m_xrayVersion = QStringLiteral("Unknown");
     bool m_loggingEnabled = true;
     bool m_autoPingProfiles = true;
-    QStringList m_subscriptions;
+    QList<SubscriptionEntry> m_subscriptionEntries;
+    QList<ProfileGroupOptions> m_profileGroupOptions;
     bool m_subscriptionBusy = false;
     QString m_subscriptionMessage;
-    QStringList m_subscriptionRefreshQueue;
+    QList<SubscriptionEntry> m_subscriptionRefreshQueue;
     int m_subscriptionRefreshSuccessCount = 0;
     int m_subscriptionRefreshFailCount = 0;
+    QStringList m_profileGroups;
+    QString m_currentProfileGroup = QStringLiteral("All");
     int m_profileCount = 0;
+    int m_filteredProfileCount = 0;
     int m_bestPingMs = -1;
     int m_worstPingMs = -1;
     double m_profileScore = 0.0;
     bool m_useSystemProxy = false;
+    bool m_tunMode = false;
     bool m_autoDisableSystemProxyOnDisconnect = false;
     bool m_whitelistMode = false;
     QString m_proxyDomainRules;
@@ -851,6 +971,23 @@ private:
     QNetworkReply *m_speedTestReply = nullptr;
     bool m_statsPolling = false;
     int m_statsQueryFailureCount = 0;
+    bool m_stoppingProcess = false;
+    int m_pendingReconnectProfileIndex = -1;
+    bool m_startedWithTunElevationRequest = false;
+    bool m_privilegedTunManaged = false;
+    bool m_privilegedTunHelperReady = false;
+    quint16 m_privilegedTunHelperPort = 0;
+    QString m_privilegedTunHelperToken;
+    QString m_privilegedTunPidPath;
+    QString m_privilegedTunLogPath;
+    qint64 m_privilegedTunLogOffset = 0;
+    QByteArray m_privilegedTunLogBuffer;
+    QTimer m_privilegedTunLogTimer;
+    QTimer m_logsFlushTimer;
+    bool m_logsDirty = false;
+    QString m_selectedTunInterfaceName;
+    QString m_activeProfileAddress;
+    QString m_lastTunServerIp;
 };
 
 #include "vpncontroller.moc"

@@ -52,6 +52,8 @@ public:
         PortRole,                  //!< Port number.
         SecurityRole,              //!< Security mode.
         DisplayLabelRole,          //!< Pre-formatted label.
+        GroupRole,                 //!< Profile group/category.
+        SourceRole,                //!< Profile source/subscription name.
         PingMsRole,                //!< Last ping in milliseconds.
         PingTextRole,              //!< Formatted ping label.
         PingingRole                //!< True while ping is in progress.
