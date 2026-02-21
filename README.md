@@ -31,9 +31,11 @@ If GenyConnect helps you, consider supporting its continued development.
 Your support keeps the project alive and evolving.
 ---
 ## Screenshot
-<img width="2240" height="1260" alt="ui-01" src="https://github.com/user-attachments/assets/dd6ca397-e3eb-4102-a909-b13872f2fee7" />
-<img width="2240" height="1260" alt="ui-02" src="https://github.com/user-attachments/assets/637a738c-a299-4f43-aded-7830592e2485" />
-<img width="2240" height="1260" alt="ui-03" src="https://github.com/user-attachments/assets/946b30cc-2a2e-468e-8503-ca8494fff670" />
+![Screenshot-2026-02-21-at-16 49 23](https://github.com/user-attachments/assets/ddb6d2b8-9b13-437a-b2b7-5cfb3ef81b31)
+![Screenshot-2026-02-21-at-16 49 43](https://github.com/user-attachments/assets/063be1ce-091c-43d4-a57b-d5218e00372c)
+![Screenshot-2026-02-21-at-16 50 59](https://github.com/user-attachments/assets/b34af7ee-7c73-4c4e-886d-4d8aace0c572)
+![Screenshot-2026-02-21-at-16 50 22](https://github.com/user-attachments/assets/fe9c7913-cef6-4649-b5cf-6d78818ec7ac)
+
 
 ---
 
