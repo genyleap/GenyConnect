@@ -272,7 +272,7 @@ if(CMAKE_PREFIX_PATH)
   set(CMAKE_PREFIX_PATH "${CMAKE_PREFIX_PATH}" CACHE STRING "Qt search prefixes" FORCE)
 endif()
 
-find_package(Qt6 6.8 REQUIRED COMPONENTS Core Gui Network Qml Quick QuickControls2)
+find_package(Qt6 6.8 REQUIRED COMPONENTS Core Gui Network Qml Quick QuickControls2 Widgets)
 qt_standard_project_setup(REQUIRES 6.8)
 
 # -------------------------
@@ -312,6 +312,12 @@ set(GENYCONNECT_IMPL_SOURCES
   src/xrayprocessmanager.cpp
   src/vpncontroller.cpp
 )
+
+if(APPLE)
+  list(APPEND GENYCONNECT_IMPL_SOURCES
+    src/platform/macosappbridge.mm
+  )
+endif()
 
 qt_add_executable(${PROJECT_NAME}
   WIN32
@@ -375,6 +381,7 @@ target_link_libraries(${PROJECT_NAME}
     Qt6::Qml
     Qt6::Quick
     Qt6::QuickControls2
+    Qt6::Widgets
 )
 
 target_compile_definitions(${PROJECT_NAME} PRIVATE APP_VERSION="${PROJECT_VERSION}")

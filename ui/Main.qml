@@ -58,15 +58,25 @@ ApplicationWindow {
     property int lastRxBytesSample: 0
     property int lastTxBytesSample: 0
     property bool rateSampleInitialized: false
+    property string tunConflictPopupText: ""
+    property string tunConflictPopupSignature: ""
     property string profileSearchQuery: ""
     property string notifiedUpdateVersion: ""
     property string subscriptionGroupDraft: "General"
     property bool importWaitingForSubscription: false
     property string importStatusText: ""
     property string importStatusKind: "idle"
+    property string customDnsDraft: ""
+    property bool customDnsDirty: false
+    property bool allowCloseExit: false
 
-    opacity: 0
-    Behavior on opacity { NumberAnimation { duration: 420; easing.type: Easing.OutCubic } }
+    onClosing: function(closeEvent) {
+        if (allowCloseExit) {
+            return
+        }
+        closeEvent.accepted = false
+        root.hide()
+    }
 
     function stateText() {
         if (vpnController.connectionState === ConnectionState.Connecting)
@@ -181,6 +191,61 @@ ApplicationWindow {
         return name === "all" || name === "general"
     }
 
+    function syncCustomDnsDraftFromController() {
+        customDnsDraft = vpnController.customDnsServers || ""
+        customDnsDirty = false
+    }
+
+    function customDnsEntries() {
+        const raw = (customDnsDraft || "")
+            .split(/[\n,;]+/)
+            .map(function(entry) { return entry.trim() })
+            .filter(function(entry) { return entry.length > 0 })
+
+        const out = []
+        const seen = {}
+        for (let i = 0; i < raw.length; ++i) {
+            const key = raw[i].toLowerCase()
+            if (seen[key] === true)
+                continue
+            seen[key] = true
+            out.push(raw[i])
+        }
+        return out
+    }
+
+    function dnsDraftContains(server) {
+        const value = (server || "").trim().toLowerCase()
+        if (value.length === 0)
+            return false
+        const items = customDnsEntries()
+        for (let i = 0; i < items.length; ++i) {
+            if (items[i].toLowerCase() === value)
+                return true
+        }
+        return false
+    }
+
+    function setDnsDraftContains(server, enabled) {
+        const value = (server || "").trim()
+        if (value.length === 0)
+            return
+
+        const items = customDnsEntries()
+        const lower = value.toLowerCase()
+        const filtered = items.filter(function(entry) { return entry.toLowerCase() !== lower })
+
+        if (enabled)
+            filtered.push(value)
+
+        customDnsDraft = filtered.join("\n")
+        customDnsDirty = customDnsDraft.trim() !== (vpnController.customDnsServers || "").trim()
+    }
+
+    function appendDnsToDraft(server) {
+        setDnsDraftContains(server, true)
+    }
+
     function findProfileGroupItem(groupName) {
         const normalized = normalizeProfileGroup(groupName).toLowerCase()
         const items = vpnController.profileGroupItems || []
@@ -293,7 +358,7 @@ ApplicationWindow {
     }
 
     function infoIpText() {
-        const profileAddress = (vpnController.currentProfileAddress() || "").trim()
+        const profileAddress = (vpnController.currentProfileAddressValue || "").trim()
         if (profileAddress.length > 0)
             return profileAddress
         return "--"
@@ -304,19 +369,35 @@ ApplicationWindow {
     }
 
     function downloadUsageText() {
-        return vpnController.formatBytes(vpnController.rxBytes)
+        return vpnController.formatBytes(Math.max(0, vpnController.rxBytes))
     }
 
     function uploadUsageText() {
-        return vpnController.formatBytes(vpnController.txBytes)
+        return vpnController.formatBytes(Math.max(0, vpnController.txBytes))
     }
 
     function downloadRateText() {
-        return vpnController.formatBytes(downRateBytesPerSec) + "/s"
+        return vpnController.formatBytes(Math.max(0, downRateBytesPerSec)) + "/s"
     }
 
     function uploadRateText() {
-        return vpnController.formatBytes(upRateBytesPerSec) + "/s"
+        return vpnController.formatBytes(Math.max(0, upRateBytesPerSec)) + "/s"
+    }
+
+    function tunConflictGuidance(errorText) {
+        const raw = (errorText || "").trim()
+        if (raw.length === 0 || !vpnController.tunMode)
+            return ""
+
+        const text = raw.toLowerCase()
+        const gatewayIssue = text.indexOf("default gateway") >= 0 && text.indexOf("tun") >= 0
+        const routeIssue = text.indexOf("split default routes") >= 0 || text.indexOf("route validation") >= 0
+        const vpnConflictHint = text.indexOf("another vpn") >= 0 || text.indexOf("already active") >= 0
+
+        if (!gatewayIssue && !routeIssue && !vpnConflictHint)
+            return ""
+
+        return "Another VPN or system tunnel appears active. Please disconnect it first, then reconnect GenyConnect in TUN mode."
     }
 
     function statePrimaryColor() {
@@ -523,7 +604,6 @@ ApplicationWindow {
     }
 
     Component.onCompleted: {
-        opacity = 1
         AppGlobals.appWindow = root
         AppGlobals.mainRect = root.contentItem
         syncSelectedProfileFromController()
@@ -567,8 +647,23 @@ ApplicationWindow {
             }
             root.rateSampleInitialized = false
         }
+
         function onCurrentProfileIndexChanged() {
             root.syncSelectedProfileFromController()
+        }
+
+        function onLastErrorChanged() {
+            const guidance = root.tunConflictGuidance(vpnController.lastError)
+            if (guidance.length === 0)
+                return
+
+            const signature = guidance + "||" + (vpnController.lastError || "")
+            if (signature === root.tunConflictPopupSignature)
+                return
+
+            root.tunConflictPopupSignature = signature
+            root.tunConflictPopupText = guidance + "\n\nDetails: " + vpnController.lastError
+            tunConflictPopup.open()
         }
     }
 
@@ -696,6 +791,70 @@ ApplicationWindow {
                         updateNoticePopup.close()
                         settingsPopup.open()
                     }
+                }
+            }
+        }
+    }
+
+    Popup {
+        id: tunConflictPopup
+        modal: true
+        focus: true
+        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+        width: Math.min(root.width - 40, 520)
+        height: 240
+        x: (root.width - width) * 0.5
+        y: (root.height - height) * 0.5
+        padding: 0
+
+        background: Rectangle {
+            radius: 18
+            color: "#ffffff"
+            border.width: 1
+            border.color: "#d7deea"
+        }
+
+        contentItem: ColumnLayout {
+            anchors.fill: parent
+            anchors.margins: 16
+            spacing: 10
+
+            Text {
+                text: "VPN Conflict Detected"
+                color: "#1f2a3a"
+                font.family: FontSystem.getContentFont.name
+                font.pixelSize: 22
+                font.bold: true
+            }
+
+            Text {
+                Layout.fillWidth: true
+                text: root.tunConflictPopupText
+                color: "#5f6f86"
+                font.family: FontSystem.getContentFont.name
+                font.pixelSize: 13
+                wrapMode: Text.WordWrap
+            }
+
+            Item { Layout.fillHeight: true }
+
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 10
+
+                Controls.Button {
+                    Layout.fillWidth: true
+                    text: "Open Logs"
+                    onClicked: {
+                        tunConflictPopup.close()
+                        logsPopup.open()
+                    }
+                }
+
+                Controls.Button {
+                    Layout.fillWidth: true
+                    text: "OK"
+                    onClicked: tunConflictPopup.close()
                 }
             }
         }
@@ -1624,6 +1783,7 @@ ApplicationWindow {
         modal: true
         focus: true
         closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+        onOpened: root.syncCustomDnsDraftFromController()
         width: Math.min(root.width - 30, 550)
         height: Math.min(root.height - 60, 620)
         x: (root.width - width)
@@ -2115,6 +2275,140 @@ ApplicationWindow {
                             onTextChanged: vpnController.blockDomainRules = text
                         }
 
+                        Rectangle {
+                            id: customDnsCard
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: customDnsColumn.implicitHeight + 20
+                            implicitHeight: customDnsColumn.implicitHeight + 20
+                            radius: 14
+                            color: "#f8fbff"
+                            border.width: 1
+                            border.color: "#d7e4f5"
+
+                            ColumnLayout {
+                                id: customDnsColumn
+                                anchors.fill: parent
+                                anchors.margins: 10
+                                spacing: 8
+
+                                Text {
+                                    Layout.fillWidth: true
+                                    text: "Custom DNS (optional, TUN mode)"
+                                    color: "#3b4e67"
+                                    font.family: FontSystem.getContentFontBold.name
+                                    font.pixelSize: 13
+                                }
+
+                                Text {
+                                    Layout.fillWidth: true
+                                    text: "Enter one resolver per line. Supports IPv4, IPv6, and DNS hostnames."
+                                    wrapMode: Text.Wrap
+                                    color: "#7c8ba1"
+                                    font.family: FontSystem.getContentFont.name
+                                    font.pixelSize: 12
+                                }
+
+                                Controls.TextArea {
+                                    id: customDnsTextArea
+                                    Layout.fillWidth: true
+                                    Layout.preferredHeight: 86
+                                    placeholderText: "1.1.1.1\n8.8.8.8\ndns.google"
+                                    text: root.customDnsDraft
+                                    onTextChanged: {
+                                        root.customDnsDraft = text
+                                        root.customDnsDirty = text.trim() !== (vpnController.customDnsServers || "").trim()
+                                    }
+                                }
+
+                                GridLayout {
+                                    Layout.fillWidth: true
+                                    columns: 4
+
+                                    Repeater {
+                                        model: [
+                                            { "label": "Cloudflare", "server": "1.1.1.1" },
+                                            { "label": "Google", "server": "8.8.8.8" },
+                                            { "label": "Quad9", "server": "9.9.9.9" }
+                                        ]
+
+                                        delegate: Rectangle {
+                                            required property var modelData
+                                            Layout.preferredWidth: 152
+                                            Layout.preferredHeight: 38
+                                            radius: 12
+                                            color: root.dnsDraftContains(modelData.server) ? "#eaf2ff" : "#ffffff"
+                                            border.width: 1
+                                            border.color: root.dnsDraftContains(modelData.server) ? "#8bb8ff" : "#d8e2f0"
+
+                                            RowLayout {
+                                                anchors.fill: parent
+                                                anchors.leftMargin: 10
+                                                anchors.rightMargin: 8
+                                                spacing: 8
+
+                                                Text {
+                                                    Layout.fillWidth: true
+                                                    text: modelData.label
+                                                    color: "#43556f"
+                                                    font.family: FontSystem.getContentFont.name
+                                                    font.pixelSize: 12
+                                                    elide: Text.ElideRight
+                                                }
+
+                                                Switch {
+                                                    checked: root.dnsDraftContains(modelData.server)
+                                                    onToggled: root.setDnsDraftContains(modelData.server, checked)
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    Item { Layout.fillWidth: true }
+
+                                    Text {
+                                        color: "#7c8ba1"
+                                        font.family: FontSystem.getContentFont.name
+                                        font.pixelSize: 12
+                                        text: {
+                                            const count = (root.customDnsDraft || "")
+                                                .split(/[\n,;]+/)
+                                                .map(function(entry) { return entry.trim() })
+                                                .filter(function(entry) { return entry.length > 0 }).length
+                                            return count > 0 ? ("Resolvers: " + count) : "Resolvers: default"
+                                        }
+                                    }
+                                }
+
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 8
+
+                                    Controls.Button {
+                                        text: "Reset"
+                                        implicitWidth: 86
+                                        implicitHeight: 34
+                                        Layout.fillWidth: false
+                                        enabled: root.customDnsDirty
+                                        onClicked: root.syncCustomDnsDraftFromController()
+                                    }
+
+                                    Item { Layout.fillWidth: true }
+
+                                    Controls.Button {
+                                        text: "Apply DNS"
+                                        implicitWidth: 106
+                                        implicitHeight: 34
+                                        Layout.fillWidth: false
+                                        enabled: root.customDnsDirty
+                                        onClicked: {
+                                            vpnController.customDnsServers = root.customDnsDraft
+                                            root.syncCustomDnsDraftFromController()
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
                         Text {
                             Layout.fillWidth: true
                             text: vpnController.processRoutingSupported
@@ -2534,6 +2828,12 @@ ApplicationWindow {
                     color: "#1f2530"
                 }
                 Item { Layout.fillWidth: true }
+                Controls.Button {
+                    text: "Clear"
+                    Layout.fillWidth: false
+                    enabled: vpnController.recentLogs.length > 0
+                    onClicked: vpnController.clearLogs()
+                }
                 Controls.Button {
                     text: "Copy"
                     Layout.fillWidth: false
@@ -4560,6 +4860,70 @@ ApplicationWindow {
                 font.family: FontSystem.getContentFont.name
                 font.pixelSize: Typography.t2
                 Behavior on color { ColorAnimation { duration: 220 } }
+            }
+
+            Text {
+                text: " | Memory: " + vpnController.memoryUsageText
+                color: Colors.textSecondary
+                font.family: FontSystem.getContentFont.name
+                font.pixelSize: Typography.t2
+            }
+
+            RowLayout {
+                id: usageSummaryRow
+                width: compact ? parent.width - 40 : 860
+                spacing: 10
+                visible: vpnController.currentProfileIndex >= 0
+
+                Item {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 34
+
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.leftMargin: 12
+                        anchors.rightMargin: 12
+                        spacing: 14
+
+                        Text {
+                            text: "Current Profile Usage -->"
+                            color: "#4f627f"
+                            font.family: FontSystem.getContentFontBold.name
+                            font.pixelSize: 12
+                            font.bold: true
+                        }
+
+                        Text {
+                            text: "<strong>Hour</strong> " + vpnController.currentProfileUsageHour
+                            color: "#647891"
+                            font.family: FontSystem.getContentFont.name
+                            font.pixelSize: 12
+                        }
+
+                        Text {
+                            text: "<strong>Day</strong> " + vpnController.currentProfileUsageDay
+                            color: "#647891"
+                            font.family: FontSystem.getContentFont.name
+                            font.pixelSize: 12
+                        }
+
+                        Text {
+                            text: "<strong>Week</strong> " + vpnController.currentProfileUsageWeek
+                            color: "#647891"
+                            font.family: FontSystem.getContentFont.name
+                            font.pixelSize: 12
+                        }
+
+                        Text {
+                            text: "<strong>Month</strong> " + vpnController.currentProfileUsageMonth
+                            color: "#647891"
+                            font.family: FontSystem.getContentFont.name
+                            font.pixelSize: 12
+                        }
+
+                        Item { Layout.fillWidth: true }
+                    }
+                }
             }
 
             Item { Layout.fillWidth: true; }

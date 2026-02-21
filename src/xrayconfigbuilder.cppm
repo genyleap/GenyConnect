@@ -70,7 +70,10 @@ private:
      * @param enableMux Enable mux section.
      * @return Outbound JSON object.
      */
-    static QJsonObject buildMainOutbound(const ServerProfile& profile, bool enableMux);
+    static QJsonObject buildMainOutbound(
+        const ServerProfile& profile,
+        bool enableMux,
+        bool enableRealityFragDialer);
 
     /**
      * @brief Build stream settings based on profile transport/security.

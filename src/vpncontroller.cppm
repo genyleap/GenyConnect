@@ -32,6 +32,7 @@ module;
 #include <QTimer>
 #include <QUrl>
 #include <QVariantList>
+#include <QVariantMap>
 
 #ifndef Q_MOC_RUN
 export module genyconnect.backend.vpncontroller;
@@ -85,6 +86,7 @@ GENYCONNECT_MODULE_EXPORT class VpnController : public QObject
 
     Q_PROPERTY(qint64 rxBytes READ rxBytes NOTIFY trafficChanged)
     Q_PROPERTY(qint64 txBytes READ txBytes NOTIFY trafficChanged)
+    Q_PROPERTY(QString memoryUsageText READ memoryUsageText NOTIFY memoryUsageChanged)
     Q_PROPERTY(bool speedTestRunning READ speedTestRunning NOTIFY speedTestChanged)
     Q_PROPERTY(QString speedTestPhase READ speedTestPhase NOTIFY speedTestChanged)
     Q_PROPERTY(int speedTestElapsedSec READ speedTestElapsedSec NOTIFY speedTestChanged)
@@ -98,6 +100,7 @@ GENYCONNECT_MODULE_EXPORT class VpnController : public QObject
     Q_PROPERTY(QStringList speedTestHistory READ speedTestHistory NOTIFY speedTestChanged)
 
     Q_PROPERTY(int currentProfileIndex READ currentProfileIndex WRITE setCurrentProfileIndex NOTIFY currentProfileIndexChanged)
+    Q_PROPERTY(QString currentProfileAddressValue READ currentProfileAddress NOTIFY currentProfileIndexChanged)
     Q_PROPERTY(QObject *profileModel READ profileModel CONSTANT)
     Q_PROPERTY(QObject *updater READ updater CONSTANT)
 
@@ -129,9 +132,14 @@ GENYCONNECT_MODULE_EXPORT class VpnController : public QObject
     Q_PROPERTY(QString proxyDomainRules READ proxyDomainRules WRITE setProxyDomainRules NOTIFY routingRulesChanged)
     Q_PROPERTY(QString directDomainRules READ directDomainRules WRITE setDirectDomainRules NOTIFY routingRulesChanged)
     Q_PROPERTY(QString blockDomainRules READ blockDomainRules WRITE setBlockDomainRules NOTIFY routingRulesChanged)
+    Q_PROPERTY(QString customDnsServers READ customDnsServers WRITE setCustomDnsServers NOTIFY customDnsServersChanged)
     Q_PROPERTY(QString proxyAppRules READ proxyAppRules WRITE setProxyAppRules NOTIFY appRulesChanged)
     Q_PROPERTY(QString directAppRules READ directAppRules WRITE setDirectAppRules NOTIFY appRulesChanged)
     Q_PROPERTY(QString blockAppRules READ blockAppRules WRITE setBlockAppRules NOTIFY appRulesChanged)
+    Q_PROPERTY(QString currentProfileUsageHour READ currentProfileUsageHour NOTIFY profileUsageChanged)
+    Q_PROPERTY(QString currentProfileUsageDay READ currentProfileUsageDay NOTIFY profileUsageChanged)
+    Q_PROPERTY(QString currentProfileUsageWeek READ currentProfileUsageWeek NOTIFY profileUsageChanged)
+    Q_PROPERTY(QString currentProfileUsageMonth READ currentProfileUsageMonth NOTIFY profileUsageChanged)
     Q_PROPERTY(bool processRoutingSupported READ processRoutingSupported NOTIFY processRoutingSupportChanged)
     Q_PROPERTY(quint16 socksPort READ socksPort CONSTANT)
     Q_PROPERTY(quint16 httpPort READ httpPort CONSTANT)
@@ -195,6 +203,12 @@ public:
      * @return TX byte counter.
      */
     qint64 txBytes() const;
+
+    /**
+     * @brief Current GenyConnect process memory usage.
+     * @return Human-readable memory usage text.
+     */
+    QString memoryUsageText() const;
 
     /**
      * @brief Whether speed test is currently running.
@@ -449,10 +463,22 @@ public:
     QString blockDomainRules() const;
 
     /**
+     * @brief Custom DNS servers used in generated runtime config.
+     * @return Comma/newline-separated DNS servers.
+     */
+    QString customDnsServers() const;
+
+    /**
      * @brief Set blocked domain rules.
      * @param value Rule text.
      */
     void setBlockDomainRules(const QString& value);
+
+    /**
+     * @brief Set custom DNS servers list for runtime config generation.
+     * @param value Comma/newline-separated DNS servers.
+     */
+    void setCustomDnsServers(const QString& value);
 
     /**
      * @brief Process names forced through proxy.
@@ -489,6 +515,30 @@ public:
      * @param value Rule text.
      */
     void setBlockAppRules(const QString& value);
+
+    /**
+     * @brief Hourly usage summary for selected profile.
+     * @return Human-readable traffic text.
+     */
+    QString currentProfileUsageHour() const;
+
+    /**
+     * @brief Daily usage summary for selected profile.
+     * @return Human-readable traffic text.
+     */
+    QString currentProfileUsageDay() const;
+
+    /**
+     * @brief Weekly usage summary for selected profile.
+     * @return Human-readable traffic text.
+     */
+    QString currentProfileUsageWeek() const;
+
+    /**
+     * @brief Monthly usage summary for selected profile.
+     * @return Human-readable traffic text.
+     */
+    QString currentProfileUsageMonth() const;
 
     /**
      * @brief Whether process-based routing is supported by runtime.
@@ -640,6 +690,25 @@ public:
      */
     Q_INVOKABLE void copyLogsToClipboard() const;
 
+    /**
+     * @brief Clear in-memory log history shown in UI.
+     */
+    Q_INVOKABLE void clearLogs();
+
+    /**
+     * @brief Structured usage summary for selected profile.
+     * @return Map containing total/day/week/month/hour usage.
+     */
+    Q_INVOKABLE QVariantMap currentProfileUsageSummary() const;
+
+    /**
+     * @brief Usage history buckets for selected profile.
+     * @param period Bucket period (`hour`, `day`, `week`, `month`).
+     * @param limit Max number of newest rows to return.
+     * @return List of usage rows.
+     */
+    Q_INVOKABLE QVariantList currentProfileUsageHistory(const QString& period, int limit = 20) const;
+
 signals:
     //! Emitted when connection state changes.
     void connectionStateChanged();
@@ -651,6 +720,8 @@ signals:
     void logsChanged();
     //! Emitted when traffic counters change.
     void trafficChanged();
+    //! Emitted when process memory usage snapshot changes.
+    void memoryUsageChanged();
     //! Emitted when speed-test state/metrics change.
     void speedTestChanged();
     //! Emitted when selected profile index changes.
@@ -678,8 +749,12 @@ signals:
     void whitelistModeChanged();
     //! Emitted when domain rules are updated.
     void routingRulesChanged();
+    //! Emitted when custom DNS server list is updated.
+    void customDnsServersChanged();
     //! Emitted when app/process rules are updated.
     void appRulesChanged();
+    //! Emitted when per-profile traffic usage snapshots change.
+    void profileUsageChanged();
     //! Emitted when process-routing capability is re-evaluated.
     void processRoutingSupportChanged();
 
@@ -785,6 +860,7 @@ private:
      * @brief Perform local proxy self-connectivity check.
      */
     void runProxySelfCheck();
+    void runProxySelfCheckAttempt(int attempt);
 
     /**
      * @brief Reset speed-test state variables.
@@ -811,6 +887,23 @@ private:
      * @return Normalized rule list.
      */
     static QStringList parseRules(const QString& value);
+    static QStringList parseDnsServers(const QString& value);
+    static QString normalizeDnsServer(const QString& value);
+    void updateMemoryUsage();
+    void clearLogsInternal();
+    void maybeReconnectToPendingProfile();
+    void updatePerProfileUsageCounters(qint64 nextRx, qint64 nextTx);
+    void resetPerProfileUsageSamples();
+    void recordProfileUsageDelta(const QString& profileId, qint64 rxDelta, qint64 txDelta);
+    QVariantMap profileUsageSummaryForId(const QString& profileId) const;
+    QVariantList profileUsageHistoryForId(const QString& profileId, const QString& period, int limit) const;
+    QString currentProfileUsageText(const QString& period) const;
+    void loadProfileUsage();
+    void saveProfileUsage() const;
+    void scheduleProfileUsageSave();
+    void cleanupDetachedHelpers();
+    void stopPrivilegedTunRuntimeByPidPath();
+    void killProcessByPid(qint64 pid) const;
 
     /**
      * @brief Query traffic stats through Xray API endpoint.
@@ -898,6 +991,7 @@ private:
     QStringList m_recentLogs;
     qint64 m_rxBytes = 0;
     qint64 m_txBytes = 0;
+    qint64 m_memoryUsageBytes = 0;
     bool m_speedTestRunning = false;
     QString m_speedTestPhase = QStringLiteral("Idle");
     int m_speedTestElapsedSec = 0;
@@ -926,7 +1020,7 @@ private:
     QString m_xrayExecutablePath;
     QString m_xrayVersion = QStringLiteral("Unknown");
     bool m_loggingEnabled = true;
-    bool m_autoPingProfiles = true;
+    bool m_autoPingProfiles = false;
     QList<SubscriptionEntry> m_subscriptionEntries;
     QList<ProfileGroupOptions> m_profileGroupOptions;
     bool m_subscriptionBusy = false;
@@ -948,6 +1042,7 @@ private:
     QString m_proxyDomainRules;
     QString m_directDomainRules;
     QString m_blockDomainRules;
+    QString m_customDnsServers;
     QString m_proxyAppRules;
     QString m_directAppRules;
     QString m_blockAppRules;
@@ -958,12 +1053,18 @@ private:
     QString m_profilesPath;
     QString m_subscriptionsPath;
     QString m_runtimeConfigPath;
+    QString m_profileUsagePath;
+    QJsonObject m_profileUsageRoot;
+    qint64 m_profileUsageLastRxSample = -1;
+    qint64 m_profileUsageLastTxSample = -1;
+    QString m_activeProfileUsageId;
 
     ServerProfileModel m_profileModel;
     Updater m_updater;
     SystemProxyManager m_systemProxyManager;
     XrayProcessManager m_processManager;
     XrayConfigBuilder::BuildOptions m_buildOptions;
+    QTimer m_memoryUsageTimer;
     QTimer m_statsPollTimer;
     QTimer m_speedTestTimer;
     QNetworkAccessManager m_speedTestNetworkManager;
@@ -977,12 +1078,14 @@ private:
     bool m_privilegedTunManaged = false;
     bool m_privilegedTunHelperReady = false;
     quint16 m_privilegedTunHelperPort = 0;
+    qint64 m_privilegedTunHelperPid = 0;
     QString m_privilegedTunHelperToken;
     QString m_privilegedTunPidPath;
     QString m_privilegedTunLogPath;
     qint64 m_privilegedTunLogOffset = 0;
     QByteArray m_privilegedTunLogBuffer;
     QTimer m_privilegedTunLogTimer;
+    QTimer m_profileUsageSaveTimer;
     QTimer m_logsFlushTimer;
     bool m_logsDirty = false;
     QString m_selectedTunInterfaceName;

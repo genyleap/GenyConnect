@@ -55,6 +55,12 @@ QJsonObject buildTunInbound(const XrayConfigBuilder::BuildOptions& options)
         ? QStringLiteral("utun9")
         : options.tunInterfaceName.trimmed();
     settings.insert(QStringLiteral("name"), tunName);
+#elif defined(Q_OS_WIN)
+    // Keep a stable adapter name on Windows so route binding and cleanup are deterministic.
+    const QString tunName = options.tunInterfaceName.trimmed().isEmpty()
+        ? QStringLiteral("genyconnect0")
+        : options.tunInterfaceName.trimmed();
+    settings.insert(QStringLiteral("name"), tunName);
 #endif
 
     return QJsonObject {
@@ -74,6 +80,27 @@ QJsonObject buildApiInbound(quint16 port)
         {QStringLiteral("settings"), QJsonObject {
             {QStringLiteral("address"), QStringLiteral("127.0.0.1")}
         }}
+    };
+}
+
+QJsonObject buildDnsOutbound()
+{
+    return QJsonObject {
+        {QStringLiteral("tag"), QStringLiteral("dns-out")},
+        {QStringLiteral("protocol"), QStringLiteral("dns")},
+        {QStringLiteral("settings"), QJsonObject {}}
+    };
+}
+
+QJsonObject buildDnsConfig()
+{
+    return QJsonObject {
+        {QStringLiteral("servers"), QJsonArray {
+            QStringLiteral("1.1.1.1"),
+            QStringLiteral("8.8.8.8"),
+            QStringLiteral("9.9.9.9")
+        }},
+        {QStringLiteral("queryStrategy"), QStringLiteral("UseIPv4")}
     };
 }
 
@@ -139,13 +166,50 @@ QJsonObject buildRouting(const XrayConfigBuilder::BuildOptions& options)
         });
     }
 
-    rules.append(QJsonObject {
+    if (options.enableTun) {
+        rules.append(QJsonObject {
+            {QStringLiteral("type"), QStringLiteral("field")},
+            {QStringLiteral("inboundTag"), QJsonArray {QStringLiteral("tun-in")}},
+            {QStringLiteral("network"), QStringLiteral("tcp,udp")},
+            {QStringLiteral("port"), QStringLiteral("53")},
+            {QStringLiteral("outboundTag"), QStringLiteral("dns-out")}
+        });
+
+        // Prevent local discovery/broadcast storms from looping in TUN mode
+        // (notably NetBIOS/mDNS/LLMNR/link-local chatter on Windows/macOS).
+        rules.append(QJsonObject {
+            {QStringLiteral("type"), QStringLiteral("field")},
+            {QStringLiteral("inboundTag"), QJsonArray {QStringLiteral("tun-in")}},
+            {QStringLiteral("network"), QStringLiteral("udp")},
+            {QStringLiteral("port"), QStringLiteral("137,138,5353,5355")},
+            {QStringLiteral("outboundTag"), QStringLiteral("block")}
+        });
+        rules.append(QJsonObject {
+            {QStringLiteral("type"), QStringLiteral("field")},
+            {QStringLiteral("inboundTag"), QJsonArray {QStringLiteral("tun-in")}},
+            {QStringLiteral("network"), QStringLiteral("udp")},
+            {QStringLiteral("ip"), QJsonArray {
+                QStringLiteral("169.254.0.0/16"),
+                QStringLiteral("255.255.255.255/32"),
+                QStringLiteral("224.0.0.0/4")
+            }},
+            {QStringLiteral("outboundTag"), QStringLiteral("block")}
+        });
+    }
+
+    QJsonObject privateDirectRule {
         {QStringLiteral("type"), QStringLiteral("field")},
         {QStringLiteral("outboundTag"), QStringLiteral("direct")},
         {QStringLiteral("ip"), privateCidrs}
-    });
+    };
+    if (options.enableTun) {
+        // In TUN mode, keep RFC1918/link-local direct bypass only for local mixed
+        // inbound traffic. Applying this rule to tun-in can create direct loops.
+        privateDirectRule.insert(QStringLiteral("inboundTag"), QJsonArray {QStringLiteral("mixed-in")});
+    }
+    rules.append(privateDirectRule);
 
-    rules.append(QJsonObject {
+    QJsonObject localhostDirectRule {
         {QStringLiteral("type"), QStringLiteral("field")},
         {QStringLiteral("outboundTag"), QStringLiteral("direct")},
         {QStringLiteral("domain"), QJsonArray {
@@ -153,7 +217,11 @@ QJsonObject buildRouting(const XrayConfigBuilder::BuildOptions& options)
             QStringLiteral("domain:local"),
             QStringLiteral("regexp:.*\\.local\\.?$")
         }}
-    });
+    };
+    if (options.enableTun) {
+        localhostDirectRule.insert(QStringLiteral("inboundTag"), QJsonArray {QStringLiteral("mixed-in")});
+    }
+    rules.append(localhostDirectRule);
 
     auto appendDomainRule = [&rules](const QStringList& entries, const QString& outboundTag) {
         const QJsonArray domains = toDomainArray(entries);
@@ -192,9 +260,11 @@ QJsonObject buildRouting(const XrayConfigBuilder::BuildOptions& options)
     appendDomainRule(options.proxyDomains, QStringLiteral("proxy"));
     appendProcessRule(options.proxyProcesses, QStringLiteral("proxy"));
 
-    const QString defaultOutbound = options.whitelistMode
-        ? QStringLiteral("direct")
-        : QStringLiteral("proxy");
+    // In TUN mode we expect full-tunnel behavior by default; only explicit
+    // direct/block rules should bypass proxy.
+    const QString defaultOutbound = options.enableTun
+        ? QStringLiteral("proxy")
+        : (options.whitelistMode ? QStringLiteral("direct") : QStringLiteral("proxy"));
     rules.append(QJsonObject {
         {QStringLiteral("type"), QStringLiteral("field")},
         {QStringLiteral("outboundTag"), defaultOutbound},
@@ -265,10 +335,17 @@ QJsonObject XrayConfigBuilder::build(const ServerProfile& profile, const BuildOp
     }
 
     QJsonArray outbounds;
-    outbounds.append(buildMainOutbound(profile, options.enableMux));
+    // Keep Reality fragmentation path enabled in both proxy and TUN modes.
+    // Some censored networks require this for stable outbound reachability.
+    const bool enableRealityFragDialer =
+        (profile.security == QStringLiteral("reality"));
+    outbounds.append(buildMainOutbound(profile, options.enableMux, enableRealityFragDialer));
+    if (options.enableTun) {
+        outbounds.append(buildDnsOutbound());
+    }
     outbounds.append(buildDirectOutbound());
     outbounds.append(buildBlockOutbound());
-    if (profile.security == QStringLiteral("reality")) {
+    if (enableRealityFragDialer) {
         outbounds.append(buildFragProxyOutbound());
     }
 
@@ -289,11 +366,17 @@ QJsonObject XrayConfigBuilder::build(const ServerProfile& profile, const BuildOp
             {QStringLiteral("services"), QJsonArray {QStringLiteral("StatsService")}}
         };
     }
+    if (options.enableTun) {
+        config[QStringLiteral("dns")] = buildDnsConfig();
+    }
 
     return config;
 }
 
-QJsonObject XrayConfigBuilder::buildMainOutbound(const ServerProfile& profile, bool enableMux)
+QJsonObject XrayConfigBuilder::buildMainOutbound(
+    const ServerProfile& profile,
+    bool enableMux,
+    bool enableRealityFragDialer)
 {
     QJsonObject user {
         {QStringLiteral("id"), profile.userId},
@@ -330,7 +413,7 @@ QJsonObject XrayConfigBuilder::buildMainOutbound(const ServerProfile& profile, b
         {QStringLiteral("streamSettings"), buildStreamSettings(profile)}
     };
 
-    if (profile.security == QStringLiteral("reality")) {
+    if (enableRealityFragDialer) {
         QJsonObject streamSettings = outbound.value(QStringLiteral("streamSettings")).toObject();
         streamSettings[QStringLiteral("sockopt")] = QJsonObject {
             {QStringLiteral("dialerProxy"), QStringLiteral("frag-proxy")}
