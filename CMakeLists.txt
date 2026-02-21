@@ -326,6 +326,11 @@ qt_add_executable(${PROJECT_NAME}
   ${GENYCONNECT_IMPL_SOURCES}
 )
 set_target_properties(${PROJECT_NAME} PROPERTIES OUTPUT_NAME "${GENY_OUTPUT_NAME}")
+set_target_properties(${PROJECT_NAME} PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY  "${CMAKE_BINARY_DIR}/bin"
+    LIBRARY_OUTPUT_DIRECTORY  "${CMAKE_BINARY_DIR}/lib"
+    ARCHIVE_OUTPUT_DIRECTORY  "${CMAKE_BINARY_DIR}/lib"
+)
 
 qt_add_executable(GenyConnectUpdater
   src/updaterhelper/main.cpp
