@@ -20,4 +20,3 @@ DownloadListView 1.0 DownloadListView.qml
 CircleIconButton 1.0 CircleIconButton.qml
 PrimaryActionButton 1.0 PrimaryActionButton.qml
 SignalBars 1.0 SignalBars.qml
-WorldMapDots 1.0 WorldMapDots.qml

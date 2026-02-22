@@ -1,10 +1,13 @@
 #include <QAction>
 #include <QApplication>
+#include <QDir>
 #include <QIcon>
+#include <QLockFile>
 #include <QMenu>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
 #include <QQuickWindow>
+#include <QStandardPaths>
 #include <QSystemTrayIcon>
 #include <QTimer>
 #include <QtCore/qglobal.h>
@@ -26,6 +29,20 @@ auto main(int argc, char *argv[]) -> int
 #else
     QCoreApplication::setApplicationVersion(QStringLiteral("0.0.0"));
 #endif
+
+    QString lockDir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
+    if (lockDir.trimmed().isEmpty()) {
+        lockDir = QStandardPaths::writableLocation(QStandardPaths::TempLocation);
+    }
+    if (lockDir.trimmed().isEmpty()) {
+        lockDir = QDir::tempPath();
+    }
+    QDir().mkpath(lockDir);
+    QLockFile instanceLock(QDir(lockDir).filePath(QStringLiteral("genyconnect.instance.lock")));
+    instanceLock.setStaleLockTime(0);
+    if (!instanceLock.tryLock(100)) {
+        return 0;
+    }
 
     qmlRegisterUncreatableMetaObject(
         connectionStateMetaObject(),

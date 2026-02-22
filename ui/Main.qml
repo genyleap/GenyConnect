@@ -14,8 +14,8 @@ ApplicationWindow {
     visible: true
     width: 1200
     height: 800
-    minimumWidth: 1200
-    minimumHeight: 800
+    minimumWidth: 860
+    minimumHeight: 760
     title: "GenyConnect (Build " +  updater.appVersion + ") - " + osNameText()
 
     color: "#eceff5"
@@ -198,9 +198,9 @@ ApplicationWindow {
 
     function customDnsEntries() {
         const raw = (customDnsDraft || "")
-            .split(/[\n,;]+/)
-            .map(function(entry) { return entry.trim() })
-            .filter(function(entry) { return entry.length > 0 })
+        .split(/[\n,;]+/)
+        .map(function(entry) { return entry.trim() })
+        .filter(function(entry) { return entry.length > 0 })
 
         const out = []
         const seen = {}
@@ -1497,7 +1497,7 @@ ApplicationWindow {
                             readonly property string groupBadge: root.profileGroupBadgeText(groupName)
                             readonly property bool groupExclusive: root.profileGroupExclusive(groupName)
                             readonly property bool matched: root.profileGroupVisible(groupName)
-                                                          && root.profileMatchesSearch(displayLabel, protocol, address, security, groupName, sourceName)
+                                                            && root.profileMatchesSearch(displayLabel, protocol, address, security, groupName, sourceName)
                             width: listView.width - 16
                             height: matched ? 84 : 0
                             visible: matched
@@ -1556,12 +1556,15 @@ ApplicationWindow {
                                     spacing: 2
 
                                     Text {
+                                        Layout.fillWidth: true
                                         text: displayLabel
                                         font.family: FontSystem.getContentFontBold.name
                                         font.weight: Font.Bold
                                         font.pixelSize: 14
                                         color: "#202634"
                                         elide: Text.ElideRight
+                                        wrapMode: Text.WordWrap
+                                        maximumLineCount: 1
                                     }
 
                                     Text {
@@ -1570,6 +1573,8 @@ ApplicationWindow {
                                         font.pixelSize: 12
                                         color: "#8c95a4"
                                         elide: Text.ElideRight
+                                        wrapMode: Text.NoWrap
+                                        maximumLineCount: 1
                                     }
 
                                     Text {
@@ -2371,9 +2376,9 @@ ApplicationWindow {
                                         font.pixelSize: 12
                                         text: {
                                             const count = (root.customDnsDraft || "")
-                                                .split(/[\n,;]+/)
-                                                .map(function(entry) { return entry.trim() })
-                                                .filter(function(entry) { return entry.length > 0 }).length
+                                            .split(/[\n,;]+/)
+                                            .map(function(entry) { return entry.trim() })
+                                            .filter(function(entry) { return entry.length > 0 }).length
                                             return count > 0 ? ("Resolvers: " + count) : "Resolvers: default"
                                         }
                                     }
@@ -3224,7 +3229,7 @@ ApplicationWindow {
                         x: speedDial.centerX
                         y: speedDial.centerY - 48
                         anchors.left: parent.left
-                        anchors.leftMargin: -220
+                        anchors.leftMargin: -270
                         width: speedDial.innerRadius * 0.62
                         spacing: 2
                         z: 6
@@ -3511,14 +3516,14 @@ ApplicationWindow {
         property string selectedManageGroup: ""
         readonly property bool hasExplicitGroup: ((subscriptionGroupCombo.editText || "").trim().length > 0)
         readonly property string targetGroupName: root.normalizeImportGroupName(
-                                                     (subscriptionGroupCombo.editText
-                                                      || subscriptionGroupCombo.currentText
-                                                      || root.subscriptionGroupDraft))
+                                                      (subscriptionGroupCombo.editText
+                                                       || subscriptionGroupCombo.currentText
+                                                       || root.subscriptionGroupDraft))
         closePolicy: vpnController.subscriptionBusy
                      ? Popup.NoAutoClose
                      : (Popup.CloseOnEscape | Popup.CloseOnPressOutside)
         width: Math.min(root.width - 40, 700)
-        height: 630
+        height: 680
         x: (root.width - width) * 0.5
         y: (root.height - height) * 0.5
         padding: 0
@@ -3579,8 +3584,8 @@ ApplicationWindow {
                 const success = lower.indexOf("imported") >= 0
                 root.importStatusKind = success ? "success" : "error"
                 root.importStatusText = msg.length > 0
-                                      ? msg
-                                      : (success ? "Import completed." : "Import failed.")
+                        ? msg
+                        : (success ? "Import completed." : "Import failed.")
                 if (success) {
                     root.importDraft = ""
                     importTextArea.text = ""
@@ -3959,9 +3964,9 @@ ApplicationWindow {
                         delegate: Rectangle {
                             required property var modelData
                             readonly property string groupName: (typeof name !== "undefined" && name !== null
-                                                                  && String(name).trim().length > 0)
-                                                                 ? String(name)
-                                                                 : ((modelData && modelData.name) ? String(modelData.name) : "")
+                                                                 && String(name).trim().length > 0)
+                                                                ? String(name)
+                                                                : ((modelData && modelData.name) ? String(modelData.name) : "")
                             readonly property bool groupEnabled: (typeof enabled !== "undefined")
                                                                  ? (enabled !== false)
                                                                  : !(modelData && modelData.enabled === false)
@@ -3969,8 +3974,8 @@ ApplicationWindow {
                                                                    ? (exclusive === true)
                                                                    : (modelData && modelData.exclusive === true)
                             readonly property string groupBadge: (typeof badge !== "undefined" && badge !== null)
-                                                                  ? String(badge)
-                                                                  : ((modelData && modelData.badge) ? String(modelData.badge) : "")
+                                                                 ? String(badge)
+                                                                 : ((modelData && modelData.badge) ? String(modelData.badge) : "")
                             readonly property bool selectedGroup: importPopup.selectedManageGroup.toLowerCase() === groupName.toLowerCase()
 
                             width: ListView.view.width - 16
@@ -4070,6 +4075,7 @@ ApplicationWindow {
                 id: importTextArea
                 Layout.fillWidth: true
                 Layout.fillHeight: true
+                Layout.preferredHeight: 128
                 placeholderText: "Paste vmess/vless, batch list, base64 subscription payload, or https subscription URL"
                 text: root.importDraft
                 onTextChanged: root.importDraft = text
@@ -4189,28 +4195,6 @@ ApplicationWindow {
             anchors.rightMargin: 20
             spacing: 8
 
-            // Controls.CircleIconButton {
-            //     diameter: 62
-            //     iconText: ""
-            //     iconPixelSize: 0
-
-            //     Rectangle {
-            //         anchors.fill: parent
-            //         radius: width * 0.5
-            //         color: "transparent"
-            //         clip: true
-
-            //         Image {
-            //             anchors.fill: parent
-            //             anchors.margins: 6
-            //             source: "qrc:/ui/Resources/image/avatar.svg"
-            //             fillMode: Image.PreserveAspectCrop
-            //             smooth: true
-            //         }
-            //     }
-            // }
-
-
             Text {
                 text: "<strong>GENY</strong>CONNECT"
                 color: Colors.textPrimary
@@ -4261,6 +4245,7 @@ ApplicationWindow {
             anchors.bottomMargin: 20
             width: Math.min(parent.width - 90, 1060)
 
+
             Image {
                 id: mapImage
                 anchors.fill: parent
@@ -4281,15 +4266,6 @@ ApplicationWindow {
                         }
                     }
                 }
-            }
-
-            Controls.WorldMapDots {
-                anchors.fill: parent
-                visible: !root.mapLoaded
-                centerMarkerXRatio: 0.53
-                centerMarkerYRatio: 0.47
-                sideMarkerXRatio: 0.17
-                sideMarkerYRatio: 0.56
             }
 
             Item {
@@ -4372,7 +4348,7 @@ ApplicationWindow {
             anchors.bottom: statusRow.top
             anchors.bottomMargin: 12
 
-            width: compact ? parent.width - 40 : 720
+            width: 720
             height: 84
 
             RectangularShadow {
@@ -4542,9 +4518,9 @@ ApplicationWindow {
             id: statusRow
             anchors.horizontalCenter: parent.horizontalCenter
             anchors.bottom: infoRow.top
-            anchors.bottomMargin: 25
+            anchors.bottomMargin: 48
 
-            width: compact ? parent.width - 40 : 720
+            width: 720
             height: 94
 
             RectangularShadow {
@@ -4678,11 +4654,11 @@ ApplicationWindow {
                                 text: downloadUsageText()
                                 color: "#1f2b3d"
                                 font.family: FontSystem.getContentFont.name
-                                font.pixelSize: Typography.h2
+                                font.pixelSize: Typography.h3
                                 font.bold: false
                             }
 
-                            Item { Layout.preferredWidth: 5 }
+                            Item { Layout.preferredWidth: 15 }
 
                         }
                     }
@@ -4732,11 +4708,11 @@ ApplicationWindow {
                                 text: uploadUsageText()
                                 color: "#1f2b3d"
                                 font.family: FontSystem.getContentFont.name
-                                font.pixelSize: Typography.h2
+                                font.pixelSize: Typography.h3
                                 font.bold: false
                             }
 
-                            Item { Layout.preferredWidth: 5 }
+                            Item { Layout.preferredWidth: 15 }
 
                         }
                     }
@@ -4749,7 +4725,7 @@ ApplicationWindow {
             anchors.horizontalCenter: parent.horizontalCenter
             anchors.bottom: quickActionsRow.top
             anchors.bottomMargin: 32
-            width: compact ? parent.width - 40 : 820
+            width: 820
             spacing: 18
 
             Item { Layout.fillWidth: true }
@@ -4796,7 +4772,11 @@ ApplicationWindow {
                     color: "#8e98aa"
                     font.family: FontSystem.getContentFont.name
                     font.pixelSize: 16
+                    elide: Text.ElideRight
+                    wrapMode: Text.WordWrap
+                    maximumLineCount: 1
                 }
+
             }
 
             Item { Layout.fillWidth: true }
@@ -4806,7 +4786,7 @@ ApplicationWindow {
             id: quickActionsRow
             anchors.horizontalCenter: parent.horizontalCenter
             anchors.bottom: parent.bottom
-            anchors.bottomMargin: 86
+            anchors.bottomMargin: 128
             spacing: 20
 
             Controls.CircleIconButton {
@@ -4869,72 +4849,50 @@ ApplicationWindow {
                 font.pixelSize: Typography.t2
             }
 
-            RowLayout {
-                id: usageSummaryRow
-                width: compact ? parent.width - 40 : 860
-                spacing: 10
-                visible: vpnController.currentProfileIndex >= 0
+            Item { Layout.fillWidth: true }
 
-                Item {
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: 34
+            Row {
+                spacing: 14
 
-                    RowLayout {
-                        anchors.fill: parent
-                        anchors.leftMargin: 12
-                        anchors.rightMargin: 12
-                        spacing: 14
-
-                        Text {
-                            text: "Current Profile Usage -->"
-                            color: "#4f627f"
-                            font.family: FontSystem.getContentFontBold.name
-                            font.pixelSize: 12
-                            font.bold: true
-                        }
-
-                        Text {
-                            text: "<strong>Hour</strong> " + vpnController.currentProfileUsageHour
-                            color: "#647891"
-                            font.family: FontSystem.getContentFont.name
-                            font.pixelSize: 12
-                        }
-
-                        Text {
-                            text: "<strong>Day</strong> " + vpnController.currentProfileUsageDay
-                            color: "#647891"
-                            font.family: FontSystem.getContentFont.name
-                            font.pixelSize: 12
-                        }
-
-                        Text {
-                            text: "<strong>Week</strong> " + vpnController.currentProfileUsageWeek
-                            color: "#647891"
-                            font.family: FontSystem.getContentFont.name
-                            font.pixelSize: 12
-                        }
-
-                        Text {
-                            text: "<strong>Month</strong> " + vpnController.currentProfileUsageMonth
-                            color: "#647891"
-                            font.family: FontSystem.getContentFont.name
-                            font.pixelSize: 12
-                        }
-
-                        Item { Layout.fillWidth: true }
-                    }
+                Text {
+                    text: "Current Profile Usage -->"
+                    color: "#4f627f"
+                    font.family: FontSystem.getContentFontBold.name
+                    font.pixelSize: 12
+                    font.bold: true
                 }
+
+                Text {
+                    text: "<strong>Hour</strong> " + vpnController.currentProfileUsageHour
+                    color: "#647891"
+                    font.family: FontSystem.getContentFont.name
+                    font.pixelSize: 12
+                }
+
+                Text {
+                    text: "<strong>Day</strong> " + vpnController.currentProfileUsageDay
+                    color: "#647891"
+                    font.family: FontSystem.getContentFont.name
+                    font.pixelSize: 12
+                }
+
+                Text {
+                    text: "<strong>Week</strong> " + vpnController.currentProfileUsageWeek
+                    color: "#647891"
+                    font.family: FontSystem.getContentFont.name
+                    font.pixelSize: 12
+                }
+
+                Text {
+                    text: "<strong>Month</strong> " + vpnController.currentProfileUsageMonth
+                    color: "#647891"
+                    font.family: FontSystem.getContentFont.name
+                    font.pixelSize: 12
+                }
+
+                Item { Layout.fillWidth: true }
             }
 
-            Item { Layout.fillWidth: true; }
-
-            Text {
-                text: stateText()
-                color: root.statePrimaryColor()
-                font.family: FontSystem.getContentFont.name
-                font.pixelSize: Typography.t2
-                Behavior on color { ColorAnimation { duration: 220 } }
-            }
 
             Item { Layout.preferredWidth: 10; }
         }
