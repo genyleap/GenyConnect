@@ -439,7 +439,6 @@ set(qml_controls
   ui/Controls/CircleIconButton.qml
   ui/Controls/PrimaryActionButton.qml
   ui/Controls/SignalBars.qml
-  ui/Controls/WorldMapDots.qml
 )
 
 set(qml_main ui/Main.qml)
