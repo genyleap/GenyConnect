@@ -54,6 +54,8 @@ export struct ServerProfile {
     QString hostHeader;       //!< Host override header.
     QString serviceName;      //!< gRPC service name.
     QString headerType;       //!< Header type override.
+    QString xhttpMode;        //!< XHTTP upload/download mode hint.
+    QJsonObject xhttpExtra;   //!< XHTTP advanced transport settings.
 
     bool allowInsecure = false; //!< Allow insecure certificate mode.
 

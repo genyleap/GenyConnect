@@ -1,6 +1,7 @@
 module;
 #include <QJsonArray>
 #include <QStringList>
+#include <QUrl>
 #include <QtGlobal>
 
 module genyconnect.backend.xrayconfigbuilder;
@@ -321,6 +322,52 @@ QJsonObject buildFragProxyOutbound()
         }}
     };
 }
+
+QString normalizeTransportPath(const QString& path)
+{
+    QString normalized = path.trimmed();
+    for (int i = 0; i < 3 && normalized.contains('%'); ++i) {
+        const QString decoded = QUrl::fromPercentEncoding(normalized.toUtf8());
+        if (decoded == normalized) {
+            break;
+        }
+        normalized = decoded.trimmed();
+    }
+
+    if (normalized.isEmpty()) {
+        return QStringLiteral("/");
+    }
+    while (normalized.startsWith(QStringLiteral("//"))) {
+        normalized.remove(0, 1);
+    }
+    if (normalized.startsWith('/')) {
+        return normalized;
+    }
+    return QStringLiteral("/") + normalized;
+}
+
+QJsonObject buildTlsPeerSettings(const ServerProfile& profile)
+{
+    QJsonObject tlsSettings;
+    if (!profile.sni.isEmpty()) {
+        tlsSettings[QStringLiteral("serverName")] = profile.sni;
+    }
+    if (!profile.alpn.isEmpty()) {
+        const QStringList alpnParts = profile.alpn.split(',', Qt::SkipEmptyParts);
+        QJsonArray alpnValues;
+        for (const QString& part : alpnParts) {
+            alpnValues.append(part.trimmed());
+        }
+        if (!alpnValues.isEmpty()) {
+            tlsSettings[QStringLiteral("alpn")] = alpnValues;
+        }
+    }
+    if (!profile.fingerprint.isEmpty()) {
+        tlsSettings[QStringLiteral("fingerprint")] = profile.fingerprint;
+    }
+    tlsSettings[QStringLiteral("allowInsecure")] = profile.allowInsecure;
+    return tlsSettings;
+}
 }
 
 QJsonObject XrayConfigBuilder::build(const ServerProfile& profile, const BuildOptions& options)
@@ -439,7 +486,7 @@ QJsonObject XrayConfigBuilder::buildStreamSettings(const ServerProfile& profile)
 
     if (profile.network == QStringLiteral("ws")) {
         QJsonObject wsSettings;
-        wsSettings[QStringLiteral("path")] = profile.path.isEmpty() ? QStringLiteral("/") : profile.path;
+        wsSettings[QStringLiteral("path")] = normalizeTransportPath(profile.path);
 
         if (!profile.hostHeader.isEmpty()) {
             wsSettings[QStringLiteral("headers")] = QJsonObject {
@@ -454,6 +501,23 @@ QJsonObject XrayConfigBuilder::buildStreamSettings(const ServerProfile& profile)
         stream[QStringLiteral("grpcSettings")] = QJsonObject {
             {QStringLiteral("serviceName"), profile.serviceName}
         };
+    }
+
+    if (profile.network == QStringLiteral("xhttp")) {
+        QJsonObject xhttpSettings;
+        xhttpSettings[QStringLiteral("path")] = normalizeTransportPath(profile.path);
+
+        if (!profile.hostHeader.isEmpty()) {
+            xhttpSettings[QStringLiteral("host")] = profile.hostHeader;
+        }
+        xhttpSettings[QStringLiteral("mode")] = profile.xhttpMode.isEmpty()
+            ? QStringLiteral("auto")
+            : profile.xhttpMode;
+        if (!profile.xhttpExtra.isEmpty()) {
+            xhttpSettings[QStringLiteral("extra")] = profile.xhttpExtra;
+        }
+
+        stream[QStringLiteral("xhttpSettings")] = xhttpSettings;
     }
 
     if (profile.network == QStringLiteral("tcp")) {
@@ -473,25 +537,7 @@ QJsonObject XrayConfigBuilder::buildStreamSettings(const ServerProfile& profile)
     stream[QStringLiteral("security")] = security;
 
     if (security == QStringLiteral("tls")) {
-        QJsonObject tlsSettings;
-        if (!profile.sni.isEmpty()) {
-            tlsSettings[QStringLiteral("serverName")] = profile.sni;
-        }
-        if (!profile.alpn.isEmpty()) {
-            const QStringList alpnParts = profile.alpn.split(',', Qt::SkipEmptyParts);
-            QJsonArray alpnValues;
-            for (const QString& part : alpnParts) {
-                alpnValues.append(part.trimmed());
-            }
-            if (!alpnValues.isEmpty()) {
-                tlsSettings[QStringLiteral("alpn")] = alpnValues;
-            }
-        }
-        if (!profile.fingerprint.isEmpty()) {
-            tlsSettings[QStringLiteral("fingerprint")] = profile.fingerprint;
-        }
-        tlsSettings[QStringLiteral("allowInsecure")] = profile.allowInsecure;
-        stream[QStringLiteral("tlsSettings")] = tlsSettings;
+        stream[QStringLiteral("tlsSettings")] = buildTlsPeerSettings(profile);
     }
 
     if (security == QStringLiteral("reality")) {

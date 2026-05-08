@@ -1,5 +1,6 @@
 module;
 #include <QJsonObject>
+#include <QJsonValue>
 #include <QString>
 #include <QUuid>
 
@@ -11,6 +12,27 @@ namespace {
 QString createProfileId()
 {
     return QUuid::createUuid().toString(QUuid::WithoutBraces);
+}
+
+std::optional<quint16> parseJsonPort(const QJsonValue& value)
+{
+    if (value.isUndefined() || value.isNull()) {
+        return std::nullopt;
+    }
+
+    bool ok = false;
+    int parsed = 0;
+    if (value.isString()) {
+        parsed = value.toString().trimmed().toInt(&ok);
+    } else {
+        parsed = value.toVariant().toInt(&ok);
+    }
+
+    if (!ok || parsed <= 0 || parsed > 65535) {
+        return std::nullopt;
+    }
+
+    return static_cast<quint16>(parsed);
 }
 }
 
@@ -58,6 +80,8 @@ QJsonObject ServerProfile::toJson() const
     json[QStringLiteral("hostHeader")] = hostHeader;
     json[QStringLiteral("serviceName")] = serviceName;
     json[QStringLiteral("headerType")] = headerType;
+    json[QStringLiteral("xhttpMode")] = xhttpMode;
+    json[QStringLiteral("xhttpExtra")] = xhttpExtra;
 
     json[QStringLiteral("allowInsecure")] = allowInsecure;
     json[QStringLiteral("originalLink")] = originalLink;
@@ -76,7 +100,11 @@ std::optional<ServerProfile> ServerProfile::fromJson(const QJsonObject& json)
     profile.name = json.value(QStringLiteral("name")).toString().trimmed();
     profile.protocol = json.value(QStringLiteral("protocol")).toString().trimmed().toLower();
     profile.address = json.value(QStringLiteral("address")).toString().trimmed();
-    profile.port = static_cast<quint16>(json.value(QStringLiteral("port")).toInt());
+    const std::optional<quint16> port = parseJsonPort(json.value(QStringLiteral("port")));
+    if (!port.has_value()) {
+        return std::nullopt;
+    }
+    profile.port = *port;
 
     profile.userId = json.value(QStringLiteral("userId")).toString().trimmed();
     profile.encryption = json.value(QStringLiteral("encryption")).toString().trimmed();
@@ -95,6 +123,8 @@ std::optional<ServerProfile> ServerProfile::fromJson(const QJsonObject& json)
     profile.hostHeader = json.value(QStringLiteral("hostHeader")).toString().trimmed();
     profile.serviceName = json.value(QStringLiteral("serviceName")).toString().trimmed();
     profile.headerType = json.value(QStringLiteral("headerType")).toString().trimmed().toLower();
+    profile.xhttpMode = json.value(QStringLiteral("xhttpMode")).toString().trimmed().toLower();
+    profile.xhttpExtra = json.value(QStringLiteral("xhttpExtra")).toObject();
 
     profile.allowInsecure = json.value(QStringLiteral("allowInsecure")).toBool(false);
     profile.originalLink = json.value(QStringLiteral("originalLink")).toString().trimmed();

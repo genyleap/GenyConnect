@@ -175,9 +175,16 @@ private:
      * @param assets Release assets array.
      * @param assetUrl Output URL.
      * @param assetName Output filename.
+     * @param assetSha256 Output SHA-256 digest if metadata provides one.
+     * @param checksumAssetUrl Output checksum manifest URL for fallback parsing.
      * @return True if an asset was selected.
      */
-    static bool selectBestReleaseAsset(const QJsonArray& assets, QString *assetUrl, QString *assetName);
+    static bool selectBestReleaseAsset(
+        const QJsonArray& assets,
+        QString *assetUrl,
+        QString *assetName,
+        QString *assetSha256 = nullptr,
+        QString *checksumAssetUrl = nullptr);
     static QString fileSha256Hex(const QString& path);
     static bool isSelfInstallSupportedAsset(const QString& path);
     void consumePendingUpdateStatus();
@@ -192,6 +199,8 @@ private:
     QString m_releaseUrl = QStringLiteral("https://github.com/genyleap/GenyConnect/releases");
     QString m_assetUrl;
     QString m_assetName;
+    QString m_assetExpectedSha256;
+    QString m_assetChecksumUrl;
     QString m_downloadedFilePath;
     qint64 m_downloadReceived = 0;
     qint64 m_downloadTotal = 0;

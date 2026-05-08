@@ -111,6 +111,7 @@ void appendLineToFile(const QString& path, const QString& line)
 }
 
 bool isIpv4(const QString& address);
+bool isIpv6(const QString& address);
 
 #if defined(Q_OS_WIN)
 struct WindowsTunAdapterInfo
@@ -878,7 +879,7 @@ QString linuxIpTool()
     return {};
 }
 
-QString linuxRouteDeviceFor(const QString& destination, QString* errorOut)
+QString linuxRouteDeviceFor(const QString& destination, bool ipv6, QString* errorOut)
 {
     const QString target = destination.trimmed();
     if (target.isEmpty()) {
@@ -897,14 +898,18 @@ QString linuxRouteDeviceFor(const QString& destination, QString* errorOut)
     QString stderrText;
     const bool ok = runProcess(
         ipTool,
-        {QStringLiteral("-4"), QStringLiteral("route"), QStringLiteral("get"), target},
+        {ipv6 ? QStringLiteral("-6") : QStringLiteral("-4"),
+         QStringLiteral("route"),
+         QStringLiteral("get"),
+         target},
         1200,
         &stdoutText,
         &stderrText);
     if (!ok) {
         if (errorOut != nullptr) {
             *errorOut = stderrText.trimmed().isEmpty()
-                ? QStringLiteral("Failed to inspect Linux route for %1.").arg(target)
+                ? QStringLiteral("Failed to inspect Linux %1 route for %2.")
+                      .arg(ipv6 ? QStringLiteral("IPv6") : QStringLiteral("IPv4"), target)
                 : stderrText.trimmed();
         }
         return {};
@@ -914,7 +919,8 @@ QString linuxRouteDeviceFor(const QString& destination, QString* errorOut)
     const QRegularExpressionMatch match = devRegex.match(stdoutText);
     if (!match.hasMatch()) {
         if (errorOut != nullptr) {
-            *errorOut = QStringLiteral("Failed to parse Linux route device for %1.").arg(target);
+            *errorOut = QStringLiteral("Failed to parse Linux %1 route device for %2.")
+                            .arg(ipv6 ? QStringLiteral("IPv6") : QStringLiteral("IPv4"), target);
         }
         return {};
     }
@@ -928,8 +934,8 @@ bool validateLinuxTunRouting(const QString& requestedTunIf, const QString& serve
     for (int i = 0; i < 20; ++i) {
         QString errA;
         QString errB;
-        const QString devA = linuxRouteDeviceFor(QStringLiteral("1.1.1.1"), &errA);
-        const QString devB = linuxRouteDeviceFor(QStringLiteral("129.0.0.1"), &errB);
+        const QString devA = linuxRouteDeviceFor(QStringLiteral("1.1.1.1"), false, &errA);
+        const QString devB = linuxRouteDeviceFor(QStringLiteral("129.0.0.1"), false, &errB);
         if (!devA.isEmpty() && devA == devB) {
             const bool looksTun = devA.startsWith(QStringLiteral("tun"), Qt::CaseInsensitive)
                                   || devA.startsWith(QStringLiteral("tap"), Qt::CaseInsensitive)
@@ -939,9 +945,17 @@ bool validateLinuxTunRouting(const QString& requestedTunIf, const QString& serve
             if (looksTun && matchesRequested) {
                 if (!serverIp.trimmed().isEmpty() && isIpv4(serverIp)) {
                     QString serverErr;
-                    const QString serverDev = linuxRouteDeviceFor(serverIp.trimmed(), &serverErr);
+                    const QString serverDev = linuxRouteDeviceFor(serverIp.trimmed(), false, &serverErr);
                     if (!serverDev.isEmpty() && serverDev.compare(devA, Qt::CaseInsensitive) == 0) {
                         lastError = QStringLiteral("VPN server endpoint route is still pointed at TUN.");
+                    } else {
+                        return true;
+                    }
+                } else if (!serverIp.trimmed().isEmpty() && isIpv6(serverIp)) {
+                    QString serverErr;
+                    const QString serverDev = linuxRouteDeviceFor(serverIp.trimmed(), true, &serverErr);
+                    if (!serverDev.isEmpty() && serverDev.compare(devA, Qt::CaseInsensitive) == 0) {
+                        lastError = QStringLiteral("VPN server endpoint IPv6 route is still pointed at TUN.");
                     } else {
                         return true;
                     }
@@ -991,6 +1005,27 @@ QString macDefaultGateway()
     return match.captured(1).trimmed();
 }
 
+QString macDefaultGateway6()
+{
+    QString stdoutText;
+    QString stderrText;
+    if (!runProcess(QStringLiteral("/sbin/route"),
+                    {QStringLiteral("-n"), QStringLiteral("get"), QStringLiteral("-inet6"), QStringLiteral("default")},
+                    3000,
+                    &stdoutText,
+                    &stderrText)) {
+        Q_UNUSED(stderrText)
+        return {};
+    }
+
+    static const QRegularExpression gatewayRegex(QStringLiteral("\\bgateway:\\s*([^\\s]+)"));
+    const QRegularExpressionMatch match = gatewayRegex.match(stdoutText);
+    if (!match.hasMatch()) {
+        return {};
+    }
+    return match.captured(1).trimmed();
+}
+
 QString macRouteInterfaceFor(const QString& destination)
 {
     const QString target = destination.trimmed();
@@ -1015,6 +1050,30 @@ QString macRouteInterfaceFor(const QString& destination)
     return match.captured(1).trimmed();
 }
 
+QString macRouteInterfaceFor6(const QString& destination)
+{
+    const QString target = destination.trimmed();
+    if (target.isEmpty()) {
+        return {};
+    }
+    QString stdoutText;
+    QString stderrText;
+    if (!runProcess(QStringLiteral("/sbin/route"),
+                    {QStringLiteral("-n"), QStringLiteral("get"), QStringLiteral("-inet6"), target},
+                    3000,
+                    &stdoutText,
+                    &stderrText)) {
+        Q_UNUSED(stderrText)
+        return {};
+    }
+    static const QRegularExpression ifRegex(QStringLiteral("\\binterface:\\s*([^\\s]+)"));
+    const QRegularExpressionMatch match = ifRegex.match(stdoutText);
+    if (!match.hasMatch()) {
+        return {};
+    }
+    return match.captured(1).trimmed();
+}
+
 bool cleanupMacTunRoutes(const QString& tunIf, const QString& serverIp)
 {
     if (tunIf.trimmed().isEmpty()) {
@@ -1023,6 +1082,8 @@ bool cleanupMacTunRoutes(const QString& tunIf, const QString& serverIp)
     QString command;
     if (!serverIp.trimmed().isEmpty() && isIpv4(serverIp)) {
         command += QStringLiteral("route -n delete -host %1 >/dev/null 2>&1 || true;").arg(serverIp.trimmed());
+    } else if (!serverIp.trimmed().isEmpty() && isIpv6(serverIp)) {
+        command += QStringLiteral("route -n delete -inet6 -host %1 >/dev/null 2>&1 || true;").arg(serverIp.trimmed());
     }
     command += QStringLiteral(
         "route -n delete -net 0.0.0.0/1 -iface %1 >/dev/null 2>&1 || true; "
@@ -1049,6 +1110,8 @@ bool applyMacTunRoutes(const QString& tunIf, const QString& serverIp, QString* e
         return false;
     }
 
+    const QString gateway6 = macDefaultGateway6();
+
     QString command;
     if (!serverIp.trimmed().isEmpty() && isIpv4(serverIp)) {
         // Keep the upstream server reachable outside tunnel to avoid route loops.
@@ -1056,6 +1119,12 @@ bool applyMacTunRoutes(const QString& tunIf, const QString& serverIp, QString* e
                        "route -n add -host %1 %2 >/dev/null 2>&1 || "
                        "route -n change -host %1 %2 >/dev/null 2>&1 || true;")
                        .arg(serverIp.trimmed(), gateway);
+    } else if (!serverIp.trimmed().isEmpty() && isIpv6(serverIp) && !gateway6.trimmed().isEmpty()) {
+        // Same bypass route guard for IPv6 endpoints.
+        command += QStringLiteral(
+                       "route -n add -inet6 -host %1 %2 >/dev/null 2>&1 || "
+                       "route -n change -inet6 -host %1 %2 >/dev/null 2>&1 || true;")
+                       .arg(serverIp.trimmed(), gateway6.trimmed());
     }
     command += QStringLiteral(
         "route -n add -net 0.0.0.0/1 -iface %1 >/dev/null 2>&1 || true; "
@@ -1091,6 +1160,14 @@ bool applyMacTunRoutes(const QString& tunIf, const QString& serverIp, QString* e
             }
             return false;
         }
+    } else if (!serverIp.trimmed().isEmpty() && isIpv6(serverIp)) {
+        const QString serverIface = macRouteInterfaceFor6(serverIp.trimmed());
+        if (!serverIface.isEmpty() && serverIface.compare(tunIf, Qt::CaseInsensitive) == 0) {
+            if (errorOut != nullptr) {
+                *errorOut = QStringLiteral("VPN server endpoint IPv6 route is still pointed at TUN.");
+            }
+            return false;
+        }
     }
     return true;
 }
@@ -1102,22 +1179,32 @@ bool isIpv4(const QString& address)
     return !host.isNull() && host.protocol() == QAbstractSocket::IPv4Protocol;
 }
 
-QString resolveIpv4ForHost(const QString& hostOrIp)
+bool isIpv6(const QString& address)
+{
+    QHostAddress host(address.trimmed());
+    return !host.isNull() && host.protocol() == QAbstractSocket::IPv6Protocol;
+}
+
+QString resolveIpForHost(const QString& hostOrIp)
 {
     const QString trimmed = hostOrIp.trimmed();
     if (trimmed.isEmpty()) {
         return {};
     }
-    if (isIpv4(trimmed)) {
+    if (isIpv4(trimmed) || isIpv6(trimmed)) {
         return trimmed;
     }
     const QHostInfo info = QHostInfo::fromName(trimmed);
+    QString ipv6Fallback;
     for (const QHostAddress& addr : info.addresses()) {
         if (addr.protocol() == QAbstractSocket::IPv4Protocol) {
             return addr.toString();
         }
+        if (ipv6Fallback.isEmpty() && addr.protocol() == QAbstractSocket::IPv6Protocol) {
+            ipv6Fallback = addr.toString();
+        }
     }
-    return {};
+    return ipv6Fallback;
 }
 
 QJsonObject makeResponse(bool ok, const QString& message = QString())
@@ -1352,9 +1439,9 @@ private:
         }
 
         // Cleanup stale legacy split-routes from older builds (best effort).
-        QString cleanupServerIp = resolveIpv4ForHost(serverIpRequested);
+        QString cleanupServerIp = resolveIpForHost(serverIpRequested);
         if (cleanupServerIp.isEmpty()) {
-            cleanupServerIp = resolveIpv4ForHost(serverHostRequested);
+            cleanupServerIp = resolveIpForHost(serverHostRequested);
         }
         Q_UNUSED(cleanupMacTunRoutes(tunIf, cleanupServerIp));
 
@@ -1374,9 +1461,9 @@ private:
             return false;
         }
 #elif defined(Q_OS_WIN)
-        QString resolvedServerIp = resolveIpv4ForHost(serverIpRequested);
+        QString resolvedServerIp = resolveIpForHost(serverIpRequested);
         if (resolvedServerIp.isEmpty()) {
-            resolvedServerIp = resolveIpv4ForHost(serverHostRequested);
+            resolvedServerIp = resolveIpForHost(serverHostRequested);
         }
         QString applyRouteNote;
         WindowsTunAdapterInfo activeTun;
@@ -1420,9 +1507,9 @@ private:
             appendLineToFile(logPath, QStringLiteral("[System] Windows route probe warning: %1").arg(routeError.trimmed()));
         }
 #elif defined(Q_OS_LINUX)
-        QString resolvedServerIp = resolveIpv4ForHost(serverIpRequested);
+        QString resolvedServerIp = resolveIpForHost(serverIpRequested);
         if (resolvedServerIp.isEmpty()) {
-            resolvedServerIp = resolveIpv4ForHost(serverHostRequested);
+            resolvedServerIp = resolveIpForHost(serverHostRequested);
         }
         QString routeError;
         if (!validateLinuxTunRouting(tunIf, resolvedServerIp, &routeError)) {

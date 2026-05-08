@@ -2,6 +2,7 @@ module;
 #include <QCoreApplication>
 #include <QDesktopServices>
 #include <QDir>
+#include <QEventLoop>
 #include <QFile>
 #include <QByteArrayView>
 #include <QFileInfo>
@@ -45,6 +46,143 @@ QString normalizeVersionToken(const QString& version)
         cleaned.remove(0, 1);
     }
     return cleaned;
+}
+
+QString normalizeSha256Digest(const QString& digest)
+{
+    QString value = digest.trimmed().toLower();
+    if (value.startsWith(QStringLiteral("sha256:"))) {
+        value.remove(0, QStringLiteral("sha256:").size());
+    }
+    static const QRegularExpression hex64Rx(QStringLiteral("^[0-9a-f]{64}$"));
+    return hex64Rx.match(value).hasMatch() ? value : QString();
+}
+
+bool isLikelyChecksumAsset(const QString& lowerAssetName)
+{
+    return lowerAssetName.contains(QStringLiteral("sha256"))
+        || lowerAssetName.contains(QStringLiteral("checksum"))
+        || lowerAssetName.endsWith(QStringLiteral(".sha256"))
+        || lowerAssetName.endsWith(QStringLiteral(".sha256.txt"))
+        || lowerAssetName.endsWith(QStringLiteral("checksums.txt"));
+}
+
+QString extractSha256FromManifest(const QByteArray& content, const QString& targetAssetName)
+{
+    const QString targetName = QFileInfo(targetAssetName.trimmed()).fileName().toLower();
+    const QString text = QString::fromUtf8(content);
+    const QStringList lines = text.split('\n');
+    static const QRegularExpression hashAndNameRx(
+        QStringLiteral("^([0-9A-Fa-f]{64})\\s+\\*?(.+)$"));
+    static const QRegularExpression sha256StyleRx(
+        QStringLiteral("^SHA256\\s*\\((.+)\\)\\s*=\\s*([0-9A-Fa-f]{64})$"),
+        QRegularExpression::CaseInsensitiveOption);
+    static const QRegularExpression hashOnlyRx(QStringLiteral("^[0-9A-Fa-f]{64}$"));
+
+    QString hashOnlyCandidate;
+    int meaningfulLines = 0;
+    for (const QString& raw : lines) {
+        const QString line = raw.trimmed();
+        if (line.isEmpty() || line.startsWith('#')) {
+            continue;
+        }
+        ++meaningfulLines;
+
+        const QRegularExpressionMatch pairMatch = hashAndNameRx.match(line);
+        if (pairMatch.hasMatch()) {
+            const QString hash = normalizeSha256Digest(pairMatch.captured(1));
+            const QString fileName = QFileInfo(pairMatch.captured(2).trimmed()).fileName().toLower();
+            if (!hash.isEmpty() && !fileName.isEmpty() && fileName == targetName) {
+                return hash;
+            }
+            continue;
+        }
+
+        const QRegularExpressionMatch styleMatch = sha256StyleRx.match(line);
+        if (styleMatch.hasMatch()) {
+            const QString hash = normalizeSha256Digest(styleMatch.captured(2));
+            const QString fileName = QFileInfo(styleMatch.captured(1).trimmed()).fileName().toLower();
+            if (!hash.isEmpty() && !fileName.isEmpty() && fileName == targetName) {
+                return hash;
+            }
+            continue;
+        }
+
+        if (hashOnlyRx.match(line).hasMatch()) {
+            hashOnlyCandidate = normalizeSha256Digest(line);
+        }
+    }
+
+    if (meaningfulLines == 1) {
+        return hashOnlyCandidate;
+    }
+    return {};
+}
+
+bool fetchUrlContentSync(
+    QNetworkAccessManager* manager,
+    const QUrl& url,
+    QByteArray *contentOut,
+    QString *errorOut,
+    int timeoutMs = 12000)
+{
+    if (manager == nullptr || contentOut == nullptr || !url.isValid() || url.isEmpty()) {
+        if (errorOut != nullptr) {
+            *errorOut = QStringLiteral("Invalid checksum URL.");
+        }
+        return false;
+    }
+
+    QNetworkRequest request(url);
+    request.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::NoLessSafeRedirectPolicy);
+    request.setRawHeader("User-Agent", "GenyConnect-Updater/1.0");
+    request.setTransferTimeout(timeoutMs);
+
+    QNetworkReply* reply = manager->get(request);
+    QEventLoop loop;
+    QTimer timer;
+    timer.setSingleShot(true);
+    bool timedOut = false;
+
+    QObject::connect(&timer, &QTimer::timeout, &loop, [&]() {
+        timedOut = true;
+        if (reply != nullptr) {
+            reply->abort();
+        }
+        loop.quit();
+    });
+    QObject::connect(reply, &QNetworkReply::finished, &loop, [&]() {
+        loop.quit();
+    });
+
+    timer.start(qMax(1000, timeoutMs));
+    loop.exec();
+
+    const bool hadError = timedOut || (reply->error() != QNetworkReply::NoError);
+    QString errorText;
+    if (timedOut) {
+        errorText = QStringLiteral("Checksum download timed out.");
+    } else if (hadError) {
+        errorText = reply->errorString().trimmed();
+    }
+
+    QByteArray payload;
+    if (!hadError) {
+        payload = reply->readAll();
+    }
+    reply->deleteLater();
+
+    if (hadError) {
+        if (errorOut != nullptr) {
+            *errorOut = errorText.isEmpty()
+                ? QStringLiteral("Checksum download failed.")
+                : errorText;
+        }
+        return false;
+    }
+
+    *contentOut = payload;
+    return true;
 }
 
 QVector<int> parseVersionParts(const QString& version)
@@ -227,7 +365,8 @@ QString Updater::downloadedFilePath() const
 
 bool Updater::canInstallDownloadedUpdate() const
 {
-    return isSelfInstallSupportedAsset(m_downloadedFilePath);
+    return isSelfInstallSupportedAsset(m_downloadedFilePath)
+        && !normalizeSha256Digest(m_assetExpectedSha256).isEmpty();
 }
 
 void Updater::checkForUpdates(bool userInitiated)
@@ -409,6 +548,25 @@ bool Updater::installDownloadedUpdate()
         return openDownloadedUpdate();
     }
 
+    const QString expectedSha256 = normalizeSha256Digest(m_assetExpectedSha256);
+    if (expectedSha256.isEmpty()) {
+        m_error = QStringLiteral(
+            "Release does not provide trusted SHA-256 metadata for this asset. Publish digest/checksum first.");
+        m_status = QStringLiteral("Install blocked.");
+        emit systemLog(QStringLiteral("[Updater] %1").arg(m_error));
+        emit changed();
+        return false;
+    }
+
+    const QString downloadedHash = fileSha256Hex(sourcePath).toLower();
+    if (downloadedHash.isEmpty() || downloadedHash != expectedSha256) {
+        m_error = QStringLiteral("Downloaded update hash verification failed.");
+        m_status = QStringLiteral("Install failed.");
+        emit systemLog(QStringLiteral("[Updater] %1").arg(m_error));
+        emit changed();
+        return false;
+    }
+
     const QString helperPath = appUpdaterHelperPath();
     if (!QFileInfo::exists(helperPath)) {
         m_error = QStringLiteral("Updater helper executable not found.");
@@ -432,15 +590,6 @@ bool Updater::installDownloadedUpdate()
     const QString stagedPath = QDir(updateDir).filePath(QStringLiteral("staged-%1").arg(sourceName));
     if (!copyWithOverwrite(sourcePath, stagedPath)) {
         m_error = QStringLiteral("Failed to stage update file.");
-        m_status = QStringLiteral("Install failed.");
-        emit changed();
-        return false;
-    }
-
-    const QString stagedHash = fileSha256Hex(stagedPath);
-    if (stagedHash.isEmpty()) {
-        QFile::remove(stagedPath);
-        m_error = QStringLiteral("Failed to hash staged update file.");
         m_status = QStringLiteral("Install failed.");
         emit changed();
         return false;
@@ -473,7 +622,7 @@ bool Updater::installDownloadedUpdate()
     job.insert(QStringLiteral("staged_executable"), stagedPath);
     job.insert(QStringLiteral("backup_executable"), backupPath);
     job.insert(QStringLiteral("working_directory"), QCoreApplication::applicationDirPath());
-    job.insert(QStringLiteral("expected_sha256"), stagedHash);
+    job.insert(QStringLiteral("expected_sha256"), expectedSha256);
     job.insert(QStringLiteral("cleanup_source_on_success"), true);
     job.insert(QStringLiteral("timeout_ms"), 45000);
     job.insert(QStringLiteral("args"), QJsonArray());
@@ -557,6 +706,8 @@ void Updater::onCheckFinished()
             m_latestVersion.clear();
             m_assetUrl.clear();
             m_assetName.clear();
+            m_assetExpectedSha256.clear();
+            m_assetChecksumUrl.clear();
             m_downloadedFilePath.clear();
             m_downloadReceived = 0;
             m_downloadTotal = 0;
@@ -571,6 +722,8 @@ void Updater::onCheckFinished()
         }
 
         m_updateAvailable = false;
+        m_assetExpectedSha256.clear();
+        m_assetChecksumUrl.clear();
         m_error = networkError.isEmpty()
             ? QStringLiteral("Failed to check updates.")
             : networkError;
@@ -587,6 +740,8 @@ void Updater::onCheckFinished()
     const QJsonDocument doc = QJsonDocument::fromJson(payload, &parseError);
     if (parseError.error != QJsonParseError::NoError || !doc.isObject()) {
         m_updateAvailable = false;
+        m_assetExpectedSha256.clear();
+        m_assetChecksumUrl.clear();
         m_error = QStringLiteral("Release metadata parse failed.");
         m_status = QStringLiteral("Update check failed.");
         m_userInitiatedCheck = false;
@@ -602,14 +757,24 @@ void Updater::onCheckFinished()
     m_error.clear();
     m_assetUrl.clear();
     m_assetName.clear();
+    m_assetExpectedSha256.clear();
+    m_assetChecksumUrl.clear();
     m_downloadedFilePath.clear();
     m_downloadReceived = 0;
     m_downloadTotal = 0;
 
     const QJsonArray assets = root.value(QStringLiteral("assets")).toArray();
-    selectBestReleaseAsset(assets, &m_assetUrl, &m_assetName);
+    selectBestReleaseAsset(assets, &m_assetUrl, &m_assetName, &m_assetExpectedSha256, &m_assetChecksumUrl);
     if (!m_assetName.isEmpty()) {
         emit systemLog(QStringLiteral("[Updater] Selected asset: %1").arg(m_assetName));
+        if (!m_assetExpectedSha256.isEmpty()) {
+            emit systemLog(QStringLiteral("[Updater] Found release digest for selected asset."));
+        } else if (!m_assetChecksumUrl.isEmpty()) {
+            emit systemLog(QStringLiteral("[Updater] Using checksum manifest for selected asset."));
+        } else {
+            emit systemLog(QStringLiteral(
+                "[Updater] No checksum metadata for selected asset. Install will require a published SHA-256."));
+        }
     }
 
     if (latest.isEmpty()) {
@@ -699,8 +864,41 @@ void Updater::onDownloadFinished()
         m_downloadFile = nullptr;
     }
 
+    if (m_assetExpectedSha256.isEmpty() && !m_assetChecksumUrl.trimmed().isEmpty() && !m_assetName.trimmed().isEmpty()) {
+        QByteArray manifestPayload;
+        QString manifestError;
+        if (fetchUrlContentSync(&m_networkManager, QUrl(m_assetChecksumUrl), &manifestPayload, &manifestError)) {
+            const QString extracted = extractSha256FromManifest(manifestPayload, m_assetName);
+            if (!extracted.isEmpty()) {
+                m_assetExpectedSha256 = extracted;
+                emit systemLog(QStringLiteral("[Updater] Checksum resolved from manifest for %1.").arg(m_assetName));
+            } else {
+                emit systemLog(QStringLiteral("[Updater] Checksum manifest did not include %1.").arg(m_assetName));
+            }
+        } else if (!manifestError.trimmed().isEmpty()) {
+            emit systemLog(QStringLiteral("[Updater] Checksum fetch failed: %1").arg(manifestError.trimmed()));
+        }
+    }
+
+    if (!m_assetExpectedSha256.isEmpty()) {
+        const QString downloadedHash = fileSha256Hex(m_downloadedFilePath).toLower();
+        if (downloadedHash.isEmpty() || downloadedHash != m_assetExpectedSha256) {
+            QFile::remove(m_downloadedFilePath);
+            m_error = QStringLiteral("Downloaded update hash verification failed.");
+            m_status = QStringLiteral("Download failed.");
+            emit systemLog(QStringLiteral("[Updater] %1").arg(m_error));
+            emit changed();
+            return;
+        }
+        emit systemLog(QStringLiteral("[Updater] Downloaded file hash verified."));
+    }
+
     m_error.clear();
-    m_status = QStringLiteral("Update downloaded. Open installer to continue.");
+    if (m_assetExpectedSha256.isEmpty()) {
+        m_status = QStringLiteral("Update downloaded, but release checksum is missing.");
+    } else {
+        m_status = QStringLiteral("Update downloaded. Open installer to continue.");
+    }
     m_downloadReceived = m_downloadTotal > 0 ? m_downloadTotal : m_downloadReceived;
     emit systemLog(QStringLiteral("[Updater] %1").arg(m_status));
     emit changed();
@@ -725,7 +923,12 @@ bool Updater::isVersionNewer(const QString& currentVersion, const QString& candi
     return false;
 }
 
-bool Updater::selectBestReleaseAsset(const QJsonArray& assets, QString *assetUrl, QString *assetName)
+bool Updater::selectBestReleaseAsset(
+    const QJsonArray& assets,
+    QString *assetUrl,
+    QString *assetName,
+    QString *assetSha256,
+    QString *checksumAssetUrl)
 {
     if (assetUrl == nullptr || assetName == nullptr) {
         return false;
@@ -733,6 +936,12 @@ bool Updater::selectBestReleaseAsset(const QJsonArray& assets, QString *assetUrl
 
     *assetUrl = QString();
     *assetName = QString();
+    if (assetSha256 != nullptr) {
+        *assetSha256 = QString();
+    }
+    if (checksumAssetUrl != nullptr) {
+        *checksumAssetUrl = QString();
+    }
     if (assets.isEmpty()) {
         return false;
     }
@@ -758,6 +967,7 @@ bool Updater::selectBestReleaseAsset(const QJsonArray& assets, QString *assetUrl
     int bestScore = std::numeric_limits<int>::min();
     QString bestUrl;
     QString bestName;
+    QString bestDigest;
 
     for (const QJsonValue& entry : assets) {
         if (!entry.isObject()) {
@@ -869,6 +1079,7 @@ bool Updater::selectBestReleaseAsset(const QJsonArray& assets, QString *assetUrl
             bestScore = score;
             bestUrl = url;
             bestName = name;
+            bestDigest = normalizeSha256Digest(obj.value(QStringLiteral("digest")).toString());
         }
     }
 
@@ -876,14 +1087,59 @@ bool Updater::selectBestReleaseAsset(const QJsonArray& assets, QString *assetUrl
         const QJsonObject firstObj = assets.first().toObject();
         bestName = firstObj.value(QStringLiteral("name")).toString().trimmed();
         bestUrl = firstObj.value(QStringLiteral("browser_download_url")).toString().trimmed();
+        bestDigest = normalizeSha256Digest(firstObj.value(QStringLiteral("digest")).toString());
     }
 
     if (bestUrl.isEmpty()) {
         return false;
     }
 
+    if (checksumAssetUrl != nullptr) {
+        const QString bestNameLower = bestName.toLower();
+        int checksumScoreBest = std::numeric_limits<int>::min();
+        QString checksumUrlCandidate;
+        for (const QJsonValue& entry : assets) {
+            if (!entry.isObject()) {
+                continue;
+            }
+            const QJsonObject obj = entry.toObject();
+            const QString candidateName = obj.value(QStringLiteral("name")).toString().trimmed();
+            const QString candidateUrl = obj.value(QStringLiteral("browser_download_url")).toString().trimmed();
+            if (candidateName.isEmpty() || candidateUrl.isEmpty()) {
+                continue;
+            }
+            const QString candidateLower = candidateName.toLower();
+            if (!isLikelyChecksumAsset(candidateLower)) {
+                continue;
+            }
+
+            int score = 0;
+            if (candidateLower == bestNameLower + QStringLiteral(".sha256")) {
+                score += 300;
+            } else if (candidateLower == bestNameLower + QStringLiteral(".sha256.txt")) {
+                score += 280;
+            } else if (candidateLower.contains(bestNameLower)) {
+                score += 180;
+            }
+            if (candidateLower.contains(QStringLiteral("sha256"))) {
+                score += 80;
+            }
+            if (candidateLower.contains(QStringLiteral("checksum"))) {
+                score += 40;
+            }
+            if (score > checksumScoreBest) {
+                checksumScoreBest = score;
+                checksumUrlCandidate = candidateUrl;
+            }
+        }
+        *checksumAssetUrl = checksumUrlCandidate;
+    }
+
     *assetUrl = bestUrl;
     *assetName = bestName;
+    if (assetSha256 != nullptr) {
+        *assetSha256 = bestDigest;
+    }
     return true;
 }
 

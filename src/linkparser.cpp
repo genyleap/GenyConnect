@@ -1,6 +1,7 @@
 module;
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QJsonValue>
 #include <QUrl>
 #include <QUrlQuery>
 #include <QUuid>
@@ -17,15 +18,64 @@ QString createProfileId()
 
 QString normalizePath(const QString& path)
 {
-    if (path.trimmed().isEmpty()) {
+    QString normalized = path.trimmed();
+    for (int i = 0; i < 3 && normalized.contains('%'); ++i) {
+        const QString decoded = QUrl::fromPercentEncoding(normalized.toUtf8());
+        if (decoded == normalized) {
+            break;
+        }
+        normalized = decoded.trimmed();
+    }
+
+    if (normalized.isEmpty()) {
         return QStringLiteral("/");
     }
 
-    if (path.startsWith('/')) {
-        return path;
+    while (normalized.startsWith(QStringLiteral("//"))) {
+        normalized.remove(0, 1);
     }
 
-    return QStringLiteral("/") + path;
+    if (normalized.startsWith('/')) {
+        return normalized;
+    }
+
+    return QStringLiteral("/") + normalized;
+}
+
+std::optional<quint16> parsePort(const QJsonValue& value)
+{
+    if (value.isUndefined() || value.isNull()) {
+        return std::nullopt;
+    }
+
+    bool ok = false;
+    int parsed = 0;
+    if (value.isString()) {
+        parsed = value.toString().trimmed().toInt(&ok);
+    } else {
+        parsed = value.toVariant().toInt(&ok);
+    }
+
+    if (!ok || parsed <= 0 || parsed > 65535) {
+        return std::nullopt;
+    }
+    return static_cast<quint16>(parsed);
+}
+
+std::optional<QJsonObject> parseJsonObjectText(const QString& value)
+{
+    const QString trimmed = value.trimmed();
+    if (trimmed.isEmpty()) {
+        return QJsonObject {};
+    }
+
+    QJsonParseError parseError;
+    const QJsonDocument doc = QJsonDocument::fromJson(trimmed.toUtf8(), &parseError);
+    if (parseError.error != QJsonParseError::NoError || !doc.isObject()) {
+        return std::nullopt;
+    }
+
+    return doc.object();
 }
 }
 
@@ -83,7 +133,12 @@ std::optional<ServerProfile> LinkParser::parseVmess(const QString& rawLink, QStr
         : profileName;
 
     profile.address = obj.value(QStringLiteral("add")).toString().trimmed();
-    profile.port = static_cast<quint16>(obj.value(QStringLiteral("port")).toString().toInt());
+    const std::optional<quint16> port = parsePort(obj.value(QStringLiteral("port")));
+    if (!port.has_value()) {
+        setError(errorMessage, QStringLiteral("VMESS link has an invalid port."));
+        return std::nullopt;
+    }
+    profile.port = *port;
     profile.userId = obj.value(QStringLiteral("id")).toString().trimmed();
     profile.encryption = obj.value(QStringLiteral("scy")).toString().trimmed();
     if (profile.encryption.isEmpty()) {
@@ -101,7 +156,8 @@ std::optional<ServerProfile> LinkParser::parseVmess(const QString& rawLink, QStr
     }
 
     profile.path = obj.value(QStringLiteral("path")).toString();
-    if (profile.network == QStringLiteral("ws")) {
+    if (profile.network == QStringLiteral("ws")
+        || profile.network == QStringLiteral("xhttp")) {
         profile.path = normalizePath(profile.path);
     }
     profile.headerType = obj.value(QStringLiteral("type")).toString().trimmed().toLower();
@@ -117,6 +173,11 @@ std::optional<ServerProfile> LinkParser::parseVmess(const QString& rawLink, QStr
     profile.spiderX = obj.value(QStringLiteral("spx")).toString().trimmed();
 
     profile.serviceName = obj.value(QStringLiteral("serviceName")).toString().trimmed();
+    profile.xhttpMode = obj.value(QStringLiteral("mode")).toString().trimmed().toLower();
+    if (profile.network == QStringLiteral("xhttp") && profile.xhttpMode.isEmpty()) {
+        profile.xhttpMode = QStringLiteral("auto");
+    }
+    profile.xhttpExtra = obj.value(QStringLiteral("extra")).toObject();
     const QString allowInsecure = obj.value(QStringLiteral("allowInsecure")).toString().trimmed().toLower();
     profile.allowInsecure = (allowInsecure == QStringLiteral("1") || allowInsecure == QStringLiteral("true"));
 
@@ -148,7 +209,15 @@ std::optional<ServerProfile> LinkParser::parseVless(const QString& rawLink, QStr
 
     profile.userId = url.userName().trimmed();
     profile.address = url.host().trimmed();
-    profile.port = static_cast<quint16>(url.port(443));
+    const int parsedPort = url.port(-1);
+    if (parsedPort == -1) {
+        profile.port = 443;
+    } else if (parsedPort > 0 && parsedPort <= 65535) {
+        profile.port = static_cast<quint16>(parsedPort);
+    } else {
+        setError(errorMessage, QStringLiteral("VLESS link has an invalid port."));
+        return std::nullopt;
+    }
 
     profile.network = query.queryItemValue(QStringLiteral("type")).trimmed().toLower();
     if (profile.network.isEmpty()) {
@@ -168,13 +237,28 @@ std::optional<ServerProfile> LinkParser::parseVless(const QString& rawLink, QStr
     profile.flow = query.queryItemValue(QStringLiteral("flow")).trimmed();
 
     profile.path = query.queryItemValue(QStringLiteral("path"));
-    if (profile.network == QStringLiteral("ws")) {
+    if (profile.network == QStringLiteral("ws")
+        || profile.network == QStringLiteral("xhttp")) {
         profile.path = normalizePath(profile.path);
     }
     profile.headerType = query.queryItemValue(QStringLiteral("headerType")).trimmed().toLower();
 
     profile.hostHeader = query.queryItemValue(QStringLiteral("host")).trimmed();
     profile.serviceName = query.queryItemValue(QStringLiteral("serviceName")).trimmed();
+    profile.xhttpMode = query.queryItemValue(QStringLiteral("mode")).trimmed().toLower();
+    if (profile.network == QStringLiteral("xhttp") && profile.xhttpMode.isEmpty()) {
+        profile.xhttpMode = QStringLiteral("auto");
+    }
+
+    const QString extraValue = query.queryItemValue(QStringLiteral("extra"));
+    if (!extraValue.trimmed().isEmpty()) {
+        const std::optional<QJsonObject> xhttpExtra = parseJsonObjectText(extraValue);
+        if (!xhttpExtra.has_value()) {
+            setError(errorMessage, QStringLiteral("VLESS link has invalid XHTTP extra JSON."));
+            return std::nullopt;
+        }
+        profile.xhttpExtra = *xhttpExtra;
+    }
 
     profile.sni = query.queryItemValue(QStringLiteral("sni")).trimmed();
     if (profile.sni.isEmpty()) {
@@ -187,7 +271,10 @@ std::optional<ServerProfile> LinkParser::parseVless(const QString& rawLink, QStr
     profile.shortId = query.queryItemValue(QStringLiteral("sid")).trimmed();
     profile.spiderX = query.queryItemValue(QStringLiteral("spx")).trimmed();
 
-    const QString allowInsecure = query.queryItemValue(QStringLiteral("allowInsecure")).trimmed().toLower();
+    QString allowInsecure = query.queryItemValue(QStringLiteral("allowInsecure")).trimmed().toLower();
+    if (allowInsecure.isEmpty()) {
+        allowInsecure = query.queryItemValue(QStringLiteral("insecure")).trimmed().toLower();
+    }
     profile.allowInsecure = (allowInsecure == QStringLiteral("1") || allowInsecure == QStringLiteral("true"));
 
     profile.originalLink = rawLink;

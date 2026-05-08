@@ -78,6 +78,12 @@ constexpr int kMaxPrivilegedTunLogBufferBytes = 512 * 1024;
 constexpr int kPrivilegedTunLogBufferKeepBytes = 256 * 1024;
 constexpr int kProfileUsageSaveDelayMs = 2500;
 
+struct ProxyApplyResult {
+    bool enable = false;
+    bool ok = false;
+    QString error;
+};
+
 QString usageHourBucketKey(const QDateTime& timestamp)
 {
     return timestamp.toString(QStringLiteral("yyyy-MM-dd HH"));
@@ -1084,7 +1090,9 @@ VpnController::~VpnController()
         m_processManager.stop(0);
     }
     if (m_useSystemProxy && m_autoDisableSystemProxyOnDisconnect) {
-        applySystemProxy(false);
+        QString ignored;
+        Q_UNUSED(m_systemProxyManager.disable(&ignored, true));
+        m_systemProxyApplied = false;
     }
     saveProfileUsage();
     cleanupDetachedHelpers();
@@ -4196,41 +4204,82 @@ void VpnController::applySystemProxy(bool enable, bool force)
         return;
     }
 
-    const bool wasEnabled = m_systemProxyManager.isEnabled();
-    if (!force && wasEnabled == enable) {
+    if (!force && m_systemProxyApplied == enable && !m_proxyApplyInFlight) {
         return;
     }
 
-    QString error;
-    const bool ok = enable
-                        ? m_systemProxyManager.enable(m_buildOptions.socksPort, m_buildOptions.httpPort, &error)
-                        : m_systemProxyManager.disable(&error, force);
+    if (m_proxyApplyInFlight) {
+        m_pendingProxyApplyState = enable ? 1 : 0;
+        m_pendingProxyApplyForce = m_pendingProxyApplyForce || force;
+        return;
+    }
 
-    if (ok) {
-        const bool nowEnabled = m_systemProxyManager.isEnabled();
-        if (enable && (!wasEnabled || force)) {
-            appendSystemLog(QStringLiteral("[System] System proxy enabled."));
-        } else if (!enable && wasEnabled && !nowEnabled) {
-            appendSystemLog(QStringLiteral("[System] System proxy disabled."));
+    const bool previousAppliedState = m_systemProxyApplied;
+
+    const auto finalizeResult = [this, previousAppliedState](const ProxyApplyResult& result) {
+        m_proxyApplyInFlight = false;
+
+        if (result.ok) {
+            m_systemProxyApplied = result.enable;
+            if (result.enable && (!previousAppliedState || result.enable != previousAppliedState)) {
+                appendSystemLog(QStringLiteral("[System] System proxy enabled."));
+            } else if (!result.enable && previousAppliedState) {
+                appendSystemLog(QStringLiteral("[System] System proxy disabled."));
+            }
+        } else if (!result.error.trimmed().isEmpty()) {
+            const QString message = result.enable
+                                        ? QStringLiteral("Connected, but failed to enable system proxy: %1")
+                                              .arg(result.error.trimmed())
+                                        : QStringLiteral("Failed to disable system proxy: %1")
+                                              .arg(result.error.trimmed());
+            appendSystemLog(QStringLiteral("[System] %1").arg(message));
+            if (result.enable) {
+                setLastError(message);
+            } else {
+                setLastError(QString());
+            }
         }
+
+        if (m_pendingProxyApplyState >= 0) {
+            const bool pendingEnable = (m_pendingProxyApplyState == 1);
+            const bool pendingForce = m_pendingProxyApplyForce;
+            m_pendingProxyApplyState = -1;
+            m_pendingProxyApplyForce = false;
+            applySystemProxy(pendingEnable, pendingForce);
+        }
+    };
+
+    const auto runOperation = [enable, force, socksPort = m_buildOptions.socksPort, httpPort = m_buildOptions.httpPort]() {
+        ProxyApplyResult result;
+        result.enable = enable;
+        SystemProxyManager manager;
+        QString error;
+        result.ok = enable
+                        ? manager.enable(socksPort, httpPort, &error)
+                        : manager.disable(&error, true);
+        result.error = error.trimmed();
+        return result;
+    };
+
+    if (QCoreApplication::closingDown()) {
+        finalizeResult(runOperation());
         return;
     }
 
-    if (error.isEmpty()) {
-        return;
-    }
-
-    const QString message = enable
-                                ? QStringLiteral("Connected, but failed to enable system proxy: %1").arg(error)
-                                : QStringLiteral("Failed to disable system proxy: %1").arg(error);
-
-    appendSystemLog(QStringLiteral("[System] %1").arg(message));
-
-    if (enable) {
-        setLastError(message);
-    } else {
-        setLastError(QString());
-    }
+    m_proxyApplyInFlight = true;
+    QPointer<VpnController> guard(this);
+    [[maybe_unused]] auto proxyApplyFuture = QtConcurrent::run([guard, runOperation, finalizeResult]() {
+        const ProxyApplyResult result = runOperation();
+        if (!guard) {
+            return;
+        }
+        QMetaObject::invokeMethod(guard.data(), [guard, result, finalizeResult]() {
+            if (!guard) {
+                return;
+            }
+            finalizeResult(result);
+        }, Qt::QueuedConnection);
+    });
 }
 
 bool VpnController::queryTrafficStatsFromApi(qint64 *uplinkBytes, qint64 *downlinkBytes, QString *errorMessage)

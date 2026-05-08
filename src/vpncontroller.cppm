@@ -1036,6 +1036,10 @@ private:
     int m_worstPingMs = -1;
     double m_profileScore = 0.0;
     bool m_useSystemProxy = false;
+    bool m_systemProxyApplied = false;
+    bool m_proxyApplyInFlight = false;
+    int m_pendingProxyApplyState = -1; // -1 none, 0 disable, 1 enable
+    bool m_pendingProxyApplyForce = false;
     bool m_tunMode = false;
     bool m_autoDisableSystemProxyOnDisconnect = false;
     bool m_whitelistMode = false;

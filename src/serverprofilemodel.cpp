@@ -129,7 +129,17 @@ bool ServerProfileModel::addProfile(const ServerProfile& profile)
 
     const int existingIdx = findEquivalentProfile(profile);
     if (existingIdx >= 0) {
-        m_profiles[existingIdx] = profile;
+        ServerProfile updated = profile;
+        const ServerProfile& existing = m_profiles.at(existingIdx);
+
+        // Preserve stable identity and prior ping sample for equivalent profiles.
+        if (updated.id.trimmed().isEmpty() || updated.id != existing.id) {
+            updated.id = existing.id;
+        }
+        updated.lastPingMs = existing.lastPingMs;
+        updated.pingInProgress = false;
+
+        m_profiles[existingIdx] = updated;
         emit dataChanged(index(existingIdx), index(existingIdx));
         return true;
     }
