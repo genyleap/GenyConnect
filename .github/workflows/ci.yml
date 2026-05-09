@@ -53,6 +53,7 @@ jobs:
           version: ${{ env.QT_VERSION }}
           arch: ${{ matrix.qt_arch }}
           cache: true
+          aqtversion: ">=3.4.0"
 
       - name: Install CMake
         uses: lukka/get-cmake@latest
