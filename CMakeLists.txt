@@ -60,7 +60,7 @@ option(GENYCONNECT_BUNDLE_DOCS "Install README and LICENSE at package root + NSI
 option(GENYCONNECT_MACDEPLOYQT_ALWAYS_OVERWRITE "Pass -always-overwrite to macdeployqt" OFF)
 option(GENYCONNECT_MACDEPLOYQT_NO_STRIP         "Pass -no-strip to macdeployqt" OFF)
 
-set(GENYCONNECT_TARGET_BUILD_ARCH "x86_64" CACHE STRING "Override target arch for output build (arm64|x86_64)")
+set(GENYCONNECT_TARGET_BUILD_ARCH "arm64" CACHE STRING "Override target arch for output build (arm64|x86_64)")
 
 set(GENYCONNECT_XRAY_VERSION      "v26.2.6" CACHE STRING   "Xray-core release tag (e.g. v26.2.6)")
 set(GENYCONNECT_XRAY_ASSET_NAME   ""        CACHE STRING   "Optional explicit Xray release asset name override")
@@ -187,7 +187,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 if(MSVC)
-  add_compile_options(/Zc:__cplusplus /permissive-)
+    add_compile_options(/Zc:__cplusplus /permissive-)
 endif()
 
 set(CMAKE_AUTOMOC ON)
@@ -195,9 +195,9 @@ set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
 
 set(CMAKE_CXX_SCAN_FOR_MODULES OFF)
-# Do not let AUTOMOC treat module interface files as MOC inputs.
-# Qt MOC generated headers are not safe inside named C++ module units on Linux/Clang.
-list(REMOVE_ITEM CMAKE_AUTOMOC_EXTENSIONS "cppm")
+if(NOT "cppm" IN_LIST CMAKE_AUTOMOC_EXTENSIONS)
+  list(APPEND CMAKE_AUTOMOC_EXTENSIONS "cppm")
+endif()
 
 if(GENYCONNECT_USE_MODULES)
   if(CMAKE_CXX_COMPILER_ID STREQUAL "AppleClang")
@@ -297,9 +297,13 @@ endif()
 set(GENYCONNECT_MODULE_IFS
   src/connectionstate.cppm
   src/serverprofile.cppm
+  src/serverprofilemodel.cppm
   src/linkparser.cppm
   src/updater.cppm
   src/xrayconfigbuilder.cppm
+  src/systemproxymanager.cppm
+  src/xrayprocessmanager.cppm
+  src/vpncontroller.cppm
 )
 
 set(GENYCONNECT_IMPL_SOURCES
@@ -374,13 +378,6 @@ endif()
 
 if(GENYCONNECT_USE_MODULES)
   set_property(TARGET ${PROJECT_NAME} PROPERTY CXX_SCAN_FOR_MODULES ON)
-
-  target_sources(${PROJECT_NAME}
-    PUBLIC
-      FILE_SET CXX_MODULES TYPE CXX_MODULES
-      BASE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/src
-      FILES ${GENYCONNECT_MODULE_IFS}
-  )
 endif()
 
 target_include_directories(${PROJECT_NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
@@ -442,7 +439,6 @@ set(qml_controls
   ui/Controls/Label.qml
   ui/Controls/TextField.qml
   ui/Controls/TextArea.qml
-  ui/Controls/NumberFlowText.qml
   ui/Controls/Switch.qml
   ui/Controls/CircleIconButton.qml
   ui/Controls/PrimaryActionButton.qml
@@ -494,6 +490,13 @@ qt_add_qml_module(${PROJECT_NAME}
     ui/Controls/qmldir
     ui/Layout/qmldir
     ui/Dashboard/qmldir
+)
+
+target_sources(${PROJECT_NAME}
+  PUBLIC
+    FILE_SET CXX_MODULES TYPE CXX_MODULES
+    BASE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/src
+    FILES ${GENYCONNECT_MODULE_IFS}
 )
 
 # -------------------------

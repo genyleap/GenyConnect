@@ -10,8 +10,6 @@ module;
 
 module genyconnect.backend.serverprofilemodel;
 
-using namespace Qt::StringLiterals;
-
 ServerProfileModel::ServerProfileModel(QObject *parent)
     : QAbstractListModel(parent)
 {
@@ -57,11 +55,11 @@ QVariant ServerProfileModel::data(const QModelIndex& index, int role) const
         return profile.lastPingMs;
     case PingTextRole:
         if (profile.pingInProgress) {
-            return u"Pinging..."_s;
+            return QStringLiteral("Pinging...");
         }
         return profile.lastPingMs >= 0
-            ? u"%1 ms"_s.arg(profile.lastPingMs)
-            : u"--"_s;
+            ? QStringLiteral("%1 ms").arg(profile.lastPingMs)
+            : QStringLiteral("--");
     case PingingRole:
         return profile.pingInProgress;
     default:

@@ -16,7 +16,9 @@
 module;
 #include <QObject>
 
+#ifndef Q_MOC_RUN
 export module genyconnect.backend.connectionstate;
+#endif
 
 namespace App {
 Q_NAMESPACE

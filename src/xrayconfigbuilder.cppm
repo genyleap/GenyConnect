@@ -18,11 +18,10 @@ module;
 #include <QStringList>
 #include <QtTypes>
 
+#ifndef Q_MOC_RUN
 export module genyconnect.backend.xrayconfigbuilder;
-
 import genyconnect.backend.serverprofile;
-
-using namespace Qt::StringLiterals;
+#endif
 
 /**
  * @class XrayConfigBuilder
@@ -39,7 +38,7 @@ public:
         quint16 socksPort = 10808;              //!< Local mixed/socks inbound port.
         quint16 httpPort = 10809;               //!< Local http inbound port.
         quint16 apiPort = 10085;                //!< Xray API inbound port.
-        QString logLevel = u"warning"_s; //!< Runtime log level.
+        QString logLevel = QStringLiteral("warning"); //!< Runtime log level.
         bool enableMux = false;                 //!< Enable outbound mux.
         bool enableStatsApi = true;             //!< Enable stats API and policy.
         bool enableTun = false;                 //!< Enable system-level TUN inbound.

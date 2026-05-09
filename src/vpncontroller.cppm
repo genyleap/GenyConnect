@@ -34,8 +34,8 @@ module;
 #include <QVariantList>
 #include <QVariantMap>
 
+#ifndef Q_MOC_RUN
 export module genyconnect.backend.vpncontroller;
-
 import genyconnect.backend.connectionstate;
 import genyconnect.backend.serverprofile;
 import genyconnect.backend.serverprofilemodel;
@@ -43,8 +43,7 @@ import genyconnect.backend.systemproxymanager;
 import genyconnect.backend.updater;
 import genyconnect.backend.xrayconfigbuilder;
 import genyconnect.backend.xrayprocessmanager;
-
-using namespace Qt::StringLiterals;
+#endif
 
 #ifdef Q_MOC_RUN
 namespace App {
@@ -718,11 +717,6 @@ public:
      * @return List of usage rows.
      */
     Q_INVOKABLE QVariantList currentProfileUsageHistory(const QString& period, int limit = 20) const;
-    Q_INVOKABLE QVariantList currentProfileUsageSessions(int limit = 20) const;
-    Q_INVOKABLE void clearCurrentProfileUsage();
-    Q_INVOKABLE void clearAllProfileUsage();
-    Q_INVOKABLE QVariantList availableAppRuleItems() const;
-    Q_INVOKABLE void appendAppRule(const QString& target, const QString& processName);
 
 signals:
     //! Emitted when connection state changes.
@@ -914,12 +908,9 @@ private:
     void updatePerProfileUsageCounters(qint64 nextRx, qint64 nextTx);
     void resetPerProfileUsageSamples();
     void recordProfileUsageDelta(const QString& profileId, qint64 rxDelta, qint64 txDelta);
-    void startProfileUsageSession();
-    void finishProfileUsageSession();
     QVariantMap profileUsageSummaryForId(const QString& profileId) const;
     QVariantList profileUsageHistoryForId(const QString& profileId, const QString& period, int limit) const;
     QString currentProfileUsageText(const QString& period) const;
-    QString currentUsageProfileId() const;
     void loadProfileUsage();
     void saveProfileUsage() const;
     void scheduleProfileUsageSave();
@@ -1015,7 +1006,7 @@ private:
     qint64 m_txBytes = 0;
     qint64 m_memoryUsageBytes = 0;
     bool m_speedTestRunning = false;
-    QString m_speedTestPhase = u"Idle"_s;
+    QString m_speedTestPhase = QStringLiteral("Idle");
     int m_speedTestElapsedSec = 0;
     int m_speedTestDurationSec = 18;
     double m_speedTestCurrentMbps = 0.0;
@@ -1042,7 +1033,7 @@ private:
     bool m_publicIpRefreshing = false;
 
     QString m_xrayExecutablePath;
-    QString m_xrayVersion = u"Unknown"_s;
+    QString m_xrayVersion = QStringLiteral("Unknown");
     bool m_loggingEnabled = true;
     bool m_autoPingProfiles = false;
     QList<SubscriptionEntry> m_subscriptionEntries;
@@ -1053,7 +1044,7 @@ private:
     int m_subscriptionRefreshSuccessCount = 0;
     int m_subscriptionRefreshFailCount = 0;
     QStringList m_profileGroups;
-    QString m_currentProfileGroup = u"All"_s;
+    QString m_currentProfileGroup = QStringLiteral("All");
     int m_profileCount = 0;
     int m_filteredProfileCount = 0;
     int m_bestPingMs = -1;
@@ -1087,9 +1078,6 @@ private:
     qint64 m_profileUsageLastRxSample = -1;
     qint64 m_profileUsageLastTxSample = -1;
     QString m_activeProfileUsageId;
-    QDateTime m_profileUsageSessionStartedAt;
-    qint64 m_profileUsageSessionStartRx = 0;
-    qint64 m_profileUsageSessionStartTx = 0;
 
     ServerProfileModel m_profileModel;
     Updater m_updater;

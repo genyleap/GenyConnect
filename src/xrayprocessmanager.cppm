@@ -19,7 +19,9 @@ module;
 #include <QProcess>
 #include <QString>
 
+#ifndef Q_MOC_RUN
 export module genyconnect.backend.xrayprocessmanager;
+#endif
 
 #ifdef Q_MOC_RUN
 #define GENYCONNECT_MODULE_EXPORT
