@@ -123,6 +123,8 @@ jobs:
         if: runner.os != 'Windows'
         shell: bash
         run: |
+          set -euo pipefail
+          echo "QT_ROOT_DIR=${QT_ROOT_DIR}"
           echo "CC=${CC}"
           echo "CXX=${CXX}"
           echo "CLANG_SCAN_DEPS=${CLANG_SCAN_DEPS}"
@@ -145,7 +147,7 @@ jobs:
 
           cmake -S . -B build -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_PREFIX_PATH="${Qt6_DIR}/../../.." \
+            -DCMAKE_PREFIX_PATH="${QT_ROOT_DIR}" \
             -DCMAKE_C_COMPILER="${CC}" \
             -DCMAKE_CXX_COMPILER="${CXX}" \
             -DCMAKE_CXX_SCAN_FOR_MODULES=ON \
@@ -164,7 +166,7 @@ jobs:
           cmake -S . -B build `
             -G "Visual Studio 17 2022" -A "${{ matrix.cmake_arch }}" `
             -DCMAKE_CONFIGURATION_TYPES="Release" `
-            -DCMAKE_PREFIX_PATH="${env:Qt6_DIR}\..\..\.." `
+            -DCMAKE_PREFIX_PATH="${env:QT_ROOT_DIR}" `
             -DCMAKE_CXX_SCAN_FOR_MODULES=ON `
             -DGENYCONNECT_USE_MODULES=ON `
             -DGENYCONNECT_TARGET_ARCH="${{ matrix.target_arch }}" `
