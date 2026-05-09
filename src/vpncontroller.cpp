@@ -79,6 +79,8 @@ constexpr int kMaxPrivilegedTunLogLinesPerTick = 64;
 constexpr int kMaxPrivilegedTunLogBufferBytes = 512 * 1024;
 constexpr int kPrivilegedTunLogBufferKeepBytes = 256 * 1024;
 constexpr int kProfileUsageSaveDelayMs = 2500;
+constexpr int kPublicIpTimeoutMs = 6500;
+constexpr const char kPublicIpEndpoint[] = "https://api.ipify.org?format=text";
 
 struct ProxyApplyResult {
     bool enable = false;
@@ -1108,6 +1110,10 @@ VpnController::VpnController(QObject *parent)
     QTimer::singleShot(1500, this, [this]() {
         m_updater.checkForUpdates(false);
     });
+    QTimer::singleShot(900, this, [this]() {
+        applyKillSwitchState();
+        refreshPublicIp();
+    });
 
     connect(qApp, &QCoreApplication::aboutToQuit, this, [this]() {
         cleanupDetachedHelpers();
@@ -1117,6 +1123,11 @@ VpnController::VpnController(QObject *parent)
 VpnController::~VpnController()
 {
     cancelSpeedTest();
+    if (m_publicIpReply) {
+        m_publicIpReply->abort();
+        m_publicIpReply->deleteLater();
+        m_publicIpReply = nullptr;
+    }
     m_profileUsageSaveTimer.stop();
     if (m_privilegedTunManaged) {
         m_privilegedTunLogTimer.stop();
@@ -1128,7 +1139,7 @@ VpnController::~VpnController()
     if (m_processManager.isRunning()) {
         m_processManager.stop(0);
     }
-    if (m_useSystemProxy && m_autoDisableSystemProxyOnDisconnect) {
+    if (m_systemProxyApplied || m_killSwitchEnabled || (m_useSystemProxy && m_autoDisableSystemProxyOnDisconnect)) {
         QString ignored;
         Q_UNUSED(m_systemProxyManager.disable(&ignored, true));
         m_systemProxyApplied = false;
@@ -1175,6 +1186,16 @@ qint64 VpnController::rxBytes() const
 qint64 VpnController::txBytes() const
 {
     return m_txBytes;
+}
+
+QString VpnController::publicIpAddress() const
+{
+    return m_publicIpAddress;
+}
+
+bool VpnController::publicIpRefreshing() const
+{
+    return m_publicIpRefreshing;
 }
 
 QString VpnController::memoryUsageText() const
@@ -1736,6 +1757,11 @@ bool VpnController::tunMode() const
     return m_tunMode;
 }
 
+bool VpnController::killSwitchEnabled() const
+{
+    return m_killSwitchEnabled;
+}
+
 void VpnController::setUseSystemProxy(bool enabled)
 {
     if (m_useSystemProxy == enabled) {
@@ -1770,6 +1796,20 @@ void VpnController::setTunMode(bool enabled)
     saveSettings();
     QSettings settings;
     settings.setValue(QStringLiteral("network/modeExplicitlyChosen"), true);
+}
+
+void VpnController::setKillSwitchEnabled(bool enabled)
+{
+    if (m_killSwitchEnabled == enabled) {
+        return;
+    }
+
+    m_killSwitchEnabled = enabled;
+    emit killSwitchEnabledChanged();
+    saveSettings();
+    applyKillSwitchState(enabled
+                             ? QStringLiteral("Kill Switch enabled.")
+                             : QStringLiteral("Kill Switch disabled."));
 }
 
 bool VpnController::autoDisableSystemProxyOnDisconnect() const
@@ -2600,6 +2640,45 @@ bool VpnController::removeProfile(int row)
     return true;
 }
 
+bool VpnController::updateProfileBasics(int row, const QString& name, const QString& groupName)
+{
+    QList<ServerProfile> profiles = m_profileModel.profiles();
+    if (row < 0 || row >= profiles.size()) {
+        setLastError(QStringLiteral("Profile is no longer available."));
+        return false;
+    }
+
+    ServerProfile& profile = profiles[row];
+    const QString cleanName = name.trimmed();
+    const QString cleanGroup = normalizeGroupName(groupName);
+    bool changed = false;
+
+    if (!cleanName.isEmpty() && profile.name != cleanName) {
+        profile.name = cleanName;
+        changed = true;
+    }
+    if (!cleanGroup.isEmpty() && profile.groupName != cleanGroup) {
+        profile.groupName = cleanGroup;
+        changed = true;
+    }
+
+    if (!changed) {
+        return true;
+    }
+
+    m_profileModel.setProfiles(profiles);
+    upsertProfileGroupOptions(profileGroupOptionsFor(cleanGroup), false);
+    refreshProfileGroups();
+    recomputeProfileStats();
+    saveProfiles();
+    saveSettings();
+    if (row == m_currentProfileIndex) {
+        emit currentProfileIndexChanged();
+    }
+    appendSystemLog(QStringLiteral("[Profile] Updated profile '%1'.").arg(profile.displayLabel()));
+    return true;
+}
+
 int VpnController::removeAllProfiles()
 {
     const int removedCount = m_profileModel.rowCount();
@@ -2924,6 +3003,37 @@ void VpnController::cleanSystemProxy()
     applySystemProxy(false, true);
 }
 
+void VpnController::refreshPublicIp()
+{
+    if (m_publicIpReply) {
+        QObject::disconnect(m_publicIpReply, nullptr, this, nullptr);
+        m_publicIpReply->abort();
+        m_publicIpReply->deleteLater();
+        m_publicIpReply = nullptr;
+    }
+
+    if ((connected() && !m_tunMode) || (m_killSwitchEnabled && !connected())) {
+        m_publicIpNetworkManager.setProxy(
+            QNetworkProxy(QNetworkProxy::Socks5Proxy, QStringLiteral("127.0.0.1"), m_buildOptions.socksPort));
+    } else {
+        m_publicIpNetworkManager.setProxy(QNetworkProxy::NoProxy);
+    }
+
+    QNetworkRequest request(QUrl(QString::fromLatin1(kPublicIpEndpoint)));
+    request.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::NoLessSafeRedirectPolicy);
+    request.setAttribute(QNetworkRequest::CacheLoadControlAttribute, QNetworkRequest::AlwaysNetwork);
+    request.setAttribute(QNetworkRequest::Http2AllowedAttribute, false);
+    request.setTransferTimeout(kPublicIpTimeoutMs);
+    request.setRawHeader("User-Agent", "GenyConnect-IPCheck/1.0");
+    request.setRawHeader("Accept", "text/plain");
+
+    m_publicIpRefreshing = true;
+    emit publicIpAddressChanged();
+
+    m_publicIpReply = m_publicIpNetworkManager.get(request);
+    connect(m_publicIpReply, &QNetworkReply::finished, this, &VpnController::onPublicIpFinished);
+}
+
 void VpnController::setXrayExecutableFromUrl(const QUrl& url)
 {
     setXrayExecutablePath(url.toLocalFile());
@@ -3201,7 +3311,7 @@ void VpnController::onProcessStarted()
     setConnectionState(ConnectionState::Connected);
     if (m_tunMode) {
         appendSystemLog(QStringLiteral("[System] TUN mode active: system traffic should route through Xray TUN."));
-    } else if (m_useSystemProxy) {
+    } else if (m_useSystemProxy || m_killSwitchEnabled) {
         applySystemProxy(true);
     } else {
         appendSystemLog(QStringLiteral(
@@ -3226,7 +3336,10 @@ void VpnController::onProcessStopped(int exitCode, QProcess::ExitStatus exitStat
     m_statsPollTimer.stop();
     cancelSpeedTest();
     resetPerProfileUsageSamples();
-    if (m_useSystemProxy && m_autoDisableSystemProxyOnDisconnect) {
+    if (m_killSwitchEnabled) {
+        applySystemProxy(true, true);
+        appendSystemLog(QStringLiteral("[System] Kill Switch active: system proxy remains locked to GenyConnect."));
+    } else if (m_useSystemProxy && m_autoDisableSystemProxyOnDisconnect) {
         applySystemProxy(false);
     }
 
@@ -3571,6 +3684,38 @@ void VpnController::onSpeedTestFinished()
     }
 }
 
+void VpnController::onPublicIpFinished()
+{
+    auto *reply = qobject_cast<QNetworkReply*>(sender());
+    if (!reply) {
+        return;
+    }
+
+    if (reply != m_publicIpReply) {
+        reply->deleteLater();
+        return;
+    }
+
+    const bool ok = reply->error() == QNetworkReply::NoError;
+    QByteArray payload;
+    if (reply->isOpen() || reply->bytesAvailable() > 0) {
+        payload = reply->readAll();
+    }
+    const QString ipText = QString::fromUtf8(payload).trimmed();
+    const QHostAddress parsed(ipText);
+
+    if (ok && !parsed.isNull()) {
+        m_publicIpAddress = ipText;
+    } else if (m_publicIpAddress.isEmpty()) {
+        m_publicIpAddress.clear();
+    }
+
+    m_publicIpRefreshing = false;
+    m_publicIpReply = nullptr;
+    reply->deleteLater();
+    emit publicIpAddressChanged();
+}
+
 void VpnController::setConnectionState(ConnectionState state)
 {
     if (m_connectionState == state) {
@@ -3579,6 +3724,10 @@ void VpnController::setConnectionState(ConnectionState state)
 
     m_connectionState = state;
     emit connectionStateChanged();
+    applyKillSwitchState();
+    QTimer::singleShot(state == ConnectionState::Connected ? 900 : 250, this, [this]() {
+        refreshPublicIp();
+    });
 }
 
 void VpnController::setLastError(const QString& error)
@@ -4256,7 +4405,7 @@ void VpnController::cleanupDetachedHelpers()
 
 void VpnController::applySystemProxy(bool enable, bool force)
 {
-    if (!m_useSystemProxy && enable) {
+    if (!m_useSystemProxy && !m_killSwitchEnabled && enable) {
         return;
     }
 
@@ -4336,6 +4485,29 @@ void VpnController::applySystemProxy(bool enable, bool force)
             finalizeResult(result);
         }, Qt::QueuedConnection);
     });
+}
+
+void VpnController::applyKillSwitchState(const QString& reason)
+{
+    if (!reason.trimmed().isEmpty()) {
+        appendSystemLog(QStringLiteral("[System] %1").arg(reason.trimmed()));
+    }
+
+    if (!m_killSwitchEnabled) {
+        if (!connected() && !busy() && !m_useSystemProxy && m_systemProxyApplied) {
+            applySystemProxy(false, true);
+        }
+        return;
+    }
+
+    if (connected()) {
+        applySystemProxy(true);
+        return;
+    }
+
+    if (!busy()) {
+        applySystemProxy(true, true);
+    }
 }
 
 bool VpnController::queryTrafficStatsFromApi(qint64 *uplinkBytes, qint64 *downlinkBytes, QString *errorMessage)
@@ -5385,6 +5557,7 @@ void VpnController::loadSettings()
     if (m_tunMode) {
         m_useSystemProxy = false;
     }
+    m_killSwitchEnabled = settings.value(QStringLiteral("network/killSwitchEnabled"), false).toBool();
     if (settings.contains(QStringLiteral("network/autoDisableSystemProxyOnDisconnect"))) {
         m_autoDisableSystemProxyOnDisconnect =
             settings.value(QStringLiteral("network/autoDisableSystemProxyOnDisconnect")).toBool();
@@ -5429,6 +5602,7 @@ void VpnController::saveSettings() const
 
     settings.setValue(QStringLiteral("network/useSystemProxy"), m_useSystemProxy);
     settings.setValue(QStringLiteral("network/tunMode"), m_tunMode);
+    settings.setValue(QStringLiteral("network/killSwitchEnabled"), m_killSwitchEnabled);
     settings.setValue(
         QStringLiteral("network/autoDisableSystemProxyOnDisconnect"),
         m_autoDisableSystemProxyOnDisconnect

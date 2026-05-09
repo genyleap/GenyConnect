@@ -86,6 +86,8 @@ GENYCONNECT_MODULE_EXPORT class VpnController : public QObject
 
     Q_PROPERTY(qint64 rxBytes READ rxBytes NOTIFY trafficChanged)
     Q_PROPERTY(qint64 txBytes READ txBytes NOTIFY trafficChanged)
+    Q_PROPERTY(QString publicIpAddress READ publicIpAddress NOTIFY publicIpAddressChanged)
+    Q_PROPERTY(bool publicIpRefreshing READ publicIpRefreshing NOTIFY publicIpAddressChanged)
     Q_PROPERTY(QString memoryUsageText READ memoryUsageText NOTIFY memoryUsageChanged)
     Q_PROPERTY(bool speedTestRunning READ speedTestRunning NOTIFY speedTestChanged)
     Q_PROPERTY(QString speedTestPhase READ speedTestPhase NOTIFY speedTestChanged)
@@ -122,6 +124,7 @@ GENYCONNECT_MODULE_EXPORT class VpnController : public QObject
     Q_PROPERTY(double profileScore READ profileScore NOTIFY profileStatsChanged)
     Q_PROPERTY(bool useSystemProxy READ useSystemProxy WRITE setUseSystemProxy NOTIFY useSystemProxyChanged)
     Q_PROPERTY(bool tunMode READ tunMode WRITE setTunMode NOTIFY tunModeChanged)
+    Q_PROPERTY(bool killSwitchEnabled READ killSwitchEnabled WRITE setKillSwitchEnabled NOTIFY killSwitchEnabledChanged)
     Q_PROPERTY(
         bool autoDisableSystemProxyOnDisconnect
         READ autoDisableSystemProxyOnDisconnect
@@ -209,6 +212,8 @@ public:
      * @return Human-readable memory usage text.
      */
     QString memoryUsageText() const;
+    QString publicIpAddress() const;
+    bool publicIpRefreshing() const;
 
     /**
      * @brief Whether speed test is currently running.
@@ -400,6 +405,7 @@ public:
      */
     bool useSystemProxy() const;
     bool tunMode() const;
+    bool killSwitchEnabled() const;
 
     /**
      * @brief Set system proxy management mode.
@@ -407,6 +413,7 @@ public:
      */
     void setUseSystemProxy(bool enabled);
     void setTunMode(bool enabled);
+    void setKillSwitchEnabled(bool enabled);
 
     /**
      * @brief Whether proxy is auto-disabled on disconnect.
@@ -601,6 +608,7 @@ public:
      * @return True when removal succeeds.
      */
     Q_INVOKABLE bool removeProfile(int row);
+    Q_INVOKABLE bool updateProfileBasics(int row, const QString& name, const QString& groupName);
     /**
      * @brief Remove all stored profiles.
      * @return Number of removed profiles.
@@ -643,6 +651,7 @@ public:
      * @brief Explicitly clear OS proxy settings.
      */
     Q_INVOKABLE void cleanSystemProxy();
+    Q_INVOKABLE void refreshPublicIp();
 
     /**
      * @brief Set executable path from local file URL.
@@ -757,6 +766,8 @@ signals:
     void profileUsageChanged();
     //! Emitted when process-routing capability is re-evaluated.
     void processRoutingSupportChanged();
+    void publicIpAddressChanged();
+    void killSwitchEnabledChanged();
 
 private slots:
     //! Handle process started signal from process manager.
@@ -779,6 +790,7 @@ private slots:
     void onSpeedTestUploadProgress(qint64 sent, qint64 total);
     //! Handle speed-test request completion.
     void onSpeedTestFinished();
+    void onPublicIpFinished();
 
 private:
     struct SubscriptionEntry {
@@ -849,6 +861,7 @@ private:
      * @param force Force operation even if state appears unchanged.
      */
     void applySystemProxy(bool enable, bool force = false);
+    void applyKillSwitchState(const QString& reason = QString());
 
     /**
      * @brief Append system-tagged line to recent logs.
@@ -1016,6 +1029,8 @@ private:
 
     int m_currentProfileIndex = -1;
     QString m_currentProfileId;
+    QString m_publicIpAddress;
+    bool m_publicIpRefreshing = false;
 
     QString m_xrayExecutablePath;
     QString m_xrayVersion = QStringLiteral("Unknown");
@@ -1041,6 +1056,7 @@ private:
     int m_pendingProxyApplyState = -1; // -1 none, 0 disable, 1 enable
     bool m_pendingProxyApplyForce = false;
     bool m_tunMode = false;
+    bool m_killSwitchEnabled = false;
     bool m_autoDisableSystemProxyOnDisconnect = false;
     bool m_whitelistMode = false;
     QString m_proxyDomainRules;
@@ -1073,7 +1089,9 @@ private:
     QTimer m_speedTestTimer;
     QNetworkAccessManager m_speedTestNetworkManager;
     QNetworkAccessManager m_subscriptionNetworkManager;
+    QNetworkAccessManager m_publicIpNetworkManager;
     QNetworkReply *m_speedTestReply = nullptr;
+    QNetworkReply *m_publicIpReply = nullptr;
     bool m_statsPolling = false;
     int m_statsQueryFailureCount = 0;
     bool m_stoppingProcess = false;
