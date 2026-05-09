@@ -7,11 +7,13 @@
 #include <QHostInfo>
 #include <QHostAddress>
 #include <QIODevice>
+#include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QNetworkInterface>
 #include <QProcess>
 #include <QRegularExpression>
+#include <QSet>
 #include <QStandardPaths>
 #include <QTcpServer>
 #include <QTcpSocket>
@@ -137,6 +139,51 @@ struct WindowsTunAdapterInfo
     QString alias;
     QString ipv4;
 };
+
+QStringList defaultWindowsTunDnsServers()
+{
+    return {
+        QStringLiteral("1.1.1.1"),
+        QStringLiteral("8.8.8.8"),
+        QStringLiteral("9.9.9.9")
+    };
+}
+
+QString powershellListLiteral(const QStringList& values)
+{
+    QStringList quoted;
+    for (const QString& value : values) {
+        const QString trimmed = value.trimmed();
+        if (!trimmed.isEmpty()) {
+            quoted.append(quoteForPowerShell(trimmed));
+        }
+    }
+    return quoted.join(QStringLiteral(","));
+}
+
+QStringList stringListFromJsonArray(const QJsonArray& values)
+{
+    QStringList out;
+    QSet<QString> seen;
+    for (const QJsonValue& value : values) {
+        const QString trimmed = value.toString().trimmed();
+        if (trimmed.isEmpty()) {
+            continue;
+        }
+        QHostAddress ip;
+        if (!ip.setAddress(trimmed)) {
+            continue;
+        }
+        const QString normalized = ip.toString();
+        const QString key = normalized.toLower();
+        if (seen.contains(key)) {
+            continue;
+        }
+        seen.insert(key);
+        out.append(normalized);
+    }
+    return out;
+}
 
 bool looksLikeWindowsTunAdapterName(const QString& name)
 {
@@ -620,24 +667,70 @@ bool serverRouteUsesTun(
     return false;
 }
 
-bool applyWindowsTunRoutes(const QString& serverIp, WindowsTunAdapterInfo* activeTunOut, QString* errorOut)
+bool applyWindowsTunRoutes(
+    const QString& serverIp,
+    const QStringList& dnsServers,
+    WindowsTunAdapterInfo* activeTunOut,
+    QString* errorOut)
 {
     const QString server = (isIpv4(serverIp) ? serverIp.trimmed() : QString());
 
     WindowsTunAdapterInfo tunInfo;
     for (int i = 0; i < 140; ++i) {
         tunInfo = findWindowsTunAdapter();
-        if (tunInfo.index > 0 && !tunInfo.ipv4.trimmed().isEmpty()) {
+        if (tunInfo.index > 0) {
             break;
         }
         QThread::msleep(150);
     }
-    if (tunInfo.index <= 0 || tunInfo.ipv4.trimmed().isEmpty()) {
+    if (tunInfo.index <= 0) {
         if (errorOut != nullptr) {
-            *errorOut = QStringLiteral("Windows TUN adapter IPv4 is not ready yet.");
+            *errorOut = QStringLiteral("Windows TUN adapter is not ready yet.");
         }
         return false;
     }
+
+    const QStringList tunDnsServers = dnsServers.isEmpty()
+        ? defaultWindowsTunDnsServers()
+        : dnsServers;
+    const QString configureCommand = QStringLiteral(
+        "$ErrorActionPreference='Stop';"
+        "$idx=%1;"
+        "Get-NetIPAddress -InterfaceIndex $idx -AddressFamily IPv4 -ErrorAction SilentlyContinue | "
+        "Where-Object { $_.IPAddress -ne '172.19.0.1' } | "
+        "Remove-NetIPAddress -Confirm:$false -ErrorAction SilentlyContinue;"
+        "if (-not (Get-NetIPAddress -InterfaceIndex $idx -AddressFamily IPv4 -IPAddress '172.19.0.1' -ErrorAction SilentlyContinue)) {"
+        "  New-NetIPAddress -InterfaceIndex $idx -IPAddress '172.19.0.1' -PrefixLength 30 -SkipAsSource $false | Out-Null;"
+        "}"
+        "Set-DnsClientServerAddress -InterfaceIndex $idx -ServerAddresses @(%2);"
+        "Clear-DnsClientCache;")
+        .arg(QString::number(tunInfo.index), powershellListLiteral(tunDnsServers));
+    QString configureError;
+    if (!runShell(configureCommand, 10000, &configureError)) {
+        if (errorOut != nullptr) {
+            *errorOut = configureError.trimmed().isEmpty()
+                ? QStringLiteral("Failed to configure Windows TUN adapter address/DNS.")
+                : configureError.trimmed();
+        }
+        return false;
+    }
+
+    for (int i = 0; i < 40; ++i) {
+        tunInfo = findWindowsTunAdapter();
+        if (tunInfo.index > 0
+            && tunInfo.ipv4.trimmed().compare(QStringLiteral("172.19.0.1"), Qt::CaseInsensitive) == 0) {
+            break;
+        }
+        QThread::msleep(150);
+    }
+    if (tunInfo.index <= 0
+        || tunInfo.ipv4.trimmed().compare(QStringLiteral("172.19.0.1"), Qt::CaseInsensitive) != 0) {
+        if (errorOut != nullptr) {
+            *errorOut = QStringLiteral("Windows TUN adapter did not accept static IPv4 address.");
+        }
+        return false;
+    }
+
     if (activeTunOut != nullptr) {
         *activeTunOut = tunInfo;
     }
@@ -1485,9 +1578,11 @@ private:
         if (resolvedServerIp.isEmpty()) {
             resolvedServerIp = resolveIpForHost(serverHostRequested);
         }
+        const QStringList dnsServers = stringListFromJsonArray(
+            request.value(QStringLiteral("dns_servers")).toArray());
         QString applyRouteNote;
         WindowsTunAdapterInfo activeTun;
-        if (!applyWindowsTunRoutes(resolvedServerIp, &activeTun, &applyRouteNote)) {
+        if (!applyWindowsTunRoutes(resolvedServerIp, dnsServers, &activeTun, &applyRouteNote)) {
             QString cleanupErr;
             Q_UNUSED(stopTun(QJsonObject{
                 {QStringLiteral("pid_path"), pidPath},

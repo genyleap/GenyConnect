@@ -439,7 +439,9 @@ void ensureTunDnsSupport(QJsonObject* config, const QStringList& dnsServers)
         };
     }
     dns.insert(QStringLiteral("servers"), serverArray);
-    if (dns.value(QStringLiteral("queryStrategy")).toString().trimmed().isEmpty()) {
+    const QString queryStrategy = dns.value(QStringLiteral("queryStrategy")).toString().trimmed();
+    if (queryStrategy.isEmpty()
+        || queryStrategy.compare(QStringLiteral("UseIPv4"), Qt::CaseInsensitive) == 0) {
         dns.insert(QStringLiteral("queryStrategy"), QStringLiteral("UseIP"));
     }
     config->insert(QStringLiteral("dns"), dns);
@@ -4976,7 +4978,8 @@ bool VpnController::startPrivilegedTunProcess(QString *errorMessage)
                 {QStringLiteral("log_path"), m_privilegedTunLogPath},
                 {QStringLiteral("tun_if"), tunIf},
                 {QStringLiteral("server_ip"), m_lastTunServerIp},
-                {QStringLiteral("server_host"), m_activeProfileAddress.trimmed()}
+                {QStringLiteral("server_host"), m_activeProfileAddress.trimmed()},
+                {QStringLiteral("dns_servers"), QJsonArray::fromStringList(parseDnsServers(m_customDnsServers))}
             },
             &response,
             &helperError,
@@ -5253,6 +5256,7 @@ bool VpnController::writeRuntimeConfig(const ServerProfile& profile, QString *er
     options.tunAutoRoute = true;
     options.tunStrictRoute = true;
     options.tunInterfaceName = m_tunMode ? selectTunInterfaceName() : QString();
+    options.dnsServers = parseDnsServers(m_customDnsServers);
     m_selectedTunInterfaceName = options.tunInterfaceName;
     options.whitelistMode = m_whitelistMode;
     options.proxyDomains = parseRules(m_proxyDomainRules);

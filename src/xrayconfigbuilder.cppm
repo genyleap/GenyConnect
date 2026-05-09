@@ -45,6 +45,7 @@ public:
         bool tunAutoRoute = true;               //!< Auto-manage host routes for TUN.
         bool tunStrictRoute = true;             //!< Prevent route bypass leaks when possible.
         QString tunInterfaceName;               //!< Optional explicit interface name (macOS: utunN).
+        QStringList dnsServers;                 //!< DNS servers used for built-in DNS / TUN DNS.
         bool whitelistMode = false;             //!< Enable whitelist-first routing mode.
         bool enableProcessRouting = false;      //!< Enable process-based rules.
         QStringList proxyDomains;               //!< Domain rules to tunnel.

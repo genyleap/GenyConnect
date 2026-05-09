@@ -1,4 +1,5 @@
 module;
+#include <QHostAddress>
 #include <QJsonArray>
 #include <QStringList>
 #include <QUrl>
@@ -7,6 +8,58 @@ module;
 module genyconnect.backend.xrayconfigbuilder;
 
 namespace {
+QStringList defaultDnsServers()
+{
+    return {
+        QStringLiteral("1.1.1.1"),
+        QStringLiteral("8.8.8.8"),
+        QStringLiteral("9.9.9.9")
+    };
+}
+
+QJsonArray toStringArray(const QStringList& values)
+{
+    QJsonArray out;
+    for (const QString& value : values) {
+        const QString trimmed = value.trimmed();
+        if (!trimmed.isEmpty()) {
+            out.append(trimmed);
+        }
+    }
+    return out;
+}
+
+QStringList tunDnsServers(const QStringList& values)
+{
+    QStringList out;
+    for (const QString& value : values) {
+        const QString trimmed = value.trimmed();
+        if (trimmed.isEmpty()) {
+            continue;
+        }
+
+        QHostAddress ip;
+        if (!ip.setAddress(trimmed)) {
+            continue;
+        }
+        out.append(ip.toString());
+    }
+
+    return out.isEmpty() ? defaultDnsServers() : out;
+}
+
+int defaultTunMtu()
+{
+#if defined(Q_OS_WIN)
+    // Windows full-tunnel traffic is more sensitive to PMTU blackholes when
+    // the outer proxy transport adds overhead. Keep the TUN MTU below 1500 so
+    // larger modern sites do not stall on fragmented TLS/HTTP payloads.
+    return 1400;
+#else
+    return 1500;
+#endif
+}
+
 QJsonObject buildMixedInbound(quint16 port)
 {
     QJsonObject sniffing {
@@ -43,7 +96,7 @@ QJsonObject buildTunInbound(const XrayConfigBuilder::BuildOptions& options)
             QStringLiteral("172.19.0.1/30"),
             QStringLiteral("fd00:1234:5678::1/126")
         }},
-        {QStringLiteral("mtu"), 1500},
+        {QStringLiteral("mtu"), defaultTunMtu()},
         {QStringLiteral("stack"), tunStack},
         {QStringLiteral("autoRoute"), options.tunAutoRoute},
         {QStringLiteral("strictRoute"), options.tunStrictRoute},
@@ -62,6 +115,15 @@ QJsonObject buildTunInbound(const XrayConfigBuilder::BuildOptions& options)
         ? QStringLiteral("genyconnect0")
         : options.tunInterfaceName.trimmed();
     settings.insert(QStringLiteral("name"), tunName);
+    // Mirror Xray's documented Windows TUN options so the adapter gets DNS
+    // servers assigned and Xray keeps its own outbound sockets on the
+    // physical interface instead of chasing the tunnel.
+    settings.insert(QStringLiteral("gateway"), QJsonArray {
+        QStringLiteral("172.19.0.1/30"),
+        QStringLiteral("fd00:1234:5678::1/126")
+    });
+    settings.insert(QStringLiteral("dns"), toStringArray(tunDnsServers(options.dnsServers)));
+    settings.insert(QStringLiteral("autoOutboundsInterface"), QStringLiteral("auto"));
 #endif
 
     return QJsonObject {
@@ -93,15 +155,14 @@ QJsonObject buildDnsOutbound()
     };
 }
 
-QJsonObject buildDnsConfig()
+QJsonObject buildDnsConfig(const XrayConfigBuilder::BuildOptions& options)
 {
+    const QStringList servers = options.dnsServers.isEmpty()
+        ? defaultDnsServers()
+        : options.dnsServers;
     return QJsonObject {
-        {QStringLiteral("servers"), QJsonArray {
-            QStringLiteral("1.1.1.1"),
-            QStringLiteral("8.8.8.8"),
-            QStringLiteral("9.9.9.9")
-        }},
-        {QStringLiteral("queryStrategy"), QStringLiteral("UseIPv4")}
+        {QStringLiteral("servers"), toStringArray(servers)},
+        {QStringLiteral("queryStrategy"), QStringLiteral("UseIP")}
     };
 }
 
@@ -414,7 +475,7 @@ QJsonObject XrayConfigBuilder::build(const ServerProfile& profile, const BuildOp
         };
     }
     if (options.enableTun) {
-        config[QStringLiteral("dns")] = buildDnsConfig();
+        config[QStringLiteral("dns")] = buildDnsConfig(options);
     }
 
     return config;
