@@ -18,12 +18,11 @@ module;
 #include <QStringList>
 #include <QtTypes>
 
-#ifndef Q_MOC_RUN
 export module genyconnect.backend.xrayconfigbuilder;
 
-using namespace Qt::StringLiterals;
 import genyconnect.backend.serverprofile;
-#endif
+
+using namespace Qt::StringLiterals;
 
 /**
  * @class XrayConfigBuilder

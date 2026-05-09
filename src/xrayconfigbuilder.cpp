@@ -9,8 +9,6 @@ module;
 
 module genyconnect.backend.xrayconfigbuilder;
 
-using namespace Qt::StringLiterals;
-
 namespace {
 QStringList defaultDnsServers()
 {

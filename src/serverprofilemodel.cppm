@@ -23,10 +23,9 @@ module;
 
 #include <optional>
 
-#ifndef Q_MOC_RUN
 export module genyconnect.backend.serverprofilemodel;
+
 import genyconnect.backend.serverprofile;
-#endif
 
 #ifdef Q_MOC_RUN
 struct ServerProfile;

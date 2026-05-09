@@ -34,10 +34,8 @@ module;
 #include <QVariantList>
 #include <QVariantMap>
 
-#ifndef Q_MOC_RUN
 export module genyconnect.backend.vpncontroller;
 
-using namespace Qt::StringLiterals;
 import genyconnect.backend.connectionstate;
 import genyconnect.backend.serverprofile;
 import genyconnect.backend.serverprofilemodel;
@@ -45,7 +43,8 @@ import genyconnect.backend.systemproxymanager;
 import genyconnect.backend.updater;
 import genyconnect.backend.xrayconfigbuilder;
 import genyconnect.backend.xrayprocessmanager;
-#endif
+
+using namespace Qt::StringLiterals;
 
 #ifdef Q_MOC_RUN
 namespace App {

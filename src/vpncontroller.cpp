@@ -61,9 +61,9 @@ extern "C" {
 
 module genyconnect.backend.vpncontroller;
 
-using namespace Qt::StringLiterals;
-
 import genyconnect.backend.linkparser;
+
+using namespace Qt::StringLiterals;
 
 namespace {
 constexpr int kMaxLogLines = 200;
