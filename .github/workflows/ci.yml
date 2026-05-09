@@ -69,11 +69,27 @@ jobs:
 
       - name: Install Linux dependencies
         if: runner.os == 'Linux'
+        shell: bash
         run: |
+          set -euo pipefail
+
           sudo apt-get update
-          sudo apt-get install -y ninja-build clang lld zip libgl1-mesa-dev libxkbcommon-dev \
-            libxcb-cursor0 libxcb-cursor-dev libxcb-xinerama0 libxcb-xinerama0-dev \
-            libxcb-icccm4-dev libxcb-image0-dev libxcb-keysyms1-dev libxcb-render-util0-dev
+          sudo apt-get install -y \
+            ninja-build \
+            clang-18 \
+            clang-tools-18 \
+            lld-18 \
+            zip \
+            libgl1-mesa-dev \
+            libxkbcommon-dev \
+            libxcb-cursor0 \
+            libxcb-cursor-dev \
+            libxcb-xinerama0 \
+            libxcb-xinerama0-dev \
+            libxcb-icccm4-dev \
+            libxcb-image0-dev \
+            libxcb-keysyms1-dev \
+            libxcb-render-util0-dev
 
       - name: Install Windows dependencies
         if: runner.os == 'Windows'
@@ -85,20 +101,35 @@ jobs:
         if: runner.os != 'Windows'
         shell: bash
         run: |
+          set -euo pipefail
+
           if [ "${{ runner.os }}" = "macOS" ]; then
             LLVM_PREFIX="$(brew --prefix llvm)"
-          else
-            LLVM_PREFIX="/usr"
-          fi
+            echo "CC=${LLVM_PREFIX}/bin/clang" >> "$GITHUB_ENV"
+            echo "CXX=${LLVM_PREFIX}/bin/clang++" >> "$GITHUB_ENV"
+            echo "CLANG_SCAN_DEPS=${LLVM_PREFIX}/bin/clang-scan-deps" >> "$GITHUB_ENV"
+            echo "${LLVM_PREFIX}/bin" >> "$GITHUB_PATH"
 
-          echo "CC=${LLVM_PREFIX}/bin/clang" >> "$GITHUB_ENV"
-          echo "CXX=${LLVM_PREFIX}/bin/clang++" >> "$GITHUB_ENV"
-          echo "${LLVM_PREFIX}/bin" >> "$GITHUB_PATH"
-
-          if [ "${{ runner.os }}" = "macOS" ]; then
             SDKROOT="$(xcrun --sdk macosx --show-sdk-path)"
             echo "SDKROOT=${SDKROOT}" >> "$GITHUB_ENV"
+          else
+            echo "CC=/usr/bin/clang-18" >> "$GITHUB_ENV"
+            echo "CXX=/usr/bin/clang++-18" >> "$GITHUB_ENV"
+            echo "CLANG_SCAN_DEPS=/usr/bin/clang-scan-deps-18" >> "$GITHUB_ENV"
+            echo "/usr/lib/llvm-18/bin" >> "$GITHUB_PATH"
           fi
+
+      - name: Print tool versions
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          echo "CC=${CC}"
+          echo "CXX=${CXX}"
+          echo "CLANG_SCAN_DEPS=${CLANG_SCAN_DEPS}"
+          "${CXX}" --version
+          "${CLANG_SCAN_DEPS}" --version
+          cmake --version
+          ninja --version
 
       - name: Configure MSVC
         if: runner.os == 'Windows'
@@ -110,11 +141,17 @@ jobs:
         if: runner.os != 'Windows'
         shell: bash
         run: |
+          set -euo pipefail
+
           cmake -S . -B build -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_PREFIX_PATH="${Qt6_DIR}/../../.." \
             -DCMAKE_C_COMPILER="${CC}" \
             -DCMAKE_CXX_COMPILER="${CXX}" \
+            -DCMAKE_CXX_SCAN_FOR_MODULES=ON \
+            -DCMAKE_CXX_COMPILER_CLANG_SCAN_DEPS="${CLANG_SCAN_DEPS}" \
+            -DGENYCONNECT_USE_MODULES=ON \
+            -DGENYCONNECT_LLVM_AUTO_SCAN=ON \
             -DGENYCONNECT_TARGET_ARCH="${{ matrix.target_arch }}" \
             -DGENYCONNECT_TARGET_BUILD_ARCH="${{ matrix.target_arch }}" \
             -DGENYCONNECT_MACOS_CODESIGN=ON \
@@ -128,6 +165,8 @@ jobs:
             -G "Visual Studio 17 2022" -A "${{ matrix.cmake_arch }}" `
             -DCMAKE_CONFIGURATION_TYPES="Release" `
             -DCMAKE_PREFIX_PATH="${env:Qt6_DIR}\..\..\.." `
+            -DCMAKE_CXX_SCAN_FOR_MODULES=ON `
+            -DGENYCONNECT_USE_MODULES=ON `
             -DGENYCONNECT_TARGET_ARCH="${{ matrix.target_arch }}" `
             -DGENYCONNECT_TARGET_BUILD_ARCH="${{ matrix.target_arch }}"
 
