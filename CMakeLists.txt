@@ -752,6 +752,9 @@ if(APPLE AND GENYCONNECT_MACOS_POSTBUILD_DEPLOY)
     COMMAND $<$<AND:${GENY_IS_RELEASE},$<BOOL:${GENYCONNECT_BUNDLED_XRAY_PATH}>>:${CMAKE_COMMAND}> -E copy_if_different
             "${GENYCONNECT_BUNDLED_XRAY_PATH}"
             "${_bundle_macos}/xray-core"
+    COMMAND $<$<AND:${GENY_IS_RELEASE},$<BOOL:${GENYCONNECT_BUNDLED_XRAY_PATH}>>:/bin/chmod>
+            755
+            "${_bundle_macos}/xray-core"
 
     COMMAND $<${GENY_IS_RELEASE}:${CMAKE_COMMAND}> -E echo "Running macdeployqt on build bundle..."
     COMMAND $<${GENY_IS_RELEASE}:${MACDEPLOYQT_EXECUTABLE}>

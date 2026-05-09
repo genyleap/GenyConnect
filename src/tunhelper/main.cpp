@@ -110,6 +110,23 @@ void appendLineToFile(const QString& path, const QString& line)
     file.close();
 }
 
+QString lastNonEmptyLogLine(const QString& logPath)
+{
+    QFile logFile(logPath);
+    if (!logFile.open(QIODevice::ReadOnly)) {
+        return {};
+    }
+
+    const QList<QByteArray> lines = logFile.readAll().split('\n');
+    for (int i = lines.size() - 1; i >= 0; --i) {
+        const QString line = QString::fromUtf8(lines[i]).trimmed();
+        if (!line.isEmpty()) {
+            return line;
+        }
+    }
+    return {};
+}
+
 bool isIpv4(const QString& address);
 bool isIpv6(const QString& address);
 
@@ -1418,22 +1435,25 @@ private:
 
         // Wait until xray creates the requested utun interface.
         bool tunReady = false;
-        for (int i = 0; i < 20; ++i) {
+        for (int i = 0; i < 80; ++i) {
             QString ifErr;
             if (runShell(QStringLiteral("/sbin/ifconfig %1 >/dev/null 2>&1").arg(tunIf), 1200, &ifErr)) {
                 tunReady = true;
                 break;
             }
-            QThread::msleep(100);
+            QThread::msleep(150);
         }
         if (!tunReady) {
+            const QString startupLogLine = lastNonEmptyLogLine(logPath);
             const QString cleanupCmd = QStringLiteral(
                 "if [ -f %1 ]; then PID=$(cat %1); [ -n \"$PID\" ] && kill \"$PID\" >/dev/null 2>&1; rm -f %1; fi")
                 .arg(quoteForSh(pidPath));
             QString ignored;
             runShell(cleanupCmd, 3000, &ignored);
             if (errorOut != nullptr) {
-                *errorOut = QStringLiteral("TUN interface was not ready in time (%1).").arg(tunIf);
+                *errorOut = startupLogLine.isEmpty()
+                    ? QStringLiteral("TUN interface was not ready in time (%1).").arg(tunIf)
+                    : QStringLiteral("TUN interface was not ready in time (%1): %2").arg(tunIf, startupLogLine);
             }
             return false;
         }

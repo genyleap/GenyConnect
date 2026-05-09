@@ -2,6 +2,8 @@
 #include <QApplication>
 #include <QDir>
 #include <QIcon>
+#include <QLocalServer>
+#include <QLocalSocket>
 #include <QLockFile>
 #include <QMenu>
 #include <QQmlApplicationEngine>
@@ -38,9 +40,17 @@ auto main(int argc, char *argv[]) -> int
         lockDir = QDir::tempPath();
     }
     QDir().mkpath(lockDir);
+    const QString instanceServerName = QStringLiteral("GenyConnectSingleInstance");
     QLockFile instanceLock(QDir(lockDir).filePath(QStringLiteral("genyconnect.instance.lock")));
     instanceLock.setStaleLockTime(0);
     if (!instanceLock.tryLock(100)) {
+        QLocalSocket socket;
+        socket.connectToServer(instanceServerName, QIODevice::WriteOnly);
+        if (socket.waitForConnected(300)) {
+            socket.write("show\n");
+            socket.flush();
+            socket.waitForBytesWritten(300);
+        }
         return 0;
     }
 
@@ -107,6 +117,20 @@ auto main(int argc, char *argv[]) -> int
         Q_UNUSED(showInTaskbar);
 #endif
     };
+
+    QLocalServer instanceServer;
+    QLocalServer::removeServer(instanceServerName);
+    if (instanceServer.listen(instanceServerName)) {
+        QObject::connect(&instanceServer, &QLocalServer::newConnection, &app, [&]() {
+            while (QLocalSocket *socket = instanceServer.nextPendingConnection()) {
+                socket->deleteLater();
+            }
+            setTaskbarPresence(true);
+            mainWindow->show();
+            mainWindow->raise();
+            mainWindow->requestActivate();
+        });
+    }
 
     if (!QSystemTrayIcon::isSystemTrayAvailable()) {
         mainWindow->setProperty("allowCloseExit", true);

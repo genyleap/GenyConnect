@@ -31,6 +31,7 @@ module;
 #include <QTcpServer>
 #include <QTcpSocket>
 #include <QUuid>
+#include <QUrlQuery>
 #include <QVariantMap>
 #include <QtConcurrent/QtConcurrentRun>
 
@@ -67,6 +68,7 @@ constexpr int kSpeedTestTickIntervalMs = 120;
 constexpr int kSpeedTestPingSamples = 4;
 constexpr int kSpeedTestMaxAttemptsPerPhase = 12;
 constexpr int kSpeedTestHistoryMaxItems = 20;
+constexpr qint64 kSpeedTestUploadPayloadBytes = 8 * 1024 * 1024;
 constexpr int kProfilePingTimeoutMs = 3200;
 constexpr int kProfilePingStaggerMs = 140;
 constexpr int kSubscriptionFetchTimeoutMs = 15000;
@@ -514,7 +516,7 @@ QUrl speedTestUrlForPhase(const QString& phase, int attempt)
 QByteArray buildUploadPayload()
 {
     QByteArray payload;
-    payload.resize(4 * 1024 * 1024);
+    payload.resize(kSpeedTestUploadPayloadBytes);
     payload.fill('x');
     return payload;
 }
@@ -640,6 +642,43 @@ bool waitForProcessFinishedResponsive(QProcess& process, int timeoutMs)
         }
     }
     return true;
+}
+
+bool ensureExecutableFile(const QString& path, QString* errorMessage)
+{
+    const QString normalized = path.trimmed();
+    if (normalized.isEmpty()) {
+        if (errorMessage != nullptr) {
+            *errorMessage = QStringLiteral("xray-core executable path is empty.");
+        }
+        return false;
+    }
+
+    QFileInfo info(normalized);
+    if (!info.exists() || !info.isFile()) {
+        if (errorMessage != nullptr) {
+            *errorMessage = QStringLiteral("xray-core binary not found at selected path.");
+        }
+        return false;
+    }
+
+    if (info.isExecutable()) {
+        return true;
+    }
+
+    QFile::Permissions permissions = QFile::permissions(normalized);
+    permissions |= QFileDevice::ReadOwner | QFileDevice::ExeOwner
+                   | QFileDevice::ReadGroup | QFileDevice::ExeGroup
+                   | QFileDevice::ReadOther | QFileDevice::ExeOther;
+    if (!QFile::setPermissions(normalized, permissions)) {
+        if (errorMessage != nullptr) {
+            *errorMessage = QStringLiteral("xray-core is not executable and permissions could not be repaired: %1")
+                                .arg(normalized);
+        }
+        return false;
+    }
+
+    return QFileInfo(normalized).isExecutable();
 }
 
 quint16 selectAvailableLocalPort()
@@ -2717,9 +2756,9 @@ void VpnController::connectToProfile(int row)
         return;
     }
 
-    QFileInfo executableInfo(m_xrayExecutablePath);
-    if (!executableInfo.exists()) {
-        setLastError(QStringLiteral("xray-core binary not found at selected path."));
+    QString executableError;
+    if (!ensureExecutableFile(m_xrayExecutablePath, &executableError)) {
+        setLastError(executableError);
         setConnectionState(ConnectionState::Error);
         return;
     }
@@ -2892,8 +2931,16 @@ void VpnController::setXrayExecutableFromUrl(const QUrl& url)
 
 void VpnController::startSpeedTestRequest(const QUrl& url, bool upload, const QByteArray& payload)
 {
-    QNetworkRequest request(url);
+    QUrl requestUrl(url);
+    QUrlQuery query(requestUrl);
+    query.addQueryItem(QStringLiteral("_gc"), QString::number(QDateTime::currentMSecsSinceEpoch()));
+    requestUrl.setQuery(query);
+
+    QNetworkRequest request(requestUrl);
     request.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::NoLessSafeRedirectPolicy);
+    request.setAttribute(QNetworkRequest::CacheLoadControlAttribute, QNetworkRequest::AlwaysNetwork);
+    request.setRawHeader("Cache-Control", "no-cache");
+    request.setRawHeader("Pragma", "no-cache");
     request.setRawHeader("User-Agent", "GenyConnect-SpeedTest/1.0");
     request.setRawHeader("Accept", "*/*");
     request.setTransferTimeout(12000);
@@ -3411,6 +3458,9 @@ void VpnController::onSpeedTestUploadProgress(qint64 sent, qint64 total)
     if (!m_speedTestRunning || !m_speedTestUploadMode) {
         return;
     }
+    if (connected()) {
+        return;
+    }
     if (sent > m_speedTestBytesReceived) {
         const qint64 delta = sent - m_speedTestBytesReceived;
         m_speedTestBytesReceived = sent;
@@ -3486,6 +3536,12 @@ void VpnController::onSpeedTestFinished()
     }
 
     if (phaseAtFinish == QStringLiteral("Upload")) {
+        if (!replyHadError) {
+            const qint64 previousBytes = m_speedTestBytesReceived;
+            m_speedTestBytesReceived = qMax(m_speedTestBytesReceived, kSpeedTestUploadPayloadBytes);
+            m_speedTestPhaseBytes += qMax<qint64>(0, m_speedTestBytesReceived - previousBytes);
+        }
+
         if (m_speedTestPhaseTimer.isValid()
             && m_speedTestPhaseTimer.elapsed() >= static_cast<qint64>(m_speedTestDurationSec) * 1000) {
             return;
