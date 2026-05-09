@@ -19,7 +19,7 @@ cmake_minimum_required(VERSION 3.28)
 # -----------------------------------------------------------------------------
 
 set(PROJECT_NAME "GenyConnect")
-project(${PROJECT_NAME} VERSION 1.1.32 LANGUAGES CXX)
+project(${PROJECT_NAME} VERSION 1.1.512 LANGUAGES CXX)
 
 if(POLICY CMP0155)
   cmake_policy(SET CMP0155 NEW)
