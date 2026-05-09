@@ -1,0 +1,161 @@
+name: GenyConnect CI
+
+on:
+  push:
+    branches: [main, master]
+    tags: ["v*"]
+  pull_request:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macos-arm64
+            os: macos-14
+            qt_arch: macos
+            target_arch: arm64
+
+          - name: macos-x64
+            os: macos-13
+            qt_arch: macos
+            target_arch: x86_64
+
+          - name: windows-x64
+            os: windows-latest
+            qt_arch: win64_msvc2022_64
+            cmake_arch: x64
+            target_arch: x86_64
+
+          - name: windows-arm64
+            os: windows-latest
+            qt_arch: win64_msvc2022_arm64
+            cmake_arch: ARM64
+            target_arch: arm64
+
+          - name: linux-x64
+            os: ubuntu-24.04
+            qt_arch: linux_gcc_64
+            target_arch: x86_64
+
+    env:
+      QT_VERSION: "6.8.3"
+      CMAKE_VERSION: "4.2.3"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: ${{ env.QT_VERSION }}
+          arch: ${{ matrix.qt_arch }}
+          modules: qt5compat
+          cache: true
+
+      - name: Install CMake
+        uses: lukka/get-cmake@latest
+        with:
+          cmakeVersion: ${{ env.CMAKE_VERSION }}
+
+      - name: Install macOS dependencies
+        if: runner.os == 'macOS'
+        run: |
+          brew install ninja llvm
+
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build clang lld zip libgl1-mesa-dev libxkbcommon-dev \
+            libxcb-cursor0 libxcb-cursor-dev libxcb-xinerama0 libxcb-xinerama0-dev \
+            libxcb-icccm4-dev libxcb-image0-dev libxcb-keysyms1-dev libxcb-render-util0-dev
+
+      - name: Install Windows dependencies
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          choco install -y ninja nsis 7zip
+
+      - name: Configure LLVM on macOS/Linux
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          if [ "${{ runner.os }}" = "macOS" ]; then
+            LLVM_PREFIX="$(brew --prefix llvm)"
+          else
+            LLVM_PREFIX="/usr"
+          fi
+
+          echo "CC=${LLVM_PREFIX}/bin/clang" >> "$GITHUB_ENV"
+          echo "CXX=${LLVM_PREFIX}/bin/clang++" >> "$GITHUB_ENV"
+          echo "${LLVM_PREFIX}/bin" >> "$GITHUB_PATH"
+
+          if [ "${{ runner.os }}" = "macOS" ]; then
+            SDKROOT="$(xcrun --sdk macosx --show-sdk-path)"
+            echo "SDKROOT=${SDKROOT}" >> "$GITHUB_ENV"
+          fi
+
+      - name: Configure MSVC
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: ${{ matrix.cmake_arch == 'ARM64' && 'amd64_arm64' || 'amd64' }}
+
+      - name: Configure macOS/Linux
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_PREFIX_PATH="${Qt6_DIR}/../../.." \
+            -DCMAKE_C_COMPILER="${CC}" \
+            -DCMAKE_CXX_COMPILER="${CXX}" \
+            -DGENYCONNECT_TARGET_ARCH="${{ matrix.target_arch }}" \
+            -DGENYCONNECT_TARGET_BUILD_ARCH="${{ matrix.target_arch }}" \
+            -DGENYCONNECT_MACOS_CODESIGN=ON \
+            -DGENYCONNECT_CODESIGN_IDENTITY="-"
+
+      - name: Configure Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          cmake -S . -B build `
+            -G "Visual Studio 17 2022" -A "${{ matrix.cmake_arch }}" `
+            -DCMAKE_CONFIGURATION_TYPES="Release" `
+            -DCMAKE_PREFIX_PATH="${env:Qt6_DIR}\..\..\.." `
+            -DGENYCONNECT_TARGET_ARCH="${{ matrix.target_arch }}" `
+            -DGENYCONNECT_TARGET_BUILD_ARCH="${{ matrix.target_arch }}"
+
+      - name: Build
+        run: cmake --build build --config Release --parallel
+
+      - name: Package
+        run: cpack --config build/CPackConfig.cmake -C Release
+
+      - name: Collect packages
+        shell: bash
+        run: |
+          mkdir -p artifacts
+          find build/final -type f \( -name "*.dmg" -o -name "*.zip" -o -name "*.exe" -o -name "*.tar.gz" -o -name "*.tgz" \) -print -exec cp {} artifacts/ \;
+          ls -lah artifacts
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: GenyConnect-${{ matrix.name }}
+          path: artifacts/*
+
+      - name: Release
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: artifacts/*
