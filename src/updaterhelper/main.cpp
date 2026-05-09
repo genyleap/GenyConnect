@@ -9,6 +9,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QProcess>
+#include <QString>
 #include <QStringList>
 #include <QThread>
 
@@ -17,9 +18,9 @@
 #else
 #include <cerrno>
 #include <csignal>
+#endif
 
 using namespace Qt::StringLiterals;
-#endif
 
 namespace {
 struct UpdateJob {
