@@ -195,9 +195,9 @@ set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
 
 set(CMAKE_CXX_SCAN_FOR_MODULES OFF)
-if(NOT "cppm" IN_LIST CMAKE_AUTOMOC_EXTENSIONS)
-  list(APPEND CMAKE_AUTOMOC_EXTENSIONS "cppm")
-endif()
+# Do not let AUTOMOC treat module interface files as MOC inputs.
+# Qt MOC generated headers are not safe inside named C++ module units on Linux/Clang.
+list(REMOVE_ITEM CMAKE_AUTOMOC_EXTENSIONS "cppm")
 
 if(GENYCONNECT_USE_MODULES)
   if(CMAKE_CXX_COMPILER_ID STREQUAL "AppleClang")
@@ -297,13 +297,9 @@ endif()
 set(GENYCONNECT_MODULE_IFS
   src/connectionstate.cppm
   src/serverprofile.cppm
-  src/serverprofilemodel.cppm
   src/linkparser.cppm
   src/updater.cppm
   src/xrayconfigbuilder.cppm
-  src/systemproxymanager.cppm
-  src/xrayprocessmanager.cppm
-  src/vpncontroller.cppm
 )
 
 set(GENYCONNECT_IMPL_SOURCES
@@ -378,6 +374,13 @@ endif()
 
 if(GENYCONNECT_USE_MODULES)
   set_property(TARGET ${PROJECT_NAME} PROPERTY CXX_SCAN_FOR_MODULES ON)
+
+  target_sources(${PROJECT_NAME}
+    PUBLIC
+      FILE_SET CXX_MODULES TYPE CXX_MODULES
+      BASE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/src
+      FILES ${GENYCONNECT_MODULE_IFS}
+  )
 endif()
 
 target_include_directories(${PROJECT_NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
@@ -491,13 +494,6 @@ qt_add_qml_module(${PROJECT_NAME}
     ui/Controls/qmldir
     ui/Layout/qmldir
     ui/Dashboard/qmldir
-)
-
-target_sources(${PROJECT_NAME}
-  PUBLIC
-    FILE_SET CXX_MODULES TYPE CXX_MODULES
-    BASE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/src
-    FILES ${GENYCONNECT_MODULE_IFS}
 )
 
 # -------------------------
