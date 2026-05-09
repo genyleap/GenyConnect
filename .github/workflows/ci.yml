@@ -52,7 +52,9 @@ jobs:
 
       - name: Install macOS dependencies
         if: runner.os == 'macOS'
+        shell: bash
         run: |
+          set -euo pipefail
           brew install ninja llvm
 
       - name: Install Windows dependencies
@@ -81,10 +83,12 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+
           echo "QT_ROOT_DIR=${QT_ROOT_DIR}"
           echo "CC=${CC}"
           echo "CXX=${CXX}"
           echo "CLANG_SCAN_DEPS=${CLANG_SCAN_DEPS}"
+
           "${CXX}" --version
           "${CLANG_SCAN_DEPS}" --version
           cmake --version
@@ -138,8 +142,16 @@ jobs:
       - name: Collect packages
         shell: bash
         run: |
+          set -euo pipefail
+
           mkdir -p artifacts
-          find build/final -type f $begin:math:text$ \-name \"\*\.dmg\" \-o \-name \"\*\.zip\" \-o \-name \"\*\.exe\" \-o \-name \"\*\.tar\.gz\" \-o \-name \"\*\.tgz\" $end:math:text$ -print -exec cp {} artifacts/ \;
+
+          find build/final -type f -name "*.dmg" -exec cp {} artifacts/ \;
+          find build/final -type f -name "*.zip" -exec cp {} artifacts/ \;
+          find build/final -type f -name "*.exe" -exec cp {} artifacts/ \;
+          find build/final -type f -name "*.tar.gz" -exec cp {} artifacts/ \;
+          find build/final -type f -name "*.tgz" -exec cp {} artifacts/ \;
+
           ls -lah artifacts
 
       - name: Upload artifact
