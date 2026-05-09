@@ -439,6 +439,7 @@ set(qml_controls
   ui/Controls/Label.qml
   ui/Controls/TextField.qml
   ui/Controls/TextArea.qml
+  ui/Controls/NumberFlowText.qml
   ui/Controls/Switch.qml
   ui/Controls/CircleIconButton.qml
   ui/Controls/PrimaryActionButton.qml
