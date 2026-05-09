@@ -22,6 +22,7 @@
 module;
 #include <QFile>
 #include <QJsonArray>
+#include <QStringLiteral>
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
 #include <QObject>
@@ -188,15 +189,14 @@ private:
     static QString fileSha256Hex(const QString& path);
     static bool isSelfInstallSupportedAsset(const QString& path);
     void consumePendingUpdateStatus();
-
-    QString m_appVersion = QStringLiteral("0.0.0");
+    QString m_appVersion = u"0.0.0"_qs;
     bool m_checking = false;
     bool m_updateAvailable = false;
     bool m_userInitiatedCheck = false;
     QString m_latestVersion;
-    QString m_status = QStringLiteral("Idle");
+    QString m_status = u"Idle"_qs;
     QString m_error;
-    QString m_releaseUrl = QStringLiteral("https://github.com/genyleap/GenyConnect/releases");
+    QString m_releaseUrl = u"https://github.com/genyleap/GenyConnect/releases"_qs;
     QString m_assetUrl;
     QString m_assetName;
     QString m_assetExpectedSha256;

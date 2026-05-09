@@ -35,6 +35,8 @@ module;
 
 module genyconnect.backend.updater;
 
+using namespace Qt::StringLiterals;
+
 namespace {
 const QUrl kReleaseApiUrl(QStringLiteral("https://api.github.com/repos/genyleap/GenyConnect/releases/latest"));
 const QString kReleasesPageUrl = QStringLiteral("https://github.com/genyleap/GenyConnect/releases");

@@ -35,7 +35,16 @@ jobs:
             qt_version: "6.10.3"
             qt_arch: win64_msvc2022_64
             cmake_arch: x64
+            msvc_arch: amd64
             target_arch: x86_64
+
+          - name: windows-arm64
+            os: windows-latest
+            qt_version: "6.10.3"
+            qt_arch: win64_msvc2022_arm64
+            cmake_arch: ARM64
+            msvc_arch: amd64_arm64
+            target_arch: arm64
 
           - name: linux-x64
             os: ubuntu-24.04
@@ -104,7 +113,7 @@ jobs:
         if: runner.os == 'Windows'
         uses: ilammy/msvc-dev-cmd@v1
         with:
-          arch: amd64
+          arch: ${{ matrix.msvc_arch }}
 
       - name: Configure macOS/Linux
         if: runner.os != 'Windows'
