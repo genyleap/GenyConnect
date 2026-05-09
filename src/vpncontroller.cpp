@@ -28,6 +28,7 @@ module;
 #include <QStandardPaths>
 #include <QThread>
 #include <QTimer>
+#include <QTimeZone>
 #include <QTcpServer>
 #include <QTcpSocket>
 #include <QUuid>
@@ -1125,6 +1126,7 @@ VpnController::VpnController(QObject *parent)
 VpnController::~VpnController()
 {
     cancelSpeedTest();
+    finishProfileUsageSession();
     if (m_publicIpReply) {
         m_publicIpReply->abort();
         m_publicIpReply->deleteLater();
@@ -2893,6 +2895,7 @@ void VpnController::connectToProfile(int row)
                     guard->m_privilegedTunManaged = true;
                     guard->m_privilegedTunLogOffset = 0;
                     guard->m_privilegedTunLogBuffer.clear();
+                    guard->startProfileUsageSession();
                     guard->m_privilegedTunLogTimer.start();
                     guard->setConnectionState(ConnectionState::Connected);
                     guard->setLastError(QString());
@@ -2946,6 +2949,7 @@ void VpnController::disconnect()
 {
     m_statsPollTimer.stop();
     cancelSpeedTest();
+    finishProfileUsageSession();
     resetPerProfileUsageSamples();
 
     if (m_privilegedTunManaged) {
@@ -3310,6 +3314,7 @@ void VpnController::onProcessStarted()
 {
     m_stoppingProcess = false;
     resetPerProfileUsageSamples();
+    startProfileUsageSession();
     setConnectionState(ConnectionState::Connected);
     if (m_tunMode) {
         appendSystemLog(QStringLiteral("[System] TUN mode active: system traffic should route through Xray TUN."));
@@ -3337,6 +3342,7 @@ void VpnController::onProcessStopped(int exitCode, QProcess::ExitStatus exitStat
     Q_UNUSED(exitCode)
     m_statsPollTimer.stop();
     cancelSpeedTest();
+    finishProfileUsageSession();
     resetPerProfileUsageSamples();
     if (m_killSwitchEnabled) {
         applySystemProxy(true, true);
@@ -3374,6 +3380,7 @@ void VpnController::onProcessError(const QString& error)
 
     m_statsPollTimer.stop();
     cancelSpeedTest();
+    finishProfileUsageSession();
     resetPerProfileUsageSamples();
     setLastError(QStringLiteral("xray-core error: %1").arg(error));
     setConnectionState(ConnectionState::Error);
@@ -4180,6 +4187,51 @@ void VpnController::recordProfileUsageDelta(const QString& profileId, qint64 rxD
     }
 }
 
+void VpnController::startProfileUsageSession()
+{
+    m_profileUsageSessionStartedAt = QDateTime::currentDateTimeUtc();
+    m_profileUsageSessionStartRx = qMax<qint64>(0, m_rxBytes);
+    m_profileUsageSessionStartTx = qMax<qint64>(0, m_txBytes);
+}
+
+void VpnController::finishProfileUsageSession()
+{
+    const QString id = m_activeProfileUsageId.trimmed();
+    if (id.isEmpty() || !m_profileUsageSessionStartedAt.isValid()) {
+        return;
+    }
+
+    const qint64 rx = qMax<qint64>(0, m_rxBytes - m_profileUsageSessionStartRx);
+    const qint64 tx = qMax<qint64>(0, m_txBytes - m_profileUsageSessionStartTx);
+    const QDateTime endedAt = QDateTime::currentDateTimeUtc();
+    const qint64 durationSec = qMax<qint64>(0, m_profileUsageSessionStartedAt.secsTo(endedAt));
+
+    if (rx > 0 || tx > 0 || durationSec > 0) {
+        QJsonObject profiles = m_profileUsageRoot.value(QStringLiteral("profiles")).toObject();
+        QJsonObject usage = profiles.value(id).toObject();
+        QJsonArray sessions = usage.value(QStringLiteral("sessions")).toArray();
+        QJsonObject session;
+        session.insert(QStringLiteral("startedAt"), m_profileUsageSessionStartedAt.toMSecsSinceEpoch());
+        session.insert(QStringLiteral("endedAt"), endedAt.toMSecsSinceEpoch());
+        session.insert(QStringLiteral("durationSec"), durationSec);
+        session.insert(QStringLiteral("rx"), rx);
+        session.insert(QStringLiteral("tx"), tx);
+        sessions.prepend(session);
+        while (sessions.size() > 100) {
+            sessions.removeLast();
+        }
+        usage.insert(QStringLiteral("sessions"), sessions);
+        profiles.insert(id, usage);
+        m_profileUsageRoot.insert(QStringLiteral("profiles"), profiles);
+        scheduleProfileUsageSave();
+        emit profileUsageChanged();
+    }
+
+    m_profileUsageSessionStartedAt = QDateTime {};
+    m_profileUsageSessionStartRx = 0;
+    m_profileUsageSessionStartTx = 0;
+}
+
 QVariantMap VpnController::profileUsageSummaryForId(const QString& profileId) const
 {
     QVariantMap out;
@@ -4291,17 +4343,169 @@ QString VpnController::currentProfileUsageText(const QString& period) const
 
 QVariantMap VpnController::currentProfileUsageSummary() const
 {
-    QString id = m_currentProfileId.trimmed();
-    if (id.isEmpty()) {
-        const auto profile = m_profileModel.profileAt(m_currentProfileIndex);
-        if (profile.has_value()) {
-            id = profile->id.trimmed();
-        }
-    }
-    return profileUsageSummaryForId(id);
+    return profileUsageSummaryForId(currentUsageProfileId());
 }
 
 QVariantList VpnController::currentProfileUsageHistory(const QString& period, int limit) const
+{
+    return profileUsageHistoryForId(currentUsageProfileId(), period, limit);
+}
+
+QVariantList VpnController::currentProfileUsageSessions(int limit) const
+{
+    QVariantList out;
+    const QString id = currentUsageProfileId();
+    if (id.isEmpty()) {
+        return out;
+    }
+    const QJsonObject profiles = m_profileUsageRoot.value(QStringLiteral("profiles")).toObject();
+    const QJsonObject usage = profiles.value(id).toObject();
+    const QJsonArray sessions = usage.value(QStringLiteral("sessions")).toArray();
+    const int count = qMin(qBound(1, limit, 100), sessions.size());
+    out.reserve(count);
+    for (int i = 0; i < count; ++i) {
+        const QJsonObject session = sessions.at(i).toObject();
+        const qint64 rx = session.value(QStringLiteral("rx")).toVariant().toLongLong();
+        const qint64 tx = session.value(QStringLiteral("tx")).toVariant().toLongLong();
+        const qint64 startedMs = session.value(QStringLiteral("startedAt")).toVariant().toLongLong();
+        const qint64 endedMs = session.value(QStringLiteral("endedAt")).toVariant().toLongLong();
+        QVariantMap row;
+        row.insert(QStringLiteral("startedAt"), QDateTime::fromMSecsSinceEpoch(startedMs, QTimeZone::UTC).toLocalTime().toString(QStringLiteral("yyyy-MM-dd HH:mm")));
+        row.insert(QStringLiteral("endedAt"), QDateTime::fromMSecsSinceEpoch(endedMs, QTimeZone::UTC).toLocalTime().toString(QStringLiteral("HH:mm")));
+        row.insert(QStringLiteral("durationSec"), session.value(QStringLiteral("durationSec")).toVariant().toLongLong());
+        row.insert(QStringLiteral("rxText"), formatBytes(rx));
+        row.insert(QStringLiteral("txText"), formatBytes(tx));
+        row.insert(QStringLiteral("totalText"), formatBytes(rx + tx));
+        out.append(row);
+    }
+    return out;
+}
+
+void VpnController::clearCurrentProfileUsage()
+{
+    const QString id = currentUsageProfileId();
+    if (id.isEmpty()) {
+        return;
+    }
+    QJsonObject profiles = m_profileUsageRoot.value(QStringLiteral("profiles")).toObject();
+    profiles.remove(id);
+    m_profileUsageRoot.insert(QStringLiteral("profiles"), profiles);
+    resetPerProfileUsageSamples();
+    startProfileUsageSession();
+    saveProfileUsage();
+    emit profileUsageChanged();
+}
+
+void VpnController::clearAllProfileUsage()
+{
+    m_profileUsageRoot.insert(QStringLiteral("profiles"), QJsonObject {});
+    resetPerProfileUsageSamples();
+    startProfileUsageSession();
+    saveProfileUsage();
+    emit profileUsageChanged();
+}
+
+QVariantList VpnController::availableAppRuleItems() const
+{
+    QVariantList out;
+    QSet<QString> seen;
+    auto appendItem = [&out, &seen](const QString& process, const QString& path = QString()) {
+        const QString trimmedProcess = process.trimmed();
+        if (trimmedProcess.isEmpty()) {
+            return;
+        }
+        const QString key = trimmedProcess.toLower();
+        if (seen.contains(key)) {
+            return;
+        }
+        seen.insert(key);
+        QVariantMap item;
+        item.insert(QStringLiteral("name"), QFileInfo(trimmedProcess).completeBaseName().isEmpty()
+                                            ? trimmedProcess
+                                            : QFileInfo(trimmedProcess).completeBaseName());
+        item.insert(QStringLiteral("process"), trimmedProcess);
+        item.insert(QStringLiteral("path"), path.trimmed());
+        out.append(item);
+    };
+
+#if defined(Q_OS_WIN)
+    QProcess process;
+    process.start(QStringLiteral("tasklist"), {QStringLiteral("/FO"), QStringLiteral("CSV"), QStringLiteral("/NH")});
+    if (process.waitForStarted(1200) && process.waitForFinished(2500)) {
+        const QStringList lines = QString::fromUtf8(process.readAllStandardOutput()).split('\n', Qt::SkipEmptyParts);
+        static const QRegularExpression firstCsvField(QStringLiteral("^\\s*\"([^\"]+)\""));
+        for (const QString& line : lines) {
+            const QRegularExpressionMatch match = firstCsvField.match(line);
+            appendItem(match.hasMatch() ? match.captured(1) : line.section(',', 0, 0).remove('"'));
+        }
+    }
+#elif defined(Q_OS_MACOS)
+    QProcess process;
+    process.start(QStringLiteral("/bin/ps"), {QStringLiteral("-axo"), QStringLiteral("comm=")});
+    if (process.waitForStarted(1200) && process.waitForFinished(2500)) {
+        const QStringList lines = QString::fromUtf8(process.readAllStandardOutput()).split('\n', Qt::SkipEmptyParts);
+        for (const QString& line : lines) {
+            const QString path = line.trimmed();
+            appendItem(QFileInfo(path).fileName(), path);
+        }
+    }
+    const QStringList appRoots {
+        QStringLiteral("/Applications"),
+        QDir::home().filePath(QStringLiteral("Applications"))
+    };
+    for (const QString& root : appRoots) {
+        const QFileInfoList apps = QDir(root).entryInfoList({QStringLiteral("*.app")}, QDir::Dirs | QDir::NoDotAndDotDot);
+        for (const QFileInfo& app : apps) {
+            const QString name = app.completeBaseName();
+            appendItem(name, app.absoluteFilePath());
+        }
+    }
+#else
+    QProcess process;
+    process.start(QStringLiteral("/bin/ps"), {QStringLiteral("-eo"), QStringLiteral("comm=")});
+    if (process.waitForStarted(1200) && process.waitForFinished(2500)) {
+        const QStringList lines = QString::fromUtf8(process.readAllStandardOutput()).split('\n', Qt::SkipEmptyParts);
+        for (const QString& line : lines) {
+            appendItem(QFileInfo(line.trimmed()).fileName(), line.trimmed());
+        }
+    }
+#endif
+
+    return out;
+}
+
+void VpnController::appendAppRule(const QString& target, const QString& processName)
+{
+    const QString process = processName.trimmed();
+    if (process.isEmpty()) {
+        return;
+    }
+
+    auto appendRuleText = [&process](QString current) {
+        const QStringList existing = parseRules(current);
+        for (const QString& item : existing) {
+            if (item.compare(process, Qt::CaseInsensitive) == 0) {
+                return current;
+            }
+        }
+        if (!current.trimmed().isEmpty() && !current.endsWith('\n')) {
+            current.append('\n');
+        }
+        current.append(process);
+        return current;
+    };
+
+    const QString normalizedTarget = target.trimmed().toLower();
+    if (normalizedTarget == QStringLiteral("proxy") || normalizedTarget == QStringLiteral("tunnel")) {
+        setProxyAppRules(appendRuleText(m_proxyAppRules));
+    } else if (normalizedTarget == QStringLiteral("block")) {
+        setBlockAppRules(appendRuleText(m_blockAppRules));
+    } else {
+        setDirectAppRules(appendRuleText(m_directAppRules));
+    }
+}
+
+QString VpnController::currentUsageProfileId() const
 {
     QString id = m_currentProfileId.trimmed();
     if (id.isEmpty()) {
@@ -4310,7 +4514,7 @@ QVariantList VpnController::currentProfileUsageHistory(const QString& period, in
             id = profile->id.trimmed();
         }
     }
-    return profileUsageHistoryForId(id, period, limit);
+    return id;
 }
 
 void VpnController::loadProfileUsage()
@@ -4706,7 +4910,7 @@ bool VpnController::ensurePrivilegedTunHelper(QString *errorMessage)
         const QStringList launchArgs = {
             QStringLiteral("--listen-port"), QString::number(m_privilegedTunHelperPort),
             QStringLiteral("--token"), m_privilegedTunHelperToken,
-            QStringLiteral("--idle-timeout-ms"), QStringLiteral("1800000")
+            QStringLiteral("--idle-timeout-ms"), QStringLiteral("604800000")
         };
 
 #if defined(Q_OS_MACOS)

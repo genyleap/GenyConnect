@@ -717,6 +717,11 @@ public:
      * @return List of usage rows.
      */
     Q_INVOKABLE QVariantList currentProfileUsageHistory(const QString& period, int limit = 20) const;
+    Q_INVOKABLE QVariantList currentProfileUsageSessions(int limit = 20) const;
+    Q_INVOKABLE void clearCurrentProfileUsage();
+    Q_INVOKABLE void clearAllProfileUsage();
+    Q_INVOKABLE QVariantList availableAppRuleItems() const;
+    Q_INVOKABLE void appendAppRule(const QString& target, const QString& processName);
 
 signals:
     //! Emitted when connection state changes.
@@ -908,9 +913,12 @@ private:
     void updatePerProfileUsageCounters(qint64 nextRx, qint64 nextTx);
     void resetPerProfileUsageSamples();
     void recordProfileUsageDelta(const QString& profileId, qint64 rxDelta, qint64 txDelta);
+    void startProfileUsageSession();
+    void finishProfileUsageSession();
     QVariantMap profileUsageSummaryForId(const QString& profileId) const;
     QVariantList profileUsageHistoryForId(const QString& profileId, const QString& period, int limit) const;
     QString currentProfileUsageText(const QString& period) const;
+    QString currentUsageProfileId() const;
     void loadProfileUsage();
     void saveProfileUsage() const;
     void scheduleProfileUsageSave();
@@ -1078,6 +1086,9 @@ private:
     qint64 m_profileUsageLastRxSample = -1;
     qint64 m_profileUsageLastTxSample = -1;
     QString m_activeProfileUsageId;
+    QDateTime m_profileUsageSessionStartedAt;
+    qint64 m_profileUsageSessionStartRx = 0;
+    qint64 m_profileUsageSessionStartTx = 0;
 
     ServerProfileModel m_profileModel;
     Updater m_updater;

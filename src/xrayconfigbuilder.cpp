@@ -1,6 +1,8 @@
 module;
 #include <QHostAddress>
+#include <QFileInfo>
 #include <QJsonArray>
+#include <QSet>
 #include <QStringList>
 #include <QUrl>
 #include <QtGlobal>
@@ -195,10 +197,45 @@ QJsonArray toDomainArray(const QStringList& values)
 QJsonArray toProcessArray(const QStringList& values)
 {
     QJsonArray out;
+    QSet<QString> seen;
+    auto appendUnique = [&out, &seen](const QString& candidate) {
+        const QString trimmed = candidate.trimmed();
+        if (trimmed.isEmpty()) {
+            return;
+        }
+        const QString key = trimmed.toLower();
+        if (seen.contains(key)) {
+            return;
+        }
+        seen.insert(key);
+        out.append(trimmed);
+    };
+
     for (const QString& value : values) {
         const QString trimmed = value.trimmed();
         if (!trimmed.isEmpty()) {
-            out.append(trimmed);
+            appendUnique(trimmed);
+            const QFileInfo info(trimmed);
+            const QString fileName = info.fileName().trimmed();
+            if (!fileName.isEmpty() && fileName != trimmed) {
+                appendUnique(fileName);
+            }
+
+            const QString baseName = info.completeBaseName().trimmed();
+            if (!baseName.isEmpty()) {
+                appendUnique(baseName);
+            }
+
+#if defined(Q_OS_WIN)
+            if (!fileName.endsWith(QStringLiteral(".exe"), Qt::CaseInsensitive)
+                && !baseName.isEmpty()) {
+                appendUnique(baseName + QStringLiteral(".exe"));
+            }
+#else
+            if (fileName.endsWith(QStringLiteral(".exe"), Qt::CaseInsensitive)) {
+                appendUnique(fileName.left(fileName.size() - 4));
+            }
+#endif
         }
     }
     return out;
