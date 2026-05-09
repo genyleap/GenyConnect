@@ -20,3 +20,4 @@ DownloadListView 1.0 DownloadListView.qml
 CircleIconButton 1.0 CircleIconButton.qml
 PrimaryActionButton 1.0 PrimaryActionButton.qml
 SignalBars 1.0 SignalBars.qml
+NumberFlowText 1.0 NumberFlowText.qml
