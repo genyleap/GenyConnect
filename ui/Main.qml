@@ -15,9 +15,13 @@ ApplicationWindow {
     visible: true
     width: 430
     height: 760
-    minimumWidth: 390
-    minimumHeight: 680
-    title: "GenyConnect (Build " +  updater.appVersion + ") - " + osNameText()
+    minimumWidth: 430
+    maximumWidth: 430
+    minimumHeight: 760
+    maximumHeight: 760
+    flags: Qt.Window | Qt.WindowTitleHint | Qt.WindowSystemMenuHint | Qt.WindowMinimizeButtonHint | Qt.WindowCloseButtonHint
+
+    title: "GenyConnect (Build " + updater.appVersion + ") - " + osNameText()
 
     color: "#eceff5"
     font.family: FontSystem.getContentFont.name
@@ -321,7 +325,7 @@ ApplicationWindow {
 
     function compactProfileFilterSelected(kind) {
         return (compactProfileFilter || "All").trim().toLowerCase()
-               === compactProfileFilterTarget(kind).toLowerCase()
+                === compactProfileFilterTarget(kind).toLowerCase()
     }
 
     function selectCompactProfileFilter(kind) {
@@ -390,9 +394,9 @@ ApplicationWindow {
         const cleanLabel = (label || "").trim()
         selectedServerLabel = cleanLabel.length > 0 ? cleanLabel : "Selected Profile"
         selectedServerFlag = guessFlag(selectedServerLabel)
-        selectedServerMeta = (protocol || "").toUpperCase() + "  " + (address || "") + ":" + port
+        selectedServerMeta = (protocol || "").toUpperCase() + " " + (address || "") + ":" + port
         if ((security || "").length > 0)
-            selectedServerMeta += "  |  " + security
+            selectedServerMeta += " | " + security
     }
 
     function syncSelectedProfileFromController() {
@@ -431,12 +435,12 @@ ApplicationWindow {
 
     function downloadUsageText() {
         return formatTrafficValue(Math.max(0, vpnController.rxBytes), dashboardStatsSettings.trafficUnit).value
-               + " " + formatTrafficValue(Math.max(0, vpnController.rxBytes), dashboardStatsSettings.trafficUnit).unit
+                + " " + formatTrafficValue(Math.max(0, vpnController.rxBytes), dashboardStatsSettings.trafficUnit).unit
     }
 
     function uploadUsageText() {
         return formatTrafficValue(Math.max(0, vpnController.txBytes), dashboardStatsSettings.trafficUnit).value
-               + " " + formatTrafficValue(Math.max(0, vpnController.txBytes), dashboardStatsSettings.trafficUnit).unit
+                + " " + formatTrafficValue(Math.max(0, vpnController.txBytes), dashboardStatsSettings.trafficUnit).unit
     }
 
     function downloadRateText() {
@@ -1489,19 +1493,18 @@ ApplicationWindow {
 
                     Item { Layout.fillWidth: true; visible: false }
 
-
                     // Text {
-                    //     Layout.preferredWidth: Math.min(profilePopup.width * 0.45, 280)
-                    //     text: vpnController.subscriptionMessage
-                    //     visible: text.length > 0
-                    //     color: vpnController.subscriptionBusy
-                    //            ? "#2b6dcf"
-                    //            : ((text.toLowerCase().indexOf("fail") >= 0 || text.toLowerCase().indexOf("error") >= 0)
-                    //               ? "#bf4d4d"
-                    //               : "#6f7f95")
-                    //     font.family: FontSystem.getContentFont.name
-                    //     font.pixelSize: 12
-                    //     elide: Text.ElideRight
+                    // Layout.preferredWidth: Math.min(profilePopup.width * 0.45, 280)
+                    // text: vpnController.subscriptionMessage
+                    // visible: text.length > 0
+                    // color: vpnController.subscriptionBusy
+                    // ? "#2b6dcf"
+                    // : ((text.toLowerCase().indexOf("fail") >= 0 || text.toLowerCase().indexOf("error") >= 0)
+                    // ? "#bf4d4d"
+                    // : "#6f7f95")
+                    // font.family: FontSystem.getContentFont.name
+                    // font.pixelSize: 12
+                    // elide: Text.ElideRight
                     // }
                 }
 
@@ -2084,9 +2087,9 @@ ApplicationWindow {
                                     Text {
                                         visible: !root.compact
                                         text: (sourceName || "Manual import")
-                                              + "  •  " + normalizedGroup
-                                              + (groupExclusive ? "  •  Exclusive" : "")
-                                              + (groupBadge.length > 0 ? "  •  " + groupBadge : "")
+                                              + " • " + normalizedGroup
+                                              + (groupExclusive ? " • Exclusive" : "")
+                                              + (groupBadge.length > 0 ? " • " + groupBadge : "")
                                         font.family: FontSystem.getContentFont.name
                                         font.pixelSize: 11
                                         color: "#7b889d"
@@ -4140,7 +4143,6 @@ ApplicationWindow {
                             }
                         }
 
-
                         // --- Email ---
                         Rectangle {
                             Layout.fillWidth: true
@@ -4455,7 +4457,6 @@ ApplicationWindow {
                         onClicked: settingsPopup.open()
                     }
 
-
                     Controls.CircleIconButton {
                         visible: !root.compact
                         diameter: 34
@@ -4632,7 +4633,6 @@ ApplicationWindow {
                                 const pivotR = 7
                                 const tipX = w - 2
                                 const halfBase = 5
-
 
                                 // Needle soft shadow
                                 ctx.beginPath()
@@ -5651,7 +5651,6 @@ ApplicationWindow {
                                     onEditingFinished: vpnController.setProfileGroupBadge(groupName, text)
                                 }
 
-
                                 Controls.CircleIconButton {
                                     diameter: 24
                                     iconText: root.iconTrash
@@ -5850,7 +5849,6 @@ ApplicationWindow {
             anchors.bottom: actionRow.top
             anchors.bottomMargin: 20
             width: Math.min(parent.width - 90, 1060)
-
 
             Image {
                 id: mapImage
@@ -6545,7 +6543,7 @@ ApplicationWindow {
                 Text {
                     id: ipPillText
                     anchors.centerIn: parent
-                    text: root.infoIpLabel() + "  " + (vpnController.publicIpRefreshing ? "checking..." : root.infoIpText())
+                    text: root.infoIpLabel() + " " + (vpnController.publicIpRefreshing ? "checking..." : root.infoIpText())
                     color: "#344053"
                     font.family: FontSystem.getContentFontBold.name
                     font.pixelSize: 13
@@ -7048,7 +7046,6 @@ ApplicationWindow {
 
                 Item { Layout.fillWidth: true }
             }
-
 
             Item { Layout.preferredWidth: 10; }
         }

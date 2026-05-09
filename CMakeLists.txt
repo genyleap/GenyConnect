@@ -19,7 +19,8 @@ cmake_minimum_required(VERSION 3.28)
 # -----------------------------------------------------------------------------
 
 set(PROJECT_NAME "GenyConnect")
-project(${PROJECT_NAME} VERSION 1.1.512 LANGUAGES CXX)
+
+project(${PROJECT_NAME} VERSION 1.2.512 LANGUAGES CXX)
 
 if(POLICY CMP0155)
   cmake_policy(SET CMP0155 NEW)
@@ -60,7 +61,7 @@ option(GENYCONNECT_BUNDLE_DOCS "Install README and LICENSE at package root + NSI
 option(GENYCONNECT_MACDEPLOYQT_ALWAYS_OVERWRITE "Pass -always-overwrite to macdeployqt" OFF)
 option(GENYCONNECT_MACDEPLOYQT_NO_STRIP         "Pass -no-strip to macdeployqt" OFF)
 
-set(GENYCONNECT_TARGET_BUILD_ARCH "arm64" CACHE STRING "Override target arch for output build (arm64|x86_64)")
+set(GENYCONNECT_TARGET_BUILD_ARCH "x86_64" CACHE STRING "Override target arch for output build (arm64|x86_64)")
 
 set(GENYCONNECT_XRAY_VERSION      "v26.2.6" CACHE STRING   "Xray-core release tag (e.g. v26.2.6)")
 set(GENYCONNECT_XRAY_ASSET_NAME   ""        CACHE STRING   "Optional explicit Xray release asset name override")
@@ -399,19 +400,16 @@ target_compile_definitions(${PROJECT_NAME} PRIVATE APP_VERSION="${PROJECT_VERSIO
 # macOS bundle props + icon
 # -------------------------
 set(GENY_MAC_ICON_ICNS "${CMAKE_CURRENT_SOURCE_DIR}/ui/Resources/image/GenyConnect.icns")
+set(GENYCONNECT_MACOS_DEPLOYMENT_TARGET "14.0" CACHE STRING "Minimum macOS version")
+set(CMAKE_OSX_DEPLOYMENT_TARGET "${GENYCONNECT_MACOS_DEPLOYMENT_TARGET}" CACHE STRING "Minimum macOS version" FORCE)
 
 if(APPLE)
-  set(CMAKE_OSX_DEPLOYMENT_TARGET "15.1" CACHE STRING "Minimum macOS version")
-  set(CMAKE_C_FLAGS   "${CMAKE_C_FLAGS} -mmacosx-version-min=15.1")
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -mmacosx-version-min=15.1")
-
   set_target_properties(${PROJECT_NAME} PROPERTIES
     MACOSX_BUNDLE TRUE
     MACOSX_BUNDLE_BUNDLE_VERSION ${PROJECT_VERSION}
     MACOSX_BUNDLE_SHORT_VERSION_STRING ${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}
     MACOSX_BUNDLE_ICON_FILE "GenyConnect.icns"
   )
-
   if(EXISTS "${GENY_MAC_ICON_ICNS}")
     set_source_files_properties("${GENY_MAC_ICON_ICNS}" PROPERTIES MACOSX_PACKAGE_LOCATION "Resources")
     target_sources(${PROJECT_NAME} PRIVATE "${GENY_MAC_ICON_ICNS}")
@@ -438,6 +436,7 @@ set(qml_controls
   ui/Controls/ComboBox.qml
   ui/Controls/Label.qml
   ui/Controls/TextField.qml
+  ui/Controls/NumberFlowText.qml
   ui/Controls/TextArea.qml
   ui/Controls/Switch.qml
   ui/Controls/CircleIconButton.qml
