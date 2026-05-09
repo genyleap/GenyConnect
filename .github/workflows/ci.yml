@@ -20,12 +20,12 @@ jobs:
         include:
           - name: macos-arm64
             os: macos-14
-            qt_arch: macos
+            qt_arch: clang_64
             target_arch: arm64
 
           - name: macos-x64
             os: macos-13
-            qt_arch: macos
+            qt_arch: clang_64
             target_arch: x86_64
 
           - name: windows-x64
@@ -34,19 +34,13 @@ jobs:
             cmake_arch: x64
             target_arch: x86_64
 
-          - name: windows-arm64
-            os: windows-latest
-            qt_arch: win64_msvc2022_arm64
-            cmake_arch: ARM64
-            target_arch: arm64
-
           - name: linux-x64
             os: ubuntu-24.04
             qt_arch: linux_gcc_64
             target_arch: x86_64
 
     env:
-      QT_VERSION: "6.8.3"
+      QT_VERSION: "6.11.0"
       CMAKE_VERSION: "4.2.3"
 
     steps:
@@ -58,7 +52,6 @@ jobs:
         with:
           version: ${{ env.QT_VERSION }}
           arch: ${{ matrix.qt_arch }}
-          modules: qt5compat
           cache: true
 
       - name: Install CMake
@@ -108,7 +101,7 @@ jobs:
         if: runner.os == 'Windows'
         uses: ilammy/msvc-dev-cmd@v1
         with:
-          arch: ${{ matrix.cmake_arch == 'ARM64' && 'amd64_arm64' || 'amd64' }}
+          arch: amd64
 
       - name: Configure macOS/Linux
         if: runner.os != 'Windows'
