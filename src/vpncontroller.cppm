@@ -36,6 +36,8 @@ module;
 
 #ifndef Q_MOC_RUN
 export module genyconnect.backend.vpncontroller;
+
+using namespace Qt::StringLiterals;
 import genyconnect.backend.connectionstate;
 import genyconnect.backend.serverprofile;
 import genyconnect.backend.serverprofilemodel;
@@ -1014,7 +1016,7 @@ private:
     qint64 m_txBytes = 0;
     qint64 m_memoryUsageBytes = 0;
     bool m_speedTestRunning = false;
-    QString m_speedTestPhase = QStringLiteral("Idle");
+    QString m_speedTestPhase = u"Idle"_s;
     int m_speedTestElapsedSec = 0;
     int m_speedTestDurationSec = 18;
     double m_speedTestCurrentMbps = 0.0;
@@ -1041,7 +1043,7 @@ private:
     bool m_publicIpRefreshing = false;
 
     QString m_xrayExecutablePath;
-    QString m_xrayVersion = QStringLiteral("Unknown");
+    QString m_xrayVersion = u"Unknown"_s;
     bool m_loggingEnabled = true;
     bool m_autoPingProfiles = false;
     QList<SubscriptionEntry> m_subscriptionEntries;
@@ -1052,7 +1054,7 @@ private:
     int m_subscriptionRefreshSuccessCount = 0;
     int m_subscriptionRefreshFailCount = 0;
     QStringList m_profileGroups;
-    QString m_currentProfileGroup = QStringLiteral("All");
+    QString m_currentProfileGroup = u"All"_s;
     int m_profileCount = 0;
     int m_filteredProfileCount = 0;
     int m_bestPingMs = -1;

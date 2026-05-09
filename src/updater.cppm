@@ -22,7 +22,6 @@
 module;
 #include <QFile>
 #include <QJsonArray>
-#include <QStringLiteral>
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
 #include <QObject>
@@ -191,7 +190,7 @@ private:
     static QString fileSha256Hex(const QString& path);
     static bool isSelfInstallSupportedAsset(const QString& path);
     void consumePendingUpdateStatus();
-    QString m_appVersion = u"0.0.0"_qs;
+    QString m_appVersion = u"0.0.0"_s;
     bool m_checking = false;
     bool m_updateAvailable = false;
     bool m_userInitiatedCheck = false;

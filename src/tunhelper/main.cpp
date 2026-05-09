@@ -22,20 +22,22 @@
 #include <QVector>
 #include <climits>
 
+using namespace Qt::StringLiterals;
+
 namespace {
 
 QString quoteForSh(const QString& value)
 {
     QString escaped = value;
     escaped.replace('\'', "'\"'\"'");
-    return QStringLiteral("'") + escaped + QStringLiteral("'");
+    return u"'"_s + escaped + u"'"_s;
 }
 
 QString quoteForPowerShell(const QString& value)
 {
     QString escaped = value;
     escaped.replace('\'', "''");
-    return QStringLiteral("'") + escaped + QStringLiteral("'");
+    return u"'"_s + escaped + u"'"_s;
 }
 
 bool runProcess(
@@ -49,7 +51,7 @@ bool runProcess(
     process.start(program, args);
     if (!process.waitForStarted(5000)) {
         if (stderrText != nullptr) {
-            *stderrText = QStringLiteral("Failed to start process: %1").arg(program);
+            *stderrText = u"Failed to start process: %1"_s.arg(program);
         }
         return false;
     }
@@ -58,7 +60,7 @@ bool runProcess(
         process.kill();
         process.waitForFinished(1000);
         if (stderrText != nullptr) {
-            *stderrText = QStringLiteral("Process timed out: %1").arg(program);
+            *stderrText = u"Process timed out: %1"_s.arg(program);
         }
         return false;
     }
@@ -78,11 +80,11 @@ bool runShell(const QString& shellCommand, int timeoutMs, QString* stderrText)
 #if defined(Q_OS_WIN)
     QString ignoredOut;
     return runProcess(
-        QStringLiteral("powershell"),
+        u"powershell"_s,
         {
-            QStringLiteral("-NoProfile"),
-            QStringLiteral("-ExecutionPolicy"), QStringLiteral("Bypass"),
-            QStringLiteral("-Command"), shellCommand
+            u"-NoProfile"_s,
+            u"-ExecutionPolicy"_s, u"Bypass"_s,
+            u"-Command"_s, shellCommand
         },
         timeoutMs,
         &ignoredOut,
@@ -90,8 +92,8 @@ bool runShell(const QString& shellCommand, int timeoutMs, QString* stderrText)
 #else
     QString ignoredOut;
     return runProcess(
-        QStringLiteral("/bin/sh"),
-        {QStringLiteral("-lc"), shellCommand},
+        u"/bin/sh"_s,
+        {u"-lc"_s, shellCommand},
         timeoutMs,
         &ignoredOut,
         stderrText);
@@ -143,9 +145,9 @@ struct WindowsTunAdapterInfo
 QStringList defaultWindowsTunDnsServers()
 {
     return {
-        QStringLiteral("1.1.1.1"),
-        QStringLiteral("8.8.8.8"),
-        QStringLiteral("9.9.9.9")
+        u"1.1.1.1"_s,
+        u"8.8.8.8"_s,
+        u"9.9.9.9"_s
     };
 }
 
@@ -158,7 +160,7 @@ QString powershellListLiteral(const QStringList& values)
             quoted.append(quoteForPowerShell(trimmed));
         }
     }
-    return quoted.join(QStringLiteral(","));
+    return quoted.join(u","_s);
 }
 
 QStringList stringListFromJsonArray(const QJsonArray& values)
@@ -188,9 +190,9 @@ QStringList stringListFromJsonArray(const QJsonArray& values)
 bool looksLikeWindowsTunAdapterName(const QString& name)
 {
     const QString lower = name.toLower();
-    return lower.contains(QStringLiteral("xray"))
-        || lower.contains(QStringLiteral("wintun"))
-        || lower.contains(QStringLiteral("genyconnect"));
+    return lower.contains(u"xray"_s)
+        || lower.contains(u"wintun"_s)
+        || lower.contains(u"genyconnect"_s);
 }
 
 QVector<WindowsTunAdapterInfo> collectWindowsTunAdapters()
@@ -216,7 +218,7 @@ QVector<WindowsTunAdapterInfo> collectWindowsTunAdapters()
                 continue;
             }
             const QString ipText = ip.toString().trimmed();
-            if (ipText.isEmpty() || ipText == QStringLiteral("127.0.0.1")) {
+            if (ipText.isEmpty() || ipText == u"127.0.0.1"_s) {
                 continue;
             }
             info.ipv4 = ipText;
@@ -290,35 +292,35 @@ void cleanupSplitRoutesForAdapter(int interfaceIndex)
         return;
     }
     deleteWindowsRouteBestEffort(
-        QStringLiteral("0.0.0.0"),
-        QStringLiteral("128.0.0.0"),
-        QStringLiteral("0.0.0.0"),
+        u"0.0.0.0"_s,
+        u"128.0.0.0"_s,
+        u"0.0.0.0"_s,
         interfaceIndex);
     deleteWindowsRouteBestEffort(
-        QStringLiteral("128.0.0.0"),
-        QStringLiteral("128.0.0.0"),
-        QStringLiteral("0.0.0.0"),
+        u"128.0.0.0"_s,
+        u"128.0.0.0"_s,
+        u"0.0.0.0"_s,
         interfaceIndex);
-    deleteWindowsRouteV6BestEffort(QStringLiteral("::/1"), interfaceIndex);
-    deleteWindowsRouteV6BestEffort(QStringLiteral("8000::/1"), interfaceIndex);
+    deleteWindowsRouteV6BestEffort(u"::/1"_s, interfaceIndex);
+    deleteWindowsRouteV6BestEffort(u"8000::/1"_s, interfaceIndex);
 }
 
 bool runWindowsRoute(const QStringList& args, int timeoutMs, QString* stdoutText, QString* stderrText)
 {
-    return runProcess(QStringLiteral("route.exe"), args, timeoutMs, stdoutText, stderrText);
+    return runProcess(u"route.exe"_s, args, timeoutMs, stdoutText, stderrText);
 }
 
 QString mergeCommandOutput(const QString& stdoutText, const QString& stderrText)
 {
     const QString merged = QStringList{stdoutText.trimmed(), stderrText.trimmed()}
-                               .join(QStringLiteral("\n"))
+                               .join(u"\n"_s)
                                .trimmed();
     return merged;
 }
 
 QStringList splitWhitespaceTokens(const QString& line)
 {
-    return line.split(QRegularExpression(QStringLiteral("\\s+")), Qt::SkipEmptyParts);
+    return line.split(QRegularExpression(u"\\s+"_s), Qt::SkipEmptyParts);
 }
 
 QString defaultGatewayFromRoutePrint(QString* errorOut)
@@ -326,14 +328,14 @@ QString defaultGatewayFromRoutePrint(QString* errorOut)
     QString stdoutText;
     QString stderrText;
     if (!runWindowsRoute(
-            {QStringLiteral("PRINT"), QStringLiteral("-4"), QStringLiteral("0.0.0.0")},
+            {u"PRINT"_s, u"-4"_s, u"0.0.0.0"_s},
             4000,
             &stdoutText,
             &stderrText)) {
         if (errorOut != nullptr) {
             const QString reason = mergeCommandOutput(stdoutText, stderrText);
             *errorOut = reason.isEmpty()
-                ? QStringLiteral("Failed to inspect default gateway route.")
+                ? u"Failed to inspect default gateway route."_s
                 : reason;
         }
         return {};
@@ -345,19 +347,19 @@ QString defaultGatewayFromRoutePrint(QString* errorOut)
         if (tokens.size() < 5) {
             continue;
         }
-        if (tokens.at(0) == QStringLiteral("0.0.0.0")
-            && tokens.at(1) == QStringLiteral("0.0.0.0")) {
+        if (tokens.at(0) == u"0.0.0.0"_s
+            && tokens.at(1) == u"0.0.0.0"_s) {
             const QString gateway = tokens.at(2).trimmed();
             if (!gateway.isEmpty()
-                && gateway.compare(QStringLiteral("On-link"), Qt::CaseInsensitive) != 0
-                && gateway != QStringLiteral("0.0.0.0")) {
+                && gateway.compare(u"On-link"_s, Qt::CaseInsensitive) != 0
+                && gateway != u"0.0.0.0"_s) {
                 return gateway;
             }
         }
     }
 
     if (errorOut != nullptr) {
-        *errorOut = QStringLiteral("Default gateway not found in route table.");
+        *errorOut = u"Default gateway not found in route table."_s;
     }
     return {};
 }
@@ -371,25 +373,25 @@ bool addOrChangeWindowsRoute(
     QString* errorOut)
 {
     auto buildArgs = [&](const QString& verb) {
-        QStringList args{verb, destination, QStringLiteral("MASK"), netmask, gateway};
+        QStringList args{verb, destination, u"MASK"_s, netmask, gateway};
         if (interfaceIndex > 0) {
-            args << QStringLiteral("IF") << QString::number(interfaceIndex);
+            args << u"IF"_s << QString::number(interfaceIndex);
         }
         if (metric > 0) {
-            args << QStringLiteral("METRIC") << QString::number(metric);
+            args << u"METRIC"_s << QString::number(metric);
         }
         return args;
     };
 
     QString outAdd;
     QString errAdd;
-    if (runWindowsRoute(buildArgs(QStringLiteral("ADD")), 5000, &outAdd, &errAdd)) {
+    if (runWindowsRoute(buildArgs(u"ADD"_s), 5000, &outAdd, &errAdd)) {
         return true;
     }
 
     QString outChange;
     QString errChange;
-    if (runWindowsRoute(buildArgs(QStringLiteral("CHANGE")), 5000, &outChange, &errChange)) {
+    if (runWindowsRoute(buildArgs(u"CHANGE"_s), 5000, &outChange, &errChange)) {
         return true;
     }
 
@@ -398,7 +400,7 @@ bool addOrChangeWindowsRoute(
             mergeCommandOutput(outAdd, errAdd),
             mergeCommandOutput(outChange, errChange));
         *errorOut = reason.isEmpty()
-            ? QStringLiteral("Failed to configure route %1/%2").arg(destination, netmask)
+            ? u"Failed to configure route %1/%2"_s.arg(destination, netmask)
             : reason;
     }
     return false;
@@ -412,29 +414,29 @@ bool addOrChangeWindowsRouteV6(
 {
     auto buildArgs = [&](const QString& verb) {
         QStringList args{
-            QStringLiteral("-6"),
+            u"-6"_s,
             verb,
             destination,
-            QStringLiteral("::")
+            u"::"_s
         };
         if (interfaceIndex > 0) {
-            args << QStringLiteral("IF") << QString::number(interfaceIndex);
+            args << u"IF"_s << QString::number(interfaceIndex);
         }
         if (metric > 0) {
-            args << QStringLiteral("METRIC") << QString::number(metric);
+            args << u"METRIC"_s << QString::number(metric);
         }
         return args;
     };
 
     QString outAdd;
     QString errAdd;
-    if (runWindowsRoute(buildArgs(QStringLiteral("ADD")), 5000, &outAdd, &errAdd)) {
+    if (runWindowsRoute(buildArgs(u"ADD"_s), 5000, &outAdd, &errAdd)) {
         return true;
     }
 
     QString outChange;
     QString errChange;
-    if (runWindowsRoute(buildArgs(QStringLiteral("CHANGE")), 5000, &outChange, &errChange)) {
+    if (runWindowsRoute(buildArgs(u"CHANGE"_s), 5000, &outChange, &errChange)) {
         return true;
     }
 
@@ -443,7 +445,7 @@ bool addOrChangeWindowsRouteV6(
             mergeCommandOutput(outAdd, errAdd),
             mergeCommandOutput(outChange, errChange));
         *errorOut = reason.isEmpty()
-            ? QStringLiteral("Failed to configure IPv6 route %1").arg(destination)
+            ? u"Failed to configure IPv6 route %1"_s.arg(destination)
             : reason;
     }
     return false;
@@ -456,14 +458,14 @@ void deleteWindowsRouteBestEffort(
     int interfaceIndex)
 {
     QStringList args{
-        QStringLiteral("DELETE"),
+        u"DELETE"_s,
         destination,
-        QStringLiteral("MASK"),
+        u"MASK"_s,
         netmask,
         gateway
     };
     if (interfaceIndex > 0) {
-        args << QStringLiteral("IF") << QString::number(interfaceIndex);
+        args << u"IF"_s << QString::number(interfaceIndex);
     }
     QString ignoredOut;
     QString ignoredErr;
@@ -473,13 +475,13 @@ void deleteWindowsRouteBestEffort(
 void deleteWindowsRouteV6BestEffort(const QString& destination, int interfaceIndex)
 {
     QStringList args{
-        QStringLiteral("-6"),
-        QStringLiteral("DELETE"),
+        u"-6"_s,
+        u"DELETE"_s,
         destination,
-        QStringLiteral("::")
+        u"::"_s
     };
     if (interfaceIndex > 0) {
-        args << QStringLiteral("IF") << QString::number(interfaceIndex);
+        args << u"IF"_s << QString::number(interfaceIndex);
     }
     QString ignoredOut;
     QString ignoredErr;
@@ -626,17 +628,17 @@ bool hasWindowsIpv6DefaultRoute()
     QString stdoutText;
     QString stderrText;
     if (!runWindowsRoute(
-            {QStringLiteral("PRINT"), QStringLiteral("-6")},
+            {u"PRINT"_s, u"-6"_s},
             3500,
             &stdoutText,
             &stderrText)) {
         Q_UNUSED(stderrText)
         return false;
     }
-    static const QRegularExpression defaultRouteShort(QStringLiteral("(^|\\s)::/0(\\s|$)"),
+    static const QRegularExpression defaultRouteShort(u"(^|\\s)::/0(\\s|$)"_s,
                                                       QRegularExpression::MultilineOption);
     static const QRegularExpression defaultRouteLong(
-        QStringLiteral("(^|\\s)0:0:0:0:0:0:0:0/0(\\s|$)"),
+        u"(^|\\s)0:0:0:0:0:0:0:0/0(\\s|$)"_s,
         QRegularExpression::MultilineOption);
     return defaultRouteShort.match(stdoutText).hasMatch()
         || defaultRouteLong.match(stdoutText).hasMatch();
@@ -659,7 +661,7 @@ bool serverRouteUsesTun(
             continue;
         }
         if (tokens.at(0) == server
-            && tokens.at(1) == QStringLiteral("255.255.255.255")
+            && tokens.at(1) == u"255.255.255.255"_s
             && tokens.at(3).compare(tunIp, Qt::CaseInsensitive) == 0) {
             return true;
         }
@@ -685,7 +687,7 @@ bool applyWindowsTunRoutes(
     }
     if (tunInfo.index <= 0) {
         if (errorOut != nullptr) {
-            *errorOut = QStringLiteral("Windows TUN adapter is not ready yet.");
+            *errorOut = u"Windows TUN adapter is not ready yet."_s;
         }
         return false;
     }
@@ -693,8 +695,7 @@ bool applyWindowsTunRoutes(
     const QStringList tunDnsServers = dnsServers.isEmpty()
         ? defaultWindowsTunDnsServers()
         : dnsServers;
-    const QString configureCommand = QStringLiteral(
-        "$ErrorActionPreference='Stop';"
+    const QString configureCommand = QString::fromUtf8("$ErrorActionPreference='Stop';"
         "$idx=%1;"
         "Get-NetIPAddress -InterfaceIndex $idx -AddressFamily IPv4 -ErrorAction SilentlyContinue | "
         "Where-Object { $_.IPAddress -ne '172.19.0.1' } | "
@@ -709,7 +710,7 @@ bool applyWindowsTunRoutes(
     if (!runShell(configureCommand, 10000, &configureError)) {
         if (errorOut != nullptr) {
             *errorOut = configureError.trimmed().isEmpty()
-                ? QStringLiteral("Failed to configure Windows TUN adapter address/DNS.")
+                ? u"Failed to configure Windows TUN adapter address/DNS."_s
                 : configureError.trimmed();
         }
         return false;
@@ -718,15 +719,15 @@ bool applyWindowsTunRoutes(
     for (int i = 0; i < 40; ++i) {
         tunInfo = findWindowsTunAdapter();
         if (tunInfo.index > 0
-            && tunInfo.ipv4.trimmed().compare(QStringLiteral("172.19.0.1"), Qt::CaseInsensitive) == 0) {
+            && tunInfo.ipv4.trimmed().compare(u"172.19.0.1"_s, Qt::CaseInsensitive) == 0) {
             break;
         }
         QThread::msleep(150);
     }
     if (tunInfo.index <= 0
-        || tunInfo.ipv4.trimmed().compare(QStringLiteral("172.19.0.1"), Qt::CaseInsensitive) != 0) {
+        || tunInfo.ipv4.trimmed().compare(u"172.19.0.1"_s, Qt::CaseInsensitive) != 0) {
         if (errorOut != nullptr) {
-            *errorOut = QStringLiteral("Windows TUN adapter did not accept static IPv4 address.");
+            *errorOut = u"Windows TUN adapter did not accept static IPv4 address."_s;
         }
         return false;
     }
@@ -739,42 +740,42 @@ bool applyWindowsTunRoutes(
     cleanupSplitRoutesForAdapter(tunInfo.index);
     // Also remove non-interface-specific leftovers (best effort).
     deleteWindowsRouteBestEffort(
-        QStringLiteral("0.0.0.0"),
-        QStringLiteral("128.0.0.0"),
-        QStringLiteral("0.0.0.0"),
+        u"0.0.0.0"_s,
+        u"128.0.0.0"_s,
+        u"0.0.0.0"_s,
         0);
     deleteWindowsRouteBestEffort(
-        QStringLiteral("128.0.0.0"),
-        QStringLiteral("128.0.0.0"),
-        QStringLiteral("0.0.0.0"),
+        u"128.0.0.0"_s,
+        u"128.0.0.0"_s,
+        u"0.0.0.0"_s,
         0);
 
     QString routeError;
     if (!addOrChangeWindowsRoute(
-            QStringLiteral("0.0.0.0"),
-            QStringLiteral("128.0.0.0"),
-            QStringLiteral("0.0.0.0"),
+            u"0.0.0.0"_s,
+            u"128.0.0.0"_s,
+            u"0.0.0.0"_s,
             tunInfo.index,
             3,
             &routeError)) {
         if (errorOut != nullptr) {
             *errorOut = routeError.isEmpty()
-                ? QStringLiteral("Failed to apply split default route 0.0.0.0/1.")
+                ? u"Failed to apply split default route 0.0.0.0/1."_s
                 : routeError;
         }
         return false;
     }
 
     if (!addOrChangeWindowsRoute(
-            QStringLiteral("128.0.0.0"),
-            QStringLiteral("128.0.0.0"),
-            QStringLiteral("0.0.0.0"),
+            u"128.0.0.0"_s,
+            u"128.0.0.0"_s,
+            u"0.0.0.0"_s,
             tunInfo.index,
             3,
             &routeError)) {
         if (errorOut != nullptr) {
             *errorOut = routeError.isEmpty()
-                ? QStringLiteral("Failed to apply split default route 128.0.0.0/1.")
+                ? u"Failed to apply split default route 128.0.0.0/1."_s
                 : routeError;
         }
         return false;
@@ -782,22 +783,22 @@ bool applyWindowsTunRoutes(
 
     // IPv6 leak guard: best-effort split default routes to TUN.
     QString v6Error;
-    const bool v6a = addOrChangeWindowsRouteV6(QStringLiteral("::/1"), tunInfo.index, 3, &v6Error);
-    const bool v6b = addOrChangeWindowsRouteV6(QStringLiteral("8000::/1"), tunInfo.index, 3, &v6Error);
+    const bool v6a = addOrChangeWindowsRouteV6(u"::/1"_s, tunInfo.index, 3, &v6Error);
+    const bool v6b = addOrChangeWindowsRouteV6(u"8000::/1"_s, tunInfo.index, 3, &v6Error);
     if (!v6a || !v6b) {
         // If the system has an IPv6 default route, failing to install split v6
         // routes can leak traffic outside TUN. In that case fail startup.
         if (hasWindowsIpv6DefaultRoute()) {
             if (errorOut != nullptr) {
-                *errorOut = QStringLiteral("Failed to apply mandatory IPv6 split routes for TUN (%1).")
-                                .arg(v6Error.trimmed().isEmpty() ? QStringLiteral("restricted environment")
+                *errorOut = u"Failed to apply mandatory IPv6 split routes for TUN (%1)."_s
+                                .arg(v6Error.trimmed().isEmpty() ? u"restricted environment"_s
                                                                  : v6Error.trimmed());
             }
             return false;
         }
         if (errorOut != nullptr) {
-            *errorOut = QStringLiteral("Windows route setup warning: IPv6 split-route not fully applied (%1).")
-                            .arg(v6Error.trimmed().isEmpty() ? QStringLiteral("restricted environment")
+            *errorOut = u"Windows route setup warning: IPv6 split-route not fully applied (%1)."_s
+                            .arg(v6Error.trimmed().isEmpty() ? u"restricted environment"_s
                                                              : v6Error.trimmed());
         }
     }
@@ -808,31 +809,31 @@ bool applyWindowsTunRoutes(
         if (!gateway.isEmpty()) {
             deleteWindowsRouteBestEffort(
                 server,
-                QStringLiteral("255.255.255.255"),
+                u"255.255.255.255"_s,
                 gateway,
                 0);
             if (!addOrChangeWindowsRoute(
                     server,
-                    QStringLiteral("255.255.255.255"),
+                    u"255.255.255.255"_s,
                     gateway,
                     0,
                     3,
                     &routeError)) {
                 if (errorOut != nullptr) {
                     *errorOut = routeError.isEmpty()
-                        ? QStringLiteral("Failed to apply VPN server bypass route.")
+                        ? u"Failed to apply VPN server bypass route."_s
                         : routeError;
                 }
                 return false;
             }
         } else if (errorOut != nullptr && !gatewayError.trimmed().isEmpty()) {
-            *errorOut = QStringLiteral("Windows route setup warning: %1").arg(gatewayError.trimmed());
+            *errorOut = u"Windows route setup warning: %1"_s.arg(gatewayError.trimmed());
         }
     }
 
     if (errorOut != nullptr) {
-        *errorOut = QStringLiteral("tun=%1;idx=%2")
-                        .arg(tunInfo.alias.isEmpty() ? QStringLiteral("unknown") : tunInfo.alias)
+        *errorOut = u"tun=%1;idx=%2"_s
+                        .arg(tunInfo.alias.isEmpty() ? u"unknown"_s : tunInfo.alias)
                         .arg(tunInfo.index);
     }
     return true;
@@ -845,20 +846,20 @@ bool cleanupWindowsTunRoutes(const QString& serverIp, QString* errorOut)
     cleanupSplitRoutesForAdapter(tunInfo.index);
     // Best effort cleanup for routes that may have been left without IF binding.
     deleteWindowsRouteBestEffort(
-        QStringLiteral("0.0.0.0"),
-        QStringLiteral("128.0.0.0"),
-        QStringLiteral("0.0.0.0"),
+        u"0.0.0.0"_s,
+        u"128.0.0.0"_s,
+        u"0.0.0.0"_s,
         0);
     deleteWindowsRouteBestEffort(
-        QStringLiteral("128.0.0.0"),
-        QStringLiteral("128.0.0.0"),
-        QStringLiteral("0.0.0.0"),
+        u"128.0.0.0"_s,
+        u"128.0.0.0"_s,
+        u"0.0.0.0"_s,
         0);
     if (!server.isEmpty()) {
         deleteWindowsRouteBestEffort(
             server,
-            QStringLiteral("255.255.255.255"),
-            QStringLiteral("0.0.0.0"),
+            u"255.255.255.255"_s,
+            u"0.0.0.0"_s,
             0);
     }
     if (errorOut != nullptr) {
@@ -873,14 +874,14 @@ bool validateWindowsTunRouting(
     QString* errorOut)
 {
     const QString server = (isIpv4(serverIp) ? serverIp.trimmed() : QString());
-    QString lastError = QStringLiteral("Windows route validation failed.");
+    QString lastError = u"Windows route validation failed."_s;
     QString selectedA;
     QString selectedB;
     const QString expectedIf = expectedTun.ipv4.trimmed();
     const int expectedIndex = expectedTun.index;
     if (expectedIf.isEmpty() || expectedIndex <= 0) {
         if (errorOut != nullptr) {
-            *errorOut = QStringLiteral("Windows TUN validation failed: active adapter info is unavailable.");
+            *errorOut = u"Windows TUN validation failed: active adapter info is unavailable."_s;
         }
         return false;
     }
@@ -888,19 +889,19 @@ bool validateWindowsTunRouting(
     for (int attempt = 0; attempt < 120; ++attempt) {
         WindowsTunAdapterInfo tunInfo = findWindowsTunAdapter();
         if (tunInfo.index <= 0 || tunInfo.ipv4.trimmed().isEmpty()) {
-            lastError = QStringLiteral("Windows TUN adapter state is not ready for validation.");
+            lastError = u"Windows TUN adapter state is not ready for validation."_s;
             QThread::msleep(150);
             continue;
         }
 
         if (tunInfo.index != expectedIndex) {
-            lastError = QStringLiteral("Windows TUN adapter index changed during validation.");
+            lastError = u"Windows TUN adapter index changed during validation."_s;
             QThread::msleep(150);
             continue;
         }
 
         if (tunInfo.ipv4.trimmed().compare(expectedIf, Qt::CaseInsensitive) != 0) {
-            lastError = QStringLiteral("Windows TUN adapter IPv4 changed during validation.");
+            lastError = u"Windows TUN adapter IPv4 changed during validation."_s;
             QThread::msleep(150);
             continue;
         }
@@ -908,12 +909,12 @@ bool validateWindowsTunRouting(
         QString routeTable;
         QString routeError;
         if (!runWindowsRoute(
-                {QStringLiteral("PRINT"), QStringLiteral("-4")},
+                {u"PRINT"_s, u"-4"_s},
                 3500,
                 &routeTable,
                 &routeError)) {
             lastError = routeError.trimmed().isEmpty()
-                ? QStringLiteral("Windows route probe unavailable.")
+                ? u"Windows route probe unavailable."_s
                 : routeError.trimmed();
             QThread::msleep(120);
             continue;
@@ -921,32 +922,32 @@ bool validateWindowsTunRouting(
 
         const bool splitAReady = routeTableHasEntry(
             routeTable,
-            QStringLiteral("0.0.0.0"),
-            QStringLiteral("128.0.0.0"),
+            u"0.0.0.0"_s,
+            u"128.0.0.0"_s,
             expectedIf);
         const bool splitBReady = routeTableHasEntry(
             routeTable,
-            QStringLiteral("128.0.0.0"),
-            QStringLiteral("128.0.0.0"),
+            u"128.0.0.0"_s,
+            u"128.0.0.0"_s,
             expectedIf);
 
         const QVector<WindowsRouteEntry> routes = parseWindowsIpv4Routes(routeTable);
-        selectedA = selectedInterfaceForDestination(routes, QStringLiteral("1.1.1.1"));
-        selectedB = selectedInterfaceForDestination(routes, QStringLiteral("129.0.0.1"));
+        selectedA = selectedInterfaceForDestination(routes, u"1.1.1.1"_s);
+        selectedB = selectedInterfaceForDestination(routes, u"129.0.0.1"_s);
         const bool selectedToTun = !selectedA.isEmpty()
             && !selectedB.isEmpty()
             && selectedA.compare(expectedIf, Qt::CaseInsensitive) == 0
             && selectedB.compare(expectedIf, Qt::CaseInsensitive) == 0;
 
         if (!splitAReady || !splitBReady || !selectedToTun) {
-            lastError = QStringLiteral("Windows TUN split-routes are not active yet.");
+            lastError = u"Windows TUN split-routes are not active yet."_s;
             QThread::msleep(150);
             continue;
         }
 
         if (serverRouteUsesTun(routeTable, server, expectedIf)) {
             if (errorOut != nullptr) {
-                *errorOut = QStringLiteral("Windows TUN validation failed: server route is bound to TUN.");
+                *errorOut = u"Windows TUN validation failed: server route is bound to TUN."_s;
             }
             return false;
         }
@@ -958,11 +959,11 @@ bool validateWindowsTunRouting(
     }
 
     if (errorOut != nullptr) {
-        *errorOut = QStringLiteral("%1 Expected interface: %2, selected(1.1.1.1): %3, selected(129.0.0.1): %4")
+        *errorOut = u"%1 Expected interface: %2, selected(1.1.1.1): %3, selected(129.0.0.1): %4"_s
                         .arg(lastError,
-                             expectedIf.isEmpty() ? QStringLiteral("unavailable") : expectedIf,
-                             selectedA.isEmpty() ? QStringLiteral("unavailable") : selectedA,
-                             selectedB.isEmpty() ? QStringLiteral("unavailable") : selectedB);
+                             expectedIf.isEmpty() ? u"unavailable"_s : expectedIf,
+                             selectedA.isEmpty() ? u"unavailable"_s : selectedA,
+                             selectedB.isEmpty() ? u"unavailable"_s : selectedB);
     }
     return false;
 }
@@ -971,15 +972,15 @@ bool validateWindowsTunRouting(
 #if defined(Q_OS_LINUX)
 QString linuxIpTool()
 {
-    const QString ipFromPath = QStandardPaths::findExecutable(QStringLiteral("ip"));
+    const QString ipFromPath = QStandardPaths::findExecutable(u"ip"_s);
     if (!ipFromPath.trimmed().isEmpty()) {
         return ipFromPath;
     }
     const QStringList candidates {
-        QStringLiteral("/sbin/ip"),
-        QStringLiteral("/usr/sbin/ip"),
-        QStringLiteral("/bin/ip"),
-        QStringLiteral("/usr/bin/ip")
+        u"/sbin/ip"_s,
+        u"/usr/sbin/ip"_s,
+        u"/bin/ip"_s,
+        u"/usr/bin/ip"_s
     };
     for (const QString& candidate : candidates) {
         if (QFileInfo::exists(candidate) && QFileInfo(candidate).isExecutable()) {
@@ -999,7 +1000,7 @@ QString linuxRouteDeviceFor(const QString& destination, bool ipv6, QString* erro
     const QString ipTool = linuxIpTool();
     if (ipTool.trimmed().isEmpty()) {
         if (errorOut != nullptr) {
-            *errorOut = QStringLiteral("Linux route inspection failed: `ip` utility not found.");
+            *errorOut = u"Linux route inspection failed: `ip` utility not found."_s;
         }
         return {};
     }
@@ -1008,9 +1009,9 @@ QString linuxRouteDeviceFor(const QString& destination, bool ipv6, QString* erro
     QString stderrText;
     const bool ok = runProcess(
         ipTool,
-        {ipv6 ? QStringLiteral("-6") : QStringLiteral("-4"),
-         QStringLiteral("route"),
-         QStringLiteral("get"),
+        {ipv6 ? u"-6"_s : u"-4"_s,
+         u"route"_s,
+         u"get"_s,
          target},
         1200,
         &stdoutText,
@@ -1018,19 +1019,19 @@ QString linuxRouteDeviceFor(const QString& destination, bool ipv6, QString* erro
     if (!ok) {
         if (errorOut != nullptr) {
             *errorOut = stderrText.trimmed().isEmpty()
-                ? QStringLiteral("Failed to inspect Linux %1 route for %2.")
-                      .arg(ipv6 ? QStringLiteral("IPv6") : QStringLiteral("IPv4"), target)
+                ? u"Failed to inspect Linux %1 route for %2."_s
+                      .arg(ipv6 ? u"IPv6"_s : u"IPv4"_s, target)
                 : stderrText.trimmed();
         }
         return {};
     }
 
-    static const QRegularExpression devRegex(QStringLiteral("\\bdev\\s+(\\S+)"));
+    static const QRegularExpression devRegex(u"\\bdev\\s+(\\S+)"_s);
     const QRegularExpressionMatch match = devRegex.match(stdoutText);
     if (!match.hasMatch()) {
         if (errorOut != nullptr) {
-            *errorOut = QStringLiteral("Failed to parse Linux %1 route device for %2.")
-                            .arg(ipv6 ? QStringLiteral("IPv6") : QStringLiteral("IPv4"), target);
+            *errorOut = u"Failed to parse Linux %1 route device for %2."_s
+                            .arg(ipv6 ? u"IPv6"_s : u"IPv4"_s, target);
         }
         return {};
     }
@@ -1044,12 +1045,12 @@ bool validateLinuxTunRouting(const QString& requestedTunIf, const QString& serve
     for (int i = 0; i < 20; ++i) {
         QString errA;
         QString errB;
-        const QString devA = linuxRouteDeviceFor(QStringLiteral("1.1.1.1"), false, &errA);
-        const QString devB = linuxRouteDeviceFor(QStringLiteral("129.0.0.1"), false, &errB);
+        const QString devA = linuxRouteDeviceFor(u"1.1.1.1"_s, false, &errA);
+        const QString devB = linuxRouteDeviceFor(u"129.0.0.1"_s, false, &errB);
         if (!devA.isEmpty() && devA == devB) {
-            const bool looksTun = devA.startsWith(QStringLiteral("tun"), Qt::CaseInsensitive)
-                                  || devA.startsWith(QStringLiteral("tap"), Qt::CaseInsensitive)
-                                  || devA.contains(QStringLiteral("xray"), Qt::CaseInsensitive);
+            const bool looksTun = devA.startsWith(u"tun"_s, Qt::CaseInsensitive)
+                                  || devA.startsWith(u"tap"_s, Qt::CaseInsensitive)
+                                  || devA.contains(u"xray"_s, Qt::CaseInsensitive);
             const bool matchesRequested = requiredTun.isEmpty()
                                           || devA.compare(requiredTun, Qt::CaseInsensitive) == 0;
             if (looksTun && matchesRequested) {
@@ -1057,7 +1058,7 @@ bool validateLinuxTunRouting(const QString& requestedTunIf, const QString& serve
                     QString serverErr;
                     const QString serverDev = linuxRouteDeviceFor(serverIp.trimmed(), false, &serverErr);
                     if (!serverDev.isEmpty() && serverDev.compare(devA, Qt::CaseInsensitive) == 0) {
-                        lastError = QStringLiteral("VPN server endpoint route is still pointed at TUN.");
+                        lastError = u"VPN server endpoint route is still pointed at TUN."_s;
                     } else {
                         return true;
                     }
@@ -1065,7 +1066,7 @@ bool validateLinuxTunRouting(const QString& requestedTunIf, const QString& serve
                     QString serverErr;
                     const QString serverDev = linuxRouteDeviceFor(serverIp.trimmed(), true, &serverErr);
                     if (!serverDev.isEmpty() && serverDev.compare(devA, Qt::CaseInsensitive) == 0) {
-                        lastError = QStringLiteral("VPN server endpoint IPv6 route is still pointed at TUN.");
+                        lastError = u"VPN server endpoint IPv6 route is still pointed at TUN."_s;
                     } else {
                         return true;
                     }
@@ -1073,10 +1074,10 @@ bool validateLinuxTunRouting(const QString& requestedTunIf, const QString& serve
                     return true;
                 }
             } else if (!matchesRequested) {
-                lastError = QStringLiteral("Linux default route device (%1) does not match requested TUN interface (%2).")
+                lastError = u"Linux default route device (%1) does not match requested TUN interface (%2)."_s
                                 .arg(devA, requiredTun);
             } else {
-                lastError = QStringLiteral("Linux default route device (%1) is not a TUN interface.").arg(devA);
+                lastError = u"Linux default route device (%1) is not a TUN interface."_s.arg(devA);
             }
         } else {
             lastError = !errA.isEmpty() ? errA : errB;
@@ -1086,7 +1087,7 @@ bool validateLinuxTunRouting(const QString& requestedTunIf, const QString& serve
 
     if (errorOut != nullptr) {
         *errorOut = lastError.trimmed().isEmpty()
-            ? QStringLiteral("Linux TUN routes were not applied correctly.")
+            ? u"Linux TUN routes were not applied correctly."_s
             : lastError.trimmed();
     }
     return false;
@@ -1098,8 +1099,8 @@ QString macDefaultGateway()
 {
     QString stdoutText;
     QString stderrText;
-    if (!runProcess(QStringLiteral("/sbin/route"),
-                    {QStringLiteral("-n"), QStringLiteral("get"), QStringLiteral("default")},
+    if (!runProcess(u"/sbin/route"_s,
+                    {u"-n"_s, u"get"_s, u"default"_s},
                     3000,
                     &stdoutText,
                     &stderrText)) {
@@ -1107,7 +1108,7 @@ QString macDefaultGateway()
         return {};
     }
 
-    static const QRegularExpression gatewayRegex(QStringLiteral("\\bgateway:\\s*([^\\s]+)"));
+    static const QRegularExpression gatewayRegex(u"\\bgateway:\\s*([^\\s]+)"_s);
     const QRegularExpressionMatch match = gatewayRegex.match(stdoutText);
     if (!match.hasMatch()) {
         return {};
@@ -1119,8 +1120,8 @@ QString macDefaultGateway6()
 {
     QString stdoutText;
     QString stderrText;
-    if (!runProcess(QStringLiteral("/sbin/route"),
-                    {QStringLiteral("-n"), QStringLiteral("get"), QStringLiteral("-inet6"), QStringLiteral("default")},
+    if (!runProcess(u"/sbin/route"_s,
+                    {u"-n"_s, u"get"_s, u"-inet6"_s, u"default"_s},
                     3000,
                     &stdoutText,
                     &stderrText)) {
@@ -1128,7 +1129,7 @@ QString macDefaultGateway6()
         return {};
     }
 
-    static const QRegularExpression gatewayRegex(QStringLiteral("\\bgateway:\\s*([^\\s]+)"));
+    static const QRegularExpression gatewayRegex(u"\\bgateway:\\s*([^\\s]+)"_s);
     const QRegularExpressionMatch match = gatewayRegex.match(stdoutText);
     if (!match.hasMatch()) {
         return {};
@@ -1144,15 +1145,15 @@ QString macRouteInterfaceFor(const QString& destination)
     }
     QString stdoutText;
     QString stderrText;
-    if (!runProcess(QStringLiteral("/sbin/route"),
-                    {QStringLiteral("-n"), QStringLiteral("get"), target},
+    if (!runProcess(u"/sbin/route"_s,
+                    {u"-n"_s, u"get"_s, target},
                     3000,
                     &stdoutText,
                     &stderrText)) {
         Q_UNUSED(stderrText)
         return {};
     }
-    static const QRegularExpression ifRegex(QStringLiteral("\\binterface:\\s*([^\\s]+)"));
+    static const QRegularExpression ifRegex(u"\\binterface:\\s*([^\\s]+)"_s);
     const QRegularExpressionMatch match = ifRegex.match(stdoutText);
     if (!match.hasMatch()) {
         return {};
@@ -1168,15 +1169,15 @@ QString macRouteInterfaceFor6(const QString& destination)
     }
     QString stdoutText;
     QString stderrText;
-    if (!runProcess(QStringLiteral("/sbin/route"),
-                    {QStringLiteral("-n"), QStringLiteral("get"), QStringLiteral("-inet6"), target},
+    if (!runProcess(u"/sbin/route"_s,
+                    {u"-n"_s, u"get"_s, u"-inet6"_s, target},
                     3000,
                     &stdoutText,
                     &stderrText)) {
         Q_UNUSED(stderrText)
         return {};
     }
-    static const QRegularExpression ifRegex(QStringLiteral("\\binterface:\\s*([^\\s]+)"));
+    static const QRegularExpression ifRegex(u"\\binterface:\\s*([^\\s]+)"_s);
     const QRegularExpressionMatch match = ifRegex.match(stdoutText);
     if (!match.hasMatch()) {
         return {};
@@ -1191,12 +1192,11 @@ bool cleanupMacTunRoutes(const QString& tunIf, const QString& serverIp)
     }
     QString command;
     if (!serverIp.trimmed().isEmpty() && isIpv4(serverIp)) {
-        command += QStringLiteral("route -n delete -host %1 >/dev/null 2>&1 || true;").arg(serverIp.trimmed());
+        command += u"route -n delete -host %1 >/dev/null 2>&1 || true;"_s.arg(serverIp.trimmed());
     } else if (!serverIp.trimmed().isEmpty() && isIpv6(serverIp)) {
-        command += QStringLiteral("route -n delete -inet6 -host %1 >/dev/null 2>&1 || true;").arg(serverIp.trimmed());
+        command += u"route -n delete -inet6 -host %1 >/dev/null 2>&1 || true;"_s.arg(serverIp.trimmed());
     }
-    command += QStringLiteral(
-        "route -n delete -net 0.0.0.0/1 -iface %1 >/dev/null 2>&1 || true; "
+    command += QString::fromUtf8("route -n delete -net 0.0.0.0/1 -iface %1 >/dev/null 2>&1 || true; "
         "route -n delete -net 128.0.0.0/1 -iface %1 >/dev/null 2>&1 || true;")
                    .arg(tunIf.trimmed());
     QString ignored;
@@ -1207,7 +1207,7 @@ bool applyMacTunRoutes(const QString& tunIf, const QString& serverIp, QString* e
 {
     if (tunIf.trimmed().isEmpty()) {
         if (errorOut != nullptr) {
-            *errorOut = QStringLiteral("Missing TUN interface name for route setup.");
+            *errorOut = u"Missing TUN interface name for route setup."_s;
         }
         return false;
     }
@@ -1215,7 +1215,7 @@ bool applyMacTunRoutes(const QString& tunIf, const QString& serverIp, QString* e
     const QString gateway = macDefaultGateway();
     if (gateway.trimmed().isEmpty()) {
         if (errorOut != nullptr) {
-            *errorOut = QStringLiteral("Unable to detect macOS default gateway for TUN routing.");
+            *errorOut = u"Unable to detect macOS default gateway for TUN routing."_s;
         }
         return false;
     }
@@ -1225,19 +1225,16 @@ bool applyMacTunRoutes(const QString& tunIf, const QString& serverIp, QString* e
     QString command;
     if (!serverIp.trimmed().isEmpty() && isIpv4(serverIp)) {
         // Keep the upstream server reachable outside tunnel to avoid route loops.
-        command += QStringLiteral(
-                       "route -n add -host %1 %2 >/dev/null 2>&1 || "
+        command += QString::fromUtf8("route -n add -host %1 %2 >/dev/null 2>&1 || "
                        "route -n change -host %1 %2 >/dev/null 2>&1 || true;")
                        .arg(serverIp.trimmed(), gateway);
     } else if (!serverIp.trimmed().isEmpty() && isIpv6(serverIp) && !gateway6.trimmed().isEmpty()) {
         // Same bypass route guard for IPv6 endpoints.
-        command += QStringLiteral(
-                       "route -n add -inet6 -host %1 %2 >/dev/null 2>&1 || "
+        command += QString::fromUtf8("route -n add -inet6 -host %1 %2 >/dev/null 2>&1 || "
                        "route -n change -inet6 -host %1 %2 >/dev/null 2>&1 || true;")
                        .arg(serverIp.trimmed(), gateway6.trimmed());
     }
-    command += QStringLiteral(
-        "route -n add -net 0.0.0.0/1 -iface %1 >/dev/null 2>&1 || true; "
+    command += QString::fromUtf8("route -n add -net 0.0.0.0/1 -iface %1 >/dev/null 2>&1 || true; "
         "route -n add -net 128.0.0.0/1 -iface %1 >/dev/null 2>&1 || true;")
                    .arg(tunIf.trimmed());
 
@@ -1245,19 +1242,19 @@ bool applyMacTunRoutes(const QString& tunIf, const QString& serverIp, QString* e
     if (!runShell(command, 6000, &routeError)) {
         if (errorOut != nullptr) {
             *errorOut = routeError.trimmed().isEmpty()
-                ? QStringLiteral("Failed to apply macOS TUN routes.")
+                ? u"Failed to apply macOS TUN routes."_s
                 : routeError.trimmed();
         }
         return false;
     }
 
     // Validate split routes are really active on the target utun.
-    const QString ifA = macRouteInterfaceFor(QStringLiteral("1.1.1.1"));
-    const QString ifB = macRouteInterfaceFor(QStringLiteral("129.0.0.1"));
+    const QString ifA = macRouteInterfaceFor(u"1.1.1.1"_s);
+    const QString ifB = macRouteInterfaceFor(u"129.0.0.1"_s);
     if (ifA.compare(tunIf, Qt::CaseInsensitive) != 0
         || ifB.compare(tunIf, Qt::CaseInsensitive) != 0) {
         if (errorOut != nullptr) {
-            *errorOut = QStringLiteral("macOS TUN split routes were not applied correctly.");
+            *errorOut = u"macOS TUN split routes were not applied correctly."_s;
         }
         return false;
     }
@@ -1266,7 +1263,7 @@ bool applyMacTunRoutes(const QString& tunIf, const QString& serverIp, QString* e
         const QString serverIface = macRouteInterfaceFor(serverIp.trimmed());
         if (serverIface.compare(tunIf, Qt::CaseInsensitive) == 0) {
             if (errorOut != nullptr) {
-                *errorOut = QStringLiteral("VPN server endpoint route is still pointed at TUN.");
+                *errorOut = u"VPN server endpoint route is still pointed at TUN."_s;
             }
             return false;
         }
@@ -1274,7 +1271,7 @@ bool applyMacTunRoutes(const QString& tunIf, const QString& serverIp, QString* e
         const QString serverIface = macRouteInterfaceFor6(serverIp.trimmed());
         if (!serverIface.isEmpty() && serverIface.compare(tunIf, Qt::CaseInsensitive) == 0) {
             if (errorOut != nullptr) {
-                *errorOut = QStringLiteral("VPN server endpoint IPv6 route is still pointed at TUN.");
+                *errorOut = u"VPN server endpoint IPv6 route is still pointed at TUN."_s;
             }
             return false;
         }
@@ -1320,12 +1317,12 @@ QString resolveIpForHost(const QString& hostOrIp)
 QJsonObject makeResponse(bool ok, const QString& message = QString())
 {
     QJsonObject response;
-    response.insert(QStringLiteral("ok"), ok);
+    response.insert(u"ok"_s, ok);
     if (!message.trimmed().isEmpty()) {
-        response.insert(QStringLiteral("message"), message.trimmed());
+        response.insert(u"message"_s, message.trimmed());
     }
-    response.insert(QStringLiteral("time_ms"), QDateTime::currentMSecsSinceEpoch());
-    response.insert(QStringLiteral("helper_pid"), static_cast<qint64>(QCoreApplication::applicationPid()));
+    response.insert(u"time_ms"_s, QDateTime::currentMSecsSinceEpoch());
+    response.insert(u"helper_pid"_s, static_cast<qint64>(QCoreApplication::applicationPid()));
     return response;
 }
 
@@ -1390,61 +1387,61 @@ private:
         QJsonParseError parseError;
         const QJsonDocument doc = QJsonDocument::fromJson(line, &parseError);
         if (parseError.error != QJsonParseError::NoError || !doc.isObject()) {
-            return makeResponse(false, QStringLiteral("Invalid JSON request."));
+            return makeResponse(false, u"Invalid JSON request."_s);
         }
 
         const QJsonObject request = doc.object();
-        if (request.value(QStringLiteral("token")).toString() != m_token) {
-            return makeResponse(false, QStringLiteral("Unauthorized token."));
+        if (request.value(u"token"_s).toString() != m_token) {
+            return makeResponse(false, u"Unauthorized token."_s);
         }
 
-        const QString action = request.value(QStringLiteral("action")).toString().trimmed();
-        if (action == QStringLiteral("ping")) {
-            return makeResponse(true, QStringLiteral("pong"));
+        const QString action = request.value(u"action"_s).toString().trimmed();
+        if (action == u"ping"_s) {
+            return makeResponse(true, u"pong"_s);
         }
-        if (action == QStringLiteral("shutdown")) {
+        if (action == u"shutdown"_s) {
             QTimer::singleShot(0, qApp, &QCoreApplication::quit);
-            return makeResponse(true, QStringLiteral("Helper shutting down."));
+            return makeResponse(true, u"Helper shutting down."_s);
         }
-        if (action == QStringLiteral("start_tun")) {
+        if (action == u"start_tun"_s) {
             QString error;
-            return startTun(request, &error) ? makeResponse(true, QStringLiteral("TUN started."))
+            return startTun(request, &error) ? makeResponse(true, u"TUN started."_s)
                                              : makeResponse(false, error);
         }
-        if (action == QStringLiteral("stop_tun")) {
+        if (action == u"stop_tun"_s) {
             QString error;
-            return stopTun(request, &error) ? makeResponse(true, QStringLiteral("TUN stopped."))
+            return stopTun(request, &error) ? makeResponse(true, u"TUN stopped."_s)
                                             : makeResponse(false, error);
         }
 
-        return makeResponse(false, QStringLiteral("Unsupported action."));
+        return makeResponse(false, u"Unsupported action."_s);
     }
 
     bool startTun(const QJsonObject& request, QString* errorOut)
     {
-        const QString xrayPath = request.value(QStringLiteral("xray_path")).toString().trimmed();
-        const QString configPath = request.value(QStringLiteral("config_path")).toString().trimmed();
-        const QString pidPath = request.value(QStringLiteral("pid_path")).toString().trimmed();
-        const QString logPath = request.value(QStringLiteral("log_path")).toString().trimmed();
-        const QString tunIf = request.value(QStringLiteral("tun_if")).toString().trimmed();
-        const QString serverIpRequested = request.value(QStringLiteral("server_ip")).toString().trimmed();
-        const QString serverHostRequested = request.value(QStringLiteral("server_host")).toString().trimmed();
+        const QString xrayPath = request.value(u"xray_path"_s).toString().trimmed();
+        const QString configPath = request.value(u"config_path"_s).toString().trimmed();
+        const QString pidPath = request.value(u"pid_path"_s).toString().trimmed();
+        const QString logPath = request.value(u"log_path"_s).toString().trimmed();
+        const QString tunIf = request.value(u"tun_if"_s).toString().trimmed();
+        const QString serverIpRequested = request.value(u"server_ip"_s).toString().trimmed();
+        const QString serverHostRequested = request.value(u"server_host"_s).toString().trimmed();
 
         if (xrayPath.isEmpty() || configPath.isEmpty() || pidPath.isEmpty() || logPath.isEmpty()) {
             if (errorOut != nullptr) {
-                *errorOut = QStringLiteral("Missing required start_tun fields.");
+                *errorOut = u"Missing required start_tun fields."_s;
             }
             return false;
         }
         if (!QFileInfo::exists(xrayPath)) {
             if (errorOut != nullptr) {
-                *errorOut = QStringLiteral("xray executable not found.");
+                *errorOut = u"xray executable not found."_s;
             }
             return false;
         }
         if (!QFileInfo::exists(configPath)) {
             if (errorOut != nullptr) {
-                *errorOut = QStringLiteral("Runtime config not found.");
+                *errorOut = u"Runtime config not found."_s;
             }
             return false;
         }
@@ -1463,8 +1460,8 @@ private:
                     QString ignoredOut;
                     QString ignoredErr;
                     Q_UNUSED(runProcess(
-                        QStringLiteral("taskkill"),
-                        {QStringLiteral("/PID"), QString::number(oldPid), QStringLiteral("/T"), QStringLiteral("/F")},
+                        u"taskkill"_s,
+                        {u"/PID"_s, QString::number(oldPid), u"/T"_s, u"/F"_s},
                         5000,
                         &ignoredOut,
                         &ignoredErr));
@@ -1477,14 +1474,14 @@ private:
         qint64 pidValue = 0;
         QProcess detachedProcess;
         detachedProcess.setProgram(xrayPath);
-        detachedProcess.setArguments({QStringLiteral("run"), QStringLiteral("-config"), configPath});
+        detachedProcess.setArguments({u"run"_s, u"-config"_s, configPath});
         detachedProcess.setWorkingDirectory(workingDir);
         detachedProcess.setStandardOutputFile(logPath, QIODevice::Append);
         detachedProcess.setStandardErrorFile(logPath, QIODevice::Append);
         const bool started = detachedProcess.startDetached(&pidValue);
         if (!started || pidValue <= 0) {
             if (errorOut != nullptr) {
-                *errorOut = QStringLiteral("Failed to start Xray in privileged helper.");
+                *errorOut = u"Failed to start Xray in privileged helper."_s;
             }
             return false;
         }
@@ -1492,7 +1489,7 @@ private:
         QFile pidFileOut(pidPath);
         if (!pidFileOut.open(QIODevice::WriteOnly | QIODevice::Text | QIODevice::Truncate)) {
             if (errorOut != nullptr) {
-                *errorOut = QStringLiteral("Failed to write privileged TUN pid file.");
+                *errorOut = u"Failed to write privileged TUN pid file."_s;
             }
             return false;
         }
@@ -1501,17 +1498,17 @@ private:
 #else
         const QString cmd =
             quoteForSh(xrayPath)
-            + QStringLiteral(" run -config ")
+            + u" run -config "_s
             + quoteForSh(configPath)
-            + QStringLiteral(" >> ")
+            + u" >> "_s
             + quoteForSh(logPath)
-            + QStringLiteral(" 2>&1 & echo $! > ")
+            + u" 2>&1 & echo $! > "_s
             + quoteForSh(pidPath);
         QString stderrText;
         if (!runShell(cmd, 10000, &stderrText)) {
             if (errorOut != nullptr) {
                 *errorOut = stderrText.isEmpty()
-                    ? QStringLiteral("Failed to start Xray in privileged helper.")
+                    ? u"Failed to start Xray in privileged helper."_s
                     : stderrText;
             }
             return false;
@@ -1521,7 +1518,7 @@ private:
 #if defined(Q_OS_MACOS)
         if (tunIf.isEmpty()) {
             if (errorOut != nullptr) {
-                *errorOut = QStringLiteral("Missing TUN interface name.");
+                *errorOut = u"Missing TUN interface name."_s;
             }
             return false;
         }
@@ -1530,7 +1527,7 @@ private:
         bool tunReady = false;
         for (int i = 0; i < 80; ++i) {
             QString ifErr;
-            if (runShell(QStringLiteral("/sbin/ifconfig %1 >/dev/null 2>&1").arg(tunIf), 1200, &ifErr)) {
+            if (runShell(u"/sbin/ifconfig %1 >/dev/null 2>&1"_s.arg(tunIf), 1200, &ifErr)) {
                 tunReady = true;
                 break;
             }
@@ -1538,15 +1535,14 @@ private:
         }
         if (!tunReady) {
             const QString startupLogLine = lastNonEmptyLogLine(logPath);
-            const QString cleanupCmd = QStringLiteral(
-                "if [ -f %1 ]; then PID=$(cat %1); [ -n \"$PID\" ] && kill \"$PID\" >/dev/null 2>&1; rm -f %1; fi")
+            const QString cleanupCmd = u"if [ -f %1 ]; then PID=$(cat %1); [ -n \"$PID\" ] && kill \"$PID\" >/dev/null 2>&1; rm -f %1; fi"_s
                 .arg(quoteForSh(pidPath));
             QString ignored;
             runShell(cleanupCmd, 3000, &ignored);
             if (errorOut != nullptr) {
                 *errorOut = startupLogLine.isEmpty()
-                    ? QStringLiteral("TUN interface was not ready in time (%1).").arg(tunIf)
-                    : QStringLiteral("TUN interface was not ready in time (%1): %2").arg(tunIf, startupLogLine);
+                    ? u"TUN interface was not ready in time (%1)."_s.arg(tunIf)
+                    : u"TUN interface was not ready in time (%1): %2"_s.arg(tunIf, startupLogLine);
             }
             return false;
         }
@@ -1561,14 +1557,13 @@ private:
         // Route system traffic through TUN and keep server endpoint direct.
         QString routeError;
         if (!applyMacTunRoutes(tunIf, cleanupServerIp, &routeError)) {
-            const QString cleanupCmd = QStringLiteral(
-                "if [ -f %1 ]; then PID=$(cat %1); [ -n \"$PID\" ] && kill \"$PID\" >/dev/null 2>&1; rm -f %1; fi")
+            const QString cleanupCmd = u"if [ -f %1 ]; then PID=$(cat %1); [ -n \"$PID\" ] && kill \"$PID\" >/dev/null 2>&1; rm -f %1; fi"_s
                 .arg(quoteForSh(pidPath));
             QString ignored;
             runShell(cleanupCmd, 3000, &ignored);
             if (errorOut != nullptr) {
                 *errorOut = routeError.trimmed().isEmpty()
-                    ? QStringLiteral("Failed to apply TUN routes.")
+                    ? u"Failed to apply TUN routes."_s
                     : routeError.trimmed();
             }
             return false;
@@ -1579,28 +1574,28 @@ private:
             resolvedServerIp = resolveIpForHost(serverHostRequested);
         }
         const QStringList dnsServers = stringListFromJsonArray(
-            request.value(QStringLiteral("dns_servers")).toArray());
+            request.value(u"dns_servers"_s).toArray());
         QString applyRouteNote;
         WindowsTunAdapterInfo activeTun;
         if (!applyWindowsTunRoutes(resolvedServerIp, dnsServers, &activeTun, &applyRouteNote)) {
             QString cleanupErr;
             Q_UNUSED(stopTun(QJsonObject{
-                {QStringLiteral("pid_path"), pidPath},
-                {QStringLiteral("tun_if"), QString()},
-                {QStringLiteral("server_ip"), resolvedServerIp}
+                {u"pid_path"_s, pidPath},
+                {u"tun_if"_s, QString()},
+                {u"server_ip"_s, resolvedServerIp}
             }, &cleanupErr));
             if (errorOut != nullptr) {
                 *errorOut = applyRouteNote.trimmed().isEmpty()
-                    ? QStringLiteral("Failed to apply Windows TUN routes.")
+                    ? u"Failed to apply Windows TUN routes."_s
                     : applyRouteNote.trimmed();
             }
             return false;
         } else {
             appendLineToFile(
                 logPath,
-                QStringLiteral("[System] Windows route setup: %1;ip=%2")
+                u"[System] Windows route setup: %1;ip=%2"_s
                     .arg(applyRouteNote.trimmed(),
-                         activeTun.ipv4.trimmed().isEmpty() ? QStringLiteral("unavailable")
+                         activeTun.ipv4.trimmed().isEmpty() ? u"unavailable"_s
                                                             : activeTun.ipv4.trimmed()));
         }
 
@@ -1608,18 +1603,18 @@ private:
         if (!validateWindowsTunRouting(resolvedServerIp, activeTun, &routeError)) {
             QString cleanupErr;
             Q_UNUSED(stopTun(QJsonObject{
-                {QStringLiteral("pid_path"), pidPath},
-                {QStringLiteral("tun_if"), QString()},
-                {QStringLiteral("server_ip"), resolvedServerIp}
+                {u"pid_path"_s, pidPath},
+                {u"tun_if"_s, QString()},
+                {u"server_ip"_s, resolvedServerIp}
             }, &cleanupErr));
             if (errorOut != nullptr) {
                 *errorOut = routeError.trimmed().isEmpty()
-                    ? QStringLiteral("Failed to validate Windows TUN routes.")
+                    ? u"Failed to validate Windows TUN routes."_s
                     : routeError.trimmed();
             }
             return false;
         } else if (!routeError.trimmed().isEmpty()) {
-            appendLineToFile(logPath, QStringLiteral("[System] Windows route probe warning: %1").arg(routeError.trimmed()));
+            appendLineToFile(logPath, u"[System] Windows route probe warning: %1"_s.arg(routeError.trimmed()));
         }
 #elif defined(Q_OS_LINUX)
         QString resolvedServerIp = resolveIpForHost(serverIpRequested);
@@ -1630,13 +1625,13 @@ private:
         if (!validateLinuxTunRouting(tunIf, resolvedServerIp, &routeError)) {
             QString cleanupErr;
             Q_UNUSED(stopTun(QJsonObject{
-                {QStringLiteral("pid_path"), pidPath},
-                {QStringLiteral("tun_if"), tunIf},
-                {QStringLiteral("server_ip"), resolvedServerIp}
+                {u"pid_path"_s, pidPath},
+                {u"tun_if"_s, tunIf},
+                {u"server_ip"_s, resolvedServerIp}
             }, &cleanupErr));
             if (errorOut != nullptr) {
                 *errorOut = routeError.trimmed().isEmpty()
-                    ? QStringLiteral("Failed to validate Linux TUN routes.")
+                    ? u"Failed to validate Linux TUN routes."_s
                     : routeError.trimmed();
             }
             return false;
@@ -1650,14 +1645,14 @@ private:
         QFile pidFile(pidPath);
         if (!pidFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
             if (errorOut != nullptr) {
-                *errorOut = QStringLiteral("TUN start failed: pid file not created.");
+                *errorOut = u"TUN start failed: pid file not created."_s;
             }
             return false;
         }
         const QString pidText = QString::fromUtf8(pidFile.readAll()).trimmed();
         if (pidText.isEmpty()) {
             if (errorOut != nullptr) {
-                *errorOut = QStringLiteral("TUN start failed: invalid pid.");
+                *errorOut = u"TUN start failed: invalid pid."_s;
             }
             return false;
         }
@@ -1667,12 +1662,12 @@ private:
 
     bool stopTun(const QJsonObject& request, QString* errorOut)
     {
-        const QString pidPath = request.value(QStringLiteral("pid_path")).toString().trimmed();
-        const QString tunIf = request.value(QStringLiteral("tun_if")).toString().trimmed();
-        const QString serverIp = request.value(QStringLiteral("server_ip")).toString().trimmed();
+        const QString pidPath = request.value(u"pid_path"_s).toString().trimmed();
+        const QString tunIf = request.value(u"tun_if"_s).toString().trimmed();
+        const QString serverIp = request.value(u"server_ip"_s).toString().trimmed();
         if (pidPath.isEmpty()) {
             if (errorOut != nullptr) {
-                *errorOut = QStringLiteral("Missing pid path.");
+                *errorOut = u"Missing pid path."_s;
             }
             return false;
         }
@@ -1695,8 +1690,8 @@ private:
                     QString stopOut;
                     QString stopErr;
                     Q_UNUSED(runProcess(
-                        QStringLiteral("taskkill"),
-                        {QStringLiteral("/PID"), QString::number(pidValue), QStringLiteral("/T"), QStringLiteral("/F")},
+                        u"taskkill"_s,
+                        {u"/PID"_s, QString::number(pidValue), u"/T"_s, u"/F"_s},
                         7000,
                         &stopOut,
                         &stopErr));
@@ -1709,8 +1704,7 @@ private:
             *errorOut = cleanupError.trimmed();
         }
 #else
-        const QString cmd = QStringLiteral(
-            "if [ -f %1 ]; then "
+        const QString cmd = QString::fromUtf8("if [ -f %1 ]; then "
             "PID=$(cat %1); "
             "if [ -n \"$PID\" ]; then kill \"$PID\" >/dev/null 2>&1; sleep 0.2; kill -9 \"$PID\" >/dev/null 2>&1 || true; fi; "
             "rm -f %1; "
@@ -1720,7 +1714,7 @@ private:
         if (!runShell(cmd, 10000, &stopErr)) {
             if (errorOut != nullptr) {
                 *errorOut = stopErr.isEmpty()
-                    ? QStringLiteral("Failed to stop privileged TUN process.")
+                    ? u"Failed to stop privileged TUN process."_s
                     : stopErr;
             }
             return false;
@@ -1743,7 +1737,7 @@ private:
 int main(int argc, char* argv[])
 {
     QCoreApplication app(argc, argv);
-    app.setApplicationName(QStringLiteral("GenyConnectTunHelper"));
+    app.setApplicationName(u"GenyConnectTunHelper"_s);
 
     quint16 port = 0;
     QString token;
@@ -1752,7 +1746,7 @@ int main(int argc, char* argv[])
     const QStringList args = app.arguments();
     for (int i = 1; i < args.size(); ++i) {
         const QString arg = args.at(i);
-        if (arg == QStringLiteral("--listen-port") && i + 1 < args.size()) {
+        if (arg == u"--listen-port"_s && i + 1 < args.size()) {
             bool ok = false;
             const int parsed = args.at(i + 1).toInt(&ok);
             if (ok && parsed > 0 && parsed < 65536) {
@@ -1761,12 +1755,12 @@ int main(int argc, char* argv[])
             ++i;
             continue;
         }
-        if (arg == QStringLiteral("--token") && i + 1 < args.size()) {
+        if (arg == u"--token"_s && i + 1 < args.size()) {
             token = args.at(i + 1).trimmed();
             ++i;
             continue;
         }
-        if (arg == QStringLiteral("--idle-timeout-ms") && i + 1 < args.size()) {
+        if (arg == u"--idle-timeout-ms"_s && i + 1 < args.size()) {
             bool ok = false;
             const int parsed = args.at(i + 1).toInt(&ok);
             if (ok && parsed >= 30000) {

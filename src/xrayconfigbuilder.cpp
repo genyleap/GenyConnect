@@ -9,13 +9,15 @@ module;
 
 module genyconnect.backend.xrayconfigbuilder;
 
+using namespace Qt::StringLiterals;
+
 namespace {
 QStringList defaultDnsServers()
 {
     return {
-        QStringLiteral("1.1.1.1"),
-        QStringLiteral("8.8.8.8"),
-        QStringLiteral("9.9.9.9")
+        u"1.1.1.1"_s,
+        u"8.8.8.8"_s,
+        u"9.9.9.9"_s
     };
 }
 
@@ -65,21 +67,21 @@ int defaultTunMtu()
 QJsonObject buildMixedInbound(quint16 port)
 {
     QJsonObject sniffing {
-        {QStringLiteral("enabled"), true},
-        {QStringLiteral("destOverride"), QJsonArray {QStringLiteral("http"), QStringLiteral("tls"), QStringLiteral("quic"), QStringLiteral("fakedns")}},
-        {QStringLiteral("routeOnly"), false}
+        {u"enabled"_s, true},
+        {u"destOverride"_s, QJsonArray {u"http"_s, u"tls"_s, u"quic"_s, u"fakedns"_s}},
+        {u"routeOnly"_s, false}
     };
 
     QJsonObject inbound {
-        {QStringLiteral("tag"), QStringLiteral("mixed-in")},
-        {QStringLiteral("listen"), QStringLiteral("127.0.0.1")},
-        {QStringLiteral("port"), static_cast<int>(port)},
-        {QStringLiteral("protocol"), QStringLiteral("mixed")},
-        {QStringLiteral("sniffing"), sniffing},
-        {QStringLiteral("settings"), QJsonObject {
-            {QStringLiteral("udp"), true},
-            {QStringLiteral("auth"), QStringLiteral("noauth")},
-            {QStringLiteral("allowTransparent"), false}
+        {u"tag"_s, u"mixed-in"_s},
+        {u"listen"_s, u"127.0.0.1"_s},
+        {u"port"_s, static_cast<int>(port)},
+        {u"protocol"_s, u"mixed"_s},
+        {u"sniffing"_s, sniffing},
+        {u"settings"_s, QJsonObject {
+            {u"udp"_s, true},
+            {u"auth"_s, u"noauth"_s},
+            {u"allowTransparent"_s, false}
         }}
     };
 
@@ -88,62 +90,62 @@ QJsonObject buildMixedInbound(quint16 port)
 
 QJsonObject buildTunInbound(const XrayConfigBuilder::BuildOptions& options)
 {
-    QString tunStack = QStringLiteral("system");
+    QString tunStack = u"system"_s;
 #if defined(Q_OS_LINUX)
-    tunStack = QStringLiteral("gvisor");
+    tunStack = u"gvisor"_s;
 #endif
 
     QJsonObject settings {
-        {QStringLiteral("address"), QJsonArray {
-            QStringLiteral("172.19.0.1/30"),
-            QStringLiteral("fd00:1234:5678::1/126")
+        {u"address"_s, QJsonArray {
+            u"172.19.0.1/30"_s,
+            u"fd00:1234:5678::1/126"_s
         }},
-        {QStringLiteral("mtu"), defaultTunMtu()},
-        {QStringLiteral("stack"), tunStack},
-        {QStringLiteral("autoRoute"), options.tunAutoRoute},
-        {QStringLiteral("strictRoute"), options.tunStrictRoute},
-        {QStringLiteral("sniff"), true}
+        {u"mtu"_s, defaultTunMtu()},
+        {u"stack"_s, tunStack},
+        {u"autoRoute"_s, options.tunAutoRoute},
+        {u"strictRoute"_s, options.tunStrictRoute},
+        {u"sniff"_s, true}
     };
 
 #if defined(Q_OS_MACOS)
     // Xray on macOS requires explicit utunN naming.
     const QString tunName = options.tunInterfaceName.trimmed().isEmpty()
-        ? QStringLiteral("utun9")
+        ? u"utun9"_s
         : options.tunInterfaceName.trimmed();
-    settings.insert(QStringLiteral("name"), tunName);
+    settings.insert(u"name"_s, tunName);
 #elif defined(Q_OS_WIN)
     // Keep a stable adapter name on Windows so route binding and cleanup are deterministic.
     const QString tunName = options.tunInterfaceName.trimmed().isEmpty()
-        ? QStringLiteral("genyconnect0")
+        ? u"genyconnect0"_s
         : options.tunInterfaceName.trimmed();
-    settings.insert(QStringLiteral("name"), tunName);
+    settings.insert(u"name"_s, tunName);
     // Mirror Xray's documented Windows TUN options so the adapter gets DNS
     // servers assigned and Xray keeps its own outbound sockets on the
     // physical interface instead of chasing the tunnel.
-    settings.insert(QStringLiteral("gateway"), QJsonArray {
-        QStringLiteral("172.19.0.1/30"),
-        QStringLiteral("fd00:1234:5678::1/126")
+    settings.insert(u"gateway"_s, QJsonArray {
+        u"172.19.0.1/30"_s,
+        u"fd00:1234:5678::1/126"_s
     });
-    settings.insert(QStringLiteral("dns"), toStringArray(tunDnsServers(options.dnsServers)));
-    settings.insert(QStringLiteral("autoOutboundsInterface"), QStringLiteral("auto"));
+    settings.insert(u"dns"_s, toStringArray(tunDnsServers(options.dnsServers)));
+    settings.insert(u"autoOutboundsInterface"_s, u"auto"_s);
 #endif
 
     return QJsonObject {
-        {QStringLiteral("tag"), QStringLiteral("tun-in")},
-        {QStringLiteral("protocol"), QStringLiteral("tun")},
-        {QStringLiteral("settings"), settings}
+        {u"tag"_s, u"tun-in"_s},
+        {u"protocol"_s, u"tun"_s},
+        {u"settings"_s, settings}
     };
 }
 
 QJsonObject buildApiInbound(quint16 port)
 {
     return QJsonObject {
-        {QStringLiteral("tag"), QStringLiteral("api-in")},
-        {QStringLiteral("listen"), QStringLiteral("127.0.0.1")},
-        {QStringLiteral("port"), static_cast<int>(port)},
-        {QStringLiteral("protocol"), QStringLiteral("dokodemo-door")},
-        {QStringLiteral("settings"), QJsonObject {
-            {QStringLiteral("address"), QStringLiteral("127.0.0.1")}
+        {u"tag"_s, u"api-in"_s},
+        {u"listen"_s, u"127.0.0.1"_s},
+        {u"port"_s, static_cast<int>(port)},
+        {u"protocol"_s, u"dokodemo-door"_s},
+        {u"settings"_s, QJsonObject {
+            {u"address"_s, u"127.0.0.1"_s}
         }}
     };
 }
@@ -151,9 +153,9 @@ QJsonObject buildApiInbound(quint16 port)
 QJsonObject buildDnsOutbound()
 {
     return QJsonObject {
-        {QStringLiteral("tag"), QStringLiteral("dns-out")},
-        {QStringLiteral("protocol"), QStringLiteral("dns")},
-        {QStringLiteral("settings"), QJsonObject {}}
+        {u"tag"_s, u"dns-out"_s},
+        {u"protocol"_s, u"dns"_s},
+        {u"settings"_s, QJsonObject {}}
     };
 }
 
@@ -163,8 +165,8 @@ QJsonObject buildDnsConfig(const XrayConfigBuilder::BuildOptions& options)
         ? defaultDnsServers()
         : options.dnsServers;
     return QJsonObject {
-        {QStringLiteral("servers"), toStringArray(servers)},
-        {QStringLiteral("queryStrategy"), QStringLiteral("UseIP")}
+        {u"servers"_s, toStringArray(servers)},
+        {u"queryStrategy"_s, u"UseIP"_s}
     };
 }
 
@@ -179,7 +181,7 @@ QString normalizeDomainRuleEntry(const QString& value)
         return trimmed;
     }
 
-    return QStringLiteral("domain:%1").arg(trimmed);
+    return u"domain:%1"_s.arg(trimmed);
 }
 
 QJsonArray toDomainArray(const QStringList& values)
@@ -227,12 +229,12 @@ QJsonArray toProcessArray(const QStringList& values)
             }
 
 #if defined(Q_OS_WIN)
-            if (!fileName.endsWith(QStringLiteral(".exe"), Qt::CaseInsensitive)
+            if (!fileName.endsWith(u".exe"_s, Qt::CaseInsensitive)
                 && !baseName.isEmpty()) {
-                appendUnique(baseName + QStringLiteral(".exe"));
+                appendUnique(baseName + u".exe"_s);
             }
 #else
-            if (fileName.endsWith(QStringLiteral(".exe"), Qt::CaseInsensitive)) {
+            if (fileName.endsWith(u".exe"_s, Qt::CaseInsensitive)) {
                 appendUnique(fileName.left(fileName.size() - 4));
             }
 #endif
@@ -245,80 +247,80 @@ QJsonObject buildRouting(const XrayConfigBuilder::BuildOptions& options)
 {
     // Avoid geoip.dat dependency by using explicit private/link-local CIDRs.
     const QJsonArray privateCidrs {
-        QStringLiteral("10.0.0.0/8"),
-        QStringLiteral("100.64.0.0/10"),
-        QStringLiteral("127.0.0.0/8"),
-        QStringLiteral("169.254.0.0/16"),
-        QStringLiteral("172.16.0.0/12"),
-        QStringLiteral("192.168.0.0/16"),
-        QStringLiteral("::1/128"),
-        QStringLiteral("fc00::/7"),
-        QStringLiteral("fe80::/10")
+        u"10.0.0.0/8"_s,
+        u"100.64.0.0/10"_s,
+        u"127.0.0.0/8"_s,
+        u"169.254.0.0/16"_s,
+        u"172.16.0.0/12"_s,
+        u"192.168.0.0/16"_s,
+        u"::1/128"_s,
+        u"fc00::/7"_s,
+        u"fe80::/10"_s
     };
 
     QJsonArray rules;
     if (options.enableStatsApi) {
         rules.append(QJsonObject {
-            {QStringLiteral("type"), QStringLiteral("field")},
-            {QStringLiteral("inboundTag"), QJsonArray {QStringLiteral("api-in")}},
-            {QStringLiteral("outboundTag"), QStringLiteral("api")}
+            {u"type"_s, u"field"_s},
+            {u"inboundTag"_s, QJsonArray {u"api-in"_s}},
+            {u"outboundTag"_s, u"api"_s}
         });
     }
 
     if (options.enableTun) {
         rules.append(QJsonObject {
-            {QStringLiteral("type"), QStringLiteral("field")},
-            {QStringLiteral("inboundTag"), QJsonArray {QStringLiteral("tun-in")}},
-            {QStringLiteral("network"), QStringLiteral("tcp,udp")},
-            {QStringLiteral("port"), QStringLiteral("53")},
-            {QStringLiteral("outboundTag"), QStringLiteral("dns-out")}
+            {u"type"_s, u"field"_s},
+            {u"inboundTag"_s, QJsonArray {u"tun-in"_s}},
+            {u"network"_s, u"tcp,udp"_s},
+            {u"port"_s, u"53"_s},
+            {u"outboundTag"_s, u"dns-out"_s}
         });
 
         // Prevent local discovery/broadcast storms from looping in TUN mode
         // (notably NetBIOS/mDNS/LLMNR/link-local chatter on Windows/macOS).
         rules.append(QJsonObject {
-            {QStringLiteral("type"), QStringLiteral("field")},
-            {QStringLiteral("inboundTag"), QJsonArray {QStringLiteral("tun-in")}},
-            {QStringLiteral("network"), QStringLiteral("udp")},
-            {QStringLiteral("port"), QStringLiteral("137,138,5353,5355")},
-            {QStringLiteral("outboundTag"), QStringLiteral("block")}
+            {u"type"_s, u"field"_s},
+            {u"inboundTag"_s, QJsonArray {u"tun-in"_s}},
+            {u"network"_s, u"udp"_s},
+            {u"port"_s, u"137,138,5353,5355"_s},
+            {u"outboundTag"_s, u"block"_s}
         });
         rules.append(QJsonObject {
-            {QStringLiteral("type"), QStringLiteral("field")},
-            {QStringLiteral("inboundTag"), QJsonArray {QStringLiteral("tun-in")}},
-            {QStringLiteral("network"), QStringLiteral("udp")},
-            {QStringLiteral("ip"), QJsonArray {
-                QStringLiteral("169.254.0.0/16"),
-                QStringLiteral("255.255.255.255/32"),
-                QStringLiteral("224.0.0.0/4")
+            {u"type"_s, u"field"_s},
+            {u"inboundTag"_s, QJsonArray {u"tun-in"_s}},
+            {u"network"_s, u"udp"_s},
+            {u"ip"_s, QJsonArray {
+                u"169.254.0.0/16"_s,
+                u"255.255.255.255/32"_s,
+                u"224.0.0.0/4"_s
             }},
-            {QStringLiteral("outboundTag"), QStringLiteral("block")}
+            {u"outboundTag"_s, u"block"_s}
         });
     }
 
     QJsonObject privateDirectRule {
-        {QStringLiteral("type"), QStringLiteral("field")},
-        {QStringLiteral("outboundTag"), QStringLiteral("direct")},
-        {QStringLiteral("ip"), privateCidrs}
+        {u"type"_s, u"field"_s},
+        {u"outboundTag"_s, u"direct"_s},
+        {u"ip"_s, privateCidrs}
     };
     if (options.enableTun) {
         // In TUN mode, keep RFC1918/link-local direct bypass only for local mixed
         // inbound traffic. Applying this rule to tun-in can create direct loops.
-        privateDirectRule.insert(QStringLiteral("inboundTag"), QJsonArray {QStringLiteral("mixed-in")});
+        privateDirectRule.insert(u"inboundTag"_s, QJsonArray {u"mixed-in"_s});
     }
     rules.append(privateDirectRule);
 
     QJsonObject localhostDirectRule {
-        {QStringLiteral("type"), QStringLiteral("field")},
-        {QStringLiteral("outboundTag"), QStringLiteral("direct")},
-        {QStringLiteral("domain"), QJsonArray {
-            QStringLiteral("full:localhost"),
-            QStringLiteral("domain:local"),
-            QStringLiteral("regexp:.*\\.local\\.?$")
+        {u"type"_s, u"field"_s},
+        {u"outboundTag"_s, u"direct"_s},
+        {u"domain"_s, QJsonArray {
+            u"full:localhost"_s,
+            u"domain:local"_s,
+            u"regexp:.*\\.local\\.?$"_s
         }}
     };
     if (options.enableTun) {
-        localhostDirectRule.insert(QStringLiteral("inboundTag"), QJsonArray {QStringLiteral("mixed-in")});
+        localhostDirectRule.insert(u"inboundTag"_s, QJsonArray {u"mixed-in"_s});
     }
     rules.append(localhostDirectRule);
 
@@ -329,9 +331,9 @@ QJsonObject buildRouting(const XrayConfigBuilder::BuildOptions& options)
         }
 
         rules.append(QJsonObject {
-            {QStringLiteral("type"), QStringLiteral("field")},
-            {QStringLiteral("outboundTag"), outboundTag},
-            {QStringLiteral("domain"), domains}
+            {u"type"_s, u"field"_s},
+            {u"outboundTag"_s, outboundTag},
+            {u"domain"_s, domains}
         });
     };
 
@@ -346,44 +348,44 @@ QJsonObject buildRouting(const XrayConfigBuilder::BuildOptions& options)
         }
 
         rules.append(QJsonObject {
-            {QStringLiteral("type"), QStringLiteral("field")},
-            {QStringLiteral("outboundTag"), outboundTag},
-            {QStringLiteral("process"), processes}
+            {u"type"_s, u"field"_s},
+            {u"outboundTag"_s, outboundTag},
+            {u"process"_s, processes}
         });
     };
 
-    appendDomainRule(options.blockDomains, QStringLiteral("block"));
-    appendProcessRule(options.blockProcesses, QStringLiteral("block"));
-    appendDomainRule(options.directDomains, QStringLiteral("direct"));
-    appendProcessRule(options.directProcesses, QStringLiteral("direct"));
-    appendDomainRule(options.proxyDomains, QStringLiteral("proxy"));
-    appendProcessRule(options.proxyProcesses, QStringLiteral("proxy"));
+    appendDomainRule(options.blockDomains, u"block"_s);
+    appendProcessRule(options.blockProcesses, u"block"_s);
+    appendDomainRule(options.directDomains, u"direct"_s);
+    appendProcessRule(options.directProcesses, u"direct"_s);
+    appendDomainRule(options.proxyDomains, u"proxy"_s);
+    appendProcessRule(options.proxyProcesses, u"proxy"_s);
 
     // In TUN mode we expect full-tunnel behavior by default; only explicit
     // direct/block rules should bypass proxy.
     const QString defaultOutbound = options.enableTun
-        ? QStringLiteral("proxy")
-        : (options.whitelistMode ? QStringLiteral("direct") : QStringLiteral("proxy"));
+        ? u"proxy"_s
+        : (options.whitelistMode ? u"direct"_s : u"proxy"_s);
     rules.append(QJsonObject {
-        {QStringLiteral("type"), QStringLiteral("field")},
-        {QStringLiteral("outboundTag"), defaultOutbound},
-        {QStringLiteral("network"), QStringLiteral("tcp,udp")}
+        {u"type"_s, u"field"_s},
+        {u"outboundTag"_s, defaultOutbound},
+        {u"network"_s, u"tcp,udp"_s}
     });
 
     return QJsonObject {
-        {QStringLiteral("domainStrategy"), QStringLiteral("AsIs")},
-        {QStringLiteral("rules"), rules}
+        {u"domainStrategy"_s, u"AsIs"_s},
+        {u"rules"_s, rules}
     };
 }
 
 QJsonObject buildPolicy()
 {
     return QJsonObject {
-        {QStringLiteral("system"), QJsonObject {
-            {QStringLiteral("statsInboundDownlink"), true},
-            {QStringLiteral("statsInboundUplink"), true},
-            {QStringLiteral("statsOutboundDownlink"), true},
-            {QStringLiteral("statsOutboundUplink"), true}
+        {u"system"_s, QJsonObject {
+            {u"statsInboundDownlink"_s, true},
+            {u"statsInboundUplink"_s, true},
+            {u"statsOutboundDownlink"_s, true},
+            {u"statsOutboundUplink"_s, true}
         }}
     };
 }
@@ -391,31 +393,31 @@ QJsonObject buildPolicy()
 QJsonObject buildDirectOutbound()
 {
     return QJsonObject {
-        {QStringLiteral("tag"), QStringLiteral("direct")},
-        {QStringLiteral("protocol"), QStringLiteral("freedom")},
-        {QStringLiteral("settings"), QJsonObject {}}
+        {u"tag"_s, u"direct"_s},
+        {u"protocol"_s, u"freedom"_s},
+        {u"settings"_s, QJsonObject {}}
     };
 }
 
 QJsonObject buildBlockOutbound()
 {
     return QJsonObject {
-        {QStringLiteral("tag"), QStringLiteral("block")},
-        {QStringLiteral("protocol"), QStringLiteral("blackhole")},
-        {QStringLiteral("settings"), QJsonObject {}}
+        {u"tag"_s, u"block"_s},
+        {u"protocol"_s, u"blackhole"_s},
+        {u"settings"_s, QJsonObject {}}
     };
 }
 
 QJsonObject buildFragProxyOutbound()
 {
     return QJsonObject {
-        {QStringLiteral("tag"), QStringLiteral("frag-proxy")},
-        {QStringLiteral("protocol"), QStringLiteral("freedom")},
-        {QStringLiteral("settings"), QJsonObject {
-            {QStringLiteral("fragment"), QJsonObject {
-                {QStringLiteral("packets"), QStringLiteral("tlshello")},
-                {QStringLiteral("length"), QStringLiteral("100-200")},
-                {QStringLiteral("interval"), QStringLiteral("10-20")}
+        {u"tag"_s, u"frag-proxy"_s},
+        {u"protocol"_s, u"freedom"_s},
+        {u"settings"_s, QJsonObject {
+            {u"fragment"_s, QJsonObject {
+                {u"packets"_s, u"tlshello"_s},
+                {u"length"_s, u"100-200"_s},
+                {u"interval"_s, u"10-20"_s}
             }}
         }}
     };
@@ -433,22 +435,22 @@ QString normalizeTransportPath(const QString& path)
     }
 
     if (normalized.isEmpty()) {
-        return QStringLiteral("/");
+        return u"/"_s;
     }
-    while (normalized.startsWith(QStringLiteral("//"))) {
+    while (normalized.startsWith(u"//"_s)) {
         normalized.remove(0, 1);
     }
     if (normalized.startsWith('/')) {
         return normalized;
     }
-    return QStringLiteral("/") + normalized;
+    return u"/"_s + normalized;
 }
 
 QJsonObject buildTlsPeerSettings(const ServerProfile& profile)
 {
     QJsonObject tlsSettings;
     if (!profile.sni.isEmpty()) {
-        tlsSettings[QStringLiteral("serverName")] = profile.sni;
+        tlsSettings[u"serverName"_s] = profile.sni;
     }
     if (!profile.alpn.isEmpty()) {
         const QStringList alpnParts = profile.alpn.split(',', Qt::SkipEmptyParts);
@@ -457,13 +459,13 @@ QJsonObject buildTlsPeerSettings(const ServerProfile& profile)
             alpnValues.append(part.trimmed());
         }
         if (!alpnValues.isEmpty()) {
-            tlsSettings[QStringLiteral("alpn")] = alpnValues;
+            tlsSettings[u"alpn"_s] = alpnValues;
         }
     }
     if (!profile.fingerprint.isEmpty()) {
-        tlsSettings[QStringLiteral("fingerprint")] = profile.fingerprint;
+        tlsSettings[u"fingerprint"_s] = profile.fingerprint;
     }
-    tlsSettings[QStringLiteral("allowInsecure")] = profile.allowInsecure;
+    tlsSettings[u"allowInsecure"_s] = profile.allowInsecure;
     return tlsSettings;
 }
 }
@@ -483,7 +485,7 @@ QJsonObject XrayConfigBuilder::build(const ServerProfile& profile, const BuildOp
     // Keep Reality fragmentation path enabled in both proxy and TUN modes.
     // Some censored networks require this for stable outbound reachability.
     const bool enableRealityFragDialer =
-        (profile.security == QStringLiteral("reality"));
+        (profile.security == u"reality"_s);
     outbounds.append(buildMainOutbound(profile, options.enableMux, enableRealityFragDialer));
     if (options.enableTun) {
         outbounds.append(buildDnsOutbound());
@@ -495,24 +497,24 @@ QJsonObject XrayConfigBuilder::build(const ServerProfile& profile, const BuildOp
     }
 
     QJsonObject config {
-        {QStringLiteral("log"), QJsonObject {
-            {QStringLiteral("loglevel"), options.logLevel}
+        {u"log"_s, QJsonObject {
+            {u"loglevel"_s, options.logLevel}
         }},
-        {QStringLiteral("inbounds"), inbounds},
-        {QStringLiteral("outbounds"), outbounds},
-        {QStringLiteral("routing"), buildRouting(options)},
-        {QStringLiteral("policy"), buildPolicy()},
-        {QStringLiteral("stats"), QJsonObject {}}
+        {u"inbounds"_s, inbounds},
+        {u"outbounds"_s, outbounds},
+        {u"routing"_s, buildRouting(options)},
+        {u"policy"_s, buildPolicy()},
+        {u"stats"_s, QJsonObject {}}
     };
 
     if (options.enableStatsApi) {
-        config[QStringLiteral("api")] = QJsonObject {
-            {QStringLiteral("tag"), QStringLiteral("api")},
-            {QStringLiteral("services"), QJsonArray {QStringLiteral("StatsService")}}
+        config[u"api"_s] = QJsonObject {
+            {u"tag"_s, u"api"_s},
+            {u"services"_s, QJsonArray {u"StatsService"_s}}
         };
     }
     if (options.enableTun) {
-        config[QStringLiteral("dns")] = buildDnsConfig(options);
+        config[u"dns"_s] = buildDnsConfig(options);
     }
 
     return config;
@@ -524,52 +526,52 @@ QJsonObject XrayConfigBuilder::buildMainOutbound(
     bool enableRealityFragDialer)
 {
     QJsonObject user {
-        {QStringLiteral("id"), profile.userId},
+        {u"id"_s, profile.userId},
     };
 
-    if (profile.protocol == QStringLiteral("vless")) {
-        user[QStringLiteral("encryption")] = profile.encryption.isEmpty()
-            ? QStringLiteral("none")
+    if (profile.protocol == u"vless"_s) {
+        user[u"encryption"_s] = profile.encryption.isEmpty()
+            ? u"none"_s
             : profile.encryption;
         if (!profile.flow.isEmpty()) {
-            user[QStringLiteral("flow")] = profile.flow;
+            user[u"flow"_s] = profile.flow;
         }
     }
 
-    if (profile.protocol == QStringLiteral("vmess")) {
-        user[QStringLiteral("security")] = profile.encryption.isEmpty()
-            ? QStringLiteral("auto")
+    if (profile.protocol == u"vmess"_s) {
+        user[u"security"_s] = profile.encryption.isEmpty()
+            ? u"auto"_s
             : profile.encryption;
-        user[QStringLiteral("alterId")] = 0;
+        user[u"alterId"_s] = 0;
     }
 
     QJsonObject outbound {
-        {QStringLiteral("tag"), QStringLiteral("proxy")},
-        {QStringLiteral("protocol"), profile.protocol},
-        {QStringLiteral("settings"), QJsonObject {
-            {QStringLiteral("vnext"), QJsonArray {
+        {u"tag"_s, u"proxy"_s},
+        {u"protocol"_s, profile.protocol},
+        {u"settings"_s, QJsonObject {
+            {u"vnext"_s, QJsonArray {
                 QJsonObject {
-                    {QStringLiteral("address"), profile.address},
-                    {QStringLiteral("port"), static_cast<int>(profile.port)},
-                    {QStringLiteral("users"), QJsonArray {user}}
+                    {u"address"_s, profile.address},
+                    {u"port"_s, static_cast<int>(profile.port)},
+                    {u"users"_s, QJsonArray {user}}
                 }
             }}
         }},
-        {QStringLiteral("streamSettings"), buildStreamSettings(profile)}
+        {u"streamSettings"_s, buildStreamSettings(profile)}
     };
 
     if (enableRealityFragDialer) {
-        QJsonObject streamSettings = outbound.value(QStringLiteral("streamSettings")).toObject();
-        streamSettings[QStringLiteral("sockopt")] = QJsonObject {
-            {QStringLiteral("dialerProxy"), QStringLiteral("frag-proxy")}
+        QJsonObject streamSettings = outbound.value(u"streamSettings"_s).toObject();
+        streamSettings[u"sockopt"_s] = QJsonObject {
+            {u"dialerProxy"_s, u"frag-proxy"_s}
         };
-        outbound[QStringLiteral("streamSettings")] = streamSettings;
+        outbound[u"streamSettings"_s] = streamSettings;
     }
 
     if (enableMux) {
-        outbound[QStringLiteral("mux")] = QJsonObject {
-            {QStringLiteral("enabled"), true},
-            {QStringLiteral("concurrency"), 8}
+        outbound[u"mux"_s] = QJsonObject {
+            {u"enabled"_s, true},
+            {u"concurrency"_s, 8}
         };
     }
 
@@ -579,85 +581,85 @@ QJsonObject XrayConfigBuilder::buildMainOutbound(
 QJsonObject XrayConfigBuilder::buildStreamSettings(const ServerProfile& profile)
 {
     QJsonObject stream {
-        {QStringLiteral("network"), profile.network.isEmpty() ? QStringLiteral("tcp") : profile.network}
+        {u"network"_s, profile.network.isEmpty() ? u"tcp"_s : profile.network}
     };
 
-    if (profile.network == QStringLiteral("ws")) {
+    if (profile.network == u"ws"_s) {
         QJsonObject wsSettings;
-        wsSettings[QStringLiteral("path")] = normalizeTransportPath(profile.path);
+        wsSettings[u"path"_s] = normalizeTransportPath(profile.path);
 
         if (!profile.hostHeader.isEmpty()) {
-            wsSettings[QStringLiteral("headers")] = QJsonObject {
-                {QStringLiteral("Host"), profile.hostHeader}
+            wsSettings[u"headers"_s] = QJsonObject {
+                {u"Host"_s, profile.hostHeader}
             };
         }
 
-        stream[QStringLiteral("wsSettings")] = wsSettings;
+        stream[u"wsSettings"_s] = wsSettings;
     }
 
-    if (profile.network == QStringLiteral("grpc")) {
-        stream[QStringLiteral("grpcSettings")] = QJsonObject {
-            {QStringLiteral("serviceName"), profile.serviceName}
+    if (profile.network == u"grpc"_s) {
+        stream[u"grpcSettings"_s] = QJsonObject {
+            {u"serviceName"_s, profile.serviceName}
         };
     }
 
-    if (profile.network == QStringLiteral("xhttp")) {
+    if (profile.network == u"xhttp"_s) {
         QJsonObject xhttpSettings;
-        xhttpSettings[QStringLiteral("path")] = normalizeTransportPath(profile.path);
+        xhttpSettings[u"path"_s] = normalizeTransportPath(profile.path);
 
         if (!profile.hostHeader.isEmpty()) {
-            xhttpSettings[QStringLiteral("host")] = profile.hostHeader;
+            xhttpSettings[u"host"_s] = profile.hostHeader;
         }
-        xhttpSettings[QStringLiteral("mode")] = profile.xhttpMode.isEmpty()
-            ? QStringLiteral("auto")
+        xhttpSettings[u"mode"_s] = profile.xhttpMode.isEmpty()
+            ? u"auto"_s
             : profile.xhttpMode;
         if (!profile.xhttpExtra.isEmpty()) {
-            xhttpSettings[QStringLiteral("extra")] = profile.xhttpExtra;
+            xhttpSettings[u"extra"_s] = profile.xhttpExtra;
         }
 
-        stream[QStringLiteral("xhttpSettings")] = xhttpSettings;
+        stream[u"xhttpSettings"_s] = xhttpSettings;
     }
 
-    if (profile.network == QStringLiteral("tcp")) {
+    if (profile.network == u"tcp"_s) {
         const QString headerType = profile.headerType.isEmpty()
-            ? QStringLiteral("none")
+            ? u"none"_s
             : profile.headerType;
-        stream[QStringLiteral("tcpSettings")] = QJsonObject {
-            {QStringLiteral("header"), QJsonObject {
-                {QStringLiteral("type"), headerType}
+        stream[u"tcpSettings"_s] = QJsonObject {
+            {u"header"_s, QJsonObject {
+                {u"type"_s, headerType}
             }}
         };
     }
 
     const QString security = profile.security.isEmpty()
-        ? QStringLiteral("none")
+        ? u"none"_s
         : profile.security;
-    stream[QStringLiteral("security")] = security;
+    stream[u"security"_s] = security;
 
-    if (security == QStringLiteral("tls")) {
-        stream[QStringLiteral("tlsSettings")] = buildTlsPeerSettings(profile);
+    if (security == u"tls"_s) {
+        stream[u"tlsSettings"_s] = buildTlsPeerSettings(profile);
     }
 
-    if (security == QStringLiteral("reality")) {
+    if (security == u"reality"_s) {
         QJsonObject realitySettings;
 
         if (!profile.sni.isEmpty()) {
-            realitySettings[QStringLiteral("serverName")] = profile.sni;
+            realitySettings[u"serverName"_s] = profile.sni;
         }
         if (!profile.fingerprint.isEmpty()) {
-            realitySettings[QStringLiteral("fingerprint")] = profile.fingerprint;
+            realitySettings[u"fingerprint"_s] = profile.fingerprint;
         }
         if (!profile.publicKey.isEmpty()) {
-            realitySettings[QStringLiteral("publicKey")] = profile.publicKey;
+            realitySettings[u"publicKey"_s] = profile.publicKey;
         }
         if (!profile.shortId.isEmpty()) {
-            realitySettings[QStringLiteral("shortId")] = profile.shortId;
+            realitySettings[u"shortId"_s] = profile.shortId;
         }
-        realitySettings[QStringLiteral("spiderX")] = profile.spiderX.isEmpty()
-            ? QStringLiteral("/")
+        realitySettings[u"spiderX"_s] = profile.spiderX.isEmpty()
+            ? u"/"_s
             : profile.spiderX;
 
-        stream[QStringLiteral("realitySettings")] = realitySettings;
+        stream[u"realitySettings"_s] = realitySettings;
     }
 
     return stream;

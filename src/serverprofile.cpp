@@ -8,6 +8,8 @@ module;
 
 module genyconnect.backend.serverprofile;
 
+using namespace Qt::StringLiterals;
+
 namespace {
 QString createProfileId()
 {
@@ -50,45 +52,45 @@ QString ServerProfile::displayLabel() const
         return name.trimmed();
     }
 
-    return QStringLiteral("%1:%2 (%3)")
+    return u"%1:%2 (%3)"_s
         .arg(address.trimmed(), QString::number(port), protocol.toUpper());
 }
 
 QJsonObject ServerProfile::toJson() const
 {
     QJsonObject json;
-    json[QStringLiteral("id")] = id;
-    json[QStringLiteral("name")] = name;
-    json[QStringLiteral("protocol")] = protocol;
-    json[QStringLiteral("address")] = address;
-    json[QStringLiteral("port")] = static_cast<int>(port);
+    json[u"id"_s] = id;
+    json[u"name"_s] = name;
+    json[u"protocol"_s] = protocol;
+    json[u"address"_s] = address;
+    json[u"port"_s] = static_cast<int>(port);
 
-    json[QStringLiteral("userId")] = userId;
-    json[QStringLiteral("encryption")] = encryption;
-    json[QStringLiteral("flow")] = flow;
-    json[QStringLiteral("network")] = network;
-    json[QStringLiteral("security")] = security;
+    json[u"userId"_s] = userId;
+    json[u"encryption"_s] = encryption;
+    json[u"flow"_s] = flow;
+    json[u"network"_s] = network;
+    json[u"security"_s] = security;
 
-    json[QStringLiteral("sni")] = sni;
-    json[QStringLiteral("alpn")] = alpn;
-    json[QStringLiteral("fingerprint")] = fingerprint;
-    json[QStringLiteral("publicKey")] = publicKey;
-    json[QStringLiteral("shortId")] = shortId;
-    json[QStringLiteral("spiderX")] = spiderX;
+    json[u"sni"_s] = sni;
+    json[u"alpn"_s] = alpn;
+    json[u"fingerprint"_s] = fingerprint;
+    json[u"publicKey"_s] = publicKey;
+    json[u"shortId"_s] = shortId;
+    json[u"spiderX"_s] = spiderX;
 
-    json[QStringLiteral("path")] = path;
-    json[QStringLiteral("hostHeader")] = hostHeader;
-    json[QStringLiteral("serviceName")] = serviceName;
-    json[QStringLiteral("headerType")] = headerType;
-    json[QStringLiteral("xhttpMode")] = xhttpMode;
-    json[QStringLiteral("xhttpExtra")] = xhttpExtra;
+    json[u"path"_s] = path;
+    json[u"hostHeader"_s] = hostHeader;
+    json[u"serviceName"_s] = serviceName;
+    json[u"headerType"_s] = headerType;
+    json[u"xhttpMode"_s] = xhttpMode;
+    json[u"xhttpExtra"_s] = xhttpExtra;
 
-    json[QStringLiteral("allowInsecure")] = allowInsecure;
-    json[QStringLiteral("originalLink")] = originalLink;
-    json[QStringLiteral("groupName")] = groupName;
-    json[QStringLiteral("sourceName")] = sourceName;
-    json[QStringLiteral("sourceId")] = sourceId;
-    json[QStringLiteral("extra")] = extra;
+    json[u"allowInsecure"_s] = allowInsecure;
+    json[u"originalLink"_s] = originalLink;
+    json[u"groupName"_s] = groupName;
+    json[u"sourceName"_s] = sourceName;
+    json[u"sourceId"_s] = sourceId;
+    json[u"extra"_s] = extra;
 
     return json;
 }
@@ -96,42 +98,42 @@ QJsonObject ServerProfile::toJson() const
 std::optional<ServerProfile> ServerProfile::fromJson(const QJsonObject& json)
 {
     ServerProfile profile;
-    profile.id = json.value(QStringLiteral("id")).toString().trimmed();
-    profile.name = json.value(QStringLiteral("name")).toString().trimmed();
-    profile.protocol = json.value(QStringLiteral("protocol")).toString().trimmed().toLower();
-    profile.address = json.value(QStringLiteral("address")).toString().trimmed();
-    const std::optional<quint16> port = parseJsonPort(json.value(QStringLiteral("port")));
+    profile.id = json.value(u"id"_s).toString().trimmed();
+    profile.name = json.value(u"name"_s).toString().trimmed();
+    profile.protocol = json.value(u"protocol"_s).toString().trimmed().toLower();
+    profile.address = json.value(u"address"_s).toString().trimmed();
+    const std::optional<quint16> port = parseJsonPort(json.value(u"port"_s));
     if (!port.has_value()) {
         return std::nullopt;
     }
     profile.port = *port;
 
-    profile.userId = json.value(QStringLiteral("userId")).toString().trimmed();
-    profile.encryption = json.value(QStringLiteral("encryption")).toString().trimmed();
-    profile.flow = json.value(QStringLiteral("flow")).toString().trimmed();
-    profile.network = json.value(QStringLiteral("network")).toString().trimmed().toLower();
-    profile.security = json.value(QStringLiteral("security")).toString().trimmed().toLower();
+    profile.userId = json.value(u"userId"_s).toString().trimmed();
+    profile.encryption = json.value(u"encryption"_s).toString().trimmed();
+    profile.flow = json.value(u"flow"_s).toString().trimmed();
+    profile.network = json.value(u"network"_s).toString().trimmed().toLower();
+    profile.security = json.value(u"security"_s).toString().trimmed().toLower();
 
-    profile.sni = json.value(QStringLiteral("sni")).toString().trimmed();
-    profile.alpn = json.value(QStringLiteral("alpn")).toString().trimmed();
-    profile.fingerprint = json.value(QStringLiteral("fingerprint")).toString().trimmed();
-    profile.publicKey = json.value(QStringLiteral("publicKey")).toString().trimmed();
-    profile.shortId = json.value(QStringLiteral("shortId")).toString().trimmed();
-    profile.spiderX = json.value(QStringLiteral("spiderX")).toString().trimmed();
+    profile.sni = json.value(u"sni"_s).toString().trimmed();
+    profile.alpn = json.value(u"alpn"_s).toString().trimmed();
+    profile.fingerprint = json.value(u"fingerprint"_s).toString().trimmed();
+    profile.publicKey = json.value(u"publicKey"_s).toString().trimmed();
+    profile.shortId = json.value(u"shortId"_s).toString().trimmed();
+    profile.spiderX = json.value(u"spiderX"_s).toString().trimmed();
 
-    profile.path = json.value(QStringLiteral("path")).toString().trimmed();
-    profile.hostHeader = json.value(QStringLiteral("hostHeader")).toString().trimmed();
-    profile.serviceName = json.value(QStringLiteral("serviceName")).toString().trimmed();
-    profile.headerType = json.value(QStringLiteral("headerType")).toString().trimmed().toLower();
-    profile.xhttpMode = json.value(QStringLiteral("xhttpMode")).toString().trimmed().toLower();
-    profile.xhttpExtra = json.value(QStringLiteral("xhttpExtra")).toObject();
+    profile.path = json.value(u"path"_s).toString().trimmed();
+    profile.hostHeader = json.value(u"hostHeader"_s).toString().trimmed();
+    profile.serviceName = json.value(u"serviceName"_s).toString().trimmed();
+    profile.headerType = json.value(u"headerType"_s).toString().trimmed().toLower();
+    profile.xhttpMode = json.value(u"xhttpMode"_s).toString().trimmed().toLower();
+    profile.xhttpExtra = json.value(u"xhttpExtra"_s).toObject();
 
-    profile.allowInsecure = json.value(QStringLiteral("allowInsecure")).toBool(false);
-    profile.originalLink = json.value(QStringLiteral("originalLink")).toString().trimmed();
-    profile.groupName = json.value(QStringLiteral("groupName")).toString().trimmed();
-    profile.sourceName = json.value(QStringLiteral("sourceName")).toString().trimmed();
-    profile.sourceId = json.value(QStringLiteral("sourceId")).toString().trimmed();
-    profile.extra = json.value(QStringLiteral("extra")).toObject();
+    profile.allowInsecure = json.value(u"allowInsecure"_s).toBool(false);
+    profile.originalLink = json.value(u"originalLink"_s).toString().trimmed();
+    profile.groupName = json.value(u"groupName"_s).toString().trimmed();
+    profile.sourceName = json.value(u"sourceName"_s).toString().trimmed();
+    profile.sourceId = json.value(u"sourceId"_s).toString().trimmed();
+    profile.extra = json.value(u"extra"_s).toObject();
 
     if (profile.id.isEmpty()) {
         profile.id = createProfileId();

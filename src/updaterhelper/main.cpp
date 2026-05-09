@@ -17,6 +17,8 @@
 #else
 #include <cerrno>
 #include <csignal>
+
+using namespace Qt::StringLiterals;
 #endif
 
 namespace {
@@ -60,9 +62,9 @@ void writeStatus(const QString& statusPath, bool ok, const QString& message)
         return;
     }
     QJsonObject root;
-    root.insert(QStringLiteral("ok"), ok);
-    root.insert(QStringLiteral("message"), message);
-    root.insert(QStringLiteral("time_ms"), QDateTime::currentMSecsSinceEpoch());
+    root.insert(u"ok"_s, ok);
+    root.insert(u"message"_s, message);
+    root.insert(u"time_ms"_s, QDateTime::currentMSecsSinceEpoch());
     file.write(QJsonDocument(root).toJson(QJsonDocument::Indented));
 }
 
@@ -70,14 +72,14 @@ bool parseJob(const QString& jobPath, UpdateJob* jobOut, QString* errorOut)
 {
     if (jobOut == nullptr) {
         if (errorOut != nullptr) {
-            *errorOut = QStringLiteral("Internal error: null output object.");
+            *errorOut = u"Internal error: null output object."_s;
         }
         return false;
     }
     QFile file(jobPath);
     if (!file.open(QIODevice::ReadOnly)) {
         if (errorOut != nullptr) {
-            *errorOut = QStringLiteral("Could not open update job file.");
+            *errorOut = u"Could not open update job file."_s;
         }
         return false;
     }
@@ -85,21 +87,21 @@ bool parseJob(const QString& jobPath, UpdateJob* jobOut, QString* errorOut)
     const QJsonDocument doc = QJsonDocument::fromJson(file.readAll(), &parseError);
     if (parseError.error != QJsonParseError::NoError || !doc.isObject()) {
         if (errorOut != nullptr) {
-            *errorOut = QStringLiteral("Update job file is invalid JSON.");
+            *errorOut = u"Update job file is invalid JSON."_s;
         }
         return false;
     }
     const QJsonObject root = doc.object();
     UpdateJob job;
-    job.pid = root.value(QStringLiteral("pid")).toVariant().toLongLong();
-    job.currentExecutable = root.value(QStringLiteral("current_executable")).toString().trimmed();
-    job.stagedExecutable = root.value(QStringLiteral("staged_executable")).toString().trimmed();
-    job.backupExecutable = root.value(QStringLiteral("backup_executable")).toString().trimmed();
-    job.workingDirectory = root.value(QStringLiteral("working_directory")).toString().trimmed();
-    job.expectedSha256 = root.value(QStringLiteral("expected_sha256")).toString().trimmed().toLower();
-    job.timeoutMs = qMax(5000, root.value(QStringLiteral("timeout_ms")).toInt(45000));
-    job.cleanupSourceOnSuccess = root.value(QStringLiteral("cleanup_source_on_success")).toBool(true);
-    const QJsonArray argsArray = root.value(QStringLiteral("args")).toArray();
+    job.pid = root.value(u"pid"_s).toVariant().toLongLong();
+    job.currentExecutable = root.value(u"current_executable"_s).toString().trimmed();
+    job.stagedExecutable = root.value(u"staged_executable"_s).toString().trimmed();
+    job.backupExecutable = root.value(u"backup_executable"_s).toString().trimmed();
+    job.workingDirectory = root.value(u"working_directory"_s).toString().trimmed();
+    job.expectedSha256 = root.value(u"expected_sha256"_s).toString().trimmed().toLower();
+    job.timeoutMs = qMax(5000, root.value(u"timeout_ms"_s).toInt(45000));
+    job.cleanupSourceOnSuccess = root.value(u"cleanup_source_on_success"_s).toBool(true);
+    const QJsonArray argsArray = root.value(u"args"_s).toArray();
     for (const QJsonValue& v : argsArray) {
         job.args.append(v.toString());
     }
@@ -109,7 +111,7 @@ bool parseJob(const QString& jobPath, UpdateJob* jobOut, QString* errorOut)
         || job.stagedExecutable.isEmpty()
         || job.backupExecutable.isEmpty()) {
         if (errorOut != nullptr) {
-            *errorOut = QStringLiteral("Update job missing required fields.");
+            *errorOut = u"Update job missing required fields."_s;
         }
         return false;
     }
@@ -191,7 +193,7 @@ bool replaceFileAtomically(const QString& currentPath, const QString& stagedPath
 {
     if (!QFileInfo::exists(stagedPath)) {
         if (errorOut != nullptr) {
-            *errorOut = QStringLiteral("Staged file does not exist.");
+            *errorOut = u"Staged file does not exist."_s;
         }
         return false;
     }
@@ -204,7 +206,7 @@ bool replaceFileAtomically(const QString& currentPath, const QString& stagedPath
 #endif
     ) {
         if (errorOut != nullptr) {
-            *errorOut = QStringLiteral("Could not remove stale backup.");
+            *errorOut = u"Could not remove stale backup."_s;
         }
         return false;
     }
@@ -218,7 +220,7 @@ bool replaceFileAtomically(const QString& currentPath, const QString& stagedPath
     if (!movedCurrentToBackup) {
         if (!copyWithOverwrite(currentPath, backupPath) || !QFile::remove(currentPath)) {
             if (errorOut != nullptr) {
-                *errorOut = QStringLiteral("Could not move current executable to backup.");
+                *errorOut = u"Could not move current executable to backup."_s;
             }
             return false;
         }
@@ -238,7 +240,7 @@ bool replaceFileAtomically(const QString& currentPath, const QString& stagedPath
             QFile::rename(backupPath, currentPath);
 #endif
             if (errorOut != nullptr) {
-                *errorOut = QStringLiteral("Could not place staged executable.");
+                *errorOut = u"Could not place staged executable."_s;
             }
             return false;
         }
@@ -257,7 +259,7 @@ bool replaceFileAtomically(const QString& currentPath, const QString& stagedPath
         QFile::remove(currentPath);
         QFile::rename(backupPath, currentPath);
         if (errorOut != nullptr) {
-            *errorOut = QStringLiteral("Failed to set executable permissions.");
+            *errorOut = u"Failed to set executable permissions."_s;
         }
         return false;
     }
@@ -284,16 +286,16 @@ bool rollback(const UpdateJob& job)
 int main(int argc, char* argv[])
 {
     QCoreApplication app(argc, argv);
-    app.setApplicationName(QStringLiteral("GenyConnectUpdater"));
+    app.setApplicationName(u"GenyConnectUpdater"_s);
 
     const QStringList args = app.arguments();
-    const int jobArgIndex = args.indexOf(QStringLiteral("--job"));
+    const int jobArgIndex = args.indexOf(u"--job"_s);
     if (jobArgIndex < 0 || (jobArgIndex + 1) >= args.size()) {
         return 2;
     }
 
     const QString jobPath = args.at(jobArgIndex + 1);
-    const QString statusPath = jobPath + QStringLiteral(".status.json");
+    const QString statusPath = jobPath + u".status.json"_s;
 
     UpdateJob job;
     QString parseError;
@@ -303,13 +305,13 @@ int main(int argc, char* argv[])
     }
 
     if (!waitForProcessExit(job.pid, job.timeoutMs)) {
-        writeStatus(statusPath, false, QStringLiteral("Timed out waiting for app process to exit."));
+        writeStatus(statusPath, false, u"Timed out waiting for app process to exit."_s);
         return 4;
     }
 
     const QString stagedHash = sha256Hex(job.stagedExecutable);
     if (stagedHash.isEmpty() || (!job.expectedSha256.isEmpty() && stagedHash.toLower() != job.expectedSha256)) {
-        writeStatus(statusPath, false, QStringLiteral("Staged file hash verification failed."));
+        writeStatus(statusPath, false, u"Staged file hash verification failed."_s);
         return 5;
     }
 
@@ -322,13 +324,13 @@ int main(int argc, char* argv[])
     const QString installedHash = sha256Hex(job.currentExecutable);
     if (installedHash.isEmpty() || installedHash.toLower() != stagedHash.toLower()) {
         rollback(job);
-        writeStatus(statusPath, false, QStringLiteral("Installed file hash validation failed. Rolled back."));
+        writeStatus(statusPath, false, u"Installed file hash validation failed. Rolled back."_s);
         return 7;
     }
 
     if (!QProcess::startDetached(job.currentExecutable, job.args, job.workingDirectory)) {
         rollback(job);
-        writeStatus(statusPath, false, QStringLiteral("Failed to relaunch updated application. Rolled back."));
+        writeStatus(statusPath, false, u"Failed to relaunch updated application. Rolled back."_s);
         return 8;
     }
 
@@ -337,6 +339,6 @@ int main(int argc, char* argv[])
     }
     QFile::remove(job.backupExecutable);
     QFile::remove(jobPath);
-    writeStatus(statusPath, true, QStringLiteral("Update applied successfully."));
+    writeStatus(statusPath, true, u"Update applied successfully."_s);
     return 0;
 }

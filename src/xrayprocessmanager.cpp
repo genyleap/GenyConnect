@@ -6,6 +6,8 @@ module;
 
 module genyconnect.backend.xrayprocessmanager;
 
+using namespace Qt::StringLiterals;
+
 XrayProcessManager::XrayProcessManager(QObject* parent)
     : QObject(parent)
 {
@@ -49,18 +51,18 @@ qint64 XrayProcessManager::txBytes() const
 bool XrayProcessManager::start(const QString& configPath, QString *errorMessage)
 {
     if (isRunning()) {
-        setError(errorMessage, QStringLiteral("xray-core is already running."));
+        setError(errorMessage, u"xray-core is already running."_s);
         return false;
     }
 
     if (m_executablePath.trimmed().isEmpty()) {
-        setError(errorMessage, QStringLiteral("xray-core executable path is not set."));
+        setError(errorMessage, u"xray-core executable path is not set."_s);
         return false;
     }
 
     QFileInfo executableInfo(m_executablePath);
     if (!executableInfo.exists()) {
-        setError(errorMessage, QStringLiteral("xray-core executable not found: %1").arg(m_executablePath));
+        setError(errorMessage, u"xray-core executable not found: %1"_s.arg(m_executablePath));
         return false;
     }
 
@@ -72,7 +74,7 @@ bool XrayProcessManager::start(const QString& configPath, QString *errorMessage)
     m_stderrBuffer.clear();
 
     m_process.setProgram(m_executablePath);
-    m_process.setArguments({QStringLiteral("run"), QStringLiteral("-config"), configPath});
+    m_process.setArguments({u"run"_s, u"-config"_s, configPath});
 
     if (!m_workingDirectory.trimmed().isEmpty()) {
         m_process.setWorkingDirectory(m_workingDirectory);
@@ -166,10 +168,10 @@ void XrayProcessManager::handleLogLine(const QString& line)
 void XrayProcessManager::parseTraffic(const QString& line)
 {
     static const QRegularExpression rxPattern(
-        QStringLiteral("(?:\\brx\\b|\\bdown(?:link)?\\b)\\D*(\\d+)")
+        u"(?:\\brx\\b|\\bdown(?:link)?\\b)\\D*(\\d+)"_s
     );
     static const QRegularExpression txPattern(
-        QStringLiteral("(?:\\btx\\b|\\bup(?:link)?\\b)\\D*(\\d+)")
+        u"(?:\\btx\\b|\\bup(?:link)?\\b)\\D*(\\d+)"_s
     );
 
     bool changed = false;
