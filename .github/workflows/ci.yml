@@ -31,18 +31,6 @@ jobs:
             cmake_arch: x64
             target_arch: x86_64
 
-          - name: linux-x64
-            os: ubuntu-24.04
-            qt_version: "6.11.0"
-            qt_arch: linux_gcc_64
-            target_arch: x86_64
-
-          - name: linux-arm64
-            os: ubuntu-24.04-arm
-            qt_version: "6.11.0"
-            qt_arch: linux_gcc_arm64
-            target_arch: arm64
-
     env:
       CMAKE_VERSION: "4.2.3"
 
@@ -67,60 +55,29 @@ jobs:
         run: |
           brew install ninja llvm
 
-      - name: Install Linux dependencies
-        if: runner.os == 'Linux'
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          sudo apt-get update
-          sudo apt-get install -y \
-            ninja-build \
-            clang-18 \
-            clang-tools-18 \
-            lld-18 \
-            zip \
-            libgl1-mesa-dev \
-            libxkbcommon-dev \
-            libxcb-cursor0 \
-            libxcb-cursor-dev \
-            libxcb-xinerama0 \
-            libxcb-xinerama0-dev \
-            libxcb-icccm4-dev \
-            libxcb-image0-dev \
-            libxcb-keysyms1-dev \
-            libxcb-render-util0-dev
-
       - name: Install Windows dependencies
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
           choco install -y ninja nsis 7zip
 
-      - name: Configure LLVM on macOS/Linux
-        if: runner.os != 'Windows'
+      - name: Configure LLVM on macOS
+        if: runner.os == 'macOS'
         shell: bash
         run: |
           set -euo pipefail
 
-          if [ "${{ runner.os }}" = "macOS" ]; then
-            LLVM_PREFIX="$(brew --prefix llvm)"
-            echo "CC=${LLVM_PREFIX}/bin/clang" >> "$GITHUB_ENV"
-            echo "CXX=${LLVM_PREFIX}/bin/clang++" >> "$GITHUB_ENV"
-            echo "CLANG_SCAN_DEPS=${LLVM_PREFIX}/bin/clang-scan-deps" >> "$GITHUB_ENV"
-            echo "${LLVM_PREFIX}/bin" >> "$GITHUB_PATH"
+          LLVM_PREFIX="$(brew --prefix llvm)"
+          echo "CC=${LLVM_PREFIX}/bin/clang" >> "$GITHUB_ENV"
+          echo "CXX=${LLVM_PREFIX}/bin/clang++" >> "$GITHUB_ENV"
+          echo "CLANG_SCAN_DEPS=${LLVM_PREFIX}/bin/clang-scan-deps" >> "$GITHUB_ENV"
+          echo "${LLVM_PREFIX}/bin" >> "$GITHUB_PATH"
 
-            SDKROOT="$(xcrun --sdk macosx --show-sdk-path)"
-            echo "SDKROOT=${SDKROOT}" >> "$GITHUB_ENV"
-          else
-            echo "CC=/usr/bin/clang-18" >> "$GITHUB_ENV"
-            echo "CXX=/usr/bin/clang++-18" >> "$GITHUB_ENV"
-            echo "CLANG_SCAN_DEPS=/usr/bin/clang-scan-deps-18" >> "$GITHUB_ENV"
-            echo "/usr/lib/llvm-18/bin" >> "$GITHUB_PATH"
-          fi
+          SDKROOT="$(xcrun --sdk macosx --show-sdk-path)"
+          echo "SDKROOT=${SDKROOT}" >> "$GITHUB_ENV"
 
-      - name: Print tool versions
-        if: runner.os != 'Windows'
+      - name: Print macOS tool versions
+        if: runner.os == 'macOS'
         shell: bash
         run: |
           set -euo pipefail
@@ -139,8 +96,8 @@ jobs:
         with:
           arch: amd64
 
-      - name: Configure macOS/Linux
-        if: runner.os != 'Windows'
+      - name: Configure macOS
+        if: runner.os == 'macOS'
         shell: bash
         run: |
           set -euo pipefail
@@ -182,7 +139,7 @@ jobs:
         shell: bash
         run: |
           mkdir -p artifacts
-          find build/final -type f \( -name "*.dmg" -o -name "*.zip" -o -name "*.exe" -o -name "*.tar.gz" -o -name "*.tgz" \) -print -exec cp {} artifacts/ \;
+          find build/final -type f $begin:math:text$ \-name \"\*\.dmg\" \-o \-name \"\*\.zip\" \-o \-name \"\*\.exe\" \-o \-name \"\*\.tar\.gz\" \-o \-name \"\*\.tgz\" $end:math:text$ -print -exec cp {} artifacts/ \;
           ls -lah artifacts
 
       - name: Upload artifact
