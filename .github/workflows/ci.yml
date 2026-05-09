@@ -18,18 +18,39 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # macOS Apple Silicon
           - name: macos-arm64
             os: macos-14
             qt_version: "6.11.0"
             qt_arch: clang_64
             target_arch: arm64
+            macos_deployment_target: "14.0"
 
+          # macOS Intel
+          # If this runner label is not available in your account,
+          # replace it with your available Intel macOS runner label.
+          - name: macos-x86_64
+            os: macos-15-intel
+            qt_version: "6.11.0"
+            qt_arch: clang_64
+            target_arch: x86_64
+            macos_deployment_target: "14.0"
+
+          # Windows Intel/AMD 64-bit
           - name: windows-x64
             os: windows-latest
             qt_version: "6.10.3"
             qt_arch: win64_msvc2022_64
             cmake_arch: x64
             target_arch: x86_64
+
+          # Windows ARM64
+          - name: windows-arm64
+            os: windows-11-arm
+            qt_version: "6.10.3"
+            qt_arch: win64_msvc2022_arm64
+            cmake_arch: ARM64
+            target_arch: arm64
 
     env:
       CMAKE_VERSION: "4.2.3"
@@ -70,6 +91,7 @@ jobs:
           set -euo pipefail
 
           LLVM_PREFIX="$(brew --prefix llvm)"
+
           echo "CC=${LLVM_PREFIX}/bin/clang" >> "$GITHUB_ENV"
           echo "CXX=${LLVM_PREFIX}/bin/clang++" >> "$GITHUB_ENV"
           echo "CLANG_SCAN_DEPS=${LLVM_PREFIX}/bin/clang-scan-deps" >> "$GITHUB_ENV"
@@ -88,17 +110,19 @@ jobs:
           echo "CC=${CC}"
           echo "CXX=${CXX}"
           echo "CLANG_SCAN_DEPS=${CLANG_SCAN_DEPS}"
+          echo "SDKROOT=${SDKROOT}"
 
           "${CXX}" --version
           "${CLANG_SCAN_DEPS}" --version
           cmake --version
           ninja --version
+          xcrun --sdk macosx --show-sdk-version
 
       - name: Configure MSVC
         if: runner.os == 'Windows'
         uses: ilammy/msvc-dev-cmd@v1
         with:
-          arch: amd64
+          arch: ${{ matrix.cmake_arch }}
 
       - name: Configure macOS
         if: runner.os == 'macOS'
@@ -113,6 +137,8 @@ jobs:
             -DCMAKE_CXX_COMPILER="${CXX}" \
             -DCMAKE_CXX_SCAN_FOR_MODULES=ON \
             -DCMAKE_CXX_COMPILER_CLANG_SCAN_DEPS="${CLANG_SCAN_DEPS}" \
+            -DCMAKE_OSX_DEPLOYMENT_TARGET="${{ matrix.macos_deployment_target }}" \
+            -DGENYCONNECT_MACOS_DEPLOYMENT_TARGET="${{ matrix.macos_deployment_target }}" \
             -DGENYCONNECT_USE_MODULES=ON \
             -DGENYCONNECT_LLVM_AUTO_SCAN=ON \
             -DGENYCONNECT_TARGET_ARCH="${{ matrix.target_arch }}" \
@@ -136,6 +162,29 @@ jobs:
       - name: Build
         run: cmake --build build --config Release --parallel
 
+      - name: Verify macOS deployment target
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          APP="build/bin/GenyConnect.app"
+
+          for f in \
+            "$APP/Contents/MacOS/GenyConnect" \
+            "$APP/Contents/MacOS/GenyConnectUpdater" \
+            "$APP/Contents/MacOS/GenyConnectTunHelper"
+          do
+            echo
+            echo "==== $f ===="
+            otool -l "$f" | grep -A5 LC_BUILD_VERSION || true
+
+            if otool -l "$f" | grep -A5 LC_BUILD_VERSION | grep -q "minos 26."; then
+              echo "ERROR: $f was built with macOS 26.x minimum target."
+              exit 1
+            fi
+          done
+
       - name: Package
         run: cpack --config build/CPackConfig.cmake -C Release
 
@@ -152,6 +201,12 @@ jobs:
           find build/final -type f -name "*.tar.gz" -exec cp {} artifacts/ \;
           find build/final -type f -name "*.tgz" -exec cp {} artifacts/ \;
 
+          if [ -z "$(find artifacts -type f -print -quit)" ]; then
+            echo "No packages found. Listing recent build files:"
+            find build -maxdepth 5 -type f | sort | tail -200
+            exit 1
+          fi
+
           ls -lah artifacts
 
       - name: Upload artifact
@@ -165,3 +220,5 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/')
         with:
           files: artifacts/*
+          fail_on_unmatched_files: true
+          generate_release_notes: true
