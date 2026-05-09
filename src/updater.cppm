@@ -30,6 +30,8 @@ module;
 
 export module genyconnect.backend.updater;
 
+using namespace Qt::StringLiterals;
+
 /**
  * @class Updater
  * @brief Handles app update check/download lifecycle.
@@ -194,9 +196,9 @@ private:
     bool m_updateAvailable = false;
     bool m_userInitiatedCheck = false;
     QString m_latestVersion;
-    QString m_status = u"Idle"_qs;
+    QString m_status = u"Idle"_s;
     QString m_error;
-    QString m_releaseUrl = u"https://github.com/genyleap/GenyConnect/releases"_qs;
+    QString m_releaseUrl = u"https://github.com/genyleap/GenyConnect/releases"_s;
     QString m_assetUrl;
     QString m_assetName;
     QString m_assetExpectedSha256;

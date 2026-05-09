@@ -60,7 +60,7 @@ option(GENYCONNECT_BUNDLE_DOCS "Install README and LICENSE at package root + NSI
 option(GENYCONNECT_MACDEPLOYQT_ALWAYS_OVERWRITE "Pass -always-overwrite to macdeployqt" OFF)
 option(GENYCONNECT_MACDEPLOYQT_NO_STRIP         "Pass -no-strip to macdeployqt" OFF)
 
-set(GENYCONNECT_TARGET_BUILD_ARCH "arm64" CACHE STRING "Override target arch for output build (arm64|x86_64)")
+set(GENYCONNECT_TARGET_BUILD_ARCH "x86_64" CACHE STRING "Override target arch for output build (arm64|x86_64)")
 
 set(GENYCONNECT_XRAY_VERSION      "v26.2.6" CACHE STRING   "Xray-core release tag (e.g. v26.2.6)")
 set(GENYCONNECT_XRAY_ASSET_NAME   ""        CACHE STRING   "Optional explicit Xray release asset name override")
