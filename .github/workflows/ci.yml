@@ -13,7 +13,6 @@ jobs:
   build:
     name: Build ${{ matrix.name }}
     runs-on: ${{ matrix.os }}
-    continue-on-error: ${{ matrix.experimental }}
 
     strategy:
       fail-fast: false
@@ -24,39 +23,25 @@ jobs:
             qt_version: "6.11.0"
             qt_arch: clang_64
             target_arch: arm64
-            experimental: false
-
-          - name: macos-x64
-            os: macos-13
-            qt_version: "6.11.0"
-            qt_arch: clang_64
-            target_arch: x86_64
-            experimental: false
 
           - name: windows-x64
             os: windows-latest
             qt_version: "6.10.3"
             qt_arch: win64_msvc2022_64
             cmake_arch: x64
-            msvc_arch: amd64
             target_arch: x86_64
-            experimental: false
-
-          - name: windows-arm64
-            os: windows-latest
-            qt_version: "6.10.3"
-            qt_arch: win64_msvc2022_arm64
-            cmake_arch: ARM64
-            msvc_arch: amd64_arm64
-            target_arch: arm64
-            experimental: true
 
           - name: linux-x64
             os: ubuntu-24.04
             qt_version: "6.11.0"
             qt_arch: linux_gcc_64
             target_arch: x86_64
-            experimental: false
+
+          - name: linux-arm64
+            os: ubuntu-24.04-arm
+            qt_version: "6.11.0"
+            qt_arch: linux_gcc_arm64
+            target_arch: arm64
 
     env:
       CMAKE_VERSION: "4.2.3"
@@ -119,7 +104,7 @@ jobs:
         if: runner.os == 'Windows'
         uses: ilammy/msvc-dev-cmd@v1
         with:
-          arch: ${{ matrix.msvc_arch }}
+          arch: amd64
 
       - name: Configure macOS/Linux
         if: runner.os != 'Windows'
