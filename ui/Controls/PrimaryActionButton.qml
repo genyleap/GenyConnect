@@ -36,7 +36,7 @@ Item {
             anchors.centerIn: parent
             text: root.text
             color: "#ffffff"
-            font.family: FontSystem.getContentFont.name
+            font.family: FontSystem.contentFontFamily
             font.pixelSize: 44 * 0.4
             font.bold: true
         }

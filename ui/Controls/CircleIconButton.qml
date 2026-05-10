@@ -5,7 +5,7 @@ Item {
     id: root
 
     property string iconText: ""
-    property string iconFontFamily: FontSystem.getContentFont.name
+    property string iconFontFamily: FontSystem.contentFontFamily
     property real diameter: 46
     property color backgroundColor: "#f5f7fb"
     property color borderColor: "#d9dde7"

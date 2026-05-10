@@ -4,27 +4,38 @@ pragma Singleton
 import QtQuick
 
 Item {
-
     property alias getAwesomeBrand: fontAwesomeBrand
     property alias getAwesomeRegular: fontAwesomeRegular
     property alias getAwesomeLight: fontAwesomeRegular
     property alias getAwesomeSolid: fontAwesomeSolid
+
     property alias getContentFont: contentFontRegular
     property alias getContentFontRegular: contentFontRegular
     property alias getContentFontMedium: contentFontRegular
     property alias getContentFontBold: contentFontBold
     property alias getFontSize: fontSize
 
+    readonly property string contentFontFamily:
+        contentFontRegular.status === FontLoader.Ready && contentFontRegular.name.length > 0
+            ? contentFontRegular.name
+            : Qt.application.font.family
+
+    readonly property string contentBoldFontFamily:
+        contentFontBold.status === FontLoader.Ready && contentFontBold.name.length > 0
+            ? contentFontBold.name
+            : contentFontFamily
+
     QtObject {
         id: fontSize
-        readonly property int       h1 : 32
-        readonly property int       h2 : 24
-        readonly property double    h3 : 18.72
-        readonly property int       h4 : 16
-        readonly property double    h5 : 13.28
-        readonly property double    h6 : 10.72
 
-        readonly property int content : 14
+        readonly property int h1: 32
+        readonly property int h2: 24
+        readonly property double h3: 18.72
+        readonly property int h4: 16
+        readonly property double h5: 13.28
+        readonly property double h6: 10.72
+
+        readonly property int content: 14
     }
 
     FontLoader {
@@ -36,7 +47,6 @@ Item {
         id: fontAwesomeRegular
         source: "qrc:/ui/Resources/fonts/fa-solid-900.otf"
     }
-
 
     FontLoader {
         id: fontAwesomeSolid
@@ -53,4 +63,11 @@ Item {
         source: "qrc:/ui/Resources/fonts/Inter-Bold.ttf"
     }
 
+    Component.onCompleted: {
+        if (contentFontRegular.status === FontLoader.Error)
+            console.warn("Failed to load Inter-Regular.ttf")
+
+        if (contentFontBold.status === FontLoader.Error)
+            console.warn("Failed to load Inter-Bold.ttf")
+    }
 }

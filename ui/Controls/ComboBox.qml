@@ -15,7 +15,7 @@ T.ComboBox {
     property color popupBorderColor: "#d8e1ef"
     property color popupHoverColor: "#edf3ff"
 
-    font.family: FontSystem.getContentFont.name
+    font.family: FontSystem.contentFontFamily
     font.pixelSize: Typography.t2
 
     leftPadding: 12
@@ -39,7 +39,7 @@ T.ComboBox {
 
     indicator: Text {
         text: "\u25BE"
-        font.family: FontSystem.getContentFont.name
+        font.family: FontSystem.contentFontFamily
         font.pixelSize: Typography.t3
         color: Colors.textMuted
         anchors.right: parent.right

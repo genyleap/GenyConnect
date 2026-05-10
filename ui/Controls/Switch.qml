@@ -10,7 +10,7 @@ T.Switch {
     property bool animation : false
 
     text: title
-    font.family: FontSystem.getContentFont.name
+    font.family: FontSystem.contentFontFamily
     font.pixelSize: Typography.t2
 
     indicator: Rectangle {

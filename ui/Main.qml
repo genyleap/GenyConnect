@@ -24,7 +24,7 @@ ApplicationWindow {
     title: "GenyConnect (Build " + updater.appVersion + ") - " + osNameText()
 
     color: "#eceff5"
-    font.family: FontSystem.getContentFont.name
+    font.family: FontSystem.contentFontFamily
 
     property bool compact: true
     readonly property string faSolid: FontSystem.getAwesomeSolid.name
@@ -1010,7 +1010,7 @@ ApplicationWindow {
                         anchors.centerIn: parent
                         text: "↑"
                         color: "#2f6de2"
-                        font.family: FontSystem.getContentFont.name
+                        font.family: FontSystem.contentFontFamily
                         font.pixelSize: 15
                         font.bold: true
                     }
@@ -1020,7 +1020,7 @@ ApplicationWindow {
                     Layout.fillWidth: true
                     text: "Update Available"
                     color: "#1f2a3a"
-                    font.family: FontSystem.getContentFont.name
+                    font.family: FontSystem.contentFontFamily
                     font.pixelSize: 16
                     font.bold: true
                 }
@@ -1030,7 +1030,7 @@ ApplicationWindow {
                 Layout.fillWidth: true
                 text: "GenyConnect " + updater.latestVersion + " is available. You're on " + updater.appVersion + "."
                 color: "#667385"
-                font.family: FontSystem.getContentFont.name
+                font.family: FontSystem.contentFontFamily
                 font.pixelSize: 13
                 wrapMode: Text.WordWrap
             }
@@ -1115,7 +1115,7 @@ ApplicationWindow {
             Text {
                 text: "VPN Conflict Detected"
                 color: "#1f2a3a"
-                font.family: FontSystem.getContentFont.name
+                font.family: FontSystem.contentFontFamily
                 font.pixelSize: 22
                 font.bold: true
             }
@@ -1124,7 +1124,7 @@ ApplicationWindow {
                 Layout.fillWidth: true
                 text: root.tunConflictPopupText
                 color: "#5f6f86"
-                font.family: FontSystem.getContentFont.name
+                font.family: FontSystem.contentFontFamily
                 font.pixelSize: 13
                 wrapMode: Text.WordWrap
             }
@@ -1310,7 +1310,7 @@ ApplicationWindow {
                         placeholderTextColor: "#8c8f98"
                         text: root.profileSearchQuery
                         color: "#1f2a3a"
-                        font.family: FontSystem.getContentFont.name
+                        font.family: FontSystem.contentFontFamily
                         font.pixelSize: 14
                         background: null
                         onTextChanged: {
@@ -1363,7 +1363,7 @@ ApplicationWindow {
                             anchors.centerIn: parent
                             text: "Add Profile"
                             color: "#ffffff"
-                            font.family: FontSystem.getContentFont.name
+                            font.family: FontSystem.contentFontFamily
                             font.pixelSize: 13
                             font.bold: false
                         }
@@ -1395,7 +1395,7 @@ ApplicationWindow {
                             anchors.centerIn: parent
                             text: "Delete All"
                             color: "#cb4f4f"
-                            font.family: FontSystem.getContentFont.name
+                            font.family: FontSystem.contentFontFamily
                             font.pixelSize: 13
                             font.bold: false
                         }
@@ -1427,7 +1427,7 @@ ApplicationWindow {
                                   ? "Ping All"
                                   : "Ping Group"
                             color: "#4b5d78"
-                            font.family: FontSystem.getContentFont.name
+                            font.family: FontSystem.contentFontFamily
                             font.pixelSize: 13
                             font.bold: false
                         }
@@ -1460,7 +1460,7 @@ ApplicationWindow {
                                   : "Refresh Group"
                             color: "#4b5d78"
                             opacity: vpnController.subscriptionBusy ? 0.5 : 1.0
-                            font.family: FontSystem.getContentFont.name
+                            font.family: FontSystem.contentFontFamily
                             font.pixelSize: 13
                             font.bold: false
                         }
@@ -1502,7 +1502,7 @@ ApplicationWindow {
                     // : ((text.toLowerCase().indexOf("fail") >= 0 || text.toLowerCase().indexOf("error") >= 0)
                     // ? "#bf4d4d"
                     // : "#6f7f95")
-                    // font.family: FontSystem.getContentFont.name
+                    // font.family: FontSystem.contentFontFamily
                     // font.pixelSize: 12
                     // elide: Text.ElideRight
                     // }
@@ -1555,7 +1555,7 @@ ApplicationWindow {
                             anchors.centerIn: parent
                             text: "Free"
                             color: root.compactProfileFilterSelected("Free") ? "#ffffff" : "#111111"
-                            font.family: FontSystem.getContentFont.name
+                            font.family: FontSystem.contentFontFamily
                             font.pixelSize: 13
                             font.bold: root.compactProfileFilterSelected("Free")
                         }
@@ -1581,7 +1581,7 @@ ApplicationWindow {
                             anchors.centerIn: parent
                             text: "Premium"
                             color: root.compactProfileFilterSelected("Premium") ? "#ffffff" : "#111111"
-                            font.family: FontSystem.getContentFont.name
+                            font.family: FontSystem.contentFontFamily
                             font.pixelSize: 13
                             font.bold: root.compactProfileFilterSelected("Premium")
                         }
@@ -1603,7 +1603,7 @@ ApplicationWindow {
                     Text {
                         text: "Group"
                         color: "#6b778a"
-                        font.family: FontSystem.getContentFont.name
+                        font.family: FontSystem.contentFontFamily
                         font.pixelSize: 12
                     }
 
@@ -1668,7 +1668,7 @@ ApplicationWindow {
                             anchors.centerIn: parent
                             text: "Visible " + vpnController.filteredProfileCount
                             color: "#5f6f86"
-                            font.family: FontSystem.getContentFont.name
+                            font.family: FontSystem.contentFontFamily
                             font.pixelSize: 11
                         }
                     }
@@ -1699,7 +1699,7 @@ ApplicationWindow {
                             Text {
                                 text: "Enabled"
                                 color: "#5f6f86"
-                                font.family: FontSystem.getContentFont.name
+                                font.family: FontSystem.contentFontFamily
                                 font.pixelSize: 12
                             }
 
@@ -1711,7 +1711,7 @@ ApplicationWindow {
                             Text {
                                 text: "Exclusive"
                                 color: "#5f6f86"
-                                font.family: FontSystem.getContentFont.name
+                                font.family: FontSystem.contentFontFamily
                                 font.pixelSize: 12
                             }
 
@@ -1738,7 +1738,7 @@ ApplicationWindow {
                                     placeholderText: "Badge"
                                     text: root.profileGroupBadgeText(groupFilterCombo.groupNameAt(groupFilterCombo.currentIndex))
                                     color: "#3b4a61"
-                                    font.family: FontSystem.getContentFont.name
+                                    font.family: FontSystem.contentFontFamily
                                     font.pixelSize: 12
                                     background: null
                                     onEditingFinished: {
@@ -1751,7 +1751,7 @@ ApplicationWindow {
                                 visible: root.profileGroupBadgeText(groupFilterCombo.groupNameAt(groupFilterCombo.currentIndex)).length > 0
                                 text: "• " + root.profileGroupBadgeText(groupFilterCombo.groupNameAt(groupFilterCombo.currentIndex))
                                 color: "#4d6691"
-                                font.family: FontSystem.getContentFont.name
+                                font.family: FontSystem.contentFontFamily
                                 font.pixelSize: 12
                                 font.bold: true
                             }
@@ -1780,7 +1780,7 @@ ApplicationWindow {
                             anchors.centerIn: parent
                             text: vpnController.autoPingProfiles ? "Auto Ping ON" : "Auto Ping OFF"
                             color: vpnController.autoPingProfiles ? "#278c59" : "#7b8799"
-                            font.family: FontSystem.getContentFont.name
+                            font.family: FontSystem.contentFontFamily
                             font.pixelSize: 11
                             font.bold: false
                         }
@@ -1799,7 +1799,7 @@ ApplicationWindow {
                             anchors.centerIn: parent
                             text: "Subs " + subscriptionsInCurrentGroup() + "/" + vpnController.subscriptions.length
                             color: "#667487"
-                            font.family: FontSystem.getContentFont.name
+                            font.family: FontSystem.contentFontFamily
                             font.pixelSize: 11
                             font.bold: false
                         }
@@ -1818,7 +1818,7 @@ ApplicationWindow {
                             anchors.centerIn: parent
                             text: "Group " + (vpnController.currentProfileGroup || "All")
                             color: "#5f7290"
-                            font.family: FontSystem.getContentFont.name
+                            font.family: FontSystem.contentFontFamily
                             font.pixelSize: 11
                             font.bold: false
                         }
@@ -1837,7 +1837,7 @@ ApplicationWindow {
                             anchors.centerIn: parent
                             text: "Profiles " + vpnController.profileCount
                             color: "#667487"
-                            font.family: FontSystem.getContentFont.name
+                            font.family: FontSystem.contentFontFamily
                             font.pixelSize: 11
                             font.bold: false
                         }
@@ -1856,7 +1856,7 @@ ApplicationWindow {
                             anchors.centerIn: parent
                             text: "Best " + (vpnController.bestPingMs >= 0 ? (vpnController.bestPingMs + " ms") : "--")
                             color: "#667487"
-                            font.family: FontSystem.getContentFont.name
+                            font.family: FontSystem.contentFontFamily
                             font.pixelSize: 11
                             font.bold: false
                         }
@@ -1875,7 +1875,7 @@ ApplicationWindow {
                             anchors.centerIn: parent
                             text: "Worst " + (vpnController.worstPingMs >= 0 ? (vpnController.worstPingMs + " ms") : "--")
                             color: "#667487"
-                            font.family: FontSystem.getContentFont.name
+                            font.family: FontSystem.contentFontFamily
                             font.pixelSize: 11
                             font.bold: false
                         }
@@ -1894,7 +1894,7 @@ ApplicationWindow {
                             anchors.centerIn: parent
                             text: "Score " + root.profileScoreStars()
                             color: "#9c6b1f"
-                            font.family: FontSystem.getContentFont.name
+                            font.family: FontSystem.contentFontFamily
                             font.pixelSize: 11
                             font.bold: false
                         }
@@ -2064,7 +2064,7 @@ ApplicationWindow {
                                                 anchors.centerIn: parent
                                                 text: groupBadge.length > 0 ? groupBadge : (vpnController.tunMode ? "TUN Server" : "Game Server")
                                                 color: root.brandBlue
-                                                font.family: FontSystem.getContentFont.name
+                                                font.family: FontSystem.contentFontFamily
                                                 font.pixelSize: 12
                                                 elide: Text.ElideRight
                                             }
@@ -2076,7 +2076,7 @@ ApplicationWindow {
                                     Text {
                                         visible: !root.compact
                                         text: protocol.toUpperCase() + " " + address + ":" + port + ((security || "").length ? " | " + security : "")
-                                        font.family: FontSystem.getContentFont.name
+                                        font.family: FontSystem.contentFontFamily
                                         font.pixelSize: 12
                                         color: "#8c95a4"
                                         elide: Text.ElideRight
@@ -2090,7 +2090,7 @@ ApplicationWindow {
                                               + " • " + normalizedGroup
                                               + (groupExclusive ? " • Exclusive" : "")
                                               + (groupBadge.length > 0 ? " • " + groupBadge : "")
-                                        font.family: FontSystem.getContentFont.name
+                                        font.family: FontSystem.contentFontFamily
                                         font.pixelSize: 11
                                         color: "#7b889d"
                                         elide: Text.ElideRight
@@ -2118,7 +2118,7 @@ ApplicationWindow {
                                             anchors.centerIn: parent
                                             text: pingText
                                             color: pinging ? "#d18b22" : (pingMs >= 0 ? "#2b6dcf" : "#9aa4b6")
-                                            font.family: FontSystem.getContentFont.name
+                                            font.family: FontSystem.contentFontFamily
                                             font.pixelSize: 12
                                             font.bold: false
                                         }
@@ -2262,7 +2262,7 @@ ApplicationWindow {
                               ? "No profiles. Import one first."
                               : "No matching profile found."
                         color: "#8f9bad"
-                        font.family: FontSystem.getContentFont.name
+                        font.family: FontSystem.contentFontFamily
                         font.pixelSize: 14
                     }
                 }
@@ -2323,7 +2323,7 @@ ApplicationWindow {
             Text {
                 text: "Delete all profiles?"
                 color: "#1f2530"
-                font.family: FontSystem.getContentFont.name
+                font.family: FontSystem.contentFontFamily
                 font.pixelSize: 24
                 font.bold: true
             }
@@ -2332,7 +2332,7 @@ ApplicationWindow {
                 Layout.fillWidth: true
                 text: "This removes all imported profiles from GenyConnect. This action cannot be undone."
                 color: "#6a778b"
-                font.family: FontSystem.getContentFont.name
+                font.family: FontSystem.contentFontFamily
                 font.pixelSize: 13
                 wrapMode: Text.WordWrap
             }
@@ -2448,7 +2448,7 @@ ApplicationWindow {
                 Layout.fillWidth: true
                 text: "Endpoint settings still come from the imported link. Re-import a link to change protocol, address, port, or security."
                 color: "#7c8697"
-                font.family: FontSystem.getContentFont.name
+                font.family: FontSystem.contentFontFamily
                 font.pixelSize: 12
                 wrapMode: Text.WordWrap
             }
@@ -2709,7 +2709,7 @@ ApplicationWindow {
                                     Layout.fillWidth: true
                                     text: "Choose the unit used by the Download and Upload speed cards. Auto selects the most readable unit."
                                     color: "#7c8697"
-                                    font.family: FontSystem.getContentFont.name
+                                    font.family: FontSystem.contentFontFamily
                                     font.pixelSize: 13
                                     wrapMode: Text.WordWrap
                                 }
@@ -2722,7 +2722,7 @@ ApplicationWindow {
                                         Layout.fillWidth: true
                                         text: "Speed Units"
                                         color: "#334155"
-                                        font.family: FontSystem.getContentFont.name
+                                        font.family: FontSystem.contentFontFamily
                                         font.pixelSize: 14
                                     }
 
@@ -2739,7 +2739,7 @@ ApplicationWindow {
                                     Layout.fillWidth: true
                                     text: "Use lowercase b for bits and uppercase B for bytes."
                                     color: "#8a95a8"
-                                    font.family: FontSystem.getContentFont.name
+                                    font.family: FontSystem.contentFontFamily
                                     font.pixelSize: 12
                                     wrapMode: Text.WordWrap
                                 }
@@ -2758,7 +2758,7 @@ ApplicationWindow {
                                         Layout.fillWidth: true
                                         text: "Total Traffic Units"
                                         color: "#334155"
-                                        font.family: FontSystem.getContentFont.name
+                                        font.family: FontSystem.contentFontFamily
                                         font.pixelSize: 14
                                     }
 
@@ -2800,7 +2800,7 @@ ApplicationWindow {
                                     Layout.fillWidth: true
                                     text: "Use GenyConnect only with profiles and networks you are authorized to access. You are responsible for complying with local laws, service terms, and network policies."
                                     color: "#667385"
-                                    font.family: FontSystem.getContentFont.name
+                                    font.family: FontSystem.contentFontFamily
                                     font.pixelSize: 13
                                     wrapMode: Text.WordWrap
                                 }
@@ -2834,7 +2834,7 @@ ApplicationWindow {
                                     Layout.fillWidth: true
                                     text: "Share the GenyConnect repository or website with someone who needs the app."
                                     color: "#667385"
-                                    font.family: FontSystem.getContentFont.name
+                                    font.family: FontSystem.contentFontFamily
                                     font.pixelSize: 13
                                     wrapMode: Text.WordWrap
                                 }
@@ -2874,7 +2874,7 @@ ApplicationWindow {
                                     Layout.fillWidth: true
                                     text: "Version " + updater.appVersion + "\nxray-core " + vpnController.xrayVersion + "\nDeveloper: Genyleap LLC\n\nGenyConnect is open source. Donations and community support help keep development active."
                                     color: "#667385"
-                                    font.family: FontSystem.getContentFont.name
+                                    font.family: FontSystem.contentFontFamily
                                     font.pixelSize: 13
                                     wrapMode: Text.WordWrap
                                 }
@@ -2916,7 +2916,7 @@ ApplicationWindow {
                                     Text {
                                         text: "App Updates"
                                         color: "#2a3240"
-                                        font.family: FontSystem.getContentFont.name
+                                        font.family: FontSystem.contentFontFamily
                                         font.pixelSize: 15
                                         font.bold: true
                                     }
@@ -2926,7 +2926,7 @@ ApplicationWindow {
                                     Text {
                                         text: "Current " + updater.appVersion
                                         color: "#677385"
-                                        font.family: FontSystem.getContentFont.name
+                                        font.family: FontSystem.contentFontFamily
                                         font.pixelSize: 13
                                     }
                                 }
@@ -2936,7 +2936,7 @@ ApplicationWindow {
                                     text: updater.status
                                     color: updater.error.length > 0 ? "#c44a4a"
                                                                     : (updater.updateAvailable ? "#1f7a51" : "#5f6f88")
-                                    font.family: FontSystem.getContentFont.name
+                                    font.family: FontSystem.contentFontFamily
                                     font.pixelSize: 13
                                     wrapMode: Text.WordWrap
                                 }
@@ -2946,7 +2946,7 @@ ApplicationWindow {
                                     visible: updater.updateAvailable && updater.latestVersion.length > 0
                                     text: "Latest " + updater.latestVersion
                                     color: "#7f8897"
-                                    font.family: FontSystem.getContentFont.name
+                                    font.family: FontSystem.contentFontFamily
                                     font.pixelSize: 12
                                 }
 
@@ -3019,7 +3019,7 @@ ApplicationWindow {
                                 Text {
                                     text: "xray-core"
                                     color: "#667081"
-                                    font.family: FontSystem.getContentFont.name
+                                    font.family: FontSystem.contentFontFamily
                                     font.pixelSize: 14
                                 }
 
@@ -3028,7 +3028,7 @@ ApplicationWindow {
                                 Text {
                                     text: "Version " + vpnController.xrayVersion
                                     color: "#2a3240"
-                                    font.family: FontSystem.getContentFont.name
+                                    font.family: FontSystem.contentFontFamily
                                     font.pixelSize: 14
                                     font.bold: true
                                 }
@@ -3055,7 +3055,7 @@ ApplicationWindow {
                                 Text {
                                     text: "Connection Mode"
                                     color: "#2a3240"
-                                    font.family: FontSystem.getContentFont.name
+                                    font.family: FontSystem.contentFontFamily
                                     font.pixelSize: 15
                                     font.bold: true
                                 }
@@ -3067,7 +3067,7 @@ ApplicationWindow {
                                              ? "TUN mode: " + osNameText() + " routes system traffic through Xray TUN without changing proxy settings."
                                              : "Clean mode: " + osNameText() + " proxy stays untouched. Only apps set to 127.0.0.1:10808 use the tunnel.")
                                     color: "#7c8697"
-                                    font.family: FontSystem.getContentFont.name
+                                    font.family: FontSystem.contentFontFamily
                                     font.pixelSize: 13
                                     wrapMode: Text.WordWrap
                                     Layout.fillWidth: true
@@ -3091,7 +3091,7 @@ ApplicationWindow {
                                             anchors.centerIn: parent
                                             text: "Global Mode"
                                             color: (vpnController.useSystemProxy && !vpnController.tunMode) ? "#ffffff" : "#344053"
-                                            font.family: FontSystem.getContentFont.name
+                                            font.family: FontSystem.contentFontFamily
                                             font.pixelSize: 13
                                             font.bold: vpnController.useSystemProxy && !vpnController.tunMode
                                         }
@@ -3120,7 +3120,7 @@ ApplicationWindow {
                                             anchors.centerIn: parent
                                             text: "Clean Mode"
                                             color: (!vpnController.useSystemProxy && !vpnController.tunMode) ? "#ffffff" : "#344053"
-                                            font.family: FontSystem.getContentFont.name
+                                            font.family: FontSystem.contentFontFamily
                                             font.pixelSize: 13
                                             font.bold: !vpnController.useSystemProxy && !vpnController.tunMode
                                         }
@@ -3149,7 +3149,7 @@ ApplicationWindow {
                                             anchors.centerIn: parent
                                             text: "TUN Mode"
                                             color: vpnController.tunMode ? "#ffffff" : "#344053"
-                                            font.family: FontSystem.getContentFont.name
+                                            font.family: FontSystem.contentFontFamily
                                             font.pixelSize: 13
                                             font.bold: vpnController.tunMode
                                         }
@@ -3184,7 +3184,7 @@ ApplicationWindow {
                                 Layout.fillWidth: true
                                 text: "Auto-disable system proxy when disconnecting"
                                 color: "#334155"
-                                font.family: FontSystem.getContentFont.name
+                                font.family: FontSystem.contentFontFamily
                                 font.pixelSize: 14
                                 wrapMode: Text.WordWrap
                             }
@@ -3217,7 +3217,7 @@ ApplicationWindow {
                                     Layout.fillWidth: true
                                     text: "When disconnected, keep the OS proxy locked to GenyConnect so proxy-aware apps cannot fall back to direct traffic."
                                     color: "#7c8697"
-                                    font.family: FontSystem.getContentFont.name
+                                    font.family: FontSystem.contentFontFamily
                                     font.pixelSize: 12
                                     wrapMode: Text.WordWrap
                                 }
@@ -3238,7 +3238,7 @@ ApplicationWindow {
                                 Layout.fillWidth: true
                                 text: "Enable xray logs"
                                 color: "#334155"
-                                font.family: FontSystem.getContentFont.name
+                                font.family: FontSystem.contentFontFamily
                                 font.pixelSize: 14
                                 wrapMode: Text.WordWrap
                             }
@@ -3258,7 +3258,7 @@ ApplicationWindow {
                                 Layout.fillWidth: true
                                 text: "Auto ping profile endpoints"
                                 color: "#334155"
-                                font.family: FontSystem.getContentFont.name
+                                font.family: FontSystem.contentFontFamily
                                 font.pixelSize: 14
                                 wrapMode: Text.WordWrap
                             }
@@ -3282,7 +3282,7 @@ ApplicationWindow {
                                      ? "Recommended: keep this enabled to restore system proxy cleanly after tunnel disconnect."
                                      : "In Clean mode this option is ignored because system proxy remains disabled.")
                             color: "#7f8897"
-                            font.family: FontSystem.getContentFont.name
+                            font.family: FontSystem.contentFontFamily
                             font.pixelSize: 12
                             wrapMode: Text.WordWrap
                         }
@@ -3343,7 +3343,7 @@ ApplicationWindow {
                                                     anchors.horizontalCenter: parent.horizontalCenter
                                                     text: modelData.label
                                                     color: "#7b8798"
-                                                    font.family: FontSystem.getContentFont.name
+                                                    font.family: FontSystem.contentFontFamily
                                                     font.pixelSize: 11
                                                 }
                                                 Text {
@@ -3429,20 +3429,20 @@ ApplicationWindow {
                                                 Layout.fillWidth: true
                                                 text: modelData.key || ""
                                                 color: "#334155"
-                                                font.family: FontSystem.getContentFont.name
+                                                font.family: FontSystem.contentFontFamily
                                                 font.pixelSize: 12
                                                 elide: Text.ElideRight
                                             }
                                             Text {
                                                 text: "Down " + (modelData.rxText || "0 B")
                                                 color: "#64748b"
-                                                font.family: FontSystem.getContentFont.name
+                                                font.family: FontSystem.contentFontFamily
                                                 font.pixelSize: 12
                                             }
                                             Text {
                                                 text: "Up " + (modelData.txText || "0 B")
                                                 color: "#64748b"
-                                                font.family: FontSystem.getContentFont.name
+                                                font.family: FontSystem.contentFontFamily
                                                 font.pixelSize: 12
                                             }
                                             Text {
@@ -3491,20 +3491,20 @@ ApplicationWindow {
                                                 Layout.fillWidth: true
                                                 text: (modelData.startedAt || "") + " - " + (modelData.endedAt || "")
                                                 color: "#334155"
-                                                font.family: FontSystem.getContentFont.name
+                                                font.family: FontSystem.contentFontFamily
                                                 font.pixelSize: 12
                                                 elide: Text.ElideRight
                                             }
                                             Text {
                                                 text: "Down " + (modelData.rxText || "0 B")
                                                 color: "#64748b"
-                                                font.family: FontSystem.getContentFont.name
+                                                font.family: FontSystem.contentFontFamily
                                                 font.pixelSize: 12
                                             }
                                             Text {
                                                 text: "Up " + (modelData.txText || "0 B")
                                                 color: "#64748b"
-                                                font.family: FontSystem.getContentFont.name
+                                                font.family: FontSystem.contentFontFamily
                                                 font.pixelSize: 12
                                             }
                                             Text {
@@ -3533,7 +3533,7 @@ ApplicationWindow {
                             Text {
                                 text: "Whitelist mode"
                                 color: "#334155"
-                                font.family: FontSystem.getContentFont.name
+                                font.family: FontSystem.contentFontFamily
                                 font.pixelSize: 14
                             }
                         }
@@ -3557,7 +3557,7 @@ ApplicationWindow {
                             visible: root.settingsSection === "routing"
                             text: "Routing Rules"
                             color: "#667081"
-                            font.family: FontSystem.getContentFont.name
+                            font.family: FontSystem.contentFontFamily
                             font.pixelSize: 14
                         }
 
@@ -3567,7 +3567,7 @@ ApplicationWindow {
                             text: "Use comma or new line between values. Domain formats: example.com, full:example.com, domain:example.com, regexp:.*\\\\.example\\\\.com$, geosite:category-ads-all."
                             wrapMode: Text.Wrap
                             color: "#8a95a8"
-                            font.family: FontSystem.getContentFont.name
+                            font.family: FontSystem.contentFontFamily
                             font.pixelSize: 12
                         }
 
@@ -3629,7 +3629,7 @@ ApplicationWindow {
                                     text: "Enter one resolver per line. Supports IPv4, IPv6, and DNS hostnames."
                                     wrapMode: Text.Wrap
                                     color: "#7c8ba1"
-                                    font.family: FontSystem.getContentFont.name
+                                    font.family: FontSystem.contentFontFamily
                                     font.pixelSize: 12
                                 }
 
@@ -3676,7 +3676,7 @@ ApplicationWindow {
                                                     Layout.fillWidth: true
                                                     text: modelData.label
                                                     color: "#43556f"
-                                                    font.family: FontSystem.getContentFont.name
+                                                    font.family: FontSystem.contentFontFamily
                                                     font.pixelSize: 12
                                                     elide: Text.ElideRight
                                                 }
@@ -3693,7 +3693,7 @@ ApplicationWindow {
 
                                     Text {
                                         color: "#7c8ba1"
-                                        font.family: FontSystem.getContentFont.name
+                                        font.family: FontSystem.contentFontFamily
                                         font.pixelSize: 12
                                         text: {
                                             const count = (root.customDnsDraft || "")
@@ -3743,7 +3743,7 @@ ApplicationWindow {
                                   : "App rules require xray-core 26.1.23+ (current build does not support process routing)."
                             wrapMode: Text.Wrap
                             color: vpnController.processRoutingSupported ? "#8a95a8" : "#d97706"
-                            font.family: FontSystem.getContentFont.name
+                            font.family: FontSystem.contentFontFamily
                             font.pixelSize: 12
                         }
 
@@ -3799,7 +3799,7 @@ ApplicationWindow {
                                             Layout.fillWidth: true
                                             text: appItem.process || ""
                                             color: "#334155"
-                                            font.family: FontSystem.getContentFont.name
+                                            font.family: FontSystem.contentFontFamily
                                             font.pixelSize: 12
                                             elide: Text.ElideRight
                                         }
@@ -3963,7 +3963,7 @@ ApplicationWindow {
                                 Text {
                                     text: "GenyConnect"
                                     color: "#667081"
-                                    font.family: FontSystem.getContentFont.name
+                                    font.family: FontSystem.contentFontFamily
                                     font.pixelSize: 14
                                 }
 
@@ -3974,7 +3974,7 @@ ApplicationWindow {
                                     Layout.maximumWidth: aboutPopup.width * 0.48
                                     elide: Text.ElideRight
                                     color: "#2a3240"
-                                    font.family: FontSystem.getContentFont.name
+                                    font.family: FontSystem.contentFontFamily
                                     font.pixelSize: 14
                                     font.bold: false
                                 }
@@ -3998,7 +3998,7 @@ ApplicationWindow {
                                 Text {
                                     text: "Developer"
                                     color: "#667081"
-                                    font.family: FontSystem.getContentFont.name
+                                    font.family: FontSystem.contentFontFamily
                                     font.pixelSize: 14
                                 }
 
@@ -4009,7 +4009,7 @@ ApplicationWindow {
                                     Layout.maximumWidth: aboutPopup.width * 0.48
                                     elide: Text.ElideRight
                                     color: "#2a3240"
-                                    font.family: FontSystem.getContentFont.name
+                                    font.family: FontSystem.contentFontFamily
                                     font.pixelSize: 14
                                     font.bold: false
                                 }
@@ -4033,7 +4033,7 @@ ApplicationWindow {
                                 Text {
                                     text: "Website"
                                     color: "#667081"
-                                    font.family: FontSystem.getContentFont.name
+                                    font.family: FontSystem.contentFontFamily
                                     font.pixelSize: 14
                                 }
 
@@ -4044,7 +4044,7 @@ ApplicationWindow {
                                     Layout.maximumWidth: aboutPopup.width * 0.52
                                     elide: Text.ElideMiddle
                                     color: "#2a3240"
-                                    font.family: FontSystem.getContentFont.name
+                                    font.family: FontSystem.contentFontFamily
                                     font.pixelSize: 14
                                     font.bold: false
                                     font.underline: true
@@ -4076,7 +4076,7 @@ ApplicationWindow {
                                 Text {
                                     text: "Repository"
                                     color: "#667081"
-                                    font.family: FontSystem.getContentFont.name
+                                    font.family: FontSystem.contentFontFamily
                                     font.pixelSize: 14
                                 }
 
@@ -4087,7 +4087,7 @@ ApplicationWindow {
                                     Layout.maximumWidth: aboutPopup.width * 0.52
                                     elide: Text.ElideMiddle
                                     color: "#2a3240"
-                                    font.family: FontSystem.getContentFont.name
+                                    font.family: FontSystem.contentFontFamily
                                     font.pixelSize: 14
                                     font.bold: false
                                     font.underline: true
@@ -4118,7 +4118,7 @@ ApplicationWindow {
                                 Text {
                                     text: "Creator's Telegram"
                                     color: "#667081"
-                                    font.family: FontSystem.getContentFont.name
+                                    font.family: FontSystem.contentFontFamily
                                     font.pixelSize: 14
                                 }
 
@@ -4129,7 +4129,7 @@ ApplicationWindow {
                                     Layout.maximumWidth: aboutPopup.width * 0.52
                                     elide: Text.ElideMiddle
                                     color: "#2a3240"
-                                    font.family: FontSystem.getContentFont.name
+                                    font.family: FontSystem.contentFontFamily
                                     font.pixelSize: 14
                                     font.bold: false
                                     font.underline: true
@@ -4160,7 +4160,7 @@ ApplicationWindow {
                                 Text {
                                     text: "Support Email"
                                     color: "#667081"
-                                    font.family: FontSystem.getContentFont.name
+                                    font.family: FontSystem.contentFontFamily
                                     font.pixelSize: 14
                                 }
 
@@ -4171,7 +4171,7 @@ ApplicationWindow {
                                     Layout.maximumWidth: aboutPopup.width * 0.52
                                     elide: Text.ElideMiddle
                                     color: "#2a3240"
-                                    font.family: FontSystem.getContentFont.name
+                                    font.family: FontSystem.contentFontFamily
                                     font.pixelSize: 14
                                     font.bold: false
                                     font.underline: true
@@ -4324,7 +4324,7 @@ ApplicationWindow {
                         Layout.fillWidth: true
                         text: "Enable xray logs in Settings to capture connection history."
                         color: "#8b95a5"
-                        font.family: FontSystem.getContentFont.name
+                        font.family: FontSystem.contentFontFamily
                         font.pixelSize: 13
                         wrapMode: Text.WordWrap
                         horizontalAlignment: Text.AlignHCenter
@@ -4344,7 +4344,7 @@ ApplicationWindow {
                     wrapMode: TextEdit.NoWrap
                     selectByMouse: true
                     text: vpnController.recentLogs.join("\n")
-                    font.family: FontSystem.getContentFont.name
+                    font.family: FontSystem.contentFontFamily
                     font.pixelSize: 12
                     color: "#1f2530"
                     background: Rectangle {
@@ -4589,7 +4589,7 @@ ApplicationWindow {
                             readonly property real radiusValue: speedDial.innerRadius - 30
                             text: speedDial.scaleLabels[index]
                             color: "#7f8898"
-                            font.family: FontSystem.getContentFont.name
+                            font.family: FontSystem.contentFontFamily
                             font.pixelSize: 12
                             x: speedDial.centerX + Math.cos(angle) * radiusValue - width * 0.5
                             y: speedDial.centerY + Math.sin(angle) * radiusValue - height * 0.5
@@ -4748,7 +4748,7 @@ ApplicationWindow {
                         Text {
                             text: root.speedGaugePrefixText() + root.speedGaugeNumberText()
                             color: "#1f2530"
-                            font.family: FontSystem.getContentFont.name
+                            font.family: FontSystem.contentFontFamily
                             font.pixelSize: 30
                             font.bold: true
                             horizontalAlignment: Text.AlignHCenter
@@ -4758,7 +4758,7 @@ ApplicationWindow {
                         Text {
                             text: root.speedGaugeUnitText()
                             color: "#8f97a6"
-                            font.family: FontSystem.getContentFont.name
+                            font.family: FontSystem.contentFontFamily
                             font.pixelSize: 16
                             font.weight: Font.Light
                             font.bold: false
@@ -4774,7 +4774,7 @@ ApplicationWindow {
                 Layout.fillWidth: true
                 text: vpnController.speedTestRunning ? speedTestStatusText() : speedTestSideStatusText()
                 color: vpnController.speedTestError.length > 0 ? "#d14545" : (vpnController.speedTestRunning ? "#6a7890" : "#5f6f88")
-                font.family: FontSystem.getContentFont.name
+                font.family: FontSystem.contentFontFamily
                 font.pixelSize: 14
                 horizontalAlignment: Text.AlignHCenter
                 wrapMode: Text.WordWrap
@@ -4802,13 +4802,13 @@ ApplicationWindow {
                         Text {
                             text: "Ping"
                             color: "#6f7d92"
-                            font.family: FontSystem.getContentFont.name
+                            font.family: FontSystem.contentFontFamily
                             font.pixelSize: 13
                         }
                         Text {
                             text: vpnController.speedTestPingMs >= 0 ? (vpnController.speedTestPingMs + " ms") : "--"
                             color: "#1f2530"
-                            font.family: FontSystem.getContentFont.name
+                            font.family: FontSystem.contentFontFamily
                             font.pixelSize: 16
                             font.bold: true
                         }
@@ -4831,13 +4831,13 @@ ApplicationWindow {
                         Text {
                             text: "Download"
                             color: "#6f7d92"
-                            font.family: FontSystem.getContentFont.name
+                            font.family: FontSystem.contentFontFamily
                             font.pixelSize: 13
                         }
                         Text {
                             text: vpnController.speedTestDownloadMbps.toFixed(1) + " Mbps"
                             color: "#1f2530"
-                            font.family: FontSystem.getContentFont.name
+                            font.family: FontSystem.contentFontFamily
                             font.pixelSize: 16
                             font.bold: true
                         }
@@ -4862,13 +4862,13 @@ ApplicationWindow {
                         Text {
                             text: "Upload"
                             color: "#6f7d92"
-                            font.family: FontSystem.getContentFont.name
+                            font.family: FontSystem.contentFontFamily
                             font.pixelSize: 13
                         }
                         Text {
                             text: vpnController.speedTestUploadMbps.toFixed(1) + " Mbps"
                             color: "#1f2530"
-                            font.family: FontSystem.getContentFont.name
+                            font.family: FontSystem.contentFontFamily
                             font.pixelSize: 16
                             font.bold: true
                         }
@@ -4899,14 +4899,14 @@ ApplicationWindow {
                 Text {
                     text: root.infoIpLabel() + ":"
                     color: "#1f2430"
-                    font.family: FontSystem.getContentFont.name
+                    font.family: FontSystem.contentFontFamily
                     font.pixelSize: 16
                     font.bold: true
                 }
                 Text {
                     text: infoIpText()
                     color: "#8f97a6"
-                    font.family: FontSystem.getContentFont.name
+                    font.family: FontSystem.contentFontFamily
                     font.pixelSize: 16
                 }
 
@@ -4915,14 +4915,14 @@ ApplicationWindow {
                 Text {
                     text: "Proxy:"
                     color: "#1f2430"
-                    font.family: FontSystem.getContentFont.name
+                    font.family: FontSystem.contentFontFamily
                     font.pixelSize: 16
                     font.bold: true
                 }
                 Text {
                     text: speedTestProxyText()
                     color: "#8f97a6"
-                    font.family: FontSystem.getContentFont.name
+                    font.family: FontSystem.contentFontFamily
                     font.pixelSize: 16
                 }
 
@@ -4931,14 +4931,14 @@ ApplicationWindow {
                 Text {
                     text: "Provider:"
                     color: "#1f2430"
-                    font.family: FontSystem.getContentFont.name
+                    font.family: FontSystem.contentFontFamily
                     font.pixelSize: 16
                     font.bold: true
                 }
                 Text {
                     text: speedTestProviderText()
                     color: "#8f97a6"
-                    font.family: FontSystem.getContentFont.name
+                    font.family: FontSystem.contentFontFamily
                     font.pixelSize: 16
                 }
 
@@ -4947,14 +4947,14 @@ ApplicationWindow {
                 Text {
                     text: "OS:"
                     color: "#1f2430"
-                    font.family: FontSystem.getContentFont.name
+                    font.family: FontSystem.contentFontFamily
                     font.pixelSize: 16
                     font.bold: true
                 }
                 Text {
                     text: osNameText()
                     color: "#8f97a6"
-                    font.family: FontSystem.getContentFont.name
+                    font.family: FontSystem.contentFontFamily
                     font.pixelSize: 16
                 }
             }
@@ -4975,7 +4975,7 @@ ApplicationWindow {
                     Text {
                         text: "Latest Results"
                         color: "#3f4d63"
-                        font.family: FontSystem.getContentFont.name
+                        font.family: FontSystem.contentFontFamily
                         font.pixelSize: 14
                         font.bold: true
                     }
@@ -5003,7 +5003,7 @@ ApplicationWindow {
                                     text: modelData
                                     elide: Text.ElideRight
                                     color: "#586780"
-                                    font.family: FontSystem.getContentFont.name
+                                    font.family: FontSystem.contentFontFamily
                                     font.pixelSize: 13
                                 }
                             }
@@ -5018,7 +5018,7 @@ ApplicationWindow {
                             horizontalAlignment: Text.AlignLeft
                             text: "No completed tests yet."
                             color: "#8a95a8"
-                            font.family: FontSystem.getContentFont.name
+                            font.family: FontSystem.contentFontFamily
                             font.pixelSize: 13
                         }
                     }
@@ -5148,7 +5148,7 @@ ApplicationWindow {
                 Layout.fillWidth: true
                 text: "Paste vmess/vless, batch text, base64 payload, or an https subscription URL."
                 color: "#6f7f95"
-                font.family: FontSystem.getContentFont.name
+                font.family: FontSystem.contentFontFamily
                 font.pixelSize: 12
                 wrapMode: Text.WordWrap
             }
@@ -5174,7 +5174,7 @@ ApplicationWindow {
                         text: root.subscriptionGroupDraft
                         placeholderText: "Group name"
                         color: "#1f2a3a"
-                        font.family: FontSystem.getContentFont.name
+                        font.family: FontSystem.contentFontFamily
                         font.pixelSize: 13
                         selectedTextColor: "#ffffff"
                         selectionColor: root.brandBlue
@@ -5258,7 +5258,7 @@ ApplicationWindow {
                             anchors.centerIn: parent
                             text: modelData
                             color: subscriptionGroupField.text === modelData ? "#2c5eaf" : "#5f6f86"
-                            font.family: FontSystem.getContentFont.name
+                            font.family: FontSystem.contentFontFamily
                             font.pixelSize: 12
                             font.bold: subscriptionGroupField.text === modelData
                         }
@@ -5283,7 +5283,7 @@ ApplicationWindow {
                 Text {
                     text: "Badge"
                     color: "#6b778a"
-                    font.family: FontSystem.getContentFont.name
+                    font.family: FontSystem.contentFontFamily
                     font.pixelSize: 12
                 }
 
@@ -5299,7 +5299,7 @@ ApplicationWindow {
                         anchors.centerIn: parent
                         text: "None"
                         color: root.profileGroupBadgeText(subscriptionGroupField.text).length === 0 ? root.brandBlue : "#667487"
-                        font.family: FontSystem.getContentFont.name
+                        font.family: FontSystem.contentFontFamily
                         font.pixelSize: 12
                         font.bold: root.profileGroupBadgeText(subscriptionGroupField.text).length === 0
                     }
@@ -5327,7 +5327,7 @@ ApplicationWindow {
                         anchors.centerIn: parent
                         text: "Free"
                         color: root.profileGroupBadgeText(subscriptionGroupField.text).toLowerCase() === "free" ? root.brandBlue : "#667487"
-                        font.family: FontSystem.getContentFont.name
+                        font.family: FontSystem.contentFontFamily
                         font.pixelSize: 12
                         font.bold: root.profileGroupBadgeText(subscriptionGroupField.text).toLowerCase() === "free"
                     }
@@ -5355,7 +5355,7 @@ ApplicationWindow {
                         anchors.centerIn: parent
                         text: "Premium"
                         color: root.profileGroupBadgeText(subscriptionGroupField.text).toLowerCase() === "premium" ? root.brandViolet : "#667487"
-                        font.family: FontSystem.getContentFont.name
+                        font.family: FontSystem.contentFontFamily
                         font.pixelSize: 12
                         font.bold: root.profileGroupBadgeText(subscriptionGroupField.text).toLowerCase() === "premium"
                     }
@@ -5392,7 +5392,7 @@ ApplicationWindow {
                         anchors.centerIn: parent
                         text: root.profileGroupEnabled(subscriptionGroupField.text) ? "Group Enabled" : "Group Disabled"
                         color: root.profileGroupEnabled(subscriptionGroupField.text) ? "#2c8b57" : "#bf4d4d"
-                        font.family: FontSystem.getContentFont.name
+                        font.family: FontSystem.contentFontFamily
                         font.pixelSize: 11
                     }
                 }
@@ -5447,7 +5447,7 @@ ApplicationWindow {
                                 placeholderText: "Badge"
                                 text: root.profileGroupBadgeText(subscriptionGroupField.text)
                                 color: "#3b4a61"
-                                font.family: FontSystem.getContentFont.name
+                                font.family: FontSystem.contentFontFamily
                                 font.pixelSize: 12
                                 background: null
                                 onEditingFinished: {
@@ -5461,7 +5461,7 @@ ApplicationWindow {
                             visible: root.profileGroupBadgeText(subscriptionGroupField.text).length > 0
                             text: "• " + root.profileGroupBadgeText(subscriptionGroupField.text)
                             color: "#4d6691"
-                            font.family: FontSystem.getContentFont.name
+                            font.family: FontSystem.contentFontFamily
                             font.pixelSize: 12
                             font.bold: true
                         }
@@ -5473,7 +5473,7 @@ ApplicationWindow {
                 Text {
                     text: "Groups: " + root.importSelectableGroups().length
                     color: "#90a0b5"
-                    font.family: FontSystem.getContentFont.name
+                    font.family: FontSystem.contentFontFamily
                     font.pixelSize: 11
                 }
             }
@@ -5495,7 +5495,7 @@ ApplicationWindow {
                     Text {
                         text: "Import Target Group:"
                         color: "#5f6f86"
-                        font.family: FontSystem.getContentFont.name
+                        font.family: FontSystem.contentFontFamily
                         font.pixelSize: 12
                     }
 
@@ -5512,7 +5512,7 @@ ApplicationWindow {
                         visible: root.width >= 620
                         text: "All pasted profiles/subscriptions will be saved here."
                         color: "#7d8ea7"
-                        font.family: FontSystem.getContentFont.name
+                        font.family: FontSystem.contentFontFamily
                         font.pixelSize: 11
                     }
                 }
@@ -5610,7 +5610,7 @@ ApplicationWindow {
                                         anchors.fill: parent
                                         text: groupName
                                         color: "#2b3648"
-                                        font.family: FontSystem.getContentFont.name
+                                        font.family: FontSystem.contentFontFamily
                                         font.pixelSize: 12
                                         elide: Text.ElideRight
                                         verticalAlignment: Text.AlignVCenter
@@ -5640,7 +5640,7 @@ ApplicationWindow {
                                     text: groupBadge
                                     selectByMouse: true
                                     color: "#3b4a61"
-                                    font.family: FontSystem.getContentFont.name
+                                    font.family: FontSystem.contentFontFamily
                                     font.pixelSize: 12
                                     background: Rectangle {
                                         radius: 8
@@ -5704,7 +5704,7 @@ ApplicationWindow {
                            : (root.importStatusKind === "success"
                               ? "#2c8b57"
                               : (root.importStatusKind === "error" ? "#c65050" : "#6f7f95"))
-                    font.family: FontSystem.getContentFont.name
+                    font.family: FontSystem.contentFontFamily
                     font.pixelSize: 12
                     elide: Text.ElideRight
                 }
@@ -6100,7 +6100,7 @@ ApplicationWindow {
                             Text {
                                 text: connectButtonText()
                                 color: "#ffffff"
-                                font.family: FontSystem.getContentFont.name
+                                font.family: FontSystem.contentFontFamily
                                 font.pixelSize: 40 * 0.58
                                 font.bold: true
                             }
@@ -6193,13 +6193,13 @@ ApplicationWindow {
                                 Text {
                                     text: "Status"
                                     color: "#6f7f96"
-                                    font.family: FontSystem.getContentFont.name
+                                    font.family: FontSystem.contentFontFamily
                                     font.pixelSize: Typography.h6
                                 }
                                 Text {
                                     text: root.stateText()
                                     color: "#1f2a37"
-                                    font.family: FontSystem.getContentFont.name
+                                    font.family: FontSystem.contentFontFamily
                                     font.pixelSize: Typography.t2
                                     font.bold: true
                                 }
@@ -6230,7 +6230,7 @@ ApplicationWindow {
                             Text {
                                 text: "↓"
                                 color: "#2874f0"
-                                font.family: FontSystem.getContentFont.name
+                                font.family: FontSystem.contentFontFamily
                                 font.pixelSize: 18
                                 font.bold: true
                             }
@@ -6240,13 +6240,13 @@ ApplicationWindow {
                                 Text {
                                     text: "Receive"
                                     color: "#6682ad"
-                                    font.family: FontSystem.getContentFont.name
+                                    font.family: FontSystem.contentFontFamily
                                     font.pixelSize: Typography.h6
                                 }
                                 Text {
                                     text: root.downloadRateText()
                                     color: "#3f5e93"
-                                    font.family: FontSystem.getContentFont.name
+                                    font.family: FontSystem.contentFontFamily
                                     font.pixelSize: Typography.t3
                                     font.bold: true
                                 }
@@ -6257,7 +6257,7 @@ ApplicationWindow {
                             Text {
                                 text: downloadUsageText()
                                 color: "#1f2b3d"
-                                font.family: FontSystem.getContentFont.name
+                                font.family: FontSystem.contentFontFamily
                                 font.pixelSize: Typography.h3
                                 font.bold: false
                             }
@@ -6284,7 +6284,7 @@ ApplicationWindow {
                             Text {
                                 text: "↑"
                                 color: "#1ea768"
-                                font.family: FontSystem.getContentFont.name
+                                font.family: FontSystem.contentFontFamily
                                 font.pixelSize: 18
                                 font.bold: true
                             }
@@ -6294,13 +6294,13 @@ ApplicationWindow {
                                 Text {
                                     text: "Send"
                                     color: "#5f9478"
-                                    font.family: FontSystem.getContentFont.name
+                                    font.family: FontSystem.contentFontFamily
                                     font.pixelSize: Typography.h6
                                 }
                                 Text {
                                     text: root.uploadRateText()
                                     color: "#2e7b58"
-                                    font.family: FontSystem.getContentFont.name
+                                    font.family: FontSystem.contentFontFamily
                                     font.pixelSize: Typography.t3
                                     font.bold: true
                                 }
@@ -6311,7 +6311,7 @@ ApplicationWindow {
                             Text {
                                 text: uploadUsageText()
                                 color: "#1f2b3d"
-                                font.family: FontSystem.getContentFont.name
+                                font.family: FontSystem.contentFontFamily
                                 font.pixelSize: Typography.h3
                                 font.bold: false
                             }
@@ -6340,7 +6340,7 @@ ApplicationWindow {
                 Text {
                     text: root.infoIpLabel() + ":"
                     color: "#2a3140"
-                    font.family: FontSystem.getContentFont.name
+                    font.family: FontSystem.contentFontFamily
                     font.pixelSize: 16
                     font.bold: true
                 }
@@ -6348,7 +6348,7 @@ ApplicationWindow {
                 Text {
                     text: infoIpText()
                     color: "#8e98aa"
-                    font.family: FontSystem.getContentFont.name
+                    font.family: FontSystem.contentFontFamily
                     font.pixelSize: 16
                 }
             }
@@ -6366,7 +6366,7 @@ ApplicationWindow {
                 Text {
                     text: "Your Location:"
                     color: "#2a3140"
-                    font.family: FontSystem.getContentFont.name
+                    font.family: FontSystem.contentFontFamily
                     font.pixelSize: 16
                     font.bold: true
                 }
@@ -6374,7 +6374,7 @@ ApplicationWindow {
                 Text {
                     text: infoLocationText()
                     color: "#8e98aa"
-                    font.family: FontSystem.getContentFont.name
+                    font.family: FontSystem.contentFontFamily
                     font.pixelSize: 16
                     elide: Text.ElideRight
                     wrapMode: Text.WordWrap
@@ -6479,7 +6479,7 @@ ApplicationWindow {
                 Text {
                     text: "<strong>GENY</strong>CONNECT"
                     color: root.brandInk
-                    font.family: FontSystem.getContentFont.name
+                    font.family: FontSystem.contentFontFamily
                     font.pixelSize: 15
                     font.bold: true
                 }
@@ -6705,7 +6705,7 @@ ApplicationWindow {
                                 width: parent.width
                                 text: "Download"
                                 color: "#1b1b1f"
-                                font.family: FontSystem.getContentFont.name
+                                font.family: FontSystem.contentFontFamily
                                 font.pixelSize: 13
                             }
                             Row {
@@ -6724,7 +6724,7 @@ ApplicationWindow {
                                     width: 42
                                     text: root.formatSpeedValue(root.downRateBytesPerSec, dashboardStatsSettings.speedUnit).unit
                                     color: "#5b5d66"
-                                    font.family: FontSystem.getContentFont.name
+                                    font.family: FontSystem.contentFontFamily
                                     font.pixelSize: 13
                                     elide: Text.ElideRight
                                 }
@@ -6774,7 +6774,7 @@ ApplicationWindow {
                                 width: parent.width
                                 text: "Upload"
                                 color: "#1b1b1f"
-                                font.family: FontSystem.getContentFont.name
+                                font.family: FontSystem.contentFontFamily
                                 font.pixelSize: 13
                             }
                             Row {
@@ -6793,7 +6793,7 @@ ApplicationWindow {
                                     width: 42
                                     text: root.formatSpeedValue(root.upRateBytesPerSec, dashboardStatsSettings.speedUnit).unit
                                     color: "#5b5d66"
-                                    font.family: FontSystem.getContentFont.name
+                                    font.family: FontSystem.contentFontFamily
                                     font.pixelSize: 13
                                     elide: Text.ElideRight
                                 }
@@ -6858,7 +6858,7 @@ ApplicationWindow {
                                 anchors.centerIn: parent
                                 text: vpnController.tunMode ? "TUN Server" : "Game Server"
                                 color: root.brandBlue
-                                font.family: FontSystem.getContentFont.name
+                                font.family: FontSystem.contentFontFamily
                                 font.pixelSize: 12
                                 elide: Text.ElideRight
                             }
@@ -6989,7 +6989,7 @@ ApplicationWindow {
             Text {
                 text: "Build: v" + updater.appVersion
                 color: Colors.textSecondary
-                font.family: FontSystem.getContentFont.name
+                font.family: FontSystem.contentFontFamily
                 font.pixelSize: 11
                 Behavior on color { ColorAnimation { duration: 220 } }
             }
@@ -6998,7 +6998,7 @@ ApplicationWindow {
                 text: " | Memory: " + vpnController.memoryUsageText
                 visible: root.width >= 520
                 color: Colors.textSecondary
-                font.family: FontSystem.getContentFont.name
+                font.family: FontSystem.contentFontFamily
                 font.pixelSize: 11
             }
 
@@ -7019,28 +7019,28 @@ ApplicationWindow {
                 Text {
                     text: "<strong>Hour</strong> " + vpnController.currentProfileUsageHour
                     color: "#647891"
-                    font.family: FontSystem.getContentFont.name
+                    font.family: FontSystem.contentFontFamily
                     font.pixelSize: 12
                 }
 
                 Text {
                     text: "<strong>Day</strong> " + vpnController.currentProfileUsageDay
                     color: "#647891"
-                    font.family: FontSystem.getContentFont.name
+                    font.family: FontSystem.contentFontFamily
                     font.pixelSize: 12
                 }
 
                 Text {
                     text: "<strong>Week</strong> " + vpnController.currentProfileUsageWeek
                     color: "#647891"
-                    font.family: FontSystem.getContentFont.name
+                    font.family: FontSystem.contentFontFamily
                     font.pixelSize: 12
                 }
 
                 Text {
                     text: "<strong>Month</strong> " + vpnController.currentProfileUsageMonth
                     color: "#647891"
-                    font.family: FontSystem.getContentFont.name
+                    font.family: FontSystem.contentFontFamily
                     font.pixelSize: 12
                 }
 

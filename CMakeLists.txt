@@ -7,20 +7,62 @@ cmake_minimum_required(VERSION 3.28)
 #     Windows: NSIS + ZIP
 #     macOS:   DragNDrop (DMG)
 #     Linux:   TGZ
-#
-# macOS IMPORTANT:
-# - Use POST_BUILD macdeployqt
-# - Copy helper into bundle BEFORE macdeployqt
-# - Then codesign AFTER macdeployqt
-#
-# NOTE:
-# - For clean packaging output, prefer running the CPack that matches the CMake
-#   used to configure this build directory (avoid mixing Homebrew CPack with Qt CMake).
 # -----------------------------------------------------------------------------
 
 set(PROJECT_NAME "GenyConnect")
 
-project(${PROJECT_NAME} VERSION 1.2.512 LANGUAGES CXX)
+# Default target architecture used for package naming and macOS build arch.
+# On Windows, the real compiler architecture is selected by the generator platform:
+#   -A x64
+#   -A ARM64
+set(GENYCONNECT_TARGET_BUILD_ARCH "" CACHE STRING "Override target arch for output build/package (arm64|x86_64)")
+
+# Must be defined before project() on macOS.
+set(GENYCONNECT_MACOS_DEPLOYMENT_TARGET "14.0" CACHE STRING "Minimum macOS version")
+
+if(APPLE)
+  if(NOT GENYCONNECT_TARGET_BUILD_ARCH)
+    set(GENYCONNECT_TARGET_BUILD_ARCH "x86_64" CACHE STRING "Override target arch for output build/package (arm64|x86_64)" FORCE)
+  endif()
+
+  set(CMAKE_OSX_ARCHITECTURES "${GENYCONNECT_TARGET_BUILD_ARCH}" CACHE STRING "Build architecture" FORCE)
+  set(CMAKE_OSX_DEPLOYMENT_TARGET "${GENYCONNECT_MACOS_DEPLOYMENT_TARGET}" CACHE STRING "Minimum macOS version" FORCE)
+endif()
+
+project(${PROJECT_NAME} VERSION 1.2.768 LANGUAGES CXX)
+
+# -------------------------
+# Detect Windows generator architecture
+# -------------------------
+if(WIN32 AND NOT GENYCONNECT_TARGET_BUILD_ARCH)
+  if(CMAKE_GENERATOR_PLATFORM MATCHES "^[Aa][Rr][Mm]64$")
+    set(GENYCONNECT_TARGET_BUILD_ARCH "arm64" CACHE STRING "Detected Windows target arch" FORCE)
+  elseif(CMAKE_GENERATOR_PLATFORM MATCHES "^[Xx]64$|^[Ww]in64$|^[Aa][Mm][Dd]64$")
+    set(GENYCONNECT_TARGET_BUILD_ARCH "x86_64" CACHE STRING "Detected Windows target arch" FORCE)
+  elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "ARM64|arm64|aarch64")
+    set(GENYCONNECT_TARGET_BUILD_ARCH "arm64" CACHE STRING "Detected Windows target arch" FORCE)
+  else()
+    set(GENYCONNECT_TARGET_BUILD_ARCH "x86_64" CACHE STRING "Detected Windows target arch" FORCE)
+  endif()
+elseif(NOT GENYCONNECT_TARGET_BUILD_ARCH)
+  if(CMAKE_SYSTEM_PROCESSOR MATCHES "ARM64|arm64|aarch64")
+    set(GENYCONNECT_TARGET_BUILD_ARCH "arm64" CACHE STRING "Detected target arch" FORCE)
+  else()
+    set(GENYCONNECT_TARGET_BUILD_ARCH "x86_64" CACHE STRING "Detected target arch" FORCE)
+  endif()
+endif()
+
+if(WIN32 AND CMAKE_GENERATOR MATCHES "Visual Studio" AND NOT CMAKE_GENERATOR_PLATFORM)
+  message(WARNING
+    "Visual Studio generator platform is empty. "
+    "Use -A x64 or -A ARM64 to avoid wrong Windows architecture/package detection."
+  )
+endif()
+
+message(STATUS "CMake generator: ${CMAKE_GENERATOR}")
+message(STATUS "CMake generator platform: ${CMAKE_GENERATOR_PLATFORM}")
+message(STATUS "CMake system processor: ${CMAKE_SYSTEM_PROCESSOR}")
+message(STATUS "GenyConnect target build arch: ${GENYCONNECT_TARGET_BUILD_ARCH}")
 
 if(POLICY CMP0155)
   cmake_policy(SET CMP0155 NEW)
@@ -61,8 +103,6 @@ option(GENYCONNECT_BUNDLE_DOCS "Install README and LICENSE at package root + NSI
 option(GENYCONNECT_MACDEPLOYQT_ALWAYS_OVERWRITE "Pass -always-overwrite to macdeployqt" OFF)
 option(GENYCONNECT_MACDEPLOYQT_NO_STRIP         "Pass -no-strip to macdeployqt" OFF)
 
-set(GENYCONNECT_TARGET_BUILD_ARCH "x86_64" CACHE STRING "Override target arch for output build (arm64|x86_64)")
-
 set(GENYCONNECT_XRAY_VERSION      "v26.2.6" CACHE STRING   "Xray-core release tag (e.g. v26.2.6)")
 set(GENYCONNECT_XRAY_ASSET_NAME   ""        CACHE STRING   "Optional explicit Xray release asset name override")
 set(GENYCONNECT_BUNDLED_XRAY_PATH ""        CACHE FILEPATH "Path to prebuilt xray-core binary to bundle with app")
@@ -71,13 +111,8 @@ set(GENYCONNECT_WINTUN_VERSION "0.14.1" CACHE STRING "Wintun version for fallbac
 set(GENYCONNECT_WINTUN_URL "" CACHE STRING "Optional explicit wintun zip URL override")
 
 set(GENYCONNECT_TARGET_OS   "" CACHE STRING "Override target OS for output naming (macos|linux|windows)")
-set(GENYCONNECT_TARGET_ARCH "${GENYCONNECT_TARGET_BUILD_ARCH}" CACHE STRING "Override target arch for output naming (arm64|x86_64)")
+set(GENYCONNECT_TARGET_ARCH "${GENYCONNECT_TARGET_BUILD_ARCH}" CACHE STRING "Override target arch for output naming (arm64|x86_64)" FORCE)
 set(GENYCONNECT_OUTPUT_NAME "" CACHE STRING "Optional explicit output name (overrides generated name)")
-
-# If you want arm64 on Apple Silicon, keep this. Universal: "arm64;x86_64".
-if(APPLE AND NOT DEFINED CMAKE_OSX_ARCHITECTURES)
-  set(CMAKE_OSX_ARCHITECTURES "${GENYCONNECT_TARGET_BUILD_ARCH}" CACHE STRING "Build architecture")
-endif()
 
 # -------------------------
 # Normalize OS / arch
@@ -188,7 +223,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 if(MSVC)
-    add_compile_options(/Zc:__cplusplus /permissive-)
+  add_compile_options(/Zc:__cplusplus /permissive-)
 endif()
 
 set(CMAKE_AUTOMOC ON)
@@ -247,11 +282,23 @@ if(GENYCONNECT_QT_AUTO_SCAN AND NOT Qt6_DIR)
       "/usr/local/Qt/*/macos"
     )
   elseif(WIN32)
-    file(GLOB _qt_candidates
-      "C:/Qt/*/msvc*_64"
-      "C:/Qt/*/mingw*_64"
-      "C:/Qt/*/clang_64"
-    )
+    if(GENYCONNECT_TARGET_BUILD_ARCH STREQUAL "arm64")
+      file(GLOB _qt_candidates
+        "C:/Qt/*/msvc*_arm64"
+        "C:/Qt/*/msvc*arm64"
+        "C:/Qt/*/msvc*_64"
+        "C:/Qt/*/mingw*_64"
+        "C:/Qt/*/clang_64"
+      )
+    else()
+      file(GLOB _qt_candidates
+        "C:/Qt/*/msvc*_64"
+        "C:/Qt/*/mingw*_64"
+        "C:/Qt/*/clang_64"
+        "C:/Qt/*/msvc*_arm64"
+        "C:/Qt/*/msvc*arm64"
+      )
+    endif()
   else()
     file(GLOB _qt_candidates
       "${CMAKE_USER_HOME_DIRECTORY}/Qt/*/gcc_64"
@@ -279,6 +326,9 @@ endif()
 
 find_package(Qt6 6.8 REQUIRED COMPONENTS Core Gui Network Qml Quick QuickControls2 Widgets)
 qt_standard_project_setup(REQUIRES 6.8)
+
+message(STATUS "Qt6_DIR: ${Qt6_DIR}")
+message(STATUS "CMAKE_PREFIX_PATH: ${CMAKE_PREFIX_PATH}")
 
 # -------------------------
 # macOS RPATH policy to avoid noisy -delete_rpath during CPack install step
@@ -330,11 +380,12 @@ qt_add_executable(${PROJECT_NAME}
   src/main.cpp
   ${GENYCONNECT_IMPL_SOURCES}
 )
+
 set_target_properties(${PROJECT_NAME} PROPERTIES OUTPUT_NAME "${GENY_OUTPUT_NAME}")
 set_target_properties(${PROJECT_NAME} PROPERTIES
-    RUNTIME_OUTPUT_DIRECTORY  "${CMAKE_BINARY_DIR}/bin"
-    LIBRARY_OUTPUT_DIRECTORY  "${CMAKE_BINARY_DIR}/lib"
-    ARCHIVE_OUTPUT_DIRECTORY  "${CMAKE_BINARY_DIR}/lib"
+  RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
+  LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib"
+  ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib"
 )
 
 qt_add_executable(GenyConnectUpdater
@@ -400,8 +451,6 @@ target_compile_definitions(${PROJECT_NAME} PRIVATE APP_VERSION="${PROJECT_VERSIO
 # macOS bundle props + icon
 # -------------------------
 set(GENY_MAC_ICON_ICNS "${CMAKE_CURRENT_SOURCE_DIR}/ui/Resources/image/GenyConnect.icns")
-set(GENYCONNECT_MACOS_DEPLOYMENT_TARGET "14.0" CACHE STRING "Minimum macOS version")
-set(CMAKE_OSX_DEPLOYMENT_TARGET "${GENYCONNECT_MACOS_DEPLOYMENT_TARGET}" CACHE STRING "Minimum macOS version" FORCE)
 
 if(APPLE)
   set_target_properties(${PROJECT_NAME} PROPERTIES
@@ -410,6 +459,7 @@ if(APPLE)
     MACOSX_BUNDLE_SHORT_VERSION_STRING ${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}
     MACOSX_BUNDLE_ICON_FILE "GenyConnect.icns"
   )
+
   if(EXISTS "${GENY_MAC_ICON_ICNS}")
     set_source_files_properties("${GENY_MAC_ICON_ICNS}" PROPERTIES MACOSX_PACKAGE_LOCATION "Resources")
     target_sources(${PROJECT_NAME} PRIVATE "${GENY_MAC_ICON_ICNS}")
@@ -462,6 +512,7 @@ set(genyconnect_image_assets
   ui/Resources/image/avatar.svg
   ui/Resources/image/favicon.png
 )
+
 if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/ui/Resources/image/map.png")
   list(APPEND genyconnect_image_assets ui/Resources/image/map.png)
 endif()
@@ -506,7 +557,7 @@ if(WIN32)
 endif()
 
 # -------------------------
-# Xray auto-download (kept)
+# Xray auto-download
 # -------------------------
 if(GENYCONNECT_AUTO_DOWNLOAD_XRAY AND NOT GENYCONNECT_BUNDLED_XRAY_PATH)
 
@@ -655,6 +706,7 @@ if(WIN32 AND GENYCONNECT_AUTO_DOWNLOAD_WINTUN AND NOT GENYCONNECT_BUNDLED_WINTUN
 
   file(REMOVE_RECURSE "${_geny_wintun_extract_dir}")
   file(MAKE_DIRECTORY "${_geny_wintun_extract_dir}")
+
   execute_process(
     COMMAND ${CMAKE_COMMAND} -E tar xf "${_geny_wintun_archive}"
     WORKING_DIRECTORY "${_geny_wintun_extract_dir}"
@@ -691,6 +743,7 @@ if(WIN32)
       VERBATIM
     )
   endif()
+
   if(GENYCONNECT_BUNDLED_WINTUN_PATH)
     add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
       COMMAND ${CMAKE_COMMAND} -E copy_if_different
@@ -773,7 +826,9 @@ if(APPLE AND GENYCONNECT_MACOS_POSTBUILD_DEPLOY)
             ${_codesign_common} ${_codesign_ent}
             "${_bundle_dir}"
 
-    COMMAND $<${GENY_IS_RELEASE}:${CODESIGN_EXECUTABLE}> --verify --deep --strict --verbose=2 "${_bundle_dir}"
+    COMMAND $<$<AND:${GENY_IS_RELEASE},$<BOOL:${GENYCONNECT_MACOS_CODESIGN}>>:${CODESIGN_EXECUTABLE}>
+            --verify --deep --strict --verbose=2
+            "${_bundle_dir}"
 
     COMMENT "macOS deploy: copy helper/xray, macdeployqt, then codesign (Release only)"
     VERBATIM
@@ -783,6 +838,18 @@ endif()
 # -----------------------------------------------------------------------------
 # Install rules (used by CPack)
 # -----------------------------------------------------------------------------
+if(WIN32 AND MSVC)
+  set(CMAKE_INSTALL_SYSTEM_RUNTIME_DESTINATION ".")
+  set(CMAKE_INSTALL_UCRT_LIBRARIES TRUE)
+
+  include(InstallRequiredSystemLibraries)
+
+  message(STATUS "MSVC runtime libraries:")
+  foreach(_geny_runtime_lib IN LISTS CMAKE_INSTALL_SYSTEM_RUNTIME_LIBS)
+    message(STATUS "  ${_geny_runtime_lib}")
+  endforeach()
+endif()
+
 include(GNUInstallDirs)
 
 # Windows: put exe at package root (.)
@@ -856,6 +923,26 @@ if(WIN32 AND GENYCONNECT_BUNDLED_WINTUN_PATH)
 endif()
 
 # -----------------------------------------------------------------------------
+# Linux deploy: collect Qt/QML runtime dependencies into the install tree
+# -----------------------------------------------------------------------------
+option(GENYCONNECT_LINUX_INSTALL_DEPLOY "Run Qt Linux deployment during install() so CPack TGZ includes Qt/QML dependencies" ON)
+option(GENYCONNECT_LINUX_DEPLOY_TRANSLATIONS "Include Qt translations in Linux deployment package" OFF)
+
+if(UNIX AND NOT APPLE AND GENYCONNECT_LINUX_INSTALL_DEPLOY)
+  set(_geny_linux_deploy_args "")
+  if(NOT GENYCONNECT_LINUX_DEPLOY_TRANSLATIONS)
+    list(APPEND _geny_linux_deploy_args NO_TRANSLATIONS)
+  endif()
+  qt_generate_deploy_qml_app_script(
+    TARGET ${PROJECT_NAME}
+    OUTPUT_SCRIPT GENYCONNECT_LINUX_DEPLOY_SCRIPT
+    NO_UNSUPPORTED_PLATFORM_ERROR
+    ${_geny_linux_deploy_args}
+  )
+  install(SCRIPT ${GENYCONNECT_LINUX_DEPLOY_SCRIPT})
+endif()
+
+# -----------------------------------------------------------------------------
 # Windows deploy: run windeployqt on the *install tree* so CPack includes deps
 # -----------------------------------------------------------------------------
 if(WIN32 AND GENYCONNECT_WINDOWS_INSTALL_DEPLOY)
@@ -902,7 +989,6 @@ if(WIN32 AND GENYCONNECT_WINDOWS_INSTALL_DEPLOY)
      message(STATUS \"[deploy] windeployqt done. Output dir: \${_root}\")\n"
   )
 endif()
-
 
 # -----------------------------------------------------------------------------
 # README + LICENSE at package root + NSIS wizard License Agreement + optional post-install README open

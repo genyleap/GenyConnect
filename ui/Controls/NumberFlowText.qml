@@ -28,7 +28,7 @@ Item {
         id: previousLabel
         text: root.previousText
         color: root.color
-        font.family: FontSystem.getContentFontBold.name
+        font.family: FontSystem.contentFontFamily
         font.pixelSize: root.fontSize
         font.bold: root.bold
         opacity: 0.0
@@ -39,7 +39,7 @@ Item {
         id: currentLabel
         text: root.currentText
         color: root.color
-        font.family: FontSystem.getContentFontBold.name
+        font.family: FontSystem.contentFontFamily
         font.pixelSize: root.fontSize
         font.bold: root.bold
         opacity: 1.0

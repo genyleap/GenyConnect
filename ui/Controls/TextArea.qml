@@ -10,7 +10,7 @@ T.TextArea {
     property color focusColor: Colors.secondry
     property int cornerRadius: 14
 
-    font.family: FontSystem.getContentFont.name
+    font.family: FontSystem.contentFontFamily
     font.pixelSize: Typography.t2
     color: Colors.textPrimary
     placeholderTextColor: Colors.textMuted

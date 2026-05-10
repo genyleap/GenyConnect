@@ -58,7 +58,7 @@ T.Button {
         //         text: control.text
         //         Layout.alignment: Qt.AlignHCenter | Qt.AlignVCenter
         //         Layout.fillWidth: false
-        //         font.family: FontSystem.getContentFont.name
+        //         font.family: FontSystem.contentFontFamily
         //         font.pixelSize: Typography.t3
         //         font.bold: isBold ? Font.Bold : Font.Normal
         //         font.weight: isBold ? Font.Bold : Font.Normal

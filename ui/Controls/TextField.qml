@@ -10,7 +10,7 @@ T.TextField {
     property color focusColor: Colors.secondry
     property int cornerRadius: 10
 
-    font.family: FontSystem.getContentFont.name
+    font.family: FontSystem.contentFontFamily
     font.pixelSize: Typography.t2
     color: Colors.textPrimary
     placeholderTextColor: Colors.textMuted
