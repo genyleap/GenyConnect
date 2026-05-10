@@ -553,9 +553,19 @@ target_sources(${PROJECT_NAME}
 # Windows resources
 # -------------------------
 if(WIN32)
-  target_sources(${PROJECT_NAME} PRIVATE properties/Windows/app.rc)
-endif()
+  string(TIMESTAMP GENYCONNECT_COPYRIGHT_YEAR "%Y")
+  set(GENYCONNECT_WINDOWS_ICON_PATH "${CMAKE_CURRENT_SOURCE_DIR}/ui/Resources/image/GenyConnect.ico")
+  set(GENYCONNECT_WINDOWS_RC_IN "${CMAKE_CURRENT_SOURCE_DIR}/properties/Windows/app.rc.in")
+  set(GENYCONNECT_WINDOWS_RC_OUT "${CMAKE_CURRENT_BINARY_DIR}/GenyConnect.rc")
 
+  configure_file(
+    "${GENYCONNECT_WINDOWS_RC_IN}"
+    "${GENYCONNECT_WINDOWS_RC_OUT}"
+    @ONLY
+  )
+
+  target_sources(${PROJECT_NAME} PRIVATE "${GENYCONNECT_WINDOWS_RC_OUT}")
+endif()
 # -------------------------
 # Xray auto-download
 # -------------------------
