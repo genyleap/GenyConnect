@@ -21,6 +21,14 @@
 #include <QTimer>
 #include <QVector>
 #include <climits>
+#if !defined(Q_OS_WIN)
+#include <cerrno>
+#include <csignal>
+#include <unistd.h>
+#endif
+#if defined(Q_OS_WIN)
+#include <windows.h>
+#endif
 
 using namespace Qt::StringLiterals;
 
@@ -1314,6 +1322,27 @@ QString resolveIpForHost(const QString& hostOrIp)
     return ipv6Fallback;
 }
 
+bool isProcessAlive(qint64 pid)
+{
+    if (pid <= 0) {
+        return false;
+    }
+#if defined(Q_OS_WIN)
+    HANDLE process = OpenProcess(SYNCHRONIZE, FALSE, static_cast<DWORD>(pid));
+    if (process == nullptr) {
+        return false;
+    }
+    const DWORD waitResult = WaitForSingleObject(process, 0);
+    CloseHandle(process);
+    return waitResult == WAIT_TIMEOUT;
+#else
+    if (::kill(static_cast<pid_t>(pid), 0) == 0) {
+        return true;
+    }
+    return errno == EPERM;
+#endif
+}
+
 QJsonObject makeResponse(bool ok, const QString& message = QString())
 {
     QJsonObject response;
@@ -1336,7 +1365,21 @@ public:
     {
         m_idleTimer.setInterval(m_idleTimeoutMs);
         m_idleTimer.setSingleShot(true);
-        connect(&m_idleTimer, &QTimer::timeout, qApp, &QCoreApplication::quit);
+        connect(&m_idleTimer, &QTimer::timeout, this, [this]() {
+            stopTrackedRuntimeBestEffort(u"Helper idle timeout cleanup."_s);
+            QCoreApplication::quit();
+        });
+        m_ownerWatchdogTimer.setInterval(2000);
+        connect(&m_ownerWatchdogTimer, &QTimer::timeout, this, [this]() {
+            if (m_ownerPid <= 0 || !m_runtimeActive) {
+                return;
+            }
+            if (isProcessAlive(m_ownerPid)) {
+                return;
+            }
+            stopTrackedRuntimeBestEffort(u"Owner process exited unexpectedly."_s);
+            QCoreApplication::quit();
+        });
         connect(&m_server, &QTcpServer::newConnection, this, [this]() {
             handleNewConnections();
         });
@@ -1400,6 +1443,7 @@ private:
             return makeResponse(true, u"pong"_s);
         }
         if (action == u"shutdown"_s) {
+            stopTrackedRuntimeBestEffort(u"Helper shutdown request cleanup."_s);
             QTimer::singleShot(0, qApp, &QCoreApplication::quit);
             return makeResponse(true, u"Helper shutting down."_s);
         }
@@ -1417,8 +1461,40 @@ private:
         return makeResponse(false, u"Unsupported action."_s);
     }
 
+    void clearRuntimeTracking()
+    {
+        m_runtimeActive = false;
+        m_runtimePid = -1;
+        m_runtimePidPath.clear();
+        m_runtimeTunIf.clear();
+        m_runtimeServerIp.clear();
+        m_ownerPid = 0;
+        m_ownerWatchdogTimer.stop();
+    }
+
+    void stopTrackedRuntimeBestEffort(const QString& reason)
+    {
+        Q_UNUSED(reason)
+        if (!m_runtimeActive || m_runtimePidPath.trimmed().isEmpty()) {
+            clearRuntimeTracking();
+            return;
+        }
+
+        QString error;
+        Q_UNUSED(stopTun(QJsonObject{
+            {u"pid_path"_s, m_runtimePidPath},
+            {u"tun_if"_s, m_runtimeTunIf},
+            {u"server_ip"_s, m_runtimeServerIp}
+        }, &error));
+        clearRuntimeTracking();
+    }
+
     bool startTun(const QJsonObject& request, QString* errorOut)
     {
+        if (m_runtimeActive) {
+            stopTrackedRuntimeBestEffort(u"Replacing previous runtime."_s);
+        }
+
         const QString xrayPath = request.value(u"xray_path"_s).toString().trimmed();
         const QString configPath = request.value(u"config_path"_s).toString().trimmed();
         const QString pidPath = request.value(u"pid_path"_s).toString().trimmed();
@@ -1426,6 +1502,7 @@ private:
         const QString tunIf = request.value(u"tun_if"_s).toString().trimmed();
         const QString serverIpRequested = request.value(u"server_ip"_s).toString().trimmed();
         const QString serverHostRequested = request.value(u"server_host"_s).toString().trimmed();
+        const qint64 ownerPid = request.value(u"owner_pid"_s).toVariant().toLongLong();
 
         if (xrayPath.isEmpty() || configPath.isEmpty() || pidPath.isEmpty() || logPath.isEmpty()) {
             if (errorOut != nullptr) {
@@ -1656,6 +1733,29 @@ private:
             }
             return false;
         }
+        bool pidOk = false;
+        const qint64 pid = pidText.toLongLong(&pidOk);
+        if (!pidOk || pid <= 0) {
+            if (errorOut != nullptr) {
+                *errorOut = u"TUN start failed: invalid pid."_s;
+            }
+            return false;
+        }
+
+        m_runtimeActive = true;
+        m_runtimePid = pid;
+        m_runtimePidPath = pidPath;
+        m_runtimeTunIf = tunIf;
+        m_runtimeServerIp = resolveIpForHost(serverIpRequested);
+        if (m_runtimeServerIp.isEmpty()) {
+            m_runtimeServerIp = resolveIpForHost(serverHostRequested);
+        }
+        m_ownerPid = ownerPid;
+        if (m_ownerPid > 0) {
+            m_ownerWatchdogTimer.start();
+        } else {
+            m_ownerWatchdogTimer.stop();
+        }
 
         return true;
     }
@@ -1721,6 +1821,7 @@ private:
         }
 #endif
 
+        clearRuntimeTracking();
         return true;
     }
 
@@ -1729,7 +1830,14 @@ private:
     QString m_token;
     int m_idleTimeoutMs = 600000;
     QTimer m_idleTimer;
+    QTimer m_ownerWatchdogTimer;
     QHash<QTcpSocket*, QByteArray> m_buffers;
+    bool m_runtimeActive = false;
+    qint64 m_runtimePid = -1;
+    qint64 m_ownerPid = 0;
+    QString m_runtimePidPath;
+    QString m_runtimeTunIf;
+    QString m_runtimeServerIp;
 };
 
 } // namespace

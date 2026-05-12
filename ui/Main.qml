@@ -23,7 +23,7 @@ ApplicationWindow {
 
     title: "GenyConnect (Build " + updater.appVersion + ") - " + osNameText()
 
-    color: "#eceff5"
+    color: root.themeColor("#eceff5", "#0f141d")
     font.family: FontSystem.contentFontFamily
 
     property bool compact: true
@@ -45,6 +45,8 @@ ApplicationWindow {
     readonly property string iconPlus: "\uf067"
     readonly property string iconMinus: "\uf068"
     readonly property string iconCopy: "\uf0c5"
+    readonly property string iconSearch: "\uf002"
+    readonly property string iconFileLines: "\uf15c"
     readonly property color brandBlue: "#2f74ff"
     readonly property color brandCyan: "#11c5ff"
     readonly property color brandViolet: "#6b35ff"
@@ -83,7 +85,10 @@ ApplicationWindow {
     property int sessionSeconds: 0
     property string settingsSection: "main"
     property var appRuleSuggestions: []
+    property var selectedAppRuleProcesses: []
+    property string appRuleSearchQuery: ""
     property string usageHistoryPeriod: "day"
+    property string usagePanelTab: "current"
     property int usageRefreshNonce: 0
     property string compactProfileFilter: "All"
     property int editProfileRow: -1
@@ -92,6 +97,10 @@ ApplicationWindow {
 
     readonly property var speedUnitOptions: ["Auto", "bps", "Kbps", "Mbps", "Gbps", "B/s", "KB/s", "MB/s", "GB/s"]
     readonly property var trafficUnitOptions: ["Auto", "B", "KB", "MB", "GB", "TB"]
+    readonly property var themeModeOptions: ["System", "Light", "Dark"]
+    readonly property bool systemPrefersDark: Qt.application.styleHints.colorScheme === Qt.ColorScheme.Dark
+    readonly property bool darkThemeEnabled: interfaceThemeSettings.mode === "Dark"
+                                         || (interfaceThemeSettings.mode === "System" && systemPrefersDark)
 
     Settings {
         id: dashboardStatsSettings
@@ -100,12 +109,22 @@ ApplicationWindow {
         property string trafficUnit: "Auto"
     }
 
+    Settings {
+        id: interfaceThemeSettings
+        category: "Interface/Theme"
+        property string mode: "System"
+    }
+
     onClosing: function(closeEvent) {
         if (allowCloseExit) {
             return
         }
         closeEvent.accepted = false
         root.hide()
+    }
+
+    function themeColor(lightColor, darkColor) {
+        return darkThemeEnabled ? darkColor : lightColor
     }
 
     function stateText() {
@@ -282,6 +301,91 @@ ApplicationWindow {
         setDnsDraftContains(server, true)
     }
 
+    function isAppSuggestionSelected(processName) {
+        const key = (processName || "").trim().toLowerCase()
+        if (key.length === 0)
+            return false
+        for (let i = 0; i < selectedAppRuleProcesses.length; ++i) {
+            if ((selectedAppRuleProcesses[i] || "").toLowerCase() === key)
+                return true
+        }
+        return false
+    }
+
+    function toggleAppSuggestionSelection(processName) {
+        const raw = (processName || "").trim()
+        const key = raw.toLowerCase()
+        if (key.length === 0)
+            return
+        const current = selectedAppRuleProcesses.slice(0)
+        const next = []
+        let removed = false
+        for (let i = 0; i < current.length; ++i) {
+            const valueRaw = (current[i] || "").trim()
+            const value = valueRaw.toLowerCase()
+            if (!removed && value === key) {
+                removed = true
+                continue
+            }
+            next.push(valueRaw)
+        }
+        if (!removed)
+            next.push(raw)
+        selectedAppRuleProcesses = next
+    }
+
+    function clearAppSuggestionSelection() {
+        selectedAppRuleProcesses = []
+    }
+
+    function visibleAppRuleSuggestions() {
+        const items = appRuleSuggestions || []
+        const rawQuery = (appRuleSearchQuery || "").trim().toLowerCase()
+        if (rawQuery.length === 0)
+            return items
+        const filtered = []
+        for (let i = 0; i < items.length; ++i) {
+            const item = items[i] || {}
+            const process = (item.process || "").toLowerCase()
+            const source = (item.source || "").toLowerCase()
+            if (process.indexOf(rawQuery) >= 0 || source.indexOf(rawQuery) >= 0)
+                filtered.push(item)
+        }
+        return filtered
+    }
+
+    function selectVisibleAppSuggestionItems() {
+        const items = visibleAppRuleSuggestions()
+        const next = []
+        const seen = {}
+        for (let i = 0; i < items.length; ++i) {
+            const process = ((items[i] || {}).process || "").trim()
+            const key = process.toLowerCase()
+            if (key.length === 0 || seen[key] === true)
+                continue
+            seen[key] = true
+            next.push(process)
+        }
+        selectedAppRuleProcesses = next
+    }
+
+    function appSuggestionInitial(processName) {
+        const cleaned = (processName || "").trim()
+        if (cleaned.length === 0)
+            return "•"
+        const first = cleaned.charAt(0)
+        if (first >= "0" && first <= "9")
+            return "#"
+        return first.toUpperCase()
+    }
+
+    function appendSelectedAppRules(target) {
+        const list = selectedAppRuleProcesses.slice(0)
+        for (let i = 0; i < list.length; ++i)
+            vpnController.appendAppRule(target, list[i] || "")
+        clearAppSuggestionSelection()
+    }
+
     function findProfileGroupItem(groupName) {
         const normalized = normalizeProfileGroup(groupName).toLowerCase()
         const items = vpnController.profileGroupItems || []
@@ -418,19 +522,27 @@ ApplicationWindow {
         const publicAddress = (vpnController.publicIpAddress || "").trim()
         if (publicAddress.length > 0)
             return publicAddress
-        return "--"
+        if (vpnController.connected)
+            return "Resolving..."
+        return "Connect to view"
     }
 
     function infoIpLabel() {
-        if (vpnController.connected)
-            return "VPN IP"
-        if (vpnController.currentProfileIndex >= 0)
-            return "Your IP"
-        return "Your IP"
+        return "Protected IP"
     }
 
     function infoLocationText() {
         return selectedServerLabel === "Select Location" ? "Milano, Italy" : selectedServerLabel
+    }
+
+    function selectedProfileDetailText() {
+        if (vpnController.currentProfileIndex < 0)
+            return "Choose a profile to view details"
+
+        const group = (vpnController.currentProfileGroupLabel() || "General").trim()
+        const pingMs = vpnController.currentProfilePingMs()
+        const pingText = pingMs >= 0 ? (pingMs + " ms") : "--"
+        return "Group: " + group + "  •  Ping: " + pingText
     }
 
     function downloadUsageText() {
@@ -451,6 +563,22 @@ ApplicationWindow {
     function uploadRateText() {
         const formatted = formatSpeedValue(Math.max(0, upRateBytesPerSec), dashboardStatsSettings.speedUnit)
         return formatted.value + " " + formatted.unit
+    }
+
+    function latestUsageValuePart() {
+        const raw = (vpnController.latestRecordedUsage || "0 B").trim()
+        const spaceAt = raw.indexOf(" ")
+        if (spaceAt <= 0)
+            return raw
+        return raw.slice(0, spaceAt)
+    }
+
+    function latestUsageUnitPart() {
+        const raw = (vpnController.latestRecordedUsage || "0 B").trim()
+        const spaceAt = raw.indexOf(" ")
+        if (spaceAt <= 0 || spaceAt + 1 >= raw.length)
+            return ""
+        return raw.slice(spaceAt + 1)
     }
 
     function sessionTimeText() {
@@ -560,14 +688,24 @@ ApplicationWindow {
             settingsPopup.open()
             Qt.callLater(function() {
                 root.settingsSection = section
-                if (section === "routing")
+                if (section === "routing") {
                     root.appRuleSuggestions = vpnController.availableAppRuleItems()
+                    root.appRuleSearchQuery = ""
+                    root.clearAppSuggestionSelection()
+                }
+                if (section === "usage")
+                    root.usagePanelTab = "current"
             })
             return
         }
         settingsSection = section
-        if (section === "routing")
+        if (section === "routing") {
             root.appRuleSuggestions = vpnController.availableAppRuleItems()
+            root.appRuleSearchQuery = ""
+            root.clearAppSuggestionSelection()
+        }
+        if (section === "usage")
+            root.usagePanelTab = "current"
     }
 
     function currentUsageHistoryModel() {
@@ -706,8 +844,6 @@ ApplicationWindow {
     }
 
     function speedGaugeStops() {
-        if (vpnController.speedTestPhase === "Ping")
-            return [0, 50, 100, 200, 500, 1000, 2000]
         return [0, 5, 10, 20, 50, 100, 200]
     }
 
@@ -718,16 +854,10 @@ ApplicationWindow {
 
     function speedGaugeValue() {
         const maxMbps = speedGaugeMaxMbps()
-        if (vpnController.speedTestRunning) {
-            if (vpnController.speedTestPhase === "Ping") {
-                if (vpnController.speedTestCurrentMbps > 0)
-                    return Math.min(vpnController.speedTestCurrentMbps, maxMbps)
-                if (vpnController.speedTestPingMs >= 0)
-                    return Math.min(vpnController.speedTestPingMs, maxMbps)
-                return Math.min(120.0, 18.0 + (speedPhaseProgress() * 102.0))
-            }
+        if (vpnController.speedTestRunning)
             return Math.min(Math.max(vpnController.speedTestCurrentMbps, 0.0), maxMbps)
-        }
+        if (vpnController.speedTestState === "Completed")
+            return Math.min(Math.max(vpnController.speedTestDownloadMbps, 0.0), maxMbps)
         // Reset dial pointer to zero whenever test is not actively running.
         return 0.0
     }
@@ -753,12 +883,12 @@ ApplicationWindow {
 
     function speedTestStatusText() {
         if (vpnController.speedTestRunning) {
-            if (vpnController.speedTestPhase === "Ping")
-                return "Measuring latency..."
-            if (vpnController.speedTestPhase === "Download")
-                return "Measuring download speed..."
-            if (vpnController.speedTestPhase === "Upload")
-                return "Measuring upload speed..."
+            if (vpnController.speedTestState === "Preparing")
+                return "Preparing secure speed check..."
+            if (vpnController.speedTestState === "Testing" && vpnController.speedTestPingMs >= 0)
+                return "Testing download speed... (" + vpnController.speedTestPingMs + " ms latency)"
+            if (vpnController.speedTestState === "Testing")
+                return "Testing download speed..."
             return "Running..."
         }
         return ""
@@ -769,8 +899,12 @@ ApplicationWindow {
             return ""
         if (vpnController.speedTestError.length > 0)
             return "Error: " + vpnController.speedTestError
-        if (vpnController.speedTestPhase === "Done")
-            return "Completed"
+        if (vpnController.speedTestState === "Completed")
+            return vpnController.speedTestPingMs >= 0
+                    ? ("Completed • Ping " + vpnController.speedTestPingMs + " ms")
+                    : "Completed"
+        if (vpnController.speedTestState === "Cancelled")
+            return "Cancelled"
         return "Ready"
     }
 
@@ -779,19 +913,10 @@ ApplicationWindow {
     }
 
     function speedGaugeNumberText() {
-        if (vpnController.speedTestPhase === "Ping") {
-            if (vpnController.speedTestCurrentMbps > 0)
-                return Math.round(vpnController.speedTestCurrentMbps) + ""
-            if (vpnController.speedTestPingMs >= 0)
-                return vpnController.speedTestPingMs + ""
-            return Math.round(speedGaugeValue()) + ""
-        }
         return speedGaugeValue().toFixed(1)
     }
 
     function speedGaugeUnitText() {
-        if (vpnController.speedTestPhase === "Ping")
-            return "ms"
         return "Mbps"
     }
 
@@ -836,7 +961,7 @@ ApplicationWindow {
     function speedTestProxyText() {
         if (vpnController.connected)
             return "VPN SOCKS5 127.0.0.1:" + vpnController.socksPort
-        return "Direct (No proxy)"
+        return "VPN disconnected"
     }
 
     function osNameText() {
@@ -863,8 +988,11 @@ ApplicationWindow {
     Component.onCompleted: {
         AppGlobals.appWindow = root
         AppGlobals.mainRect = root.contentItem
+        Theme.mode = darkThemeEnabled ? Theme.Dark : Theme.Light
         syncSelectedProfileFromController()
     }
+
+    onDarkThemeEnabledChanged: Theme.mode = darkThemeEnabled ? Theme.Dark : Theme.Light
 
     Timer {
         id: trafficRateTimer
@@ -976,9 +1104,9 @@ ApplicationWindow {
 
         background: Rectangle {
             radius: 16
-            color: "#ffffff"
+            color: root.themeColor("#ffffff", "#131b27")
             border.width: 1
-            border.color: "#d6dfec"
+            border.color: root.themeColor("#d6dfec", "#30435d")
         }
 
         contentItem: ColumnLayout {
@@ -991,7 +1119,7 @@ ApplicationWindow {
                 Layout.preferredWidth: 42
                 Layout.preferredHeight: 4
                 radius: 2
-                color: "#d6dde8"
+                color: root.themeColor("#d6dde8", "#304059")
             }
 
             RowLayout {
@@ -1002,14 +1130,14 @@ ApplicationWindow {
                     width: 26
                     height: 26
                     radius: 13
-                    color: "#eaf2ff"
+                    color: root.themeColor("#eaf2ff", "#223753")
                     border.width: 1
-                    border.color: "#c8d9f7"
+                    border.color: root.themeColor("#c8d9f7", "#4f86e6")
 
                     Text {
                         anchors.centerIn: parent
                         text: "↑"
-                        color: "#2f6de2"
+                        color: root.themeColor("#2f6de2", "#86b6ff")
                         font.family: FontSystem.contentFontFamily
                         font.pixelSize: 15
                         font.bold: true
@@ -1019,7 +1147,7 @@ ApplicationWindow {
                 Text {
                     Layout.fillWidth: true
                     text: "Update Available"
-                    color: "#1f2a3a"
+                    color: root.themeColor("#1f2a3a", "#d8e1f0")
                     font.family: FontSystem.contentFontFamily
                     font.pixelSize: 16
                     font.bold: true
@@ -1029,7 +1157,7 @@ ApplicationWindow {
             Text {
                 Layout.fillWidth: true
                 text: "GenyConnect " + updater.latestVersion + " is available. You're on " + updater.appVersion + "."
-                color: "#667385"
+                color: root.themeColor("#667385", "#9bb0cb")
                 font.family: FontSystem.contentFontFamily
                 font.pixelSize: 13
                 wrapMode: Text.WordWrap
@@ -1094,9 +1222,9 @@ ApplicationWindow {
 
         background: Rectangle {
             radius: 24
-            color: "#ffffff"
+            color: root.themeColor("#ffffff", "#131b27")
             border.width: 1
-            border.color: "#d7deea"
+            border.color: root.themeColor("#d7deea", "#30435d")
         }
 
         contentItem: ColumnLayout {
@@ -1109,12 +1237,12 @@ ApplicationWindow {
                 Layout.preferredWidth: 42
                 Layout.preferredHeight: 4
                 radius: 2
-                color: "#d6dde8"
+                color: root.themeColor("#d6dde8", "#304059")
             }
 
             Text {
                 text: "VPN Conflict Detected"
-                color: "#1f2a3a"
+                color: root.themeColor("#1f2a3a", "#d8e1f0")
                 font.family: FontSystem.contentFontFamily
                 font.pixelSize: 22
                 font.bold: true
@@ -1123,7 +1251,7 @@ ApplicationWindow {
             Text {
                 Layout.fillWidth: true
                 text: root.tunConflictPopupText
-                color: "#5f6f86"
+                color: root.themeColor("#5f6f86", "#9bb0cb")
                 font.family: FontSystem.contentFontFamily
                 font.pixelSize: 13
                 wrapMode: Text.WordWrap
@@ -1194,9 +1322,9 @@ ApplicationWindow {
 
         background: Rectangle {
             radius: root.compact ? 0 : 22
-            color: "#ffffff"
+            color: root.themeColor("#ffffff", "#131b27")
             border.width: 1
-            border.color: "#dbe2ee"
+            border.color: root.themeColor("#dbe2ee", "#30435d")
         }
 
         contentItem: Item {
@@ -1225,7 +1353,7 @@ ApplicationWindow {
                     Layout.preferredWidth: 42
                     Layout.preferredHeight: 4
                     radius: 2
-                    color: "#d6dde8"
+                    color: root.themeColor("#d6dde8", "#304059")
                     visible: !root.compact
                 }
 
@@ -1240,11 +1368,11 @@ ApplicationWindow {
                         Layout.preferredHeight: 38
                         diameter: 38
                         elevated: false
-                        backgroundColor: "#faf9ff"
-                        borderColor: "#f0eef8"
+                        backgroundColor: root.themeColor("#faf9ff", "#1a2b42")
+                        borderColor: root.themeColor("#f0eef8", "#355173")
                         iconText: "\uf060"
                         iconFontFamily: root.faSolid
-                        iconColor: "#050505"
+                        iconColor: root.themeColor("#050505", "#d8e1f0")
                         iconPixelSize: 15
                         onClicked: profilePopup.close()
                     }
@@ -1252,7 +1380,7 @@ ApplicationWindow {
                     Text {
                         Layout.fillWidth: true
                         text: "Server Location"
-                        color: "#090909"
+                        color: root.themeColor("#090909", "#e7eefb")
                         font.family: FontSystem.getContentFontBold.name
                         font.pixelSize: 18
                         font.bold: true
@@ -1264,8 +1392,8 @@ ApplicationWindow {
                         Layout.preferredHeight: 38
                         diameter: 38
                         elevated: false
-                        backgroundColor: "#ffffff"
-                        borderColor: "#e8edf5"
+                        backgroundColor: root.themeColor("#ffffff", "#1a2b42")
+                        borderColor: root.themeColor("#e8edf5", "#355173")
                         iconText: root.iconPlus
                         iconFontFamily: root.faSolid
                         iconColor: root.brandBlue
@@ -1282,9 +1410,11 @@ ApplicationWindow {
                     Layout.fillWidth: true
                     implicitHeight: root.compact ? 52 : 58
                     radius: 14
-                    color: "#ffffff"
+                    color: root.themeColor("#ffffff", "#5f233851")
                     border.width: 1
-                    border.color: profileSearchField.activeFocus ? "#b7caee" : "#dfe6f1"
+                    border.color: profileSearchField.activeFocus
+                                  ? root.themeColor("#b7caee", "#6b98d5")
+                                  : root.themeColor("#dfe6f1", "#496688")
                     Behavior on border.color { ColorAnimation { duration: 120 } }
 
                     Text {
@@ -1292,7 +1422,7 @@ ApplicationWindow {
                         anchors.leftMargin: 12
                         anchors.verticalCenter: parent.verticalCenter
                         text: "\uf002"
-                        color: "#9aa6ba"
+                        color: root.themeColor("#9aa6ba", "#9db1ca")
                         font.family: root.faSolid
                         font.pixelSize: 13
                     }
@@ -1307,9 +1437,9 @@ ApplicationWindow {
                         anchors.rightMargin: 4
                         padding: 0
                         placeholderText: root.compact ? "Search location..." : "Search by profile, country, or IP"
-                        placeholderTextColor: "#8c8f98"
+                        placeholderTextColor: root.themeColor("#8c8f98", "#9cb0c8")
                         text: root.profileSearchQuery
-                        color: "#1f2a3a"
+                        color: root.themeColor("#1f2a3a", "#d8e1f0")
                         font.family: FontSystem.contentFontFamily
                         font.pixelSize: 14
                         background: null
@@ -1325,7 +1455,7 @@ ApplicationWindow {
                         anchors.rightMargin: 12
                         anchors.verticalCenter: parent.verticalCenter
                         text: root.profileSearchQuery.length > 0 ? root.iconClose : ""
-                        color: "#a0acbe"
+                        color: root.themeColor("#a0acbe", "#9fb4cd")
                         font.family: root.faSolid
                         font.pixelSize: 12
 
@@ -1356,7 +1486,7 @@ ApplicationWindow {
                         radius: 12
                         color: addProfileMouse.containsMouse ? "#2f6ff1" : "#3f7cf3"
                         border.width: 1
-                        border.color: "#2f6ff1"
+                        border.color: root.themeColor("#2f6ff1", "#3a7bff")
                         Behavior on color { ColorAnimation { duration: 120 } }
 
                         Text {
@@ -1385,16 +1515,18 @@ ApplicationWindow {
                         Layout.preferredWidth: 1
                         Layout.preferredHeight: 36
                         radius: 12
-                        color: clearAllMouse.containsMouse ? "#fff0f0" : "#fff6f6"
+                        color: clearAllMouse.containsMouse
+                               ? root.themeColor("#fff0f0", "#5f3b46")
+                               : root.themeColor("#fff6f6", "#4d313b")
                         border.width: 1
-                        border.color: "#f2cdcd"
+                        border.color: root.themeColor("#f2cdcd", "#7d5062")
                         opacity: listView.count > 0 ? 1.0 : 0.55
                         Behavior on color { ColorAnimation { duration: 120 } }
 
                         Text {
                             anchors.centerIn: parent
                             text: "Delete All"
-                            color: "#cb4f4f"
+                            color: root.themeColor("#cb4f4f", "#ff8e8e")
                             font.family: FontSystem.contentFontFamily
                             font.pixelSize: 13
                             font.bold: false
@@ -1415,9 +1547,11 @@ ApplicationWindow {
                         Layout.preferredWidth: 1
                         Layout.preferredHeight: 36
                         radius: 12
-                        color: pingAllMouse.containsMouse ? "#f2f6fd" : "#f7f9fd"
+                        color: pingAllMouse.containsMouse
+                               ? root.themeColor("#f2f6fd", "#6a355172")
+                               : root.themeColor("#f7f9fd", "#5a2d4462")
                         border.width: 1
-                        border.color: "#d7dfec"
+                        border.color: root.themeColor("#d7dfec", "#3f5777")
                         opacity: listView.count > 0 ? 1.0 : 0.55
                         Behavior on color { ColorAnimation { duration: 120 } }
 
@@ -1426,7 +1560,7 @@ ApplicationWindow {
                             text: (vpnController.currentProfileGroup || "All").toLowerCase() === "all"
                                   ? "Ping All"
                                   : "Ping Group"
-                            color: "#4b5d78"
+                            color: root.themeColor("#4b5d78", "#b0c3db")
                             font.family: FontSystem.contentFontFamily
                             font.pixelSize: 13
                             font.bold: false
@@ -1447,9 +1581,11 @@ ApplicationWindow {
                         Layout.preferredWidth: 1
                         Layout.preferredHeight: 36
                         radius: 12
-                        color: refreshSubsMouse.containsMouse ? "#f2f6fd" : "#f7f9fd"
+                        color: refreshSubsMouse.containsMouse
+                               ? root.themeColor("#f2f6fd", "#6a355172")
+                               : root.themeColor("#f7f9fd", "#5a2d4462")
                         border.width: 1
-                        border.color: "#d7dfec"
+                        border.color: root.themeColor("#d7dfec", "#3f5777")
                         opacity: vpnController.subscriptions.length > 0 ? 1.0 : 0.55
                         Behavior on color { ColorAnimation { duration: 120 } }
 
@@ -1458,7 +1594,7 @@ ApplicationWindow {
                             text: (vpnController.currentProfileGroup || "All") === "All"
                                   ? "Refresh Subs"
                                   : "Refresh Group"
-                            color: "#4b5d78"
+                            color: root.themeColor("#4b5d78", "#b0c3db")
                             opacity: vpnController.subscriptionBusy ? 0.5 : 1.0
                             font.family: FontSystem.contentFontFamily
                             font.pixelSize: 13
@@ -1519,16 +1655,22 @@ ApplicationWindow {
                         Layout.fillWidth: true
                         Layout.preferredHeight: 40
                         radius: 18
-                        color: root.compactProfileFilterSelected("All") ? root.brandBlue : "#ffffff"
+                        color: root.compactProfileFilterSelected("All")
+                               ? root.brandBlue
+                               : root.themeColor("#ffffff", "#5a2b4462")
                         border.width: 1
-                        border.color: root.compactProfileFilterSelected("All") ? root.brandBlue : "#e7e9ee"
+                        border.color: root.compactProfileFilterSelected("All")
+                                      ? root.brandBlue
+                                      : root.themeColor("#e7e9ee", "#4f6b8b")
                         Behavior on color { ColorAnimation { duration: 150 } }
                         Behavior on border.color { ColorAnimation { duration: 150 } }
 
                         Text {
                             anchors.centerIn: parent
                             text: "All"
-                            color: root.compactProfileFilterSelected("All") ? "#ffffff" : "#111111"
+                            color: root.compactProfileFilterSelected("All")
+                                   ? "#ffffff"
+                                   : root.themeColor("#111111", "#e2ecf9")
                             font.family: FontSystem.getContentFontBold.name
                             font.pixelSize: 13
                             font.bold: true
@@ -1545,16 +1687,22 @@ ApplicationWindow {
                         Layout.fillWidth: true
                         Layout.preferredHeight: 40
                         radius: 18
-                        color: root.compactProfileFilterSelected("Free") ? root.brandCyan : "#ffffff"
+                        color: root.compactProfileFilterSelected("Free")
+                               ? root.brandCyan
+                               : root.themeColor("#ffffff", "#5a2b4462")
                         border.width: 1
-                        border.color: root.compactProfileFilterSelected("Free") ? root.brandCyan : "#e7e9ee"
+                        border.color: root.compactProfileFilterSelected("Free")
+                                      ? root.brandCyan
+                                      : root.themeColor("#e7e9ee", "#4f6b8b")
                         Behavior on color { ColorAnimation { duration: 150 } }
                         Behavior on border.color { ColorAnimation { duration: 150 } }
 
                         Text {
                             anchors.centerIn: parent
                             text: "Free"
-                            color: root.compactProfileFilterSelected("Free") ? "#ffffff" : "#111111"
+                            color: root.compactProfileFilterSelected("Free")
+                                   ? "#ffffff"
+                                   : root.themeColor("#111111", "#e2ecf9")
                             font.family: FontSystem.contentFontFamily
                             font.pixelSize: 13
                             font.bold: root.compactProfileFilterSelected("Free")
@@ -1571,16 +1719,22 @@ ApplicationWindow {
                         Layout.fillWidth: true
                         Layout.preferredHeight: 40
                         radius: 18
-                        color: root.compactProfileFilterSelected("Premium") ? root.brandViolet : "#ffffff"
+                        color: root.compactProfileFilterSelected("Premium")
+                               ? root.brandViolet
+                               : root.themeColor("#ffffff", "#5a2b4462")
                         border.width: 1
-                        border.color: root.compactProfileFilterSelected("Premium") ? root.brandViolet : "#e7e9ee"
+                        border.color: root.compactProfileFilterSelected("Premium")
+                                      ? root.brandViolet
+                                      : root.themeColor("#e7e9ee", "#4f6b8b")
                         Behavior on color { ColorAnimation { duration: 150 } }
                         Behavior on border.color { ColorAnimation { duration: 150 } }
 
                         Text {
                             anchors.centerIn: parent
                             text: "Premium"
-                            color: root.compactProfileFilterSelected("Premium") ? "#ffffff" : "#111111"
+                            color: root.compactProfileFilterSelected("Premium")
+                                   ? "#ffffff"
+                                   : root.themeColor("#111111", "#e2ecf9")
                             font.family: FontSystem.contentFontFamily
                             font.pixelSize: 13
                             font.bold: root.compactProfileFilterSelected("Premium")
@@ -1602,7 +1756,7 @@ ApplicationWindow {
 
                     Text {
                         text: "Group"
-                        color: "#6b778a"
+                        color: root.themeColor("#6b778a", "#9cb0c8")
                         font.family: FontSystem.contentFontFamily
                         font.pixelSize: 12
                     }
@@ -1659,15 +1813,15 @@ ApplicationWindow {
                         radius: 10
                         height: 30
                         width: visibleProfilesText.implicitWidth + 16
-                        color: "#eef4ff"
+                        color: root.themeColor("#eef4ff", "#223753")
                         border.width: 1
-                        border.color: "#d8e4f8"
+                        border.color: root.themeColor("#d8e4f8", "#3f5777")
 
                         Text {
                             id: visibleProfilesText
                             anchors.centerIn: parent
                             text: "Visible " + vpnController.filteredProfileCount
-                            color: "#5f6f86"
+                            color: root.themeColor("#5f6f86", "#9bb0cb")
                             font.family: FontSystem.contentFontFamily
                             font.pixelSize: 11
                         }
@@ -1686,9 +1840,9 @@ ApplicationWindow {
                         Layout.fillWidth: true
                         implicitHeight: 38
                         radius: 12
-                        color: "#f7f9fd"
+                        color: root.themeColor("#f7f9fd", "#1f2f46")
                         border.width: 1
-                        border.color: "#dce4f2"
+                        border.color: root.themeColor("#dce4f2", "#3f5777")
 
                         RowLayout {
                             anchors.fill: parent
@@ -1698,24 +1852,24 @@ ApplicationWindow {
 
                             Text {
                                 text: "Enabled"
-                                color: "#5f6f86"
+                                color: root.themeColor("#5f6f86", "#9bb0cb")
                                 font.family: FontSystem.contentFontFamily
                                 font.pixelSize: 12
                             }
 
-                            Switch {
+                            Controls.Switch {
                                 checked: root.profileGroupEnabled(groupFilterCombo.groupNameAt(groupFilterCombo.currentIndex))
                                 onToggled: vpnController.setProfileGroupEnabled(groupFilterCombo.groupNameAt(groupFilterCombo.currentIndex), checked)
                             }
 
                             Text {
                                 text: "Exclusive"
-                                color: "#5f6f86"
+                                color: root.themeColor("#5f6f86", "#9bb0cb")
                                 font.family: FontSystem.contentFontFamily
                                 font.pixelSize: 12
                             }
 
-                            Switch {
+                            Controls.Switch {
                                 checked: root.profileGroupExclusive(groupFilterCombo.groupNameAt(groupFilterCombo.currentIndex))
                                 onToggled: vpnController.setProfileGroupExclusive(groupFilterCombo.groupNameAt(groupFilterCombo.currentIndex), checked)
                             }
@@ -1724,9 +1878,9 @@ ApplicationWindow {
                                 Layout.preferredWidth: 132
                                 Layout.preferredHeight: 28
                                 radius: 9
-                                color: "#ffffff"
+                                color: root.themeColor("#ffffff", "#22324a")
                                 border.width: 1
-                                border.color: "#d5deec"
+                                border.color: root.themeColor("#d5deec", "#3f5777")
 
                                 TextField {
                                     id: groupBadgeField
@@ -1737,7 +1891,7 @@ ApplicationWindow {
                                     clip: true
                                     placeholderText: "Badge"
                                     text: root.profileGroupBadgeText(groupFilterCombo.groupNameAt(groupFilterCombo.currentIndex))
-                                    color: "#3b4a61"
+                                    color: root.themeColor("#3b4a61", "#d0ddf0")
                                     font.family: FontSystem.contentFontFamily
                                     font.pixelSize: 12
                                     background: null
@@ -1750,7 +1904,7 @@ ApplicationWindow {
                             Text {
                                 visible: root.profileGroupBadgeText(groupFilterCombo.groupNameAt(groupFilterCombo.currentIndex)).length > 0
                                 text: "• " + root.profileGroupBadgeText(groupFilterCombo.groupNameAt(groupFilterCombo.currentIndex))
-                                color: "#4d6691"
+                                color: root.themeColor("#4d6691", "#9fc3f2")
                                 font.family: FontSystem.contentFontFamily
                                 font.pixelSize: 12
                                 font.bold: true
@@ -1789,16 +1943,16 @@ ApplicationWindow {
                     Rectangle {
                         radius: 11
                         height: 24
-                        color: "#f3f6fb"
+                        color: root.themeColor("#f3f6fb", "#20314b")
                         border.width: 1
-                        border.color: "#d9e0ed"
+                        border.color: root.themeColor("#d9e0ed", "#3f5777")
                         width: subsText.implicitWidth + 18
 
                         Text {
                             id: subsText
                             anchors.centerIn: parent
                             text: "Subs " + subscriptionsInCurrentGroup() + "/" + vpnController.subscriptions.length
-                            color: "#667487"
+                            color: root.themeColor("#667487", "#9bb0cb")
                             font.family: FontSystem.contentFontFamily
                             font.pixelSize: 11
                             font.bold: false
@@ -1808,16 +1962,16 @@ ApplicationWindow {
                     Rectangle {
                         radius: 11
                         height: 24
-                        color: "#edf5ff"
+                        color: root.themeColor("#edf5ff", "#213655")
                         border.width: 1
-                        border.color: "#d9e6fb"
+                        border.color: root.themeColor("#d9e6fb", "#47638c")
                         width: groupText.implicitWidth + 18
 
                         Text {
                             id: groupText
                             anchors.centerIn: parent
                             text: "Group " + (vpnController.currentProfileGroup || "All")
-                            color: "#5f7290"
+                            color: root.themeColor("#5f7290", "#9cb2cf")
                             font.family: FontSystem.contentFontFamily
                             font.pixelSize: 11
                             font.bold: false
@@ -1827,16 +1981,16 @@ ApplicationWindow {
                     Rectangle {
                         radius: 11
                         height: 24
-                        color: "#f3f6fb"
+                        color: root.themeColor("#f3f6fb", "#20314b")
                         border.width: 1
-                        border.color: "#d9e0ed"
+                        border.color: root.themeColor("#d9e0ed", "#3f5777")
                         width: profilesText.implicitWidth + 18
 
                         Text {
                             id: profilesText
                             anchors.centerIn: parent
                             text: "Profiles " + vpnController.profileCount
-                            color: "#667487"
+                            color: root.themeColor("#667487", "#9bb0cb")
                             font.family: FontSystem.contentFontFamily
                             font.pixelSize: 11
                             font.bold: false
@@ -1846,16 +2000,16 @@ ApplicationWindow {
                     Rectangle {
                         radius: 11
                         height: 24
-                        color: "#f3f6fb"
+                        color: root.themeColor("#f3f6fb", "#20314b")
                         border.width: 1
-                        border.color: "#d9e0ed"
+                        border.color: root.themeColor("#d9e0ed", "#3f5777")
                         width: bestText.implicitWidth + 18
 
                         Text {
                             id: bestText
                             anchors.centerIn: parent
                             text: "Best " + (vpnController.bestPingMs >= 0 ? (vpnController.bestPingMs + " ms") : "--")
-                            color: "#667487"
+                            color: root.themeColor("#667487", "#9bb0cb")
                             font.family: FontSystem.contentFontFamily
                             font.pixelSize: 11
                             font.bold: false
@@ -1865,16 +2019,16 @@ ApplicationWindow {
                     Rectangle {
                         radius: 11
                         height: 24
-                        color: "#f3f6fb"
+                        color: root.themeColor("#f3f6fb", "#20314b")
                         border.width: 1
-                        border.color: "#d9e0ed"
+                        border.color: root.themeColor("#d9e0ed", "#3f5777")
                         width: worstText.implicitWidth + 18
 
                         Text {
                             id: worstText
                             anchors.centerIn: parent
                             text: "Worst " + (vpnController.worstPingMs >= 0 ? (vpnController.worstPingMs + " ms") : "--")
-                            color: "#667487"
+                            color: root.themeColor("#667487", "#9bb0cb")
                             font.family: FontSystem.contentFontFamily
                             font.pixelSize: 11
                             font.bold: false
@@ -1884,16 +2038,16 @@ ApplicationWindow {
                     Rectangle {
                         radius: 11
                         height: 24
-                        color: "#fff5e9"
+                        color: root.themeColor("#fff5e9", "#3b311d")
                         border.width: 1
-                        border.color: "#f4d9b1"
+                        border.color: root.themeColor("#f4d9b1", "#866333")
                         width: scoreText.implicitWidth + 18
 
                         Text {
                             id: scoreText
                             anchors.centerIn: parent
                             text: "Score " + root.profileScoreStars()
-                            color: "#9c6b1f"
+                            color: root.themeColor("#9c6b1f", "#f4c56a")
                             font.family: FontSystem.contentFontFamily
                             font.pixelSize: 11
                             font.bold: false
@@ -1907,9 +2061,9 @@ ApplicationWindow {
                     Layout.fillHeight: true
                     Layout.preferredHeight: Math.min(Math.max(listView.contentHeight, 100), 300)
                     radius: root.compact ? 0 : 16
-                    color: "#ffffff"
+                    color: root.themeColor("#ffffff", "#4d1f324a")
                     border.width: root.compact ? 0 : 1
-                    border.color: "#e4eaf4"
+                    border.color: root.themeColor("#e4eaf4", "#4e6a8b")
 
                     ListView {
                         id: listView
@@ -1958,9 +2112,15 @@ ApplicationWindow {
                                 anchors.topMargin: root.compact ? 0 : 3
                                 anchors.bottomMargin: root.compact ? 0 : 3
                                 radius: 14
-                                color: selected ? "#eef3ff" : (hoverArea.containsMouse ? "#f8fbff" : "#ffffff")
+                                color: selected
+                                       ? root.themeColor("#eef3ff", "#8a35527a")
+                                       : (hoverArea.containsMouse
+                                          ? root.themeColor("#f8fbff", "#7a2b4461")
+                                          : root.themeColor("#ffffff", "#66263c56"))
                                 border.width: 1
-                                border.color: selected ? root.brandBlue : "#e7edf6"
+                                border.color: selected
+                                              ? root.themeColor(root.brandBlue, "#6ba0ff")
+                                              : root.themeColor("#e7edf6", "#4e6a8b")
                                 Behavior on color { ColorAnimation { duration: 120 } }
                                 Behavior on border.color { ColorAnimation { duration: 120 } }
                             }
@@ -1987,9 +2147,9 @@ ApplicationWindow {
                                     Layout.preferredWidth: root.compact ? 40 : 38
                                     Layout.preferredHeight: root.compact ? 40 : 38
                                     radius: width / 2
-                                    color: "#f3f6fb"
+                                    color: root.themeColor("#f3f6fb", "#20314b")
                                     border.width: 1
-                                    border.color: "#dde4ef"
+                                    border.color: root.themeColor("#dde4ef", "#3f5777")
 
                                     Text {
                                         anchors.centerIn: parent
@@ -2008,7 +2168,7 @@ ApplicationWindow {
                                         font.family: FontSystem.getContentFontBold.name
                                         font.weight: Font.Bold
                                         font.pixelSize: root.compact ? 15 : 14
-                                        color: "#202634"
+                                        color: root.themeColor("#202634", "#d7e4f6")
                                         elide: Text.ElideRight
                                         wrapMode: Text.WordWrap
                                         maximumLineCount: 1
@@ -2057,7 +2217,7 @@ ApplicationWindow {
                                             Layout.preferredWidth: compactBadgeText.implicitWidth + 22
                                             Layout.preferredHeight: 22
                                             radius: 12
-                                            color: "#edf2ff"
+                                            color: root.themeColor("#edf2ff", "#263a58")
 
                                             Text {
                                                 id: compactBadgeText
@@ -2078,7 +2238,7 @@ ApplicationWindow {
                                         text: protocol.toUpperCase() + " " + address + ":" + port + ((security || "").length ? " | " + security : "")
                                         font.family: FontSystem.contentFontFamily
                                         font.pixelSize: 12
-                                        color: "#8c95a4"
+                                        color: root.themeColor("#8c95a4", "#9fb4cd")
                                         elide: Text.ElideRight
                                         wrapMode: Text.NoWrap
                                         maximumLineCount: 1
@@ -2092,7 +2252,7 @@ ApplicationWindow {
                                               + (groupBadge.length > 0 ? " • " + groupBadge : "")
                                         font.family: FontSystem.contentFontFamily
                                         font.pixelSize: 11
-                                        color: "#7b889d"
+                                        color: root.themeColor("#7b889d", "#9eb3cc")
                                         elide: Text.ElideRight
                                     }
                                 }
@@ -2110,14 +2270,22 @@ ApplicationWindow {
                                         Layout.fillWidth: false
                                         Layout.preferredHeight: 30
                                         radius: 10
-                                        color: pinging ? "#fff5e8" : "#eff5ff"
+                                        color: pinging
+                                               ? root.themeColor("#fff5e8", "#5b3f22")
+                                               : root.themeColor("#eff5ff", "#274062")
                                         border.width: 1
-                                        border.color: pinging ? "#f9d9a8" : "#d8e4f8"
+                                        border.color: pinging
+                                                      ? root.themeColor("#f9d9a8", "#9c7a44")
+                                                      : root.themeColor("#d8e4f8", "#4f6f95")
 
                                         Text {
                                             anchors.centerIn: parent
                                             text: pingText
-                                            color: pinging ? "#d18b22" : (pingMs >= 0 ? "#2b6dcf" : "#9aa4b6")
+                                            color: pinging
+                                                   ? root.themeColor("#d18b22", "#f0bf6b")
+                                                   : (pingMs >= 0
+                                                      ? root.themeColor("#2b6dcf", "#8ab6ff")
+                                                      : root.themeColor("#9aa4b6", "#9fb4cd"))
                                             font.family: FontSystem.contentFontFamily
                                             font.pixelSize: 12
                                             font.bold: false
@@ -2129,16 +2297,18 @@ ApplicationWindow {
                                         height: 30
                                         visible: !root.compact
                                         radius: 15
-                                        color: pingButtonMouse.containsMouse ? "#edf4ff" : "#f7f9fd"
+                                        color: pingButtonMouse.containsMouse
+                                               ? root.themeColor("#edf4ff", "#314f73")
+                                               : root.themeColor("#f7f9fd", "#273c58")
                                         border.width: 1
-                                        border.color: "#dbe3ef"
+                                        border.color: root.themeColor("#dbe3ef", "#3f5777")
 
                                         Text {
                                             anchors.centerIn: parent
                                             text: root.iconPing
                                             font.family: root.faSolid
                                             font.pixelSize: 12
-                                            color: "#5e6f89"
+                                            color: root.themeColor("#5e6f89", "#9fb4cd")
                                         }
 
                                         MouseArea {
@@ -2155,16 +2325,18 @@ ApplicationWindow {
                                         height: 30
                                         visible: !root.compact
                                         radius: 15
-                                        color: removeButtonMouse.containsMouse ? "#fff0f0" : "#fff6f6"
+                                        color: removeButtonMouse.containsMouse
+                                               ? root.themeColor("#fff0f0", "#5f3b46")
+                                               : root.themeColor("#fff6f6", "#4d313b")
                                         border.width: 1
-                                        border.color: "#f2cdcd"
+                                        border.color: root.themeColor("#f2cdcd", "#7d5062")
 
                                         Text {
                                             anchors.centerIn: parent
                                             text: root.iconTrash
                                             font.family: root.faSolid
                                             font.pixelSize: 12
-                                            color: "#cb4f4f"
+                                            color: root.themeColor("#cb4f4f", "#ff8e8e")
                                         }
 
                                         MouseArea {
@@ -2190,7 +2362,7 @@ ApplicationWindow {
                                     Text {
                                         Layout.preferredWidth: 20
                                         text: root.iconPing
-                                        color: pinging ? root.brandBlue : "#7c8ca5"
+                                        color: pinging ? root.brandBlue : root.themeColor("#7c8ca5", "#9eb2cb")
                                         font.family: root.faSolid
                                         font.pixelSize: 13
                                         horizontalAlignment: Text.AlignHCenter
@@ -2222,7 +2394,7 @@ ApplicationWindow {
                                     Text {
                                         Layout.preferredWidth: 20
                                         text: root.iconTrash
-                                        color: "#cb4f4f"
+                                        color: root.themeColor("#cb4f4f", "#ff8e8e")
                                         font.family: root.faSolid
                                         font.pixelSize: 13
                                         horizontalAlignment: Text.AlignHCenter
@@ -2261,7 +2433,7 @@ ApplicationWindow {
                         text: listView.count === 0
                               ? "No profiles. Import one first."
                               : "No matching profile found."
-                        color: "#8f9bad"
+                        color: root.themeColor("#8f9bad", "#9eb3cc")
                         font.family: FontSystem.contentFontFamily
                         font.pixelSize: 14
                     }
@@ -2302,9 +2474,9 @@ ApplicationWindow {
 
         background: Rectangle {
             radius: 20
-            color: "#ffffff"
+            color: root.themeColor("#ffffff", "#131b27")
             border.width: 1
-            border.color: "#d8dde8"
+            border.color: root.themeColor("#d8dde8", "#283345")
         }
 
         contentItem: ColumnLayout {
@@ -2317,12 +2489,12 @@ ApplicationWindow {
                 Layout.preferredWidth: 42
                 Layout.preferredHeight: 4
                 radius: 2
-                color: "#d6dde8"
+                color: root.themeColor("#d6dde8", "#304059")
             }
 
             Text {
                 text: "Delete all profiles?"
-                color: "#1f2530"
+                color: root.themeColor("#1f2530", "#d8e1f0")
                 font.family: FontSystem.contentFontFamily
                 font.pixelSize: 24
                 font.bold: true
@@ -2331,7 +2503,7 @@ ApplicationWindow {
             Text {
                 Layout.fillWidth: true
                 text: "This removes all imported profiles from GenyConnect. This action cannot be undone."
-                color: "#6a778b"
+                color: root.themeColor("#6a778b", "#9eb3cc")
                 font.family: FontSystem.contentFontFamily
                 font.pixelSize: 13
                 wrapMode: Text.WordWrap
@@ -2398,9 +2570,9 @@ ApplicationWindow {
         background: Rectangle {
             topRightRadius: 24
             topLeftRadius: 24
-            color: "#ffffff"
+            color: root.themeColor("#ffffff", "#131b27")
             border.width: 1
-            border.color: "#d8dde8"
+            border.color: root.themeColor("#d8dde8", "#283345")
         }
 
         contentItem: ColumnLayout {
@@ -2413,12 +2585,12 @@ ApplicationWindow {
                 Layout.preferredWidth: 42
                 Layout.preferredHeight: 4
                 radius: 2
-                color: "#d6dde8"
+                color: root.themeColor("#d6dde8", "#304059")
             }
 
             Text {
                 text: "Edit Profile"
-                color: "#1f2530"
+                color: root.themeColor("#1f2530", "#d8e1f0")
                 font.family: FontSystem.getContentFontBold.name
                 font.pixelSize: 22
                 font.bold: true
@@ -2447,7 +2619,7 @@ ApplicationWindow {
             Text {
                 Layout.fillWidth: true
                 text: "Endpoint settings still come from the imported link. Re-import a link to change protocol, address, port, or security."
-                color: "#7c8697"
+                color: root.themeColor("#7c8697", "#9bb0cb")
                 font.family: FontSystem.contentFontFamily
                 font.pixelSize: 12
                 wrapMode: Text.WordWrap
@@ -2519,9 +2691,9 @@ ApplicationWindow {
 
         background: Rectangle {
             radius: root.compact ? 0 : 24
-            color: "#ffffff"
+            color: root.themeColor("#ffffff", "#131b27")
             border.width: 1
-            border.color: "#d8dde8"
+            border.color: root.themeColor("#d8dde8", "#283345")
             clip: true
         }
 
@@ -2539,7 +2711,7 @@ ApplicationWindow {
                     Layout.preferredWidth: 42
                     Layout.preferredHeight: 4
                     radius: 2
-                    color: "#d6dde8"
+                    color: root.themeColor("#d6dde8", "#304059")
                     visible: !root.compact
                 }
 
@@ -2551,11 +2723,11 @@ ApplicationWindow {
                         visible: root.compact
                         diameter: 38
                         elevated: false
-                        backgroundColor: "#faf9ff"
-                        borderColor: "#f0eef8"
+                        backgroundColor: root.themeColor("#faf9ff", "#1b2738")
+                        borderColor: root.themeColor("#f0eef8", "#34445b")
                         iconText: "\uf060"
                         iconFontFamily: root.faSolid
-                        iconColor: "#050505"
+                        iconColor: root.themeColor("#050505", "#d8e1f0")
                         iconPixelSize: 15
                         onClicked: {
                             if (root.settingsSection === "main") {
@@ -2571,7 +2743,7 @@ ApplicationWindow {
                         font.family: FontSystem.getContentFontBold.name
                         font.weight: Font.Bold
                         font.pixelSize: root.compact ? 18 : 24
-                        color: root.compact ? "#090909" : "#1f2530"
+                        color: root.themeColor((root.compact ? "#090909" : "#1f2530"), "#d8e1f0")
                     }
                     Item { Layout.fillWidth: true }
                     Controls.CircleIconButton {
@@ -2579,22 +2751,33 @@ ApplicationWindow {
                         diameter: 34
                         iconText: "×"
                         iconPixelSize: 20
-                        iconColor: "#8d96a5"
-                        backgroundColor: "#f7f8fb"
-                        borderColor: "#e1e5ed"
+                        iconColor: root.themeColor("#8d96a5", "#9db0ca")
+                        backgroundColor: root.themeColor("#f7f8fb", "#1b2738")
+                        borderColor: root.themeColor("#e1e5ed", "#34445b")
                         onClicked: settingsPopup.close()
                     }
                 }
 
-                ScrollView {
-                    id: settingsScroll
+                Flickable {
+                    id: settingsFlick
                     Layout.fillWidth: true
                     Layout.fillHeight: true
                     clip: true
-                    contentWidth: availableWidth
-                    ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
+                    contentWidth: width
+                    contentHeight: settingsContent.implicitHeight
+                    boundsBehavior: Flickable.DragAndOvershootBounds
+                    flickableDirection: Flickable.VerticalFlick
+
+                    ScrollBar.vertical: ScrollBar {
+                        policy: ScrollBar.AsNeeded
+                    }
+                    ScrollBar.horizontal: ScrollBar {
+                        policy: ScrollBar.AlwaysOff
+                    }
+
                     ColumnLayout {
-                        width: settingsScroll.availableWidth
+                        id: settingsContent
+                        width: settingsFlick.width
                         spacing: root.compact ? 14 : 10
                         clip: true
 
@@ -2629,9 +2812,9 @@ ApplicationWindow {
                                         Layout.fillWidth: true
                                         Layout.preferredHeight: 76
                                         radius: 15
-                                        color: "#ffffff"
+                                        color: root.themeColor("#ffffff", "#182538")
                                         border.width: 1
-                                        border.color: "#edf0f6"
+                                        border.color: root.themeColor("#edf0f6", "#314159")
 
                                         RowLayout {
                                             anchors.fill: parent
@@ -2643,12 +2826,12 @@ ApplicationWindow {
                                                 Layout.preferredWidth: 42
                                                 Layout.preferredHeight: 42
                                                 radius: 21
-                                                color: "#eef0ff"
+                                                color: root.themeColor("#eef0ff", "#223149")
 
                                                 Text {
                                                     anchors.centerIn: parent
                                                     text: modelData.icon
-                                                    color: "#3147d0"
+                                                    color: root.themeColor("#3147d0", "#8ab2ff")
                                                     font.family: root.faSolid
                                                     font.pixelSize: 17
                                                 }
@@ -2657,7 +2840,7 @@ ApplicationWindow {
                                             Text {
                                                 Layout.fillWidth: true
                                                 text: modelData.title
-                                                color: "#090909"
+                                                color: root.themeColor("#090909", "#e7eefb")
                                                 font.family: FontSystem.getContentFontBold.name
                                                 font.pixelSize: 16
                                                 font.bold: true
@@ -2666,7 +2849,7 @@ ApplicationWindow {
 
                                             Text {
                                                 text: "\uf054"
-                                                color: "#050505"
+                                                color: root.themeColor("#050505", "#d5e3f8")
                                                 font.family: root.faSolid
                                                 font.pixelSize: 16
                                             }
@@ -2687,9 +2870,9 @@ ApplicationWindow {
                             visible: root.settingsSection === "interface"
                             implicitHeight: interfaceColumn.implicitHeight + 28
                             radius: Colors.innerRadius
-                            color: "#f7f9fc"
+                            color: root.themeColor("#f7f9fc", "#1a2432")
                             border.width: 1
-                            border.color: "#e0e6f0"
+                            border.color: root.themeColor("#e0e6f0", "#2f3d52")
 
                             ColumnLayout {
                                 id: interfaceColumn
@@ -2699,7 +2882,7 @@ ApplicationWindow {
 
                                 Text {
                                     text: "Dashboard Stats"
-                                    color: "#2a3240"
+                                    color: root.themeColor("#2a3240", "#d5deeb")
                                     font.family: FontSystem.getContentFontBold.name
                                     font.pixelSize: 16
                                     font.bold: true
@@ -2707,8 +2890,8 @@ ApplicationWindow {
 
                                 Text {
                                     Layout.fillWidth: true
-                                    text: "Choose the unit used by the Download and Upload speed cards. Auto selects the most readable unit."
-                                    color: "#7c8697"
+                                    text: "Choose the unit used by live transfer-rate indicators. Auto selects the most readable unit."
+                                    color: root.themeColor("#7c8697", "#93a2b8")
                                     font.family: FontSystem.contentFontFamily
                                     font.pixelSize: 13
                                     wrapMode: Text.WordWrap
@@ -2720,8 +2903,38 @@ ApplicationWindow {
 
                                     Text {
                                         Layout.fillWidth: true
+                                        text: "Theme"
+                                        color: root.themeColor("#334155", "#c8d3e2")
+                                        font.family: FontSystem.contentFontFamily
+                                        font.pixelSize: 14
+                                    }
+
+                                    Controls.ComboBox {
+                                        Layout.preferredWidth: 140
+                                        Layout.preferredHeight: 40
+                                        model: root.themeModeOptions
+                                        currentIndex: root.unitIndex(root.themeModeOptions, interfaceThemeSettings.mode)
+                                        onActivated: interfaceThemeSettings.mode = root.themeModeOptions[currentIndex]
+                                    }
+                                }
+
+                                Text {
+                                    Layout.fillWidth: true
+                                    text: "System follows macOS/Windows appearance. Light keeps current look."
+                                    color: root.themeColor("#8a95a8", "#8ea0b8")
+                                    font.family: FontSystem.contentFontFamily
+                                    font.pixelSize: 12
+                                    wrapMode: Text.WordWrap
+                                }
+
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 10
+
+                                    Text {
+                                        Layout.fillWidth: true
                                         text: "Speed Units"
-                                        color: "#334155"
+                                        color: root.themeColor("#334155", "#c8d3e2")
                                         font.family: FontSystem.contentFontFamily
                                         font.pixelSize: 14
                                     }
@@ -2738,7 +2951,7 @@ ApplicationWindow {
                                 Text {
                                     Layout.fillWidth: true
                                     text: "Use lowercase b for bits and uppercase B for bytes."
-                                    color: "#8a95a8"
+                                    color: root.themeColor("#8a95a8", "#8ea0b8")
                                     font.family: FontSystem.contentFontFamily
                                     font.pixelSize: 12
                                     wrapMode: Text.WordWrap
@@ -2747,7 +2960,7 @@ ApplicationWindow {
                                 Rectangle {
                                     Layout.fillWidth: true
                                     height: 1
-                                    color: "#e3e8f1"
+                                    color: root.themeColor("#e3e8f1", "#30435d")
                                 }
 
                                 RowLayout {
@@ -2757,7 +2970,7 @@ ApplicationWindow {
                                     Text {
                                         Layout.fillWidth: true
                                         text: "Total Traffic Units"
-                                        color: "#334155"
+                                        color: root.themeColor("#334155", "#c8d3e2")
                                         font.family: FontSystem.contentFontFamily
                                         font.pixelSize: 14
                                     }
@@ -2778,9 +2991,9 @@ ApplicationWindow {
                             visible: root.settingsSection === "terms"
                             implicitHeight: termsColumn.implicitHeight + 28
                             radius: Colors.innerRadius
-                            color: "#f7f9fc"
+                            color: root.themeColor("#f7f9fc", "#1a2638")
                             border.width: 1
-                            border.color: "#e0e6f0"
+                            border.color: root.themeColor("#e0e6f0", "#30435d")
 
                             ColumnLayout {
                                 id: termsColumn
@@ -2790,7 +3003,7 @@ ApplicationWindow {
 
                                 Text {
                                     text: "Terms And Conditions"
-                                    color: "#2a3240"
+                                    color: root.themeColor("#2a3240", "#d7e4f6")
                                     font.family: FontSystem.getContentFontBold.name
                                     font.pixelSize: 16
                                     font.bold: true
@@ -2799,7 +3012,7 @@ ApplicationWindow {
                                 Text {
                                     Layout.fillWidth: true
                                     text: "Use GenyConnect only with profiles and networks you are authorized to access. You are responsible for complying with local laws, service terms, and network policies."
-                                    color: "#667385"
+                                    color: root.themeColor("#667385", "#9bb0cb")
                                     font.family: FontSystem.contentFontFamily
                                     font.pixelSize: 13
                                     wrapMode: Text.WordWrap
@@ -2812,9 +3025,9 @@ ApplicationWindow {
                             visible: root.settingsSection === "share"
                             implicitHeight: shareColumn.implicitHeight + 28
                             radius: Colors.innerRadius
-                            color: "#f7f9fc"
+                            color: root.themeColor("#f7f9fc", "#1a2638")
                             border.width: 1
-                            border.color: "#e0e6f0"
+                            border.color: root.themeColor("#e0e6f0", "#30435d")
 
                             ColumnLayout {
                                 id: shareColumn
@@ -2824,7 +3037,7 @@ ApplicationWindow {
 
                                 Text {
                                     text: "Share App"
-                                    color: "#2a3240"
+                                    color: root.themeColor("#2a3240", "#d7e4f6")
                                     font.family: FontSystem.getContentFontBold.name
                                     font.pixelSize: 16
                                     font.bold: true
@@ -2833,7 +3046,7 @@ ApplicationWindow {
                                 Text {
                                     Layout.fillWidth: true
                                     text: "Share the GenyConnect repository or website with someone who needs the app."
-                                    color: "#667385"
+                                    color: root.themeColor("#667385", "#9bb0cb")
                                     font.family: FontSystem.contentFontFamily
                                     font.pixelSize: 13
                                     wrapMode: Text.WordWrap
@@ -2852,9 +3065,9 @@ ApplicationWindow {
                             visible: root.settingsSection === "about"
                             implicitHeight: aboutSettingsColumn.implicitHeight + 28
                             radius: Colors.innerRadius
-                            color: "#f7f9fc"
+                            color: root.themeColor("#f7f9fc", "#1a2638")
                             border.width: 1
-                            border.color: "#e0e6f0"
+                            border.color: root.themeColor("#e0e6f0", "#30435d")
 
                             ColumnLayout {
                                 id: aboutSettingsColumn
@@ -2864,7 +3077,7 @@ ApplicationWindow {
 
                                 Text {
                                     text: "GenyConnect"
-                                    color: "#2a3240"
+                                    color: root.themeColor("#2a3240", "#d7e4f6")
                                     font.family: FontSystem.getContentFontBold.name
                                     font.pixelSize: 16
                                     font.bold: true
@@ -2873,7 +3086,7 @@ ApplicationWindow {
                                 Text {
                                     Layout.fillWidth: true
                                     text: "Version " + updater.appVersion + "\nxray-core " + vpnController.xrayVersion + "\nDeveloper: Genyleap LLC\n\nGenyConnect is open source. Donations and community support help keep development active."
-                                    color: "#667385"
+                                    color: root.themeColor("#667385", "#9bb0cb")
                                     font.family: FontSystem.contentFontFamily
                                     font.pixelSize: 13
                                     wrapMode: Text.WordWrap
@@ -2896,12 +3109,12 @@ ApplicationWindow {
                         Rectangle {
                             Layout.fillWidth: true
                             visible: root.settingsSection === "updates"
-                            Layout.maximumWidth: settingsScroll.availableWidth
+                            Layout.maximumWidth: settingsFlick.width
                             implicitHeight: updateColumn.implicitHeight + 24
                             radius: Colors.innerRadius
-                            color: "#f7f9fc"
+                            color: root.themeColor("#f7f9fc", "#1a2638")
                             border.width: 1
-                            border.color: "#e0e6f0"
+                            border.color: root.themeColor("#e0e6f0", "#30435d")
 
                             ColumnLayout {
                                 id: updateColumn
@@ -2915,7 +3128,7 @@ ApplicationWindow {
 
                                     Text {
                                         text: "App Updates"
-                                        color: "#2a3240"
+                                        color: root.themeColor("#2a3240", "#d7e4f6")
                                         font.family: FontSystem.contentFontFamily
                                         font.pixelSize: 15
                                         font.bold: true
@@ -2925,7 +3138,7 @@ ApplicationWindow {
 
                                     Text {
                                         text: "Current " + updater.appVersion
-                                        color: "#677385"
+                                        color: root.themeColor("#677385", "#9bb0cb")
                                         font.family: FontSystem.contentFontFamily
                                         font.pixelSize: 13
                                     }
@@ -2934,8 +3147,11 @@ ApplicationWindow {
                                 Text {
                                     Layout.fillWidth: true
                                     text: updater.status
-                                    color: updater.error.length > 0 ? "#c44a4a"
-                                                                    : (updater.updateAvailable ? "#1f7a51" : "#5f6f88")
+                                    color: updater.error.length > 0
+                                           ? root.themeColor("#c44a4a", "#ff8e8e")
+                                           : (updater.updateAvailable
+                                              ? root.themeColor("#1f7a51", "#55d793")
+                                              : root.themeColor("#5f6f88", "#9bb0cb"))
                                     font.family: FontSystem.contentFontFamily
                                     font.pixelSize: 13
                                     wrapMode: Text.WordWrap
@@ -2945,7 +3161,7 @@ ApplicationWindow {
                                     Layout.fillWidth: true
                                     visible: updater.updateAvailable && updater.latestVersion.length > 0
                                     text: "Latest " + updater.latestVersion
-                                    color: "#7f8897"
+                                    color: root.themeColor("#7f8897", "#99abc4")
                                     font.family: FontSystem.contentFontFamily
                                     font.pixelSize: 12
                                 }
@@ -3004,11 +3220,11 @@ ApplicationWindow {
                         Rectangle {
                             Layout.fillWidth: true
                             visible: root.settingsSection === "about"
-                            Layout.maximumWidth: settingsScroll.availableWidth
+                            Layout.maximumWidth: settingsFlick.width
                             radius: Colors.innerRadius
-                            color: "#f7f9fc"
+                            color: root.themeColor("#f7f9fc", "#1a2638")
                             border.width: 1
-                            border.color: "#e0e6f0"
+                            border.color: root.themeColor("#e0e6f0", "#30435d")
                             implicitHeight: 64
 
                             RowLayout {
@@ -3018,7 +3234,7 @@ ApplicationWindow {
 
                                 Text {
                                     text: "xray-core"
-                                    color: "#667081"
+                                    color: root.themeColor("#667081", "#9ab0ca")
                                     font.family: FontSystem.contentFontFamily
                                     font.pixelSize: 14
                                 }
@@ -3027,7 +3243,7 @@ ApplicationWindow {
 
                                 Text {
                                     text: "Version " + vpnController.xrayVersion
-                                    color: "#2a3240"
+                                    color: root.themeColor("#2a3240", "#d7e4f6")
                                     font.family: FontSystem.contentFontFamily
                                     font.pixelSize: 14
                                     font.bold: true
@@ -3038,13 +3254,13 @@ ApplicationWindow {
                         Rectangle {
                             Layout.fillWidth: true
                             visible: root.settingsSection === "connection"
-                            Layout.maximumWidth: settingsScroll.availableWidth
+                            Layout.maximumWidth: settingsFlick.width
                             implicitHeight: modeColumn.implicitHeight + 24
                             Layout.preferredHeight: implicitHeight
                             radius: Colors.innerRadius
-                            color: "#f7f9fc"
+                            color: root.themeColor("#f7f9fc", "#1a2638")
                             border.width: 1
-                            border.color: "#e0e6f0"
+                            border.color: root.themeColor("#e0e6f0", "#30435d")
 
                             ColumnLayout {
                                 id: modeColumn
@@ -3054,7 +3270,7 @@ ApplicationWindow {
 
                                 Text {
                                     text: "Connection Mode"
-                                    color: "#2a3240"
+                                    color: root.themeColor("#2a3240", "#d7e4f6")
                                     font.family: FontSystem.contentFontFamily
                                     font.pixelSize: 15
                                     font.bold: true
@@ -3066,101 +3282,121 @@ ApplicationWindow {
                                           : (vpnController.tunMode
                                              ? "TUN mode: " + osNameText() + " routes system traffic through Xray TUN without changing proxy settings."
                                              : "Clean mode: " + osNameText() + " proxy stays untouched. Only apps set to 127.0.0.1:10808 use the tunnel.")
-                                    color: "#7c8697"
+                                    color: root.themeColor("#7c8697", "#9bb0cb")
                                     font.family: FontSystem.contentFontFamily
                                     font.pixelSize: 13
                                     wrapMode: Text.WordWrap
                                     Layout.fillWidth: true
                                 }
 
-                                GridLayout {
+                                ColumnLayout {
                                     Layout.fillWidth: true
-                                    columns: 1
-                                    columnSpacing: 8
-                                    rowSpacing: 8
+                                    spacing: 8
 
-                                    Rectangle {
-                                        Layout.fillWidth: true
-                                        Layout.preferredHeight: 44
-                                        radius: Colors.outerRadius
-                                        color: (vpnController.useSystemProxy && !vpnController.tunMode) ? "#2f6ff1" : "#ffffff"
-                                        border.width: 1
-                                        border.color: (vpnController.useSystemProxy && !vpnController.tunMode) ? "#2f6ff1" : "#d9e0ec"
-
-                                        Text {
-                                            anchors.centerIn: parent
-                                            text: "Global Mode"
-                                            color: (vpnController.useSystemProxy && !vpnController.tunMode) ? "#ffffff" : "#344053"
-                                            font.family: FontSystem.contentFontFamily
-                                            font.pixelSize: 13
-                                            font.bold: vpnController.useSystemProxy && !vpnController.tunMode
-                                        }
-
-                                        MouseArea {
-                                            anchors.fill: parent
-                                            enabled: !vpnController.useSystemProxy || vpnController.tunMode
-                                            cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
-                                            onClicked: {
-                                                vpnController.tunMode = false
-                                                vpnController.useSystemProxy = true
-                                                vpnController.autoDisableSystemProxyOnDisconnect = true
+                                    Repeater {
+                                        model: [
+                                            {
+                                                "title": "Global Mode",
+                                                "subtitle": "Apply system proxy for compatible apps.",
+                                                "checked": vpnController.useSystemProxy && !vpnController.tunMode,
+                                                "enabled": !vpnController.useSystemProxy || vpnController.tunMode,
+                                                "apply": function() {
+                                                    vpnController.tunMode = false
+                                                    vpnController.useSystemProxy = true
+                                                    vpnController.autoDisableSystemProxyOnDisconnect = true
+                                                }
+                                            },
+                                            {
+                                                "title": "Clean Mode",
+                                                "subtitle": "Keep OS proxy unchanged and route manual proxy apps only.",
+                                                "checked": !vpnController.useSystemProxy && !vpnController.tunMode,
+                                                "enabled": vpnController.useSystemProxy || vpnController.tunMode,
+                                                "apply": function() {
+                                                    vpnController.tunMode = false
+                                                    vpnController.useSystemProxy = false
+                                                    vpnController.autoDisableSystemProxyOnDisconnect = true
+                                                }
+                                            },
+                                            {
+                                                "title": "TUN Mode",
+                                                "subtitle": "Route system traffic through Xray TUN.",
+                                                "checked": vpnController.tunMode,
+                                                "enabled": !vpnController.tunMode,
+                                                "apply": function() {
+                                                    vpnController.useSystemProxy = false
+                                                    vpnController.tunMode = true
+                                                }
                                             }
-                                        }
-                                    }
+                                        ]
 
-                                    Rectangle {
-                                        Layout.fillWidth: true
-                                        Layout.preferredHeight: 44
-                                        radius: Colors.outerRadius
-                                        color: (!vpnController.useSystemProxy && !vpnController.tunMode) ? "#2f6ff1" : "#ffffff"
-                                        border.width: 1
-                                        border.color: (!vpnController.useSystemProxy && !vpnController.tunMode) ? "#2f6ff1" : "#d9e0ec"
+                                        delegate: Rectangle {
+                                            required property var modelData
+                                            Layout.fillWidth: true
+                                            Layout.preferredHeight: 56
+                                            radius: 8
+                                            color: modelData.checked
+                                                   ? root.themeColor("#edf4ff", "#274062")
+                                                   : root.themeColor("#ffffff", "#22324a")
+                                            border.width: 1
+                                            border.color: modelData.checked
+                                                          ? root.themeColor("#6da2ff", "#4f86e6")
+                                                          : root.themeColor("#d9e0ec", "#3a5470")
 
-                                        Text {
-                                            anchors.centerIn: parent
-                                            text: "Clean Mode"
-                                            color: (!vpnController.useSystemProxy && !vpnController.tunMode) ? "#ffffff" : "#344053"
-                                            font.family: FontSystem.contentFontFamily
-                                            font.pixelSize: 13
-                                            font.bold: !vpnController.useSystemProxy && !vpnController.tunMode
-                                        }
+                                            RowLayout {
+                                                anchors.fill: parent
+                                                anchors.leftMargin: 12
+                                                anchors.rightMargin: 12
+                                                spacing: 10
 
-                                        MouseArea {
-                                            anchors.fill: parent
-                                            enabled: vpnController.useSystemProxy || vpnController.tunMode
-                                            cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
-                                            onClicked: {
-                                                vpnController.tunMode = false
-                                                vpnController.useSystemProxy = false
-                                                vpnController.autoDisableSystemProxyOnDisconnect = true
+                                                Rectangle {
+                                                    Layout.preferredWidth: 18
+                                                    Layout.preferredHeight: 18
+                                                    radius: 9
+                                                    color: "transparent"
+                                                    border.width: 2
+                                                    border.color: modelData.checked
+                                                                  ? root.themeColor("#2f6ff1", "#7eb1ff")
+                                                                  : root.themeColor("#9aa6ba", "#90a6c2")
+
+                                                    Rectangle {
+                                                        visible: modelData.checked
+                                                        anchors.centerIn: parent
+                                                        width: 8
+                                                        height: 8
+                                                        radius: 4
+                                                        color: root.themeColor("#2f6ff1", "#7eb1ff")
+                                                    }
+                                                }
+
+                                                ColumnLayout {
+                                                    Layout.fillWidth: true
+                                                    spacing: 1
+
+                                                    Text {
+                                                        Layout.fillWidth: true
+                                                        text: modelData.title
+                                                        color: root.themeColor("#2a3240", "#d7e4f6")
+                                                        font.family: FontSystem.contentFontFamily
+                                                        font.pixelSize: 13
+                                                        font.bold: true
+                                                    }
+
+                                                    Text {
+                                                        Layout.fillWidth: true
+                                                        text: modelData.subtitle
+                                                        color: root.themeColor("#7c8697", "#9bb0cb")
+                                                        font.family: FontSystem.contentFontFamily
+                                                        font.pixelSize: 11
+                                                        elide: Text.ElideRight
+                                                    }
+                                                }
                                             }
-                                        }
-                                    }
 
-                                    Rectangle {
-                                        Layout.fillWidth: true
-                                        Layout.preferredHeight: 44
-                                        radius: Colors.outerRadius
-                                        color: vpnController.tunMode ? "#2f6ff1" : "#ffffff"
-                                        border.width: 1
-                                        border.color: vpnController.tunMode ? "#2f6ff1" : "#d9e0ec"
-
-                                        Text {
-                                            anchors.centerIn: parent
-                                            text: "TUN Mode"
-                                            color: vpnController.tunMode ? "#ffffff" : "#344053"
-                                            font.family: FontSystem.contentFontFamily
-                                            font.pixelSize: 13
-                                            font.bold: vpnController.tunMode
-                                        }
-
-                                        MouseArea {
-                                            anchors.fill: parent
-                                            enabled: !vpnController.tunMode
-                                            cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
-                                            onClicked: {
-                                                vpnController.useSystemProxy = false
-                                                vpnController.tunMode = true
+                                            MouseArea {
+                                                anchors.fill: parent
+                                                enabled: modelData.enabled
+                                                cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+                                                onClicked: modelData.apply()
                                             }
                                         }
                                     }
@@ -3173,7 +3409,7 @@ ApplicationWindow {
                             visible: root.settingsSection === "connection"
                             spacing: 10
 
-                            Switch {
+                            Controls.Switch {
                                 id: autoDisableSwitch
                                 checked: vpnController.autoDisableSystemProxyOnDisconnect
                                 enabled: vpnController.useSystemProxy && !vpnController.tunMode
@@ -3183,7 +3419,7 @@ ApplicationWindow {
                             Text {
                                 Layout.fillWidth: true
                                 text: "Auto-disable system proxy when disconnecting"
-                                color: "#334155"
+                                color: root.themeColor("#334155", "#d7e4f6")
                                 font.family: FontSystem.contentFontFamily
                                 font.pixelSize: 14
                                 wrapMode: Text.WordWrap
@@ -3195,7 +3431,7 @@ ApplicationWindow {
                             visible: root.settingsSection === "connection"
                             spacing: 10
 
-                            Switch {
+                            Controls.Switch {
                                 checked: vpnController.killSwitchEnabled
                                 onToggled: vpnController.killSwitchEnabled = checked
                             }
@@ -3207,7 +3443,7 @@ ApplicationWindow {
                                 Text {
                                     Layout.fillWidth: true
                                     text: "Kill Switch"
-                                    color: "#334155"
+                                    color: root.themeColor("#334155", "#d7e4f6")
                                     font.family: FontSystem.getContentFontBold.name
                                     font.pixelSize: 14
                                     font.bold: true
@@ -3216,7 +3452,7 @@ ApplicationWindow {
                                 Text {
                                     Layout.fillWidth: true
                                     text: "When disconnected, keep the OS proxy locked to GenyConnect so proxy-aware apps cannot fall back to direct traffic."
-                                    color: "#7c8697"
+                                    color: root.themeColor("#7c8697", "#9bb0cb")
                                     font.family: FontSystem.contentFontFamily
                                     font.pixelSize: 12
                                     wrapMode: Text.WordWrap
@@ -3229,7 +3465,7 @@ ApplicationWindow {
                             visible: root.settingsSection === "logs"
                             spacing: 10
 
-                            Switch {
+                            Controls.Switch {
                                 checked: vpnController.loggingEnabled
                                 onToggled: vpnController.loggingEnabled = checked
                             }
@@ -3237,7 +3473,7 @@ ApplicationWindow {
                             Text {
                                 Layout.fillWidth: true
                                 text: "Enable xray logs"
-                                color: "#334155"
+                                color: root.themeColor("#334155", "#d7e4f6")
                                 font.family: FontSystem.contentFontFamily
                                 font.pixelSize: 14
                                 wrapMode: Text.WordWrap
@@ -3249,7 +3485,7 @@ ApplicationWindow {
                             visible: root.settingsSection === "connection"
                             spacing: 10
 
-                            Switch {
+                            Controls.Switch {
                                 checked: vpnController.autoPingProfiles
                                 onToggled: vpnController.autoPingProfiles = checked
                             }
@@ -3257,7 +3493,7 @@ ApplicationWindow {
                             Text {
                                 Layout.fillWidth: true
                                 text: "Auto ping profile endpoints"
-                                color: "#334155"
+                                color: root.themeColor("#334155", "#d7e4f6")
                                 font.family: FontSystem.contentFontFamily
                                 font.pixelSize: 14
                                 wrapMode: Text.WordWrap
@@ -3281,7 +3517,7 @@ ApplicationWindow {
                                   : (vpnController.useSystemProxy
                                      ? "Recommended: keep this enabled to restore system proxy cleanly after tunnel disconnect."
                                      : "In Clean mode this option is ignored because system proxy remains disabled.")
-                            color: "#7f8897"
+                            color: root.themeColor("#7f8897", "#99abc4")
                             font.family: FontSystem.contentFontFamily
                             font.pixelSize: 12
                             wrapMode: Text.WordWrap
@@ -3292,9 +3528,9 @@ ApplicationWindow {
                             visible: root.settingsSection === "usage"
                             implicitHeight: usageColumn.implicitHeight + 24
                             radius: 12
-                            color: "#f8fbff"
+                            color: root.themeColor("#f8fbff", "#172437")
                             border.width: 1
-                            border.color: "#e1e8f2"
+                            border.color: root.themeColor("#e1e8f2", "#30435d")
 
                             ColumnLayout {
                                 id: usageColumn
@@ -3306,54 +3542,305 @@ ApplicationWindow {
 
                                 Text {
                                     Layout.fillWidth: true
-                                    text: "Current profile archive"
-                                    color: "#334155"
+                                    text: "Data Usage"
+                                    color: root.themeColor("#334155", "#d7e4f6")
                                     font.family: FontSystem.getContentFontBold.name
                                     font.pixelSize: 14
                                     font.bold: true
                                 }
 
-                                GridLayout {
+                                RowLayout {
                                     Layout.fillWidth: true
-                                    columns: root.compact ? 2 : 4
-                                    columnSpacing: 8
-                                    rowSpacing: 8
+                                    spacing: 8
 
                                     Repeater {
                                         model: [
-                                            { "label": "Hour", "value": vpnController.currentProfileUsageHour },
-                                            { "label": "Day", "value": vpnController.currentProfileUsageDay },
-                                            { "label": "Week", "value": vpnController.currentProfileUsageWeek },
-                                            { "label": "Month", "value": vpnController.currentProfileUsageMonth }
+                                            { "key": "current", "label": "Current" },
+                                            { "key": "recent", "label": "Recent" }
                                         ]
 
                                         delegate: Rectangle {
                                             required property var modelData
                                             Layout.fillWidth: true
-                                            Layout.preferredHeight: 58
+                                            Layout.preferredHeight: 32
                                             radius: 8
-                                            color: "#ffffff"
+                                            color: root.usagePanelTab === modelData.key
+                                                   ? root.themeColor("#2f6ff1", "#3a7bff")
+                                                   : root.themeColor("#ffffff", "#1f2f46")
                                             border.width: 1
-                                            border.color: "#e5ebf4"
+                                            border.color: root.usagePanelTab === modelData.key
+                                                          ? root.themeColor("#2f6ff1", "#3a7bff")
+                                                          : root.themeColor("#d7e2f0", "#395170")
 
-                                            Column {
+                                            Text {
                                                 anchors.centerIn: parent
-                                                spacing: 3
-                                                Text {
-                                                    anchors.horizontalCenter: parent.horizontalCenter
-                                                    text: modelData.label
-                                                    color: "#7b8798"
-                                                    font.family: FontSystem.contentFontFamily
-                                                    font.pixelSize: 11
+                                                text: modelData.label
+                                                color: root.usagePanelTab === modelData.key
+                                                       ? "#ffffff"
+                                                       : root.themeColor("#425874", "#b6c8df")
+                                                font.family: FontSystem.getContentFontBold.name
+                                                font.pixelSize: 12
+                                                font.bold: true
+                                            }
+
+                                            MouseArea {
+                                                anchors.fill: parent
+                                                cursorShape: Qt.PointingHandCursor
+                                                onClicked: root.usagePanelTab = modelData.key
+                                            }
+                                        }
+                                    }
+                                }
+
+                                Item {
+                                    Layout.fillWidth: true
+                                    visible: root.usagePanelTab === "current"
+                                    implicitHeight: usageCurrentColumn.implicitHeight
+
+                                    ColumnLayout {
+                                        id: usageCurrentColumn
+                                        anchors.left: parent.left
+                                        anchors.right: parent.right
+                                        spacing: 10
+
+                                        Text {
+                                            Layout.fillWidth: true
+                                            text: "Current profile archive"
+                                            color: root.themeColor("#334155", "#d7e4f6")
+                                            font.family: FontSystem.getContentFontBold.name
+                                            font.pixelSize: 13
+                                            font.bold: true
+                                        }
+
+                                        GridLayout {
+                                            Layout.fillWidth: true
+                                            columns: root.compact ? 2 : 3
+                                            columnSpacing: 8
+                                            rowSpacing: 8
+
+                                            Repeater {
+                                                model: [
+                                                    { "label": "Hour", "value": vpnController.currentProfileUsageHour },
+                                                    { "label": "Day", "value": vpnController.currentProfileUsageDay },
+                                                    { "label": "Week", "value": vpnController.currentProfileUsageWeek },
+                                                    { "label": "Month", "value": vpnController.currentProfileUsageMonth },
+                                                    { "label": "Total", "value": (vpnController.currentProfileUsageSummary().totalText || "0 B") },
+                                                    { "label": "Latest", "value": (vpnController.latestRecordedUsage || "0 B") }
+                                                ]
+
+                                                delegate: Rectangle {
+                                                    required property var modelData
+                                                    Layout.fillWidth: true
+                                                    Layout.preferredHeight: 58
+                                                    radius: 8
+                                                    color: root.themeColor("#ffffff", "#22324a")
+                                                    border.width: 1
+                                                    border.color: root.themeColor("#e5ebf4", "#39526f")
+
+                                                    Column {
+                                                        anchors.centerIn: parent
+                                                        spacing: 3
+                                                        Text {
+                                                            anchors.horizontalCenter: parent.horizontalCenter
+                                                            text: modelData.label
+                                                            color: root.themeColor("#7b8798", "#9ab0ca")
+                                                            font.family: FontSystem.contentFontFamily
+                                                            font.pixelSize: 11
+                                                        }
+                                                        Controls.NumberFlowText {
+                                                            anchors.horizontalCenter: parent.horizontalCenter
+                                                            text: modelData.value
+                                                            color: root.themeColor("#1f2937", "#edf4ff")
+                                                            fontSize: 14
+                                                            bold: true
+                                                        }
+                                                    }
                                                 }
-                                                Text {
-                                                    anchors.horizontalCenter: parent.horizontalCenter
-                                                    text: modelData.value
-                                                    color: "#1f2937"
-                                                    font.family: FontSystem.getContentFontBold.name
-                                                    font.pixelSize: 14
-                                                    font.bold: true
+                                            }
+                                        }
+
+                                        RowLayout {
+                                            Layout.fillWidth: true
+                                            spacing: 6
+
+                                            Repeater {
+                                                model: ["hour", "day", "week", "month"]
+
+                                                delegate: Rectangle {
+                                                    required property var modelData
+                                                    Layout.fillWidth: true
+                                                    Layout.preferredHeight: 30
+                                                    radius: 7
+                                                    color: root.usageHistoryPeriod === modelData
+                                                           ? root.themeColor("#2f6ff1", "#3a7bff")
+                                                           : root.themeColor("#ffffff", "#1f2f46")
+                                                    border.width: 1
+                                                    border.color: root.usageHistoryPeriod === modelData
+                                                                  ? root.themeColor("#2f6ff1", "#3a7bff")
+                                                                  : root.themeColor("#d5dfed", "#395170")
+
+                                                    Text {
+                                                        anchors.centerIn: parent
+                                                        text: modelData.charAt(0).toUpperCase() + modelData.slice(1)
+                                                        color: root.usageHistoryPeriod === modelData
+                                                               ? "#ffffff"
+                                                               : root.themeColor("#4b5d75", "#b6c8df")
+                                                        font.family: FontSystem.contentFontFamily
+                                                        font.pixelSize: 11
+                                                        font.bold: root.usageHistoryPeriod === modelData
+                                                    }
+
+                                                    MouseArea {
+                                                        anchors.fill: parent
+                                                        cursorShape: Qt.PointingHandCursor
+                                                        onClicked: {
+                                                            root.usageHistoryPeriod = modelData
+                                                            root.usageRefreshNonce += 1
+                                                        }
+                                                    }
                                                 }
+                                            }
+                                        }
+
+                                        ListView {
+                                            Layout.fillWidth: true
+                                            Layout.preferredHeight: 176
+                                            clip: true
+                                            spacing: 6
+                                            model: root.currentUsageHistoryModel()
+
+                                            delegate: Rectangle {
+                                                required property var modelData
+                                                width: ListView.view.width
+                                                height: 42
+                                                radius: 8
+                                                color: root.themeColor("#ffffff", "#22324a")
+                                                border.width: 1
+                                                border.color: root.themeColor("#e7edf5", "#3a5470")
+
+                                                RowLayout {
+                                                    anchors.fill: parent
+                                                    anchors.leftMargin: 10
+                                                    anchors.rightMargin: 10
+                                                    spacing: 10
+
+                                                    Text {
+                                                        Layout.fillWidth: true
+                                                        text: modelData.key || ""
+                                                        color: root.themeColor("#334155", "#d2def0")
+                                                        font.family: FontSystem.contentFontFamily
+                                                        font.pixelSize: 12
+                                                        elide: Text.ElideRight
+                                                    }
+                                                    Text {
+                                                        text: "Down " + (modelData.rxText || "0 B")
+                                                        color: root.themeColor("#64748b", "#a4b6cd")
+                                                        font.family: FontSystem.contentFontFamily
+                                                        font.pixelSize: 12
+                                                    }
+                                                    Text {
+                                                        text: "Up " + (modelData.txText || "0 B")
+                                                        color: root.themeColor("#64748b", "#a4b6cd")
+                                                        font.family: FontSystem.contentFontFamily
+                                                        font.pixelSize: 12
+                                                    }
+                                                    Text {
+                                                        text: modelData.totalText || "0 B"
+                                                        color: root.themeColor(root.brandBlue, "#7fb0ff")
+                                                        font.family: FontSystem.getContentFontBold.name
+                                                        font.pixelSize: 12
+                                                        font.bold: true
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+
+                                Item {
+                                    Layout.fillWidth: true
+                                    visible: root.usagePanelTab === "recent"
+                                    implicitHeight: usageRecentColumn.implicitHeight
+
+                                    ColumnLayout {
+                                        id: usageRecentColumn
+                                        anchors.left: parent.left
+                                        anchors.right: parent.right
+                                        spacing: 10
+
+                                        Text {
+                                            Layout.fillWidth: true
+                                            text: "Recent connections"
+                                            color: root.themeColor("#334155", "#d7e4f6")
+                                            font.family: FontSystem.getContentFontBold.name
+                                            font.pixelSize: 13
+                                            font.bold: true
+                                        }
+
+                                        ListView {
+                                            id: usageSessionsList
+                                            Layout.fillWidth: true
+                                            Layout.preferredHeight: usageSessionsList.count > 0 ? 286 : 90
+                                            clip: true
+                                            spacing: 6
+                                            model: root.currentUsageSessionsModel()
+
+                                            delegate: Rectangle {
+                                                required property var modelData
+                                                width: ListView.view.width
+                                                height: 40
+                                                radius: 8
+                                                color: root.themeColor("#ffffff", "#22324a")
+                                                border.width: 1
+                                                border.color: root.themeColor("#e7edf5", "#3a5470")
+
+                                                RowLayout {
+                                                    anchors.fill: parent
+                                                    anchors.leftMargin: 10
+                                                    anchors.rightMargin: 10
+                                                    spacing: 10
+
+                                                    Text {
+                                                        Layout.fillWidth: true
+                                                        text: (modelData.startedAt || "") + " - " + (modelData.endedAt || "")
+                                                        color: root.themeColor("#334155", "#d2def0")
+                                                        font.family: FontSystem.contentFontFamily
+                                                        font.pixelSize: 12
+                                                        elide: Text.ElideRight
+                                                    }
+                                                    Text {
+                                                        text: "Down " + (modelData.rxText || "0 B")
+                                                        color: root.themeColor("#64748b", "#a4b6cd")
+                                                        font.family: FontSystem.contentFontFamily
+                                                        font.pixelSize: 12
+                                                    }
+                                                    Text {
+                                                        text: "Up " + (modelData.txText || "0 B")
+                                                        color: root.themeColor("#64748b", "#a4b6cd")
+                                                        font.family: FontSystem.contentFontFamily
+                                                        font.pixelSize: 12
+                                                    }
+                                                    Text {
+                                                        text: modelData.totalText || "0 B"
+                                                        color: root.themeColor(root.brandBlue, "#7fb0ff")
+                                                        font.family: FontSystem.getContentFontBold.name
+                                                        font.pixelSize: 12
+                                                        font.bold: true
+                                                    }
+                                                }
+                                            }
+
+                                            Text {
+                                                anchors.fill: parent
+                                                visible: usageSessionsList.count === 0
+                                                verticalAlignment: Text.AlignVCenter
+                                                horizontalAlignment: Text.AlignHCenter
+                                                text: vpnController.connected
+                                                      ? "Session in progress. Disconnect to record it here."
+                                                      : "No recorded sessions yet."
+                                                color: root.themeColor("#8a95a8", "#9eb1c9")
+                                                font.family: FontSystem.contentFontFamily
+                                                font.pixelSize: 12
                                             }
                                         }
                                     }
@@ -3363,156 +3850,80 @@ ApplicationWindow {
                                     Layout.fillWidth: true
                                     spacing: 8
 
-                                    ComboBox {
-                                        Layout.preferredWidth: 130
-                                        model: ["hour", "day", "week", "month"]
-                                        currentIndex: Math.max(0, model.indexOf(root.usageHistoryPeriod))
-                                        onActivated: {
-                                            root.usageHistoryPeriod = model[currentIndex]
-                                            root.usageRefreshNonce += 1
-                                        }
-                                    }
-
-                                    Item { Layout.fillWidth: true }
-
-                                    Controls.Button {
-                                        text: "Refresh"
-                                        implicitWidth: 82
-                                        implicitHeight: 32
-                                        onClicked: root.usageRefreshNonce += 1
-                                    }
-
-                                    Controls.Button {
-                                        text: "Clear Current"
-                                        implicitWidth: 126
-                                        implicitHeight: 32
-                                        onClicked: {
-                                            vpnController.clearCurrentProfileUsage()
-                                            root.usageRefreshNonce += 1
-                                        }
-                                    }
-
-                                    Controls.Button {
-                                        text: "Clear All"
-                                        implicitWidth: 84
-                                        implicitHeight: 32
-                                        onClicked: {
-                                            vpnController.clearAllProfileUsage()
-                                            root.usageRefreshNonce += 1
-                                        }
-                                    }
-                                }
-
-                                ListView {
-                                    Layout.fillWidth: true
-                                    Layout.preferredHeight: 48
-                                    clip: true
-                                    spacing: 6
-                                    model: root.currentUsageHistoryModel()
-
-                                    delegate: Rectangle {
-                                        required property var modelData
-                                        width: ListView.view.width
-                                        height: 42
-                                        radius: 8
-                                        color: "#ffffff"
+                                    Rectangle {
+                                        Layout.fillWidth: true
+                                        Layout.preferredHeight: 32
+                                        radius: 7
+                                        color: root.themeColor("#ffffff", "#1f2f46")
                                         border.width: 1
-                                        border.color: "#e7edf5"
+                                        border.color: root.themeColor("#d7e2f0", "#395170")
 
-                                        RowLayout {
+                                        Text {
+                                            anchors.centerIn: parent
+                                            text: "Refresh"
+                                            color: root.themeColor("#2f6ff1", "#86b6ff")
+                                            font.family: FontSystem.contentFontFamily
+                                            font.pixelSize: 12
+                                            font.bold: true
+                                        }
+
+                                        MouseArea {
                                             anchors.fill: parent
-                                            anchors.leftMargin: 10
-                                            anchors.rightMargin: 10
-                                            spacing: 10
+                                            cursorShape: Qt.PointingHandCursor
+                                            onClicked: root.usageRefreshNonce += 1
+                                        }
+                                    }
 
-                                            Text {
-                                                Layout.fillWidth: true
-                                                text: modelData.key || ""
-                                                color: "#334155"
-                                                font.family: FontSystem.contentFontFamily
-                                                font.pixelSize: 12
-                                                elide: Text.ElideRight
-                                            }
-                                            Text {
-                                                text: "Down " + (modelData.rxText || "0 B")
-                                                color: "#64748b"
-                                                font.family: FontSystem.contentFontFamily
-                                                font.pixelSize: 12
-                                            }
-                                            Text {
-                                                text: "Up " + (modelData.txText || "0 B")
-                                                color: "#64748b"
-                                                font.family: FontSystem.contentFontFamily
-                                                font.pixelSize: 12
-                                            }
-                                            Text {
-                                                text: modelData.totalText || "0 B"
-                                                color: root.brandBlue
-                                                font.family: FontSystem.getContentFontBold.name
-                                                font.pixelSize: 12
-                                                font.bold: true
+                                    Rectangle {
+                                        Layout.fillWidth: true
+                                        Layout.preferredHeight: 32
+                                        radius: 7
+                                        color: root.themeColor("#ffffff", "#1f2f46")
+                                        border.width: 1
+                                        border.color: root.themeColor("#d7e2f0", "#395170")
+
+                                        Text {
+                                            anchors.centerIn: parent
+                                            text: "Clear Current"
+                                            color: root.themeColor("#41536c", "#b8c9de")
+                                            font.family: FontSystem.contentFontFamily
+                                            font.pixelSize: 12
+                                            font.bold: true
+                                        }
+
+                                        MouseArea {
+                                            anchors.fill: parent
+                                            cursorShape: Qt.PointingHandCursor
+                                            onClicked: {
+                                                vpnController.clearCurrentProfileUsage()
+                                                root.usageRefreshNonce += 1
                                             }
                                         }
                                     }
-                                }
 
-                                Text {
-                                    Layout.fillWidth: true
-                                    text: "Recent connections"
-                                    color: "#334155"
-                                    font.family: FontSystem.getContentFontBold.name
-                                    font.pixelSize: 13
-                                    font.bold: true
-                                }
-
-                                ListView {
-                                    Layout.fillWidth: true
-                                    Layout.preferredHeight: 256
-                                    clip: true
-                                    spacing: 6
-                                    model: root.currentUsageSessionsModel()
-
-                                    delegate: Rectangle {
-                                        required property var modelData
-                                        width: ListView.view.width
-                                        height: 40
-                                        radius: 8
-                                        color: "#ffffff"
+                                    Rectangle {
+                                        Layout.fillWidth: true
+                                        Layout.preferredHeight: 32
+                                        radius: 7
+                                        color: root.themeColor("#ffffff", "#2a2834")
                                         border.width: 1
-                                        border.color: "#e7edf5"
+                                        border.color: root.themeColor("#f0ced1", "#6a3f4f")
 
-                                        RowLayout {
+                                        Text {
+                                            anchors.centerIn: parent
+                                            text: "Clear All"
+                                            color: root.themeColor("#bf3f50", "#ff7d92")
+                                            font.family: FontSystem.contentFontFamily
+                                            font.pixelSize: 12
+                                            font.bold: true
+                                        }
+
+                                        MouseArea {
                                             anchors.fill: parent
-                                            anchors.leftMargin: 10
-                                            anchors.rightMargin: 10
-                                            spacing: 10
-
-                                            Text {
-                                                Layout.fillWidth: true
-                                                text: (modelData.startedAt || "") + " - " + (modelData.endedAt || "")
-                                                color: "#334155"
-                                                font.family: FontSystem.contentFontFamily
-                                                font.pixelSize: 12
-                                                elide: Text.ElideRight
-                                            }
-                                            Text {
-                                                text: "Down " + (modelData.rxText || "0 B")
-                                                color: "#64748b"
-                                                font.family: FontSystem.contentFontFamily
-                                                font.pixelSize: 12
-                                            }
-                                            Text {
-                                                text: "Up " + (modelData.txText || "0 B")
-                                                color: "#64748b"
-                                                font.family: FontSystem.contentFontFamily
-                                                font.pixelSize: 12
-                                            }
-                                            Text {
-                                                text: modelData.totalText || "0 B"
-                                                color: root.brandBlue
-                                                font.family: FontSystem.getContentFontBold.name
-                                                font.pixelSize: 12
-                                                font.bold: true
+                                            cursorShape: Qt.PointingHandCursor
+                                            onClicked: {
+                                                vpnController.clearAllProfileUsage()
+                                                root.usageRefreshNonce += 1
                                             }
                                         }
                                     }
@@ -3525,14 +3936,14 @@ ApplicationWindow {
                             visible: root.settingsSection === "routing"
                             spacing: 10
 
-                            Switch {
+                            Controls.Switch {
                                 checked: vpnController.whitelistMode
                                 onToggled: vpnController.whitelistMode = checked
                             }
 
                             Text {
                                 text: "Whitelist mode"
-                                color: "#334155"
+                                color: root.themeColor("#334155", "#d7e4f6")
                                 font.family: FontSystem.contentFontFamily
                                 font.pixelSize: 14
                             }
@@ -3550,13 +3961,13 @@ ApplicationWindow {
                             Layout.fillWidth: true
                             visible: root.settingsSection === "routing"
                             height: 1
-                            color: "#e4e8ef"
+                            color: root.themeColor("#e4e8ef", "#30435d")
                         }
 
                         Text {
                             visible: root.settingsSection === "routing"
                             text: "Routing Rules"
-                            color: "#667081"
+                            color: root.themeColor("#667081", "#9ab0ca")
                             font.family: FontSystem.contentFontFamily
                             font.pixelSize: 14
                         }
@@ -3566,7 +3977,7 @@ ApplicationWindow {
                             visible: root.settingsSection === "routing"
                             text: "Use comma or new line between values. Domain formats: example.com, full:example.com, domain:example.com, regexp:.*\\\\.example\\\\.com$, geosite:category-ads-all."
                             wrapMode: Text.Wrap
-                            color: "#8a95a8"
+                            color: root.themeColor("#8a95a8", "#9eb2cb")
                             font.family: FontSystem.contentFontFamily
                             font.pixelSize: 12
                         }
@@ -3602,13 +4013,13 @@ ApplicationWindow {
                             id: customDnsCard
                             Layout.fillWidth: true
                             visible: root.settingsSection === "dns"
-                            Layout.maximumWidth: settingsScroll.availableWidth
+                            Layout.maximumWidth: settingsFlick.width
                             Layout.preferredHeight: customDnsColumn.implicitHeight + 20
                             implicitHeight: customDnsColumn.implicitHeight + 20
                             radius: 14
-                            color: "#f8fbff"
+                            color: root.themeColor("#f8fbff", "#172437")
                             border.width: 1
-                            border.color: "#d7e4f5"
+                            border.color: root.themeColor("#d7e4f5", "#355070")
 
                             ColumnLayout {
                                 id: customDnsColumn
@@ -3619,7 +4030,7 @@ ApplicationWindow {
                                 Text {
                                     Layout.fillWidth: true
                                     text: "Custom DNS (optional, TUN mode)"
-                                    color: "#3b4e67"
+                                    color: root.themeColor("#3b4e67", "#d0ddf0")
                                     font.family: FontSystem.getContentFontBold.name
                                     font.pixelSize: 13
                                 }
@@ -3628,7 +4039,7 @@ ApplicationWindow {
                                     Layout.fillWidth: true
                                     text: "Enter one resolver per line. Supports IPv4, IPv6, and DNS hostnames."
                                     wrapMode: Text.Wrap
-                                    color: "#7c8ba1"
+                                    color: root.themeColor("#7c8ba1", "#9eb2cb")
                                     font.family: FontSystem.contentFontFamily
                                     font.pixelSize: 12
                                 }
@@ -3637,6 +4048,9 @@ ApplicationWindow {
                                     id: customDnsTextArea
                                     Layout.fillWidth: true
                                     Layout.preferredHeight: 86
+                                    fillColor: root.themeColor("#ffffff", "#4d20334d")
+                                    strokeColor: root.themeColor("#d8e2f0", "#4f6f95")
+                                    focusColor: root.themeColor("#8bb8ff", "#6ba0ff")
                                     placeholderText: "1.1.1.1\n8.8.8.8\ndns.google"
                                     text: root.customDnsDraft
                                     onTextChanged: {
@@ -3662,9 +4076,13 @@ ApplicationWindow {
                                             Layout.preferredWidth: root.width < 520 ? 1 : 152
                                             Layout.preferredHeight: 38
                                             radius: 12
-                                            color: root.dnsDraftContains(modelData.server) ? "#eaf2ff" : "#ffffff"
+                                            color: root.dnsDraftContains(modelData.server)
+                                                   ? root.themeColor("#eaf2ff", "#223753")
+                                                   : root.themeColor("#ffffff", "#22324a")
                                             border.width: 1
-                                            border.color: root.dnsDraftContains(modelData.server) ? "#8bb8ff" : "#d8e2f0"
+                                            border.color: root.dnsDraftContains(modelData.server)
+                                                          ? root.themeColor("#8bb8ff", "#4f86e6")
+                                                          : root.themeColor("#d8e2f0", "#3f5777")
 
                                             RowLayout {
                                                 anchors.fill: parent
@@ -3675,13 +4093,13 @@ ApplicationWindow {
                                                 Text {
                                                     Layout.fillWidth: true
                                                     text: modelData.label
-                                                    color: "#43556f"
+                                                    color: root.themeColor("#43556f", "#d0ddf0")
                                                     font.family: FontSystem.contentFontFamily
                                                     font.pixelSize: 12
                                                     elide: Text.ElideRight
                                                 }
 
-                                                Switch {
+                                                Controls.Switch {
                                                     checked: root.dnsDraftContains(modelData.server)
                                                     onToggled: root.setDnsDraftContains(modelData.server, checked)
                                                 }
@@ -3692,7 +4110,7 @@ ApplicationWindow {
                                     Item { Layout.fillWidth: true }
 
                                     Text {
-                                        color: "#7c8ba1"
+                                        color: root.themeColor("#7c8ba1", "#9eb2cb")
                                         font.family: FontSystem.contentFontFamily
                                         font.pixelSize: 12
                                         text: {
@@ -3740,9 +4158,13 @@ ApplicationWindow {
                             visible: root.settingsSection === "routing"
                             text: vpnController.processRoutingSupported
                                   ? "App rules are supported on this xray-core build."
-                                  : "App rules require xray-core 26.1.23+ (current build does not support process routing)."
+                                  : (Qt.platform.os === "osx"
+                                     ? "macOS note: process-name app rules are not supported by xray-core. Use domain/IP rules here, or switch to Network Extension app-based routing architecture."
+                                     : "App rules require xray-core 26.1.23+ (current build does not support process routing).")
                             wrapMode: Text.Wrap
-                            color: vpnController.processRoutingSupported ? "#8a95a8" : "#d97706"
+                            color: vpnController.processRoutingSupported
+                                   ? root.themeColor("#8a95a8", "#9eb2cb")
+                                   : root.themeColor("#d97706", "#ffb454")
                             font.family: FontSystem.contentFontFamily
                             font.pixelSize: 12
                         }
@@ -3755,7 +4177,7 @@ ApplicationWindow {
                             Text {
                                 Layout.fillWidth: true
                                 text: "Running apps"
-                                color: "#334155"
+                                color: root.themeColor("#334155", "#d7e4f6")
                                 font.family: FontSystem.getContentFontBold.name
                                 font.pixelSize: 13
                                 font.bold: true
@@ -3766,59 +4188,291 @@ ApplicationWindow {
                                 implicitWidth: 82
                                 implicitHeight: 32
                                 enabled: vpnController.processRoutingSupported
-                                onClicked: root.appRuleSuggestions = vpnController.availableAppRuleItems()
+                                onClicked: {
+                                    root.appRuleSuggestions = vpnController.availableAppRuleItems()
+                                    root.appRuleSearchQuery = ""
+                                    root.clearAppSuggestionSelection()
+                                }
                             }
                         }
 
-                        Flow {
+                        RowLayout {
                             Layout.fillWidth: true
                             visible: root.settingsSection === "routing"
                             spacing: 8
 
-                            Repeater {
-                                model: Math.min((root.appRuleSuggestions || []).length, 12)
+                            Rectangle {
+                                Layout.fillWidth: true
+                                Layout.preferredHeight: 34
+                                radius: 10
+                                color: root.themeColor("#f7f9fd", "#1f2f46")
+                                border.width: 1
+                                border.color: appRuleSearchField.activeFocus
+                                              ? root.themeColor("#b9ccee", "#5f87c2")
+                                              : root.themeColor("#d9e1ef", "#3a5470")
+
+                                RowLayout {
+                                    anchors.fill: parent
+                                    anchors.leftMargin: 10
+                                    anchors.rightMargin: 10
+                                    spacing: 8
+
+                                    Text {
+                                        text: root.iconSearch
+                                        color: root.themeColor("#8da0ba", "#9eb4d0")
+                                        font.family: root.faSolid
+                                        font.pixelSize: 12
+                                    }
+
+                                    TextField {
+                                        id: appRuleSearchField
+                                        Layout.fillWidth: true
+                                        padding: 0
+                                        text: root.appRuleSearchQuery
+                                        placeholderText: "Search running apps"
+                                        color: root.themeColor("#1f2a3a", "#edf4ff")
+                                        font.family: FontSystem.contentFontFamily
+                                        font.pixelSize: 12
+                                        selectedTextColor: "#ffffff"
+                                        selectionColor: root.brandBlue
+                                        selectByMouse: true
+                                        background: null
+                                        onTextEdited: root.appRuleSearchQuery = text
+                                    }
+                                }
+                            }
+
+                            Controls.Button {
+                                text: "Select visible"
+                                implicitWidth: 104
+                                implicitHeight: 32
+                                Layout.fillWidth: false
+                                enabled: vpnController.processRoutingSupported
+                                         && (root.visibleAppRuleSuggestions() || []).length > 0
+                                onClicked: root.selectVisibleAppSuggestionItems()
+                            }
+                        }
+
+                        RowLayout {
+                            Layout.fillWidth: true
+                            visible: root.settingsSection === "routing"
+                            spacing: 8
+
+                            Text {
+                                text: (root.selectedAppRuleProcesses || []).length > 0
+                                      ? ((root.selectedAppRuleProcesses || []).length + " selected")
+                                      : (((root.visibleAppRuleSuggestions() || []).length > 0)
+                                         ? "Select apps to apply rules"
+                                         : "No matching app found")
+                                color: root.themeColor("#6b7b92", "#9eb2cb")
+                                font.family: FontSystem.contentFontFamily
+                                font.pixelSize: 12
+                            }
+
+                            Item { Layout.fillWidth: true }
+
+                            Controls.Button {
+                                text: "Clear"
+                                implicitWidth: 62
+                                implicitHeight: 30
+                                enabled: (root.selectedAppRuleProcesses || []).length > 0
+                                onClicked: root.clearAppSuggestionSelection()
+                            }
+
+                            Controls.Button {
+                                text: "Direct"
+                                implicitWidth: 72
+                                implicitHeight: 30
+                                enabled: vpnController.processRoutingSupported
+                                         && (root.selectedAppRuleProcesses || []).length > 0
+                                onClicked: root.appendSelectedAppRules("direct")
+                            }
+
+                            Controls.Button {
+                                text: "Tunnel"
+                                implicitWidth: 72
+                                implicitHeight: 30
+                                enabled: vpnController.processRoutingSupported
+                                         && (root.selectedAppRuleProcesses || []).length > 0
+                                onClicked: root.appendSelectedAppRules("proxy")
+                            }
+
+                            Controls.Button {
+                                text: "Block"
+                                implicitWidth: 72
+                                implicitHeight: 30
+                                enabled: vpnController.processRoutingSupported
+                                         && (root.selectedAppRuleProcesses || []).length > 0
+                                onClicked: root.appendSelectedAppRules("block")
+                            }
+                        }
+
+                        Rectangle {
+                            Layout.fillWidth: true
+                            visible: root.settingsSection === "routing"
+                            Layout.preferredHeight: 240
+                            radius: 10
+                            color: root.themeColor("#f8fbff", "#172437")
+                            border.width: 1
+                            border.color: root.themeColor("#dfe7f2", "#355070")
+
+                            ListView {
+                                anchors.fill: parent
+                                anchors.margins: 8
+                                clip: true
+                                spacing: 6
+                                model: root.visibleAppRuleSuggestions() || []
 
                                 delegate: Rectangle {
-                                    required property int index
-                                    property var appItem: root.appRuleSuggestions[index] || {}
-                                    width: Math.min(260, Math.max(178, appRuleName.implicitWidth + 96))
-                                    height: 34
+                                    required property var modelData
+                                    width: ListView.view.width
+                                    height: 46
                                     radius: 8
-                                    color: "#f8fbff"
+                                    color: root.isAppSuggestionSelected(modelData.process || "")
+                                           ? root.themeColor("#edf4ff", "#274062")
+                                           : root.themeColor("#ffffff", "#22324a")
                                     border.width: 1
-                                    border.color: "#dfe7f2"
+                                    border.color: root.isAppSuggestionSelected(modelData.process || "")
+                                                 ? root.themeColor("#b8d0ff", "#578dcf")
+                                                 : root.themeColor("#e1e9f4", "#3d5876")
 
                                     RowLayout {
+                                        z: 1
                                         anchors.fill: parent
                                         anchors.leftMargin: 10
                                         anchors.rightMargin: 8
                                         spacing: 6
 
-                                        Text {
-                                            id: appRuleName
+                                        Rectangle {
+                                            Layout.preferredWidth: 26
+                                            Layout.preferredHeight: 26
+                                            radius: 13
+                                            color: root.isAppSuggestionSelected(modelData.process || "")
+                                                   ? root.themeColor("#dbe8ff", "#335178")
+                                                   : root.themeColor("#eff4fb", "#2a3f5b")
+                                            border.width: 1
+                                            border.color: root.isAppSuggestionSelected(modelData.process || "")
+                                                         ? root.themeColor("#9db9f9", "#659bdf")
+                                                         : root.themeColor("#d4dfef", "#496384")
+
+                                            Text {
+                                                anchors.centerIn: parent
+                                                text: root.appSuggestionInitial(modelData.process || "")
+                                                color: root.themeColor("#40618f", "#9fc3f2")
+                                                font.family: FontSystem.getContentFontBold.name
+                                                font.pixelSize: 11
+                                                font.bold: true
+                                            }
+                                        }
+
+                                        Column {
                                             Layout.fillWidth: true
-                                            text: appItem.process || ""
-                                            color: "#334155"
-                                            font.family: FontSystem.contentFontFamily
-                                            font.pixelSize: 12
-                                            elide: Text.ElideRight
+                                            spacing: 0
+
+                                            Text {
+                                                width: parent.width
+                                                text: modelData.process || ""
+                                                color: root.themeColor("#334155", "#d2def0")
+                                                font.family: FontSystem.contentFontFamily
+                                                font.pixelSize: 12
+                                                elide: Text.ElideMiddle
+                                            }
+
+                                            Text {
+                                                width: parent.width
+                                                text: modelData.source ? ("Source: " + modelData.source) : ""
+                                                visible: text.length > 0
+                                                color: root.themeColor("#95a3b8", "#a4b6cd")
+                                                font.family: FontSystem.contentFontFamily
+                                                font.pixelSize: 10
+                                                elide: Text.ElideRight
+                                            }
                                         }
 
-                                        Controls.Button {
-                                            text: "Direct"
-                                            implicitWidth: 58
-                                            implicitHeight: 24
-                                            enabled: vpnController.processRoutingSupported
-                                            onClicked: vpnController.appendAppRule("direct", appItem.process || "")
+                                        Rectangle {
+                                            Layout.preferredWidth: 54
+                                            Layout.preferredHeight: 24
+                                            radius: 6
+                                            color: root.themeColor("#f3f7ff", "#20314b")
+                                            border.width: 1
+                                            border.color: root.themeColor("#d4e1f8", "#4c6990")
+                                            opacity: vpnController.processRoutingSupported ? 1.0 : 0.6
+
+                                            Text {
+                                                anchors.centerIn: parent
+                                                text: "Direct"
+                                                color: root.themeColor("#3862a9", "#8bb7ff")
+                                                font.family: FontSystem.contentFontFamily
+                                                font.pixelSize: 11
+                                                font.bold: true
+                                            }
+
+                                            MouseArea {
+                                                anchors.fill: parent
+                                                enabled: vpnController.processRoutingSupported
+                                                cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+                                                onClicked: vpnController.appendAppRule("direct", modelData.process || "")
+                                            }
                                         }
 
-                                        Controls.Button {
-                                            text: "Tunnel"
-                                            implicitWidth: 60
-                                            implicitHeight: 24
-                                            enabled: vpnController.processRoutingSupported
-                                            onClicked: vpnController.appendAppRule("proxy", appItem.process || "")
+                                        Rectangle {
+                                            Layout.preferredWidth: 56
+                                            Layout.preferredHeight: 24
+                                            radius: 6
+                                            color: root.themeColor("#e9f1ff", "#1b2f4c")
+                                            border.width: 1
+                                            border.color: root.themeColor("#c3d8ff", "#4770af")
+                                            opacity: vpnController.processRoutingSupported ? 1.0 : 0.6
+
+                                            Text {
+                                                anchors.centerIn: parent
+                                                text: "Tunnel"
+                                                color: root.themeColor("#2f6ff1", "#86b6ff")
+                                                font.family: FontSystem.contentFontFamily
+                                                font.pixelSize: 11
+                                                font.bold: true
+                                            }
+
+                                            MouseArea {
+                                                anchors.fill: parent
+                                                enabled: vpnController.processRoutingSupported
+                                                cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+                                                onClicked: vpnController.appendAppRule("proxy", modelData.process || "")
+                                            }
                                         }
+
+                                        Rectangle {
+                                            Layout.preferredWidth: 50
+                                            Layout.preferredHeight: 24
+                                            radius: 6
+                                            color: root.themeColor("#fff0f0", "#3b2631")
+                                            border.width: 1
+                                            border.color: root.themeColor("#ffd0d0", "#7d5062")
+                                            opacity: vpnController.processRoutingSupported ? 1.0 : 0.6
+
+                                            Text {
+                                                anchors.centerIn: parent
+                                                text: "Block"
+                                                color: root.themeColor("#ca3b3b", "#ff8da0")
+                                                font.family: FontSystem.contentFontFamily
+                                                font.pixelSize: 11
+                                                font.bold: true
+                                            }
+
+                                            MouseArea {
+                                                anchors.fill: parent
+                                                enabled: vpnController.processRoutingSupported
+                                                cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+                                                onClicked: vpnController.appendAppRule("block", modelData.process || "")
+                                            }
+                                        }
+                                    }
+
+                                    MouseArea {
+                                        z: 0
+                                        anchors.fill: parent
+                                        acceptedButtons: Qt.LeftButton
+                                        onClicked: root.toggleAppSuggestionSelection(modelData.process || "")
                                     }
                                 }
                             }
@@ -3895,9 +4549,9 @@ ApplicationWindow {
 
         background: Rectangle {
             radius: 24
-            color: "#ffffff"
+            color: root.themeColor("#ffffff", "#131b27")
             border.width: 1
-            border.color: "#d8dde8"
+            border.color: root.themeColor("#d8dde8", "#283345")
         }
 
         contentItem: Item {
@@ -3913,7 +4567,7 @@ ApplicationWindow {
                     Layout.preferredWidth: 42
                     Layout.preferredHeight: 4
                     radius: 2
-                    color: "#d6dde8"
+                    color: root.themeColor("#d6dde8", "#304059")
                 }
 
                 RowLayout {
@@ -3923,16 +4577,16 @@ ApplicationWindow {
                         font.family: FontSystem.getContentFontBold.name
                         font.weight: Font.Bold
                         font.pixelSize: 24
-                        color: "#1f2530"
+                        color: root.themeColor("#1f2530", "#d8e1f0")
                     }
                     Item { Layout.fillWidth: true }
                     Controls.CircleIconButton {
                         diameter: 34
                         iconText: "×"
                         iconPixelSize: 20
-                        iconColor: "#8d96a5"
-                        backgroundColor: "#f7f8fb"
-                        borderColor: "#e1e5ed"
+                        iconColor: root.themeColor("#8d96a5", "#9db0ca")
+                        backgroundColor: root.themeColor("#f7f8fb", "#1b2738")
+                        borderColor: root.themeColor("#e1e5ed", "#34445b")
                         onClicked: aboutPopup.close()
                     }
                 }
@@ -3950,9 +4604,9 @@ ApplicationWindow {
                         Rectangle {
                             Layout.fillWidth: true
                             radius: 14
-                            color: "#f7f9fc"
+                            color: root.themeColor("#f7f9fc", "#1a2638")
                             border.width: 1
-                            border.color: "#e0e6f0"
+                            border.color: root.themeColor("#e0e6f0", "#30435d")
                             implicitHeight: 64
 
                             RowLayout {
@@ -3962,7 +4616,7 @@ ApplicationWindow {
 
                                 Text {
                                     text: "GenyConnect"
-                                    color: "#667081"
+                                    color: root.themeColor("#667081", "#9ab0ca")
                                     font.family: FontSystem.contentFontFamily
                                     font.pixelSize: 14
                                 }
@@ -3973,7 +4627,7 @@ ApplicationWindow {
                                     text: "Version " + updater.appVersion
                                     Layout.maximumWidth: aboutPopup.width * 0.48
                                     elide: Text.ElideRight
-                                    color: "#2a3240"
+                                    color: root.themeColor("#2a3240", "#d7e4f6")
                                     font.family: FontSystem.contentFontFamily
                                     font.pixelSize: 14
                                     font.bold: false
@@ -3985,9 +4639,9 @@ ApplicationWindow {
                         Rectangle {
                             Layout.fillWidth: true
                             radius: 14
-                            color: "#f7f9fc"
+                            color: root.themeColor("#f7f9fc", "#1a2638")
                             border.width: 1
-                            border.color: "#e0e6f0"
+                            border.color: root.themeColor("#e0e6f0", "#30435d")
                             implicitHeight: 64
 
                             RowLayout {
@@ -3997,7 +4651,7 @@ ApplicationWindow {
 
                                 Text {
                                     text: "Developer"
-                                    color: "#667081"
+                                    color: root.themeColor("#667081", "#9ab0ca")
                                     font.family: FontSystem.contentFontFamily
                                     font.pixelSize: 14
                                 }
@@ -4008,7 +4662,7 @@ ApplicationWindow {
                                     text: "Genyleap LLC"
                                     Layout.maximumWidth: aboutPopup.width * 0.48
                                     elide: Text.ElideRight
-                                    color: "#2a3240"
+                                    color: root.themeColor("#2a3240", "#d7e4f6")
                                     font.family: FontSystem.contentFontFamily
                                     font.pixelSize: 14
                                     font.bold: false
@@ -4020,9 +4674,9 @@ ApplicationWindow {
                         Rectangle {
                             Layout.fillWidth: true
                             radius: 14
-                            color: "#f7f9fc"
+                            color: root.themeColor("#f7f9fc", "#1a2638")
                             border.width: 1
-                            border.color: "#e0e6f0"
+                            border.color: root.themeColor("#e0e6f0", "#30435d")
                             implicitHeight: 64
 
                             RowLayout {
@@ -4032,7 +4686,7 @@ ApplicationWindow {
 
                                 Text {
                                     text: "Website"
-                                    color: "#667081"
+                                    color: root.themeColor("#667081", "#9ab0ca")
                                     font.family: FontSystem.contentFontFamily
                                     font.pixelSize: 14
                                 }
@@ -4043,7 +4697,7 @@ ApplicationWindow {
                                     text: "https://genyleap.com"
                                     Layout.maximumWidth: aboutPopup.width * 0.52
                                     elide: Text.ElideMiddle
-                                    color: "#2a3240"
+                                    color: root.themeColor("#2a3240", "#9ec1ff")
                                     font.family: FontSystem.contentFontFamily
                                     font.pixelSize: 14
                                     font.bold: false
@@ -4063,9 +4717,9 @@ ApplicationWindow {
                         Rectangle {
                             Layout.fillWidth: true
                             radius: 14
-                            color: "#f7f9fc"
+                            color: root.themeColor("#f7f9fc", "#1a2638")
                             border.width: 1
-                            border.color: "#e0e6f0"
+                            border.color: root.themeColor("#e0e6f0", "#30435d")
                             implicitHeight: 64
 
                             RowLayout {
@@ -4075,7 +4729,7 @@ ApplicationWindow {
 
                                 Text {
                                     text: "Repository"
-                                    color: "#667081"
+                                    color: root.themeColor("#667081", "#9ab0ca")
                                     font.family: FontSystem.contentFontFamily
                                     font.pixelSize: 14
                                 }
@@ -4086,7 +4740,7 @@ ApplicationWindow {
                                     text: "https://github.com/genyleap/genyconnect"
                                     Layout.maximumWidth: aboutPopup.width * 0.52
                                     elide: Text.ElideMiddle
-                                    color: "#2a3240"
+                                    color: root.themeColor("#2a3240", "#9ec1ff")
                                     font.family: FontSystem.contentFontFamily
                                     font.pixelSize: 14
                                     font.bold: false
@@ -4105,9 +4759,9 @@ ApplicationWindow {
                         Rectangle {
                             Layout.fillWidth: true
                             radius: 14
-                            color: "#f7f9fc"
+                            color: root.themeColor("#f7f9fc", "#1a2638")
                             border.width: 1
-                            border.color: "#e0e6f0"
+                            border.color: root.themeColor("#e0e6f0", "#30435d")
                             implicitHeight: 64
 
                             RowLayout {
@@ -4117,7 +4771,7 @@ ApplicationWindow {
 
                                 Text {
                                     text: "Creator's Telegram"
-                                    color: "#667081"
+                                    color: root.themeColor("#667081", "#9ab0ca")
                                     font.family: FontSystem.contentFontFamily
                                     font.pixelSize: 14
                                 }
@@ -4128,7 +4782,7 @@ ApplicationWindow {
                                     text: "https://t.me/compezeth"
                                     Layout.maximumWidth: aboutPopup.width * 0.52
                                     elide: Text.ElideMiddle
-                                    color: "#2a3240"
+                                    color: root.themeColor("#2a3240", "#9ec1ff")
                                     font.family: FontSystem.contentFontFamily
                                     font.pixelSize: 14
                                     font.bold: false
@@ -4147,9 +4801,9 @@ ApplicationWindow {
                         Rectangle {
                             Layout.fillWidth: true
                             radius: 14
-                            color: "#f7f9fc"
+                            color: root.themeColor("#f7f9fc", "#1a2638")
                             border.width: 1
-                            border.color: "#e0e6f0"
+                            border.color: root.themeColor("#e0e6f0", "#30435d")
                             implicitHeight: 64
 
                             RowLayout {
@@ -4159,7 +4813,7 @@ ApplicationWindow {
 
                                 Text {
                                     text: "Support Email"
-                                    color: "#667081"
+                                    color: root.themeColor("#667081", "#9ab0ca")
                                     font.family: FontSystem.contentFontFamily
                                     font.pixelSize: 14
                                 }
@@ -4170,7 +4824,7 @@ ApplicationWindow {
                                     text: "support@genyleap.com"
                                     Layout.maximumWidth: aboutPopup.width * 0.52
                                     elide: Text.ElideMiddle
-                                    color: "#2a3240"
+                                    color: root.themeColor("#2a3240", "#9ec1ff")
                                     font.family: FontSystem.contentFontFamily
                                     font.pixelSize: 14
                                     font.bold: false
@@ -4224,9 +4878,9 @@ ApplicationWindow {
         background: Rectangle {
             topRightRadius: 24
             topLeftRadius: 24
-            color: "#ffffff"
+            color: root.themeColor("#ffffff", "#131b27")
             border.width: 1
-            border.color: "#d8dde8"
+            border.color: root.themeColor("#d8dde8", "#283345")
             clip: true
         }
 
@@ -4241,7 +4895,7 @@ ApplicationWindow {
                 Layout.preferredWidth: 42
                 Layout.preferredHeight: 4
                 radius: 2
-                color: "#d6dde8"
+                color: root.themeColor("#d6dde8", "#304059")
             }
 
             RowLayout {
@@ -4254,7 +4908,7 @@ ApplicationWindow {
                     font.family: FontSystem.getContentFontBold.name
                     font.weight: Font.Bold
                     font.pixelSize: 20
-                    color: "#1f2530"
+                    color: root.themeColor("#1f2530", "#d8e1f0")
                     elide: Text.ElideRight
                 }
 
@@ -4263,7 +4917,9 @@ ApplicationWindow {
                     iconText: root.iconTrash
                     iconFontFamily: root.faSolid
                     iconPixelSize: 12
-                    iconColor: vpnController.recentLogs.length > 0 ? "#d35b5b" : "#a8b2c0"
+                    iconColor: vpnController.recentLogs.length > 0
+                               ? root.themeColor("#d35b5b", "#ff8e8e")
+                               : root.themeColor("#a8b2c0", "#8ea1ba")
                     enabled: vpnController.recentLogs.length > 0
                     onClicked: vpnController.clearLogs()
                 }
@@ -4273,7 +4929,9 @@ ApplicationWindow {
                     iconText: root.iconCopy
                     iconFontFamily: root.faSolid
                     iconPixelSize: 12
-                    iconColor: vpnController.loggingEnabled && vpnController.recentLogs.length > 0 ? "#64748b" : "#a8b2c0"
+                    iconColor: vpnController.loggingEnabled && vpnController.recentLogs.length > 0
+                               ? root.themeColor("#64748b", "#a4b6cd")
+                               : root.themeColor("#a8b2c0", "#8ea1ba")
                     enabled: vpnController.loggingEnabled && vpnController.recentLogs.length > 0
                     onClicked: vpnController.copyLogsToClipboard()
                 }
@@ -4283,7 +4941,7 @@ ApplicationWindow {
                     iconText: root.iconClose
                     iconFontFamily: root.faSolid
                     iconPixelSize: 12
-                    iconColor: "#94a3b8"
+                    iconColor: root.themeColor("#94a3b8", "#a2b5ce")
                     onClicked: logsPopup.close()
                 }
             }
@@ -4293,9 +4951,9 @@ ApplicationWindow {
                 Layout.fillHeight: true
                 visible: !vpnController.loggingEnabled
                 radius: 16
-                color: "#f7f9fc"
+                color: root.themeColor("#f7f9fc", "#1a2638")
                 border.width: 1
-                border.color: "#e1e6ee"
+                border.color: root.themeColor("#e1e6ee", "#30435d")
                 clip: true
 
                 ColumnLayout {
@@ -4306,7 +4964,7 @@ ApplicationWindow {
                     Text {
                         Layout.alignment: Qt.AlignHCenter
                         text: root.iconHistory
-                        color: "#9aa8bb"
+                        color: root.themeColor("#9aa8bb", "#9db1ca")
                         font.family: root.faSolid
                         font.pixelSize: 28
                     }
@@ -4314,7 +4972,7 @@ ApplicationWindow {
                     Text {
                         Layout.fillWidth: true
                         text: "Logging is disabled"
-                        color: "#2a3240"
+                        color: root.themeColor("#2a3240", "#d7e4f6")
                         font.family: FontSystem.getContentFontBold.name
                         font.pixelSize: 16
                         horizontalAlignment: Text.AlignHCenter
@@ -4323,7 +4981,7 @@ ApplicationWindow {
                     Text {
                         Layout.fillWidth: true
                         text: "Enable xray logs in Settings to capture connection history."
-                        color: "#8b95a5"
+                        color: root.themeColor("#8b95a5", "#9cb0c8")
                         font.family: FontSystem.contentFontFamily
                         font.pixelSize: 13
                         wrapMode: Text.WordWrap
@@ -4346,10 +5004,10 @@ ApplicationWindow {
                     text: vpnController.recentLogs.join("\n")
                     font.family: FontSystem.contentFontFamily
                     font.pixelSize: 12
-                    color: "#1f2530"
+                    color: root.themeColor("#1f2530", "#e7eefb")
                     background: Rectangle {
-                        color: "#f7f9fc"
-                        border.color: "#e1e6ee"
+                        color: root.themeColor("#f7f9fc", "#1a2638")
+                        border.color: root.themeColor("#e1e6ee", "#30435d")
                         border.width: 1
                         radius: 12
                     }
@@ -4396,9 +5054,9 @@ ApplicationWindow {
 
         background: Rectangle {
             radius: root.compact ? 0 : 24
-            color: "#ffffff"
+            color: root.themeColor("#ffffff", "#131b27")
             border.width: 1
-            border.color: "#d8dde8"
+            border.color: root.themeColor("#d8dde8", "#283345")
             clip: true
         }
 
@@ -4413,7 +5071,7 @@ ApplicationWindow {
                 Layout.preferredWidth: 42
                 Layout.preferredHeight: 4
                 radius: 2
-                color: "#d6dde8"
+                color: root.themeColor("#d6dde8", "#304059")
                 visible: !root.compact
             }
 
@@ -4425,11 +5083,11 @@ ApplicationWindow {
                     visible: root.compact
                     diameter: 38
                     elevated: false
-                    backgroundColor: "#faf9ff"
-                    borderColor: "#f0eef8"
+                    backgroundColor: root.themeColor("#faf9ff", "#1b2738")
+                    borderColor: root.themeColor("#f0eef8", "#34445b")
                     iconText: "\uf060"
                     iconFontFamily: root.faSolid
-                    iconColor: "#050505"
+                    iconColor: root.themeColor("#050505", "#d8e1f0")
                     iconPixelSize: 15
                     onClicked: speedTestPopup.close()
                 }
@@ -4452,7 +5110,7 @@ ApplicationWindow {
                         diameter: 34
                         iconText: root.iconSetting
                         iconFontFamily: root.faSolid
-                        iconColor: "#a0a8b5"
+                        iconColor: root.themeColor("#a0a8b5", "#8ea1ba")
                         iconPixelSize: 14
                         onClicked: settingsPopup.open()
                     }
@@ -4462,7 +5120,7 @@ ApplicationWindow {
                         diameter: 34
                         iconText: root.iconClose
                         iconFontFamily: root.faSolid
-                        iconColor: "#95a0b3"
+                        iconColor: root.themeColor("#95a0b3", "#8ea1ba")
                         iconPixelSize: 14
                         onClicked: speedTestPopup.close()
                     }
@@ -4556,7 +5214,7 @@ ApplicationWindow {
                             width: 2
                             height: index % 3 === 0 ? 10 : 6
                             radius: 1
-                            color: activeTick ? root.gaugeColorAt(ratio) : "#dbe3ef"
+                            color: activeTick ? root.gaugeColorAt(ratio) : root.themeColor("#dbe3ef", "#415a7a")
                             antialiasing: true
                             x: speedDial.centerX + Math.cos(angleRad) * (speedDial.outerRadius - height * 0.5) - width * 0.5
                             y: speedDial.centerY + Math.sin(angleRad) * (speedDial.outerRadius - height * 0.5) - height * 0.5
@@ -4572,9 +5230,9 @@ ApplicationWindow {
                         height: width
                         radius: width * 0.5
                         anchors.centerIn: parent
-                        color: "#f8fafc"
+                        color: root.themeColor("#f8fafc", "#1f2f46")
                         border.width: 1
-                        border.color: "#e1e7f0"
+                        border.color: root.themeColor("#e1e7f0", "#405979")
                     }
 
                     Repeater {
@@ -4588,7 +5246,7 @@ ApplicationWindow {
                             readonly property real angle: (speedDial.startDeg + ratio * speedDial.sweepDeg) * Math.PI / 180.0
                             readonly property real radiusValue: speedDial.innerRadius - 30
                             text: speedDial.scaleLabels[index]
-                            color: "#7f8898"
+                            color: root.themeColor("#7f8898", "#9db2cc")
                             font.family: FontSystem.contentFontFamily
                             font.pixelSize: 12
                             x: speedDial.centerX + Math.cos(angle) * radiusValue - width * 0.5
@@ -4733,9 +5391,9 @@ ApplicationWindow {
                         width: speedDial.innerRadius * 1.58
                         height: width
                         radius: width * 0.5
-                        color: "#ffffff"
+                        color: root.themeColor("#ffffff", "#22324a")
                         border.width: 1
-                        border.color: "#e2e8f2"
+                        border.color: root.themeColor("#e2e8f2", "#456081")
                         z: 45
                     }
 
@@ -4747,7 +5405,7 @@ ApplicationWindow {
 
                         Text {
                             text: root.speedGaugePrefixText() + root.speedGaugeNumberText()
-                            color: "#1f2530"
+                            color: root.themeColor("#1f2530", "#edf4ff")
                             font.family: FontSystem.contentFontFamily
                             font.pixelSize: 30
                             font.bold: true
@@ -4757,7 +5415,7 @@ ApplicationWindow {
 
                         Text {
                             text: root.speedGaugeUnitText()
-                            color: "#8f97a6"
+                            color: root.themeColor("#8f97a6", "#9db1ca")
                             font.family: FontSystem.contentFontFamily
                             font.pixelSize: 16
                             font.weight: Font.Light
@@ -4773,7 +5431,11 @@ ApplicationWindow {
             Text {
                 Layout.fillWidth: true
                 text: vpnController.speedTestRunning ? speedTestStatusText() : speedTestSideStatusText()
-                color: vpnController.speedTestError.length > 0 ? "#d14545" : (vpnController.speedTestRunning ? "#6a7890" : "#5f6f88")
+                color: vpnController.speedTestError.length > 0
+                       ? root.themeColor("#d14545", "#ff8e8e")
+                       : (vpnController.speedTestRunning
+                          ? root.themeColor("#6a7890", "#9db2cc")
+                          : root.themeColor("#5f6f88", "#9bb0cb"))
                 font.family: FontSystem.contentFontFamily
                 font.pixelSize: 14
                 horizontalAlignment: Text.AlignHCenter
@@ -4782,7 +5444,7 @@ ApplicationWindow {
 
             GridLayout {
                 Layout.fillWidth: true
-                columns: 3
+                columns: root.compact ? 2 : 4
                 columnSpacing: 8
                 rowSpacing: 8
 
@@ -4791,23 +5453,25 @@ ApplicationWindow {
                     Layout.preferredWidth: 1
                     Layout.preferredHeight: 56
                     radius: 14
-                    color: vpnController.speedTestPhase === "Ping" ? "#eaf2ff" : "#f5f8fc"
+                    color: vpnController.speedTestState === "Completed" || vpnController.speedTestRunning
+                           ? root.themeColor("#eaf2ff", "#223753")
+                           : root.themeColor("#f5f8fc", "#1f2f46")
                     border.width: 1
-                    border.color: "#dce4ef"
+                    border.color: root.themeColor("#dce4ef", "#3f5777")
 
                     Column {
                         anchors.centerIn: parent
                         spacing: 2
 
                         Text {
-                            text: "Ping"
-                            color: "#6f7d92"
+                            text: "Latency"
+                            color: root.themeColor("#6f7d92", "#9cb0c8")
                             font.family: FontSystem.contentFontFamily
                             font.pixelSize: 13
                         }
                         Text {
                             text: vpnController.speedTestPingMs >= 0 ? (vpnController.speedTestPingMs + " ms") : "--"
-                            color: "#1f2530"
+                            color: root.themeColor("#1f2530", "#edf4ff")
                             font.family: FontSystem.contentFontFamily
                             font.pixelSize: 16
                             font.bold: true
@@ -4820,9 +5484,11 @@ ApplicationWindow {
                     Layout.preferredWidth: 1
                     Layout.preferredHeight: 56
                     radius: 14
-                    color: vpnController.speedTestPhase === "Download" ? "#eaf2ff" : "#f5f8fc"
+                    color: vpnController.speedTestState === "Completed" || vpnController.speedTestRunning
+                           ? root.themeColor("#eaf2ff", "#223753")
+                           : root.themeColor("#f5f8fc", "#1f2f46")
                     border.width: 1
-                    border.color: "#dce4ef"
+                    border.color: root.themeColor("#dce4ef", "#3f5777")
 
                     Column {
                         anchors.centerIn: parent
@@ -4830,13 +5496,13 @@ ApplicationWindow {
 
                         Text {
                             text: "Download"
-                            color: "#6f7d92"
+                            color: root.themeColor("#6f7d92", "#9cb0c8")
                             font.family: FontSystem.contentFontFamily
                             font.pixelSize: 13
                         }
                         Text {
-                            text: vpnController.speedTestDownloadMbps.toFixed(1) + " Mbps"
-                            color: "#1f2530"
+                            text: vpnController.speedTestDownloadMbps > 0 ? vpnController.speedTestDownloadMbps.toFixed(2) + " Mbps" : "--"
+                            color: root.themeColor("#1f2530", "#edf4ff")
                             font.family: FontSystem.contentFontFamily
                             font.pixelSize: 16
                             font.bold: true
@@ -4849,25 +5515,58 @@ ApplicationWindow {
                     Layout.preferredWidth: 1
                     Layout.preferredHeight: 56
                     radius: 14
-                    color: vpnController.speedTestPhase === "Upload" || vpnController.speedTestPhase === "Done"
-                           ? "#eaf2ff"
-                           : "#f5f8fc"
+                    color: vpnController.speedTestState === "Completed" || vpnController.speedTestRunning
+                           ? root.themeColor("#eaf2ff", "#223753")
+                           : root.themeColor("#f5f8fc", "#1f2f46")
                     border.width: 1
-                    border.color: "#dce4ef"
+                    border.color: root.themeColor("#dce4ef", "#3f5777")
 
                     Column {
                         anchors.centerIn: parent
                         spacing: 2
 
                         Text {
-                            text: "Upload"
-                            color: "#6f7d92"
+                            text: "Throughput"
+                            color: root.themeColor("#6f7d92", "#9cb0c8")
                             font.family: FontSystem.contentFontFamily
                             font.pixelSize: 13
                         }
                         Text {
-                            text: vpnController.speedTestUploadMbps.toFixed(1) + " Mbps"
-                            color: "#1f2530"
+                            text: vpnController.speedTestDownloadMbps > 0
+                                  ? (vpnController.speedTestDownloadMbps / 8.0).toFixed(2) + " MB/s"
+                                  : "--"
+                            color: root.themeColor("#1f2530", "#edf4ff")
+                            font.family: FontSystem.contentFontFamily
+                            font.pixelSize: 16
+                            font.bold: true
+                        }
+                    }
+                }
+
+                Rectangle {
+                    Layout.fillWidth: true
+                    Layout.preferredWidth: 1
+                    Layout.preferredHeight: 56
+                    radius: 14
+                    color: vpnController.speedTestRunning || vpnController.speedTestState === "Completed"
+                           ? root.themeColor("#eaf2ff", "#223753")
+                           : root.themeColor("#f5f8fc", "#1f2f46")
+                    border.width: 1
+                    border.color: root.themeColor("#dce4ef", "#3f5777")
+
+                    Column {
+                        anchors.centerIn: parent
+                        spacing: 2
+
+                        Text {
+                            text: "Progress"
+                            color: root.themeColor("#6f7d92", "#9cb0c8")
+                            font.family: FontSystem.contentFontFamily
+                            font.pixelSize: 13
+                        }
+                        Text {
+                            text: Math.round(Math.max(0, Math.min(vpnController.speedTestProgress, 1.0)) * 100) + "%"
+                            color: root.themeColor("#1f2530", "#edf4ff")
                             font.family: FontSystem.contentFontFamily
                             font.pixelSize: 16
                             font.bold: true
@@ -4876,12 +5575,62 @@ ApplicationWindow {
                 }
             }
 
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 8
+
+                Text {
+                    text: "Test Size:"
+                    color: root.themeColor("#64748b", "#9db2cc")
+                    font.family: FontSystem.contentFontFamily
+                    font.pixelSize: 13
+                }
+
+                Repeater {
+                    model: [5, 10, 25]
+
+                    delegate: Rectangle {
+                        required property int modelData
+                        Layout.preferredWidth: 62
+                        Layout.preferredHeight: 30
+                        radius: 8
+                        color: vpnController.speedTestSelectedSizeMb === modelData
+                               ? root.themeColor("#2f6ff1", "#3a7bff")
+                               : root.themeColor("#f5f8fc", "#1f2f46")
+                        border.width: 1
+                        border.color: vpnController.speedTestSelectedSizeMb === modelData
+                                      ? root.themeColor("#2f6ff1", "#3a7bff")
+                                      : root.themeColor("#dbe3ef", "#3f5777")
+
+                        Text {
+                            anchors.centerIn: parent
+                            text: modelData + " MB"
+                            color: vpnController.speedTestSelectedSizeMb === modelData
+                                   ? "#ffffff"
+                                   : root.themeColor("#495971", "#b7cae2")
+                            font.family: FontSystem.contentFontFamily
+                            font.pixelSize: 12
+                            font.bold: vpnController.speedTestSelectedSizeMb === modelData
+                        }
+
+                        MouseArea {
+                            anchors.fill: parent
+                            enabled: !vpnController.speedTestRunning
+                            cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+                            onClicked: vpnController.speedTestSelectedSizeMb = modelData
+                        }
+                    }
+                }
+
+                Item { Layout.fillWidth: true }
+            }
+
             Controls.PrimaryActionButton {
                 Layout.alignment: Qt.AlignHCenter
                 width: 172
                 height: 48
                 text: vpnController.speedTestRunning ? "Cancel" : "Start Test"
-                enabled: vpnController.speedTestRunning || vpnController.connectionState !== ConnectionState.Connecting
+                enabled: vpnController.speedTestRunning || vpnController.connectionState === ConnectionState.Connected
                 onClicked: {
                     if (vpnController.speedTestRunning) {
                         vpnController.cancelSpeedTest()
@@ -4898,62 +5647,62 @@ ApplicationWindow {
 
                 Text {
                     text: root.infoIpLabel() + ":"
-                    color: "#1f2430"
+                    color: root.themeColor("#1f2430", "#d7e4f6")
                     font.family: FontSystem.contentFontFamily
                     font.pixelSize: 16
                     font.bold: true
                 }
                 Text {
                     text: infoIpText()
-                    color: "#8f97a6"
+                    color: root.themeColor("#8f97a6", "#9eb2cb")
                     font.family: FontSystem.contentFontFamily
                     font.pixelSize: 16
                 }
 
-                Rectangle { width: 1; height: 26; color: "#d4d9e3" }
+                Rectangle { width: 1; height: 26; color: root.themeColor("#d4d9e3", "#405979") }
 
                 Text {
                     text: "Proxy:"
-                    color: "#1f2430"
+                    color: root.themeColor("#1f2430", "#d7e4f6")
                     font.family: FontSystem.contentFontFamily
                     font.pixelSize: 16
                     font.bold: true
                 }
                 Text {
                     text: speedTestProxyText()
-                    color: "#8f97a6"
+                    color: root.themeColor("#8f97a6", "#9eb2cb")
                     font.family: FontSystem.contentFontFamily
                     font.pixelSize: 16
                 }
 
-                Rectangle { width: 1; height: 26; color: "#d4d9e3" }
+                Rectangle { width: 1; height: 26; color: root.themeColor("#d4d9e3", "#405979") }
 
                 Text {
                     text: "Provider:"
-                    color: "#1f2430"
+                    color: root.themeColor("#1f2430", "#d7e4f6")
                     font.family: FontSystem.contentFontFamily
                     font.pixelSize: 16
                     font.bold: true
                 }
                 Text {
                     text: speedTestProviderText()
-                    color: "#8f97a6"
+                    color: root.themeColor("#8f97a6", "#9eb2cb")
                     font.family: FontSystem.contentFontFamily
                     font.pixelSize: 16
                 }
 
-                Rectangle { width: 1; height: 26; color: "#d4d9e3" }
+                Rectangle { width: 1; height: 26; color: root.themeColor("#d4d9e3", "#405979") }
 
                 Text {
                     text: "OS:"
-                    color: "#1f2430"
+                    color: root.themeColor("#1f2430", "#d7e4f6")
                     font.family: FontSystem.contentFontFamily
                     font.pixelSize: 16
                     font.bold: true
                 }
                 Text {
                     text: osNameText()
-                    color: "#8f97a6"
+                    color: root.themeColor("#8f97a6", "#9eb2cb")
                     font.family: FontSystem.contentFontFamily
                     font.pixelSize: 16
                 }
@@ -4963,9 +5712,9 @@ ApplicationWindow {
                 Layout.fillWidth: true
                 Layout.preferredHeight: speedTestPopup.showHistory ? 86 : 42
                 radius: 16
-                color: "#f7f9fc"
+                color: root.themeColor("#f7f9fc", "#1a2638")
                 border.width: 1
-                border.color: "#dde4ef"
+                border.color: root.themeColor("#dde4ef", "#355070")
 
                 ColumnLayout {
                     anchors.fill: parent
@@ -4974,7 +5723,7 @@ ApplicationWindow {
 
                     Text {
                         text: "Latest Results"
-                        color: "#3f4d63"
+                        color: root.themeColor("#3f4d63", "#d7e4f6")
                         font.family: FontSystem.contentFontFamily
                         font.pixelSize: 14
                         font.bold: true
@@ -5002,7 +5751,7 @@ ApplicationWindow {
                                     width: parent.width - 6
                                     text: modelData
                                     elide: Text.ElideRight
-                                    color: "#586780"
+                                    color: root.themeColor("#586780", "#b0c3db")
                                     font.family: FontSystem.contentFontFamily
                                     font.pixelSize: 13
                                 }
@@ -5017,7 +5766,7 @@ ApplicationWindow {
                             verticalAlignment: Text.AlignVCenter
                             horizontalAlignment: Text.AlignLeft
                             text: "No completed tests yet."
-                            color: "#8a95a8"
+                            color: root.themeColor("#8a95a8", "#9eb2cb")
                             font.family: FontSystem.contentFontFamily
                             font.pixelSize: 13
                         }
@@ -5080,9 +5829,9 @@ ApplicationWindow {
         background: Rectangle {
             topRightRadius: 24
             topLeftRadius: 24
-            color: "#ffffff"
+            color: root.themeColor("#ffffff", "#131b27")
             border.width: 1
-            border.color: "#d8dde8"
+            border.color: root.themeColor("#d8dde8", "#283345")
         }
 
         Connections {
@@ -5116,7 +5865,7 @@ ApplicationWindow {
                 Layout.preferredWidth: 42
                 Layout.preferredHeight: 4
                 radius: 2
-                color: "#d6dde8"
+                color: root.themeColor("#d6dde8", "#304059")
             }
 
             RowLayout {
@@ -5128,17 +5877,20 @@ ApplicationWindow {
                     font.family: FontSystem.getContentFontBold.name
                     font.weight: Font.Bold
                     font.pixelSize: 23
-                    color: "#1f2530"
+                    color: root.themeColor("#1f2530", "#d8e1f0")
                 }
 
                 Item { Layout.fillWidth: true }
 
                 Controls.CircleIconButton {
                     diameter: 32
+                    elevated: false
                     iconText: root.iconClose
                     iconFontFamily: root.faSolid
                     iconPixelSize: 13
-                    iconColor: "#94a3b8"
+                    backgroundColor: root.themeColor("#f7f9fc", "#1f2f46")
+                    borderColor: root.themeColor("#d8e1ef", "#4d6a8d")
+                    iconColor: root.themeColor("#94a3b8", "#a2b5ce")
                     enabled: !vpnController.subscriptionBusy
                     onClicked: importPopup.close()
                 }
@@ -5147,7 +5899,7 @@ ApplicationWindow {
             Text {
                 Layout.fillWidth: true
                 text: "Paste vmess/vless, batch text, base64 payload, or an https subscription URL."
-                color: "#6f7f95"
+                color: root.themeColor("#6f7f95", "#9eb2cb")
                 font.family: FontSystem.contentFontFamily
                 font.pixelSize: 12
                 wrapMode: Text.WordWrap
@@ -5161,9 +5913,11 @@ ApplicationWindow {
                     Layout.fillWidth: true
                     Layout.preferredHeight: 44
                     radius: 12
-                    color: "#f7f9fd"
+                    color: root.themeColor("#f7f9fd", "#1f2f46")
                     border.width: 1
-                    border.color: subscriptionGroupField.activeFocus ? "#b9ccee" : "#d9e1ef"
+                    border.color: subscriptionGroupField.activeFocus
+                                  ? root.themeColor("#b9ccee", "#5f87c2")
+                                  : root.themeColor("#d9e1ef", "#3a5470")
 
                     TextField {
                         id: subscriptionGroupField
@@ -5173,7 +5927,7 @@ ApplicationWindow {
                         padding: 0
                         text: root.subscriptionGroupDraft
                         placeholderText: "Group name"
-                        color: "#1f2a3a"
+                        color: root.themeColor("#1f2a3a", "#edf4ff")
                         font.family: FontSystem.contentFontFamily
                         font.pixelSize: 13
                         selectedTextColor: "#ffffff"
@@ -5189,9 +5943,12 @@ ApplicationWindow {
 
                 Controls.CircleIconButton {
                     diameter: 32
+                    elevated: false
                     iconText: root.iconPlus
                     iconFontFamily: root.faSolid
                     iconPixelSize: 12
+                    backgroundColor: root.themeColor("#f4f8ff", "#1f2f46")
+                    borderColor: root.themeColor("#d8e4f8", "#4d6a8d")
                     iconColor: root.brandBlue
                     enabled: !vpnController.subscriptionBusy
                     onClicked: {
@@ -5214,10 +5971,13 @@ ApplicationWindow {
 
                 Controls.CircleIconButton {
                     diameter: 32
+                    elevated: false
                     iconText: root.iconMinus
                     iconFontFamily: root.faSolid
                     iconPixelSize: 12
-                    iconColor: "#cb4f4f"
+                    backgroundColor: root.themeColor("#fff6f6", "#3b2631")
+                    borderColor: root.themeColor("#f0d5d5", "#7d5062")
+                    iconColor: root.themeColor("#cb4f4f", "#ff8e8e")
                     enabled: !vpnController.subscriptionBusy
                              && !root.isProtectedGroup(root.normalizeImportGroupName(subscriptionGroupField.text))
                     onClicked: {
@@ -5236,53 +5996,13 @@ ApplicationWindow {
                 }
             }
 
-            Flow {
-                Layout.fillWidth: true
-                spacing: 8
-                visible: root.importSelectableGroups().length > 0
-
-                Repeater {
-                    model: root.importSelectableGroups()
-
-                    delegate: Rectangle {
-                        required property string modelData
-                        width: groupShortcutText.implicitWidth + 22
-                        height: 32
-                        radius: 16
-                        color: subscriptionGroupField.text === modelData ? "#eaf2ff" : "#f7f9fd"
-                        border.width: 1
-                        border.color: subscriptionGroupField.text === modelData ? "#8bb8ff" : "#d8e2f0"
-
-                        Text {
-                            id: groupShortcutText
-                            anchors.centerIn: parent
-                            text: modelData
-                            color: subscriptionGroupField.text === modelData ? "#2c5eaf" : "#5f6f86"
-                            font.family: FontSystem.contentFontFamily
-                            font.pixelSize: 12
-                            font.bold: subscriptionGroupField.text === modelData
-                        }
-
-                        MouseArea {
-                            anchors.fill: parent
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: {
-                                subscriptionGroupField.text = modelData
-                                root.subscriptionGroupDraft = modelData
-                                importPopup.selectedManageGroup = modelData
-                            }
-                        }
-                    }
-                }
-            }
-
             RowLayout {
                 Layout.fillWidth: true
                 spacing: 8
 
                 Text {
                     text: "Badge"
-                    color: "#6b778a"
+                    color: root.themeColor("#6b778a", "#9cb0c8")
                     font.family: FontSystem.contentFontFamily
                     font.pixelSize: 12
                 }
@@ -5291,14 +6011,20 @@ ApplicationWindow {
                     Layout.preferredWidth: 76
                     Layout.preferredHeight: 32
                     radius: 16
-                    color: root.profileGroupBadgeText(subscriptionGroupField.text).length === 0 ? "#eaf2ff" : "#ffffff"
+                    color: root.profileGroupBadgeText(subscriptionGroupField.text).length === 0
+                           ? root.themeColor("#eaf2ff", "#223753")
+                           : root.themeColor("#ffffff", "#22324a")
                     border.width: 1
-                    border.color: root.profileGroupBadgeText(subscriptionGroupField.text).length === 0 ? root.brandBlue : "#dfe7f2"
+                    border.color: root.profileGroupBadgeText(subscriptionGroupField.text).length === 0
+                                  ? root.brandBlue
+                                  : root.themeColor("#dfe7f2", "#3f5777")
 
                     Text {
                         anchors.centerIn: parent
                         text: "None"
-                        color: root.profileGroupBadgeText(subscriptionGroupField.text).length === 0 ? root.brandBlue : "#667487"
+                        color: root.profileGroupBadgeText(subscriptionGroupField.text).length === 0
+                               ? root.brandBlue
+                               : root.themeColor("#667487", "#9bb0cb")
                         font.family: FontSystem.contentFontFamily
                         font.pixelSize: 12
                         font.bold: root.profileGroupBadgeText(subscriptionGroupField.text).length === 0
@@ -5319,14 +6045,20 @@ ApplicationWindow {
                     Layout.preferredWidth: 76
                     Layout.preferredHeight: 32
                     radius: 16
-                    color: root.profileGroupBadgeText(subscriptionGroupField.text).toLowerCase() === "free" ? "#eaf2ff" : "#ffffff"
+                    color: root.profileGroupBadgeText(subscriptionGroupField.text).toLowerCase() === "free"
+                           ? root.themeColor("#eaf2ff", "#223753")
+                           : root.themeColor("#ffffff", "#22324a")
                     border.width: 1
-                    border.color: root.profileGroupBadgeText(subscriptionGroupField.text).toLowerCase() === "free" ? root.brandBlue : "#dfe7f2"
+                    border.color: root.profileGroupBadgeText(subscriptionGroupField.text).toLowerCase() === "free"
+                                  ? root.brandBlue
+                                  : root.themeColor("#dfe7f2", "#3f5777")
 
                     Text {
                         anchors.centerIn: parent
                         text: "Free"
-                        color: root.profileGroupBadgeText(subscriptionGroupField.text).toLowerCase() === "free" ? root.brandBlue : "#667487"
+                        color: root.profileGroupBadgeText(subscriptionGroupField.text).toLowerCase() === "free"
+                               ? root.brandBlue
+                               : root.themeColor("#667487", "#9bb0cb")
                         font.family: FontSystem.contentFontFamily
                         font.pixelSize: 12
                         font.bold: root.profileGroupBadgeText(subscriptionGroupField.text).toLowerCase() === "free"
@@ -5347,14 +6079,20 @@ ApplicationWindow {
                     Layout.preferredWidth: 92
                     Layout.preferredHeight: 32
                     radius: 16
-                    color: root.profileGroupBadgeText(subscriptionGroupField.text).toLowerCase() === "premium" ? "#efeaff" : "#ffffff"
+                    color: root.profileGroupBadgeText(subscriptionGroupField.text).toLowerCase() === "premium"
+                           ? root.themeColor("#efeaff", "#2a2450")
+                           : root.themeColor("#ffffff", "#22324a")
                     border.width: 1
-                    border.color: root.profileGroupBadgeText(subscriptionGroupField.text).toLowerCase() === "premium" ? root.brandViolet : "#dfe7f2"
+                    border.color: root.profileGroupBadgeText(subscriptionGroupField.text).toLowerCase() === "premium"
+                                  ? root.themeColor(root.brandViolet, "#7568d5")
+                                  : root.themeColor("#dfe7f2", "#3f5777")
 
                     Text {
                         anchors.centerIn: parent
                         text: "Premium"
-                        color: root.profileGroupBadgeText(subscriptionGroupField.text).toLowerCase() === "premium" ? root.brandViolet : "#667487"
+                        color: root.profileGroupBadgeText(subscriptionGroupField.text).toLowerCase() === "premium"
+                               ? root.themeColor(root.brandViolet, "#b8acff")
+                               : root.themeColor("#667487", "#9bb0cb")
                         font.family: FontSystem.contentFontFamily
                         font.pixelSize: 12
                         font.bold: root.profileGroupBadgeText(subscriptionGroupField.text).toLowerCase() === "premium"
@@ -5383,15 +6121,21 @@ ApplicationWindow {
                     radius: 10
                     height: 28
                     width: groupStateText.implicitWidth + 18
-                    color: root.profileGroupEnabled(subscriptionGroupField.text) ? "#e8f7ef" : "#fff0f0"
+                    color: root.profileGroupEnabled(subscriptionGroupField.text)
+                           ? root.themeColor("#e8f7ef", "#173c2f")
+                           : root.themeColor("#fff0f0", "#3b2631")
                     border.width: 1
-                    border.color: root.profileGroupEnabled(subscriptionGroupField.text) ? "#b7e4cb" : "#f2c6c6"
+                    border.color: root.profileGroupEnabled(subscriptionGroupField.text)
+                                  ? root.themeColor("#b7e4cb", "#3f8569")
+                                  : root.themeColor("#f2c6c6", "#7d5062")
 
                     Text {
                         id: groupStateText
                         anchors.centerIn: parent
                         text: root.profileGroupEnabled(subscriptionGroupField.text) ? "Group Enabled" : "Group Disabled"
-                        color: root.profileGroupEnabled(subscriptionGroupField.text) ? "#2c8b57" : "#bf4d4d"
+                        color: root.profileGroupEnabled(subscriptionGroupField.text)
+                               ? root.themeColor("#2c8b57", "#5adf97")
+                               : root.themeColor("#bf4d4d", "#ff8e8e")
                         font.family: FontSystem.contentFontFamily
                         font.pixelSize: 11
                     }
@@ -5401,9 +6145,9 @@ ApplicationWindow {
                     Layout.fillWidth: true
                     implicitHeight: 38
                     radius: 12
-                    color: "#f7f9fd"
+                    color: root.themeColor("#f7f9fd", "#1f2f46")
                     border.width: 1
-                    border.color: "#dce4f2"
+                    border.color: root.themeColor("#dce4f2", "#3f5777")
 
                     RowLayout {
                         Layout.fillWidth: true
@@ -5411,31 +6155,31 @@ ApplicationWindow {
                         anchors.rightMargin: 10
                         spacing: 10
 
-                        Switch {
+                        Controls.Switch {
                             checked: root.profileGroupEnabled(subscriptionGroupField.text)
                             onToggled: {
                                 const groupName = root.normalizeImportGroupName(subscriptionGroupField.text)
                                 vpnController.setProfileGroupEnabled(groupName, checked)
                             }
-                            text: "Enabled"
+                            title: "Enabled"
                         }
 
-                        Switch {
+                        Controls.Switch {
                             checked: root.profileGroupExclusive(subscriptionGroupField.text)
                             onToggled: {
                                 const groupName = root.normalizeImportGroupName(subscriptionGroupField.text)
                                 vpnController.setProfileGroupExclusive(groupName, checked)
                             }
-                            text: "Exclusive"
+                            title: "Exclusive"
                         }
 
                         Rectangle {
                             Layout.preferredWidth: 128
                             Layout.preferredHeight: 28
                             radius: 9
-                            color: "#ffffff"
+                            color: root.themeColor("#ffffff", "#22324a")
                             border.width: 1
-                            border.color: "#d5deec"
+                            border.color: root.themeColor("#d5deec", "#3f5777")
 
                             TextField {
                                 id: importGroupBadgeField
@@ -5446,7 +6190,7 @@ ApplicationWindow {
                                 clip: true
                                 placeholderText: "Badge"
                                 text: root.profileGroupBadgeText(subscriptionGroupField.text)
-                                color: "#3b4a61"
+                                color: root.themeColor("#3b4a61", "#d0ddf0")
                                 font.family: FontSystem.contentFontFamily
                                 font.pixelSize: 12
                                 background: null
@@ -5460,7 +6204,7 @@ ApplicationWindow {
                         Text {
                             visible: root.profileGroupBadgeText(subscriptionGroupField.text).length > 0
                             text: "• " + root.profileGroupBadgeText(subscriptionGroupField.text)
-                            color: "#4d6691"
+                            color: root.themeColor("#4d6691", "#9fc3f2")
                             font.family: FontSystem.contentFontFamily
                             font.pixelSize: 12
                             font.bold: true
@@ -5472,7 +6216,7 @@ ApplicationWindow {
 
                 Text {
                     text: "Groups: " + root.importSelectableGroups().length
-                    color: "#90a0b5"
+                    color: root.themeColor("#90a0b5", "#9fb4cd")
                     font.family: FontSystem.contentFontFamily
                     font.pixelSize: 11
                 }
@@ -5482,9 +6226,9 @@ ApplicationWindow {
                 Layout.fillWidth: true
                 implicitHeight: 36
                 radius: 10
-                color: "#eef4ff"
+                color: root.themeColor("#eef4ff", "#223753")
                 border.width: 1
-                border.color: "#d2def4"
+                border.color: root.themeColor("#d2def4", "#3f5777")
 
                 RowLayout {
                     anchors.fill: parent
@@ -5494,7 +6238,7 @@ ApplicationWindow {
 
                     Text {
                         text: "Import Target Group:"
-                        color: "#5f6f86"
+                        color: root.themeColor("#5f6f86", "#9bb0cb")
                         font.family: FontSystem.contentFontFamily
                         font.pixelSize: 12
                     }
@@ -5502,7 +6246,7 @@ ApplicationWindow {
                     Text {
                         Layout.fillWidth: true
                         text: importPopup.targetGroupName
-                        color: "#2c5eaf"
+                        color: root.themeColor("#2c5eaf", "#8ab6ff")
                         font.family: FontSystem.getContentFontBold.name
                         font.pixelSize: 12
                         elide: Text.ElideRight
@@ -5511,7 +6255,7 @@ ApplicationWindow {
                     Text {
                         visible: root.width >= 620
                         text: "All pasted profiles/subscriptions will be saved here."
-                        color: "#7d8ea7"
+                        color: root.themeColor("#7d8ea7", "#9eb2cb")
                         font.family: FontSystem.contentFontFamily
                         font.pixelSize: 11
                     }
@@ -5523,9 +6267,9 @@ ApplicationWindow {
                 visible: root.width >= 620
                 Layout.preferredHeight: 232
                 radius: 12
-                color: "#f7f9fd"
+                color: root.themeColor("#f7f9fd", "#1f2f46")
                 border.width: 1
-                border.color: "#d8e1ef"
+                border.color: root.themeColor("#d8e1ef", "#3f5777")
 
                 ColumnLayout {
                     anchors.fill: parent
@@ -5536,7 +6280,7 @@ ApplicationWindow {
                         Layout.fillWidth: true
                         Text {
                             text: "Manage Groups"
-                            color: "#5f6f86"
+                            color: root.themeColor("#5f6f86", "#9bb0cb")
                             font.family: FontSystem.getContentFontBold.name
                             font.pixelSize: 12
                         }
@@ -5581,9 +6325,13 @@ ApplicationWindow {
                             height: groupName.toLowerCase() === "all" ? 0 : 64
                             visible: groupName.toLowerCase() !== "all"
                             radius: 10
-                            color: selectedGroup ? "#eaf2ff" : "#ffffff"
+                            color: selectedGroup
+                                   ? root.themeColor("#eaf2ff", "#223753")
+                                   : root.themeColor("#ffffff", "#22324a")
                             border.width: selectedGroup ? 2 : 1
-                            border.color: selectedGroup ? "#3d7ae6" : "#dee6f3"
+                            border.color: selectedGroup
+                                          ? root.themeColor("#3d7ae6", "#5f95f2")
+                                          : root.themeColor("#dee6f3", "#3f5777")
 
                             RowLayout {
                                 anchors.fill: parent
@@ -5609,7 +6357,7 @@ ApplicationWindow {
                                     Text {
                                         anchors.fill: parent
                                         text: groupName
-                                        color: "#2b3648"
+                                        color: root.themeColor("#2b3648", "#d7e4f6")
                                         font.family: FontSystem.contentFontFamily
                                         font.pixelSize: 12
                                         elide: Text.ElideRight
@@ -5617,16 +6365,16 @@ ApplicationWindow {
                                     }
                                 }
 
-                                Switch {
+                                Controls.Switch {
                                     Layout.fillWidth: false
-                                    text: "Enabled"
+                                    title: "Enabled"
                                     checked: groupEnabled
                                     onToggled: vpnController.setProfileGroupEnabled(groupName, checked)
                                 }
 
-                                Switch {
+                                Controls.Switch {
                                     Layout.fillWidth: false
-                                    text: "Exclusive"
+                                    title: "Exclusive"
                                     checked: groupExclusive
                                     enabled: groupEnabled
                                     onToggled: vpnController.setProfileGroupExclusive(groupName, checked)
@@ -5639,14 +6387,14 @@ ApplicationWindow {
                                     placeholderText: "Badge"
                                     text: groupBadge
                                     selectByMouse: true
-                                    color: "#3b4a61"
+                                    color: root.themeColor("#3b4a61", "#d0ddf0")
                                     font.family: FontSystem.contentFontFamily
                                     font.pixelSize: 12
                                     background: Rectangle {
                                         radius: 8
-                                        color: "#f8fbff"
+                                        color: root.themeColor("#f8fbff", "#22324a")
                                         border.width: 1
-                                        border.color: "#d5deec"
+                                        border.color: root.themeColor("#d5deec", "#3f5777")
                                     }
                                     onEditingFinished: vpnController.setProfileGroupBadge(groupName, text)
                                 }
@@ -5656,7 +6404,7 @@ ApplicationWindow {
                                     iconText: root.iconTrash
                                     iconFontFamily: root.faSolid
                                     iconPixelSize: 10
-                                    iconColor: "#cb4f4f"
+                                    iconColor: root.themeColor("#cb4f4f", "#ff8e8e")
                                     enabled: !root.isProtectedGroup(groupName)
                                     onClicked: vpnController.removeProfileGroup(groupName)
                                 }
@@ -5674,6 +6422,9 @@ ApplicationWindow {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 Layout.preferredHeight: 128
+                fillColor: root.themeColor("#f8fbff", "#8a18283d")
+                strokeColor: root.themeColor("#d8e2f0", "#3f587a")
+                focusColor: root.themeColor("#8bb8ff", "#6ba0ff")
                 placeholderText: "Paste vmess/vless, batch list, base64 subscription payload, or https subscription URL"
                 text: root.importDraft
                 onTextChanged: root.importDraft = text
@@ -5700,10 +6451,12 @@ ApplicationWindow {
                              ? root.importStatusText
                              : (vpnController.subscriptionMessage.length > 0 ? vpnController.subscriptionMessage : ""))
                     color: vpnController.subscriptionBusy
-                           ? "#2b6dcf"
+                           ? root.themeColor("#2b6dcf", "#8ab6ff")
                            : (root.importStatusKind === "success"
-                              ? "#2c8b57"
-                              : (root.importStatusKind === "error" ? "#c65050" : "#6f7f95"))
+                              ? root.themeColor("#2c8b57", "#5adf97")
+                              : (root.importStatusKind === "error"
+                                 ? root.themeColor("#c65050", "#ff8e8e")
+                                 : root.themeColor("#6f7f95", "#9eb2cb")))
                     font.family: FontSystem.contentFontFamily
                     font.pixelSize: 12
                     elide: Text.ElideRight
@@ -5816,7 +6569,7 @@ ApplicationWindow {
                     diameter: 46
                     iconText: root.iconSetting
                     iconFontFamily: root.faSolid
-                    iconColor: "#a0a8b5"
+                    iconColor: root.themeColor("#a0a8b5", "#8ea1ba")
                     iconPixelSize: 18
                     onClicked: settingsPopup.open()
                 }
@@ -5825,7 +6578,7 @@ ApplicationWindow {
                     diameter: 46
                     iconText: root.iconInfo
                     iconFontFamily: root.faSolid
-                    iconColor: "#a0a8b5"
+                    iconColor: root.themeColor("#a0a8b5", "#8ea1ba")
                     iconPixelSize: 18
                     onClicked: aboutPopup.open()
                 }
@@ -5834,7 +6587,7 @@ ApplicationWindow {
                     diameter: 46
                     iconText: root.iconHistory
                     iconFontFamily: root.faSolid
-                    iconColor: "#a0a8b5"
+                    iconColor: root.themeColor("#a0a8b5", "#8ea1ba")
                     iconPixelSize: 18
                     onClicked: logsPopup.open()
                 }
@@ -5970,19 +6723,21 @@ ApplicationWindow {
                 anchors.fill: parent
                 height: 84
                 radius: Colors.outerRadius
-                color: "#ffffff"
+                color: root.themeColor("#ffffff", "#1a2638")
                 border.width: 1
                 z: 2
-                border.color: vpnController.connected
-                              ? "#c8ead8"
-                              : (vpnController.busy ? "#f7ddaa" : Colors.borderDeactivated)
+                    border.color: vpnController.connected
+                                  ? root.themeColor("#c8ead8", "#3f8569")
+                                  : (vpnController.busy
+                                     ? root.themeColor("#f7ddaa", "#7e6633")
+                                     : Colors.borderDeactivated)
                 Behavior on border.color { ColorAnimation { duration: Animations.fast } }
 
                 Rectangle {
                     anchors.fill: parent
                     anchors.topMargin: 8
                     radius: Colors.radius
-                    color: "#1f5ed8"
+                    color: root.themeColor("#1f5ed8", "#376de0")
                     opacity: 0.08
                     z: -1
                 }
@@ -6025,7 +6780,7 @@ ApplicationWindow {
                                 radius: Colors.innerRadius
                                 color: Colors.backgroundItemActivated
                                 border.width: 1
-                                border.color: "#dee3ec"
+                                border.color: root.themeColor("#dee3ec", "#3a4f69")
 
                                 Text {
                                     anchors.centerIn: parent
@@ -6050,7 +6805,7 @@ ApplicationWindow {
 
                             Text {
                                 text: root.iconChevronDown
-                                color: "#9ea6b5"
+                                color: root.themeColor("#9ea6b5", "#9fb4cd")
                                 font.family: root.faSolid
                                 font.pixelSize: 14
                             }
@@ -6060,7 +6815,7 @@ ApplicationWindow {
                     Rectangle {
                         width: 1
                         Layout.fillHeight: true
-                        color: "#e6ebf3"
+                        color: root.themeColor("#e6ebf3", "#334b67")
                     }
 
                     Rectangle {
@@ -6142,7 +6897,7 @@ ApplicationWindow {
                 anchors.fill: parent
                 implicitHeight: 94
                 radius: Colors.outerRadius
-                color: "#ffffff"
+                color: root.themeColor("#ffffff", "#1a2638")
                 border.width: 1
                 border.color: Colors.borderDeactivated
                 Behavior on color { ColorAnimation { duration: 220 } }
@@ -6192,13 +6947,13 @@ ApplicationWindow {
                                 spacing: 1
                                 Text {
                                     text: "Status"
-                                    color: "#6f7f96"
+                                    color: root.themeColor("#6f7f96", "#9fb4cd")
                                     font.family: FontSystem.contentFontFamily
                                     font.pixelSize: Typography.h6
                                 }
                                 Text {
                                     text: root.stateText()
-                                    color: "#1f2a37"
+                                    color: root.themeColor("#1f2a37", "#d7e4f6")
                                     font.family: FontSystem.contentFontFamily
                                     font.pixelSize: Typography.t2
                                     font.bold: true
@@ -6210,16 +6965,16 @@ ApplicationWindow {
                     Rectangle {
                         width: 1
                         Layout.fillHeight: true
-                        color: "#e6ebf3"
+                        color: root.themeColor("#e6ebf3", "#334b67")
                     }
 
                     Rectangle {
                         Layout.fillWidth: true
                         Layout.fillHeight: true
                         radius: Colors.innerRadius
-                        color: "#eaf2ff"
+                        color: root.themeColor("#eaf2ff", "#223753")
                         border.width: 1
-                        border.color: "#d7e4fb"
+                        border.color: root.themeColor("#d7e4fb", "#3f5777")
 
                         RowLayout {
                             anchors.fill: parent
@@ -6229,7 +6984,7 @@ ApplicationWindow {
 
                             Text {
                                 text: "↓"
-                                color: "#2874f0"
+                                color: root.themeColor("#2874f0", "#8ab6ff")
                                 font.family: FontSystem.contentFontFamily
                                 font.pixelSize: 18
                                 font.bold: true
@@ -6239,27 +6994,24 @@ ApplicationWindow {
                                 spacing: 1
                                 Text {
                                     text: "Receive"
-                                    color: "#6682ad"
+                                    color: root.themeColor("#6682ad", "#9fc3f2")
                                     font.family: FontSystem.contentFontFamily
                                     font.pixelSize: Typography.h6
                                 }
-                                Text {
+                                Controls.NumberFlowText {
                                     text: root.downloadRateText()
-                                    color: "#3f5e93"
-                                    font.family: FontSystem.contentFontFamily
-                                    font.pixelSize: Typography.t3
-                                    font.bold: true
+                                    color: root.themeColor("#3f5e93", "#c7dbf8")
+                                    fontSize: Typography.t3
+                                    bold: true
                                 }
                             }
 
                             Item { Layout.fillWidth: true }
 
-                            Text {
+                            Controls.NumberFlowText {
                                 text: downloadUsageText()
-                                color: "#1f2b3d"
-                                font.family: FontSystem.contentFontFamily
-                                font.pixelSize: Typography.h3
-                                font.bold: false
+                                color: root.themeColor("#1f2b3d", "#edf4ff")
+                                fontSize: Typography.h3
                             }
 
                             Item { Layout.preferredWidth: 15 }
@@ -6271,9 +7023,9 @@ ApplicationWindow {
                         Layout.fillWidth: true
                         Layout.fillHeight: true
                         radius: Colors.innerRadius
-                        color: "#ecfff3"
+                        color: root.themeColor("#ecfff3", "#173c2f")
                         border.width: 1
-                        border.color: "#d8efdf"
+                        border.color: root.themeColor("#d8efdf", "#3f8569")
 
                         RowLayout {
                             anchors.fill: parent
@@ -6283,7 +7035,7 @@ ApplicationWindow {
 
                             Text {
                                 text: "↑"
-                                color: "#1ea768"
+                                color: root.themeColor("#1ea768", "#5edc86")
                                 font.family: FontSystem.contentFontFamily
                                 font.pixelSize: 18
                                 font.bold: true
@@ -6293,27 +7045,24 @@ ApplicationWindow {
                                 spacing: 1
                                 Text {
                                     text: "Send"
-                                    color: "#5f9478"
+                                    color: root.themeColor("#5f9478", "#9fceb7")
                                     font.family: FontSystem.contentFontFamily
                                     font.pixelSize: Typography.h6
                                 }
-                                Text {
+                                Controls.NumberFlowText {
                                     text: root.uploadRateText()
-                                    color: "#2e7b58"
-                                    font.family: FontSystem.contentFontFamily
-                                    font.pixelSize: Typography.t3
-                                    font.bold: true
+                                    color: root.themeColor("#2e7b58", "#bee9d3")
+                                    fontSize: Typography.t3
+                                    bold: true
                                 }
                             }
 
                             Item { Layout.fillWidth: true }
 
-                            Text {
+                            Controls.NumberFlowText {
                                 text: uploadUsageText()
-                                color: "#1f2b3d"
-                                font.family: FontSystem.contentFontFamily
-                                font.pixelSize: Typography.h3
-                                font.bold: false
+                                color: root.themeColor("#1f2b3d", "#edf4ff")
+                                fontSize: Typography.h3
                             }
 
                             Item { Layout.preferredWidth: 15 }
@@ -6337,9 +7086,26 @@ ApplicationWindow {
             RowLayout {
                 spacing: 6
 
+                Rectangle {
+                    Layout.preferredWidth: 20
+                    Layout.preferredHeight: 20
+                    radius: 10
+                    color: vpnController.connected ? "#e8faef" : "#f1edff"
+                    border.width: 1
+                    border.color: vpnController.connected ? "#bdeacb" : "#d9d0ff"
+
+                    Text {
+                        anchors.centerIn: parent
+                        text: root.iconShield
+                        color: vpnController.connected ? "#22a557" : root.brandViolet
+                        font.family: root.faSolid
+                        font.pixelSize: 10
+                    }
+                }
+
                 Text {
                     text: root.infoIpLabel() + ":"
-                    color: "#2a3140"
+                    color: root.themeColor("#2a3140", "#d7e4f6")
                     font.family: FontSystem.contentFontFamily
                     font.pixelSize: 16
                     font.bold: true
@@ -6347,7 +7113,7 @@ ApplicationWindow {
 
                 Text {
                     text: infoIpText()
-                    color: "#8e98aa"
+                    color: root.themeColor("#8e98aa", "#9eb2cb")
                     font.family: FontSystem.contentFontFamily
                     font.pixelSize: 16
                 }
@@ -6357,7 +7123,7 @@ ApplicationWindow {
                 Layout.alignment: Qt.AlignVCenter
                 width: 1
                 height: 24
-                color: "#d9dee8"
+                color: root.themeColor("#d9dee8", "#3a4f69")
             }
 
             RowLayout {
@@ -6365,7 +7131,7 @@ ApplicationWindow {
 
                 Text {
                     text: "Your Location:"
-                    color: "#2a3140"
+                    color: root.themeColor("#2a3140", "#d7e4f6")
                     font.family: FontSystem.contentFontFamily
                     font.pixelSize: 16
                     font.bold: true
@@ -6373,7 +7139,7 @@ ApplicationWindow {
 
                 Text {
                     text: infoLocationText()
-                    color: "#8e98aa"
+                    color: root.themeColor("#8e98aa", "#9eb2cb")
                     font.family: FontSystem.contentFontFamily
                     font.pixelSize: 16
                     elide: Text.ElideRight
@@ -6398,7 +7164,7 @@ ApplicationWindow {
                 iconText: root.iconSetting
                 iconFontFamily: root.faSolid
                 iconPixelSize: 20
-                iconColor: "#97a0b0"
+                iconColor: root.themeColor("#97a0b0", "#9fb4cd")
                 onClicked: settingsPopup.open()
             }
 
@@ -6407,7 +7173,7 @@ ApplicationWindow {
                 iconText: root.iconSpeed
                 iconFontFamily: root.faSolid
                 iconPixelSize: 20
-                iconColor: "#97a0b0"
+                iconColor: root.themeColor("#97a0b0", "#9fb4cd")
                 onClicked: speedTestPopup.open()
             }
 
@@ -6416,7 +7182,7 @@ ApplicationWindow {
                 iconText: root.iconImport
                 iconFontFamily: root.faSolid
                 iconPixelSize: 20
-                iconColor: "#97a0b0"
+                iconColor: root.themeColor("#97a0b0", "#9fb4cd")
                 onClicked: importPopup.open()
             }
         }
@@ -6431,11 +7197,11 @@ ApplicationWindow {
 
         Rectangle {
             anchors.fill: parent
-            color: "#ffffff"
+            color: root.themeColor("#ffffff", "#0f1622")
             gradient: Gradient {
-                GradientStop { position: 0.0; color: "#ffffff" }
-                GradientStop { position: 0.58; color: "#ffffff" }
-                GradientStop { position: 1.0; color: "#eef7ff" }
+                GradientStop { position: 0.0; color: root.themeColor("#ffffff", "#101927") }
+                GradientStop { position: 0.58; color: root.themeColor("#ffffff", "#101927") }
+                GradientStop { position: 1.0; color: root.themeColor("#eef7ff", "#0b121d") }
             }
         }
 
@@ -6464,21 +7230,45 @@ ApplicationWindow {
                 Layout.preferredHeight: 42
                 spacing: 10
 
-                Controls.CircleIconButton {
-                    diameter: 36
-                    elevated: false
-                    backgroundColor: "#edf7ff"
-                    borderColor: "#d9edff"
-                    iconText: root.iconHistory
-                    iconFontFamily: root.faSolid
-                    iconColor: root.brandBlue
-                    iconPixelSize: 15
-                    onClicked: logsPopup.open()
+                Item {
+                    Layout.preferredWidth: 36
+                    Layout.preferredHeight: 36
+
+                    Controls.CircleIconButton {
+                        anchors.fill: parent
+                        diameter: 36
+                        elevated: false
+                        backgroundColor: vpnController.loggingEnabled
+                                         ? root.themeColor("#ecfaf3", "#102b1f")
+                                         : root.themeColor("#edf7ff", "#1a2638")
+                        borderColor: vpnController.loggingEnabled
+                                     ? root.themeColor("#ccefdc", "#275641")
+                                     : root.themeColor("#d9edff", "#2f425d")
+                        iconText: vpnController.loggingEnabled ? root.iconFileLines : root.iconHistory
+                        iconFontFamily: root.faSolid
+                        iconColor: vpnController.loggingEnabled ? "#34c37b" : root.themeColor(root.brandBlue, "#84b2ff")
+                        iconPixelSize: 15
+                        onClicked: logsPopup.open()
+                    }
+
+                    Rectangle {
+                        anchors.right: parent.right
+                        anchors.top: parent.top
+                        anchors.rightMargin: 1
+                        anchors.topMargin: 1
+                        width: 9
+                        height: 9
+                        radius: 4.5
+                        visible: vpnController.loggingEnabled
+                        color: "#22b26a"
+                        border.width: 1
+                        border.color: root.themeColor("#ffffff", "#131f2d")
+                    }
                 }
 
                 Text {
                     text: "<strong>GENY</strong>CONNECT"
-                    color: root.brandInk
+                    color: root.themeColor(root.brandInk, "#e5edf9")
                     font.family: FontSystem.contentFontFamily
                     font.pixelSize: 15
                     font.bold: true
@@ -6488,7 +7278,7 @@ ApplicationWindow {
 
                 Text {
                     text: "Speed"
-                    color: root.brandInk
+                    color: root.themeColor(root.brandInk, "#e5edf9")
                     font.family: FontSystem.getContentFontBold.name
                     font.pixelSize: 15
                     font.bold: true
@@ -6498,9 +7288,9 @@ ApplicationWindow {
                     Layout.preferredWidth: 42
                     Layout.preferredHeight: 42
                     radius: 21
-                    color: "#f0edff"
+                    color: root.themeColor("#f0edff", "#221c36")
                     border.width: 1
-                    border.color: "#d9d0ff"
+                    border.color: root.themeColor("#d9d0ff", "#463472")
 
                     Text {
                         anchors.centerIn: parent
@@ -6522,8 +7312,8 @@ ApplicationWindow {
                 id: dashboardTimerText
                 Layout.alignment: Qt.AlignHCenter
                 Layout.preferredHeight: 54
-                text: vpnController.connected || vpnController.busy ? root.sessionTimeText() : "00:00:00"
-                color: "#050505"
+                        text: vpnController.connected || vpnController.busy ? root.sessionTimeText() : "00:00:00"
+                color: root.themeColor("#050505", "#f1f5ff")
                 font.family: FontSystem.getContentFontBold.name
                 font.pixelSize: 44
                 font.bold: true
@@ -6533,30 +7323,97 @@ ApplicationWindow {
 
             Rectangle {
                 Layout.alignment: Qt.AlignHCenter
-                Layout.preferredWidth: Math.min(ipPillText.implicitWidth + 36, parent.width - 38)
-                Layout.preferredHeight: 38
+                Layout.preferredWidth: Math.min(ipPillRow.implicitWidth + 26, parent.width - 38)
+                Layout.preferredHeight: 40
                 radius: 23
-                color: "#f5f7fb"
+                color: root.themeColor("#f5f7fb", "#182230")
                 border.width: 1
-                border.color: "#e3e8f1"
+                border.color: root.themeColor("#e3e8f1", "#2f3d53")
 
-                Text {
-                    id: ipPillText
+                RowLayout {
+                    id: ipPillRow
                     anchors.centerIn: parent
-                    text: root.infoIpLabel() + " " + (vpnController.publicIpRefreshing ? "checking..." : root.infoIpText())
-                    color: "#344053"
-                    font.family: FontSystem.getContentFontBold.name
-                    font.pixelSize: 13
-                    font.bold: true
-                    elide: Text.ElideMiddle
-                    width: parent.width - 28
-                    horizontalAlignment: Text.AlignHCenter
+                    spacing: 8
+
+                    Rectangle {
+                        Layout.preferredWidth: 22
+                        Layout.preferredHeight: 22
+                        radius: 11
+                        border.width: 1
+                        color: vpnController.connected
+                               ? root.themeColor("#e8faef", "#173323")
+                               : root.themeColor("#f1edff", "#241f3d")
+                        border.color: vpnController.connected
+                                      ? root.themeColor("#bdeacb", "#376e52")
+                                      : root.themeColor("#d9d0ff", "#4b3d73")
+
+                        Text {
+                            anchors.centerIn: parent
+                            text: root.iconShield
+                            color: vpnController.connected ? "#22a557" : root.themeColor(root.brandViolet, "#a88dff")
+                            font.family: root.faSolid
+                            font.pixelSize: 11
+                        }
+                    }
+
+                    Text {
+                        id: ipPillText
+                        text: root.infoIpLabel() + " " + (vpnController.publicIpRefreshing ? "securing..." : root.infoIpText())
+                        color: root.themeColor("#344053", "#c7d4e6")
+                        font.family: FontSystem.getContentFontBold.name
+                        font.pixelSize: 13
+                        font.bold: true
+                        elide: Text.ElideMiddle
+                    }
                 }
 
                 MouseArea {
                     anchors.fill: parent
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: vpnController.refreshPublicIp()
+                    enabled: vpnController.connected
+                    cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+                    onClicked: {
+                        if (enabled)
+                            vpnController.refreshPublicIp()
+                    }
+                }
+            }
+
+            Item {
+                Layout.alignment: Qt.AlignHCenter
+                Layout.preferredWidth: Math.min(parent.width - 44, 276)
+                Layout.preferredHeight: 56
+
+                ColumnLayout {
+                    anchors.centerIn: parent
+                    spacing: 2
+
+                    Text {
+                        Layout.alignment: Qt.AlignHCenter
+                        text: "Last Usage"
+                        color: root.themeColor("#557299", "#9ab2ce")
+                        font.family: FontSystem.contentFontFamily
+                        font.pixelSize: 11
+                    }
+
+                    RowLayout {
+                        Layout.alignment: Qt.AlignHCenter
+                        spacing: 4
+
+                        Controls.NumberFlowText {
+                            text: root.latestUsageValuePart()
+                            color: root.themeColor("#173f75", "#d2e1f6")
+                            fontSize: 24
+                            bold: true
+                        }
+
+                        Text {
+                            text: root.latestUsageUnitPart()
+                            color: root.themeColor("#244f86", "#a9c1de")
+                            font.family: FontSystem.getContentFontBold.name
+                            font.pixelSize: 18
+                            font.bold: true
+                        }
+                    }
                 }
             }
 
@@ -6629,9 +7486,11 @@ ApplicationWindow {
                     width: statusChipText.implicitWidth + 38
                     height: 32
                     radius: 16
-                    color: vpnController.connected ? "#e7faef" : (vpnController.busy ? "#fff5d8" : "#f1f3f7")
-                    border.width: 1
-                    border.color: vpnController.connected ? "#c9f0d8" : (vpnController.busy ? "#f1daa1" : "#dfe5ee")
+                    color: vpnController.connected
+                           ? root.themeColor("#e7faef", "#6646a77c")
+                           : (vpnController.busy
+                              ? root.themeColor("#fff5d8", "#666f5b2e")
+                              : root.themeColor("#f1f3f7", "#66557a9f"))
                     scale: vpnController.busy ? 1.04 : 1.0
                     Behavior on color { ColorAnimation { duration: 260 } }
                     Behavior on border.color { ColorAnimation { duration: 260 } }
@@ -6648,7 +7507,11 @@ ApplicationWindow {
                         id: statusChipText
                         anchors.centerIn: parent
                         text: root.stateText()
-                        color: vpnController.connected ? "#55c982" : (vpnController.busy ? "#d3a722" : "#8993a4")
+                        color: vpnController.connected
+                               ? root.themeColor("#55c982", "#82e3bb")
+                               : (vpnController.busy
+                                  ? root.themeColor("#d3a722", "#f0c86e")
+                                  : root.themeColor("#8993a4", "#c8d9ed"))
                         font.family: FontSystem.getContentFontBold.name
                         font.pixelSize: 13
                         font.bold: true
@@ -6660,7 +7523,7 @@ ApplicationWindow {
             Rectangle {
                 Layout.fillWidth: true
                 Layout.preferredHeight: 1
-                color: "#f0f1f5"
+                color: root.themeColor("#f0f1f5", "#223147")
             }
 
             RowLayout {
@@ -6685,7 +7548,7 @@ ApplicationWindow {
                             Layout.preferredWidth: 28
                             Layout.preferredHeight: 28
                             radius: 14
-                            color: "#e9fff2"
+                            color: root.themeColor("#e9fff2", "#173126")
 
                             Text {
                                 anchors.centerIn: parent
@@ -6703,8 +7566,8 @@ ApplicationWindow {
                             spacing: 4
                             Text {
                                 width: parent.width
-                                text: "Download"
-                                color: "#1b1b1f"
+                                text: "Downlink"
+                                color: root.themeColor("#1b1b1f", "#cbd9ec")
                                 font.family: FontSystem.contentFontFamily
                                 font.pixelSize: 13
                             }
@@ -6714,16 +7577,16 @@ ApplicationWindow {
                                 Controls.NumberFlowText {
                                     id: downStatValueText
                                     width: 58
-                                    text: root.formatSpeedValue(root.downRateBytesPerSec, dashboardStatsSettings.speedUnit).value
-                                    color: "#050505"
+                                    text: root.formatSpeedValue(Math.max(0, downRateBytesPerSec), dashboardStatsSettings.speedUnit).value
+                                    color: root.themeColor("#050505", "#eef4ff")
                                     fontSize: 18
                                     bold: true
                                     transformOrigin: Item.Center
                                 }
                                 Text {
                                     width: 42
-                                    text: root.formatSpeedValue(root.downRateBytesPerSec, dashboardStatsSettings.speedUnit).unit
-                                    color: "#5b5d66"
+                                    text: root.formatSpeedValue(Math.max(0, downRateBytesPerSec), dashboardStatsSettings.speedUnit).unit
+                                    color: root.themeColor("#5b5d66", "#9db0c9")
                                     font.family: FontSystem.contentFontFamily
                                     font.pixelSize: 13
                                     elide: Text.ElideRight
@@ -6736,7 +7599,7 @@ ApplicationWindow {
                 Rectangle {
                     Layout.preferredWidth: 1
                     Layout.fillHeight: true
-                    color: "#eef0f4"
+                    color: root.themeColor("#eef0f4", "#364b66")
                 }
 
                 Item {
@@ -6754,7 +7617,7 @@ ApplicationWindow {
                             Layout.preferredWidth: 28
                             Layout.preferredHeight: 28
                             radius: 14
-                            color: "#fff9db"
+                            color: root.themeColor("#fff9db", "#3a3215")
 
                             Text {
                                 anchors.centerIn: parent
@@ -6772,8 +7635,8 @@ ApplicationWindow {
                             spacing: 4
                             Text {
                                 width: parent.width
-                                text: "Upload"
-                                color: "#1b1b1f"
+                                text: "Uplink"
+                                color: root.themeColor("#1b1b1f", "#cbd9ec")
                                 font.family: FontSystem.contentFontFamily
                                 font.pixelSize: 13
                             }
@@ -6783,16 +7646,16 @@ ApplicationWindow {
                                 Controls.NumberFlowText {
                                     id: upStatValueText
                                     width: 58
-                                    text: root.formatSpeedValue(root.upRateBytesPerSec, dashboardStatsSettings.speedUnit).value
-                                    color: "#050505"
+                                    text: root.formatSpeedValue(Math.max(0, upRateBytesPerSec), dashboardStatsSettings.speedUnit).value
+                                    color: root.themeColor("#050505", "#eef4ff")
                                     fontSize: 18
                                     bold: true
                                     transformOrigin: Item.Center
                                 }
                                 Text {
                                     width: 42
-                                    text: root.formatSpeedValue(root.upRateBytesPerSec, dashboardStatsSettings.speedUnit).unit
-                                    color: "#5b5d66"
+                                    text: root.formatSpeedValue(Math.max(0, upRateBytesPerSec), dashboardStatsSettings.speedUnit).unit
+                                    color: root.themeColor("#5b5d66", "#9db0c9")
                                     font.family: FontSystem.contentFontFamily
                                     font.pixelSize: 13
                                     elide: Text.ElideRight
@@ -6806,13 +7669,15 @@ ApplicationWindow {
             Rectangle {
                 id: mobileLocationCard
                 Layout.fillWidth: true
-                Layout.preferredHeight: 70
-                Layout.minimumHeight: 70
-                Layout.maximumHeight: 70
+                Layout.preferredHeight: 78
+                Layout.minimumHeight: 78
+                Layout.maximumHeight: 78
                 radius: 18
-                color: mobileLocationMouse.containsMouse ? "#fbfcff" : "#ffffff"
+                color: mobileLocationMouse.containsMouse
+                       ? root.themeColor("#fbfcff", "#1a2638")
+                       : root.themeColor("#ffffff", "#142032")
                 border.width: 1
-                border.color: "#ebedf3"
+                border.color: root.themeColor("#ebedf3", "#2e3d52")
 
                 RowLayout {
                     anchors.fill: parent
@@ -6824,7 +7689,7 @@ ApplicationWindow {
                         Layout.preferredWidth: 42
                         Layout.preferredHeight: 42
                         radius: 21
-                        color: "#f0f1ff"
+                        color: root.themeColor("#f0f1ff", "#273650")
 
                         Text {
                             anchors.centerIn: parent
@@ -6840,34 +7705,43 @@ ApplicationWindow {
                         Text {
                             Layout.fillWidth: true
                             text: selectedServerLabel
-                            color: "#070707"
+                            color: root.themeColor("#070707", "#edf3fe")
                             font.family: FontSystem.getContentFontBold.name
-                            font.pixelSize: 17
+                            font.pixelSize: 16
                             font.bold: true
                             elide: Text.ElideRight
                         }
 
                         Rectangle {
-                            Layout.preferredWidth: Math.min(serverBadgeText.implicitWidth + 22, 126)
-                            Layout.preferredHeight: 24
-                            radius: 12
-                            color: "#edf2ff"
+                            Layout.preferredWidth: Math.min(serverBadgeText.implicitWidth + 20, 118)
+                            Layout.preferredHeight: 21
+                            radius: 11
+                            color: root.themeColor("#edf2ff", "#263858")
 
                             Text {
                                 id: serverBadgeText
                                 anchors.centerIn: parent
                                 text: vpnController.tunMode ? "TUN Server" : "Game Server"
-                                color: root.brandBlue
+                                color: root.themeColor(root.brandBlue, "#9ec1ff")
                                 font.family: FontSystem.contentFontFamily
-                                font.pixelSize: 12
+                                font.pixelSize: 11
                                 elide: Text.ElideRight
                             }
+                        }
+
+                        Text {
+                            Layout.fillWidth: true
+                            text: selectedServerMeta
+                            color: root.themeColor("#7385a0", "#97acc8")
+                            font.family: FontSystem.contentFontFamily
+                            font.pixelSize: 10
+                            elide: Text.ElideMiddle
                         }
                     }
 
                     Text {
                         text: "\uf054"
-                        color: "#050505"
+                        color: root.themeColor("#050505", "#dce7f8")
                         font.family: root.faSolid
                         font.pixelSize: 17
                     }
@@ -6892,16 +7766,16 @@ ApplicationWindow {
             anchors.bottom: parent.bottom
             height: 88
             radius: 28
-            color: "#ffffff"
+            color: root.themeColor("#ffffff", "#121d2e")
             border.width: 1
-            border.color: "#eff1f6"
+            border.color: root.themeColor("#eff1f6", "#2a3950")
 
             Rectangle {
                 anchors.left: parent.left
                 anchors.right: parent.right
                 anchors.bottom: parent.bottom
                 height: 28
-                color: "#ffffff"
+                color: root.themeColor("#ffffff", "#121d2e")
             }
 
             RowLayout {
@@ -6919,7 +7793,7 @@ ApplicationWindow {
                         width: 42
                         height: 42
                         radius: 21
-                        color: "#3147d0"
+                        color: root.themeColor("#3147d0", "#3e6fff")
 
                         Text {
                             anchors.centerIn: parent
@@ -6938,7 +7812,7 @@ ApplicationWindow {
                     Text {
                         anchors.centerIn: parent
                         text: "\uf57d"
-                        color: "#050505"
+                        color: root.themeColor("#050505", "#d7e4f6")
                         font.family: root.faSolid
                         font.pixelSize: 25
                     }
@@ -6957,7 +7831,7 @@ ApplicationWindow {
                     Text {
                         anchors.centerIn: parent
                         text: "\uf013"
-                        color: "#050505"
+                        color: root.themeColor("#050505", "#d7e4f6")
                         font.family: root.faSolid
                         font.pixelSize: 24
                     }
@@ -7010,7 +7884,7 @@ ApplicationWindow {
 
                 Text {
                     text: "Current Profile Usage -->"
-                    color: "#4f627f"
+                    color: root.themeColor("#4f627f", "#9eb2cb")
                     font.family: FontSystem.getContentFontBold.name
                     font.pixelSize: 12
                     font.bold: true
@@ -7018,28 +7892,28 @@ ApplicationWindow {
 
                 Text {
                     text: "<strong>Hour</strong> " + vpnController.currentProfileUsageHour
-                    color: "#647891"
+                    color: root.themeColor("#647891", "#9fb4cd")
                     font.family: FontSystem.contentFontFamily
                     font.pixelSize: 12
                 }
 
                 Text {
                     text: "<strong>Day</strong> " + vpnController.currentProfileUsageDay
-                    color: "#647891"
+                    color: root.themeColor("#647891", "#9fb4cd")
                     font.family: FontSystem.contentFontFamily
                     font.pixelSize: 12
                 }
 
                 Text {
                     text: "<strong>Week</strong> " + vpnController.currentProfileUsageWeek
-                    color: "#647891"
+                    color: root.themeColor("#647891", "#9fb4cd")
                     font.family: FontSystem.contentFontFamily
                     font.pixelSize: 12
                 }
 
                 Text {
                     text: "<strong>Month</strong> " + vpnController.currentProfileUsageMonth
-                    color: "#647891"
+                    color: root.themeColor("#647891", "#9fb4cd")
                     font.family: FontSystem.contentFontFamily
                     font.pixelSize: 12
                 }

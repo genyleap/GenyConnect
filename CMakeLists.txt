@@ -22,14 +22,14 @@ set(GENYCONNECT_MACOS_DEPLOYMENT_TARGET "14.0" CACHE STRING "Minimum macOS versi
 
 if(APPLE)
   if(NOT GENYCONNECT_TARGET_BUILD_ARCH)
-    set(GENYCONNECT_TARGET_BUILD_ARCH "x86_64" CACHE STRING "Override target arch for output build/package (arm64|x86_64)" FORCE)
+    set(GENYCONNECT_TARGET_BUILD_ARCH "arm64" CACHE STRING "Override target arch for output build/package (arm64|x86_64)" FORCE)
   endif()
 
   set(CMAKE_OSX_ARCHITECTURES "${GENYCONNECT_TARGET_BUILD_ARCH}" CACHE STRING "Build architecture" FORCE)
   set(CMAKE_OSX_DEPLOYMENT_TARGET "${GENYCONNECT_MACOS_DEPLOYMENT_TARGET}" CACHE STRING "Minimum macOS version" FORCE)
 endif()
 
-project(${PROJECT_NAME} VERSION 1.2.768 LANGUAGES CXX)
+project(${PROJECT_NAME} VERSION 1.2.860 LANGUAGES CXX)
 
 # -------------------------
 # Detect Windows generator architecture
@@ -513,6 +513,10 @@ set(genyconnect_image_assets
   ui/Resources/image/favicon.png
 )
 
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/ui/Resources/image/GenyConnect.ico")
+  list(APPEND genyconnect_image_assets ui/Resources/image/GenyConnect.ico)
+endif()
+
 if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/ui/Resources/image/map.png")
   list(APPEND genyconnect_image_assets ui/Resources/image/map.png)
 endif()
@@ -555,15 +559,14 @@ target_sources(${PROJECT_NAME}
 if(WIN32)
   string(TIMESTAMP GENYCONNECT_COPYRIGHT_YEAR "%Y")
   set(GENYCONNECT_WINDOWS_ICON_PATH "${CMAKE_CURRENT_SOURCE_DIR}/ui/Resources/image/GenyConnect.ico")
+  file(TO_NATIVE_PATH "${GENYCONNECT_WINDOWS_ICON_PATH}" GENYCONNECT_WINDOWS_ICON_PATH)
   set(GENYCONNECT_WINDOWS_RC_IN "${CMAKE_CURRENT_SOURCE_DIR}/properties/Windows/app.rc.in")
   set(GENYCONNECT_WINDOWS_RC_OUT "${CMAKE_CURRENT_BINARY_DIR}/GenyConnect.rc")
-
   configure_file(
     "${GENYCONNECT_WINDOWS_RC_IN}"
     "${GENYCONNECT_WINDOWS_RC_OUT}"
     @ONLY
   )
-
   target_sources(${PROJECT_NAME} PRIVATE "${GENYCONNECT_WINDOWS_RC_OUT}")
 endif()
 # -------------------------

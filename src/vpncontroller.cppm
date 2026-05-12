@@ -24,6 +24,7 @@ module;
 #include <QJsonObject>
 #include <QObject>
 #include <QElapsedTimer>
+#include <QDateTime>
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
 #include <QNetworkProxy>
@@ -33,6 +34,7 @@ module;
 #include <QUrl>
 #include <QVariantList>
 #include <QVariantMap>
+#include <atomic>
 
 #ifndef Q_MOC_RUN
 export module genyconnect.backend.vpncontroller;
@@ -88,11 +90,14 @@ GENYCONNECT_MODULE_EXPORT class VpnController : public QObject
     Q_PROPERTY(qint64 txBytes READ txBytes NOTIFY trafficChanged)
     Q_PROPERTY(QString publicIpAddress READ publicIpAddress NOTIFY publicIpAddressChanged)
     Q_PROPERTY(bool publicIpRefreshing READ publicIpRefreshing NOTIFY publicIpAddressChanged)
+    Q_PROPERTY(QString latestRecordedUsage READ latestRecordedUsage NOTIFY profileUsageChanged)
     Q_PROPERTY(QString memoryUsageText READ memoryUsageText NOTIFY memoryUsageChanged)
     Q_PROPERTY(bool speedTestRunning READ speedTestRunning NOTIFY speedTestChanged)
+    Q_PROPERTY(QString speedTestState READ speedTestState NOTIFY speedTestChanged)
     Q_PROPERTY(QString speedTestPhase READ speedTestPhase NOTIFY speedTestChanged)
     Q_PROPERTY(int speedTestElapsedSec READ speedTestElapsedSec NOTIFY speedTestChanged)
     Q_PROPERTY(int speedTestDurationSec READ speedTestDurationSec NOTIFY speedTestChanged)
+    Q_PROPERTY(double speedTestProgress READ speedTestProgress NOTIFY speedTestChanged)
     Q_PROPERTY(double speedTestCurrentMbps READ speedTestCurrentMbps NOTIFY speedTestChanged)
     Q_PROPERTY(double speedTestPeakMbps READ speedTestPeakMbps NOTIFY speedTestChanged)
     Q_PROPERTY(int speedTestPingMs READ speedTestPingMs NOTIFY speedTestChanged)
@@ -100,6 +105,12 @@ GENYCONNECT_MODULE_EXPORT class VpnController : public QObject
     Q_PROPERTY(double speedTestUploadMbps READ speedTestUploadMbps NOTIFY speedTestChanged)
     Q_PROPERTY(QString speedTestError READ speedTestError NOTIFY speedTestChanged)
     Q_PROPERTY(QStringList speedTestHistory READ speedTestHistory NOTIFY speedTestChanged)
+    Q_PROPERTY(
+        int speedTestSelectedSizeMb
+        READ speedTestSelectedSizeMb
+        WRITE setSpeedTestSelectedSizeMb
+        NOTIFY speedTestChanged
+    )
 
     Q_PROPERTY(int currentProfileIndex READ currentProfileIndex WRITE setCurrentProfileIndex NOTIFY currentProfileIndexChanged)
     Q_PROPERTY(QString currentProfileAddressValue READ currentProfileAddress NOTIFY currentProfileIndexChanged)
@@ -214,12 +225,14 @@ public:
     QString memoryUsageText() const;
     QString publicIpAddress() const;
     bool publicIpRefreshing() const;
+    QString latestRecordedUsage() const;
 
     /**
      * @brief Whether speed test is currently running.
      * @return Running flag.
      */
     bool speedTestRunning() const;
+    QString speedTestState() const;
 
     /**
      * @brief Current speed-test phase.
@@ -238,6 +251,7 @@ public:
      * @return Duration seconds.
      */
     int speedTestDurationSec() const;
+    double speedTestProgress() const;
 
     /**
      * @brief Instantaneous measured speed.
@@ -280,6 +294,8 @@ public:
      * @return History list (newest first).
      */
     QStringList speedTestHistory() const;
+    int speedTestSelectedSizeMb() const;
+    void setSpeedTestSelectedSizeMb(int sizeMb);
 
     /**
      * @brief Currently selected profile row index.
@@ -693,6 +709,8 @@ public:
      * @return Protocol/address/security summary or empty when unavailable.
      */
     Q_INVOKABLE QString currentProfileSubtitle() const;
+    Q_INVOKABLE QString currentProfileGroupLabel() const;
+    Q_INVOKABLE int currentProfilePingMs() const;
 
     /**
      * @brief Copy buffered logs to clipboard.
@@ -717,6 +735,11 @@ public:
      * @return List of usage rows.
      */
     Q_INVOKABLE QVariantList currentProfileUsageHistory(const QString& period, int limit = 20) const;
+    Q_INVOKABLE QVariantList currentProfileUsageSessions(int limit = 20) const;
+    Q_INVOKABLE void clearCurrentProfileUsage();
+    Q_INVOKABLE void clearAllProfileUsage();
+    Q_INVOKABLE QVariantList availableAppRuleItems() const;
+    Q_INVOKABLE void appendAppRule(const QString& target, const QString& process);
 
 signals:
     //! Emitted when connection state changes.
@@ -786,6 +809,7 @@ private slots:
     void onSpeedTestTick();
     //! Read bytes during active speed-test request.
     void onSpeedTestReadyRead();
+    void onSpeedTestDownloadProgress(qint64 received, qint64 total);
     //! Update upload counters during upload phase.
     void onSpeedTestUploadProgress(qint64 sent, qint64 total);
     //! Handle speed-test request completion.
@@ -832,20 +856,8 @@ private:
      * @brief Start request for current phase/attempt.
      */
     void startCurrentSpeedTestRequest();
-
-    /**
-     * @brief Enter ping phase and dispatch request.
-     */
     void startPingPhase();
-
-    /**
-     * @brief Enter download phase and dispatch request.
-     */
     void startDownloadPhase();
-
-    /**
-     * @brief Enter upload phase and dispatch request.
-     */
     void startUploadPhase();
 
     /**
@@ -854,6 +866,9 @@ private:
      * @param error Error message when failed.
      */
     void finishSpeedTest(bool ok, const QString& error = QString());
+    QUrl speedTestDownloadUrlForSizeMb(int sizeMb) const;
+    QList<QUrl> speedTestDownloadFallbackUrls(int sizeMb) const;
+    int normalizedSpeedTestSizeMb(int requested) const;
 
     /**
      * @brief Enable/disable system proxy according to settings/state.
@@ -908,8 +923,12 @@ private:
     void updatePerProfileUsageCounters(qint64 nextRx, qint64 nextTx);
     void resetPerProfileUsageSamples();
     void recordProfileUsageDelta(const QString& profileId, qint64 rxDelta, qint64 txDelta);
+    void beginProfileUsageSession(const QString& profileId);
+    void endProfileUsageSession(const QString& profileId);
     QVariantMap profileUsageSummaryForId(const QString& profileId) const;
     QVariantList profileUsageHistoryForId(const QString& profileId, const QString& period, int limit) const;
+    QVariantList profileUsageSessionsForId(const QString& profileId, int limit) const;
+    QVariantMap latestUsageSnapshotForId(const QString& profileId) const;
     QString currentProfileUsageText(const QString& period) const;
     void loadProfileUsage();
     void saveProfileUsage() const;
@@ -917,6 +936,14 @@ private:
     void cleanupDetachedHelpers();
     void stopPrivilegedTunRuntimeByPidPath();
     void killProcessByPid(qint64 pid) const;
+    void writeManagedRuntimeRecord(qint64 pid, const QString& mode);
+    void clearManagedRuntimeRecord();
+    bool tryLoadManagedRuntimeRecord(QJsonObject *record) const;
+    bool cleanupManagedRuntimeFromRecord(const QJsonObject& record, const QString& reason);
+    void cleanupManagedRuntimeOnStartup();
+    bool isProcessLikelyManagedXray(qint64 pid, const QString& expectedExecutablePath) const;
+    static bool isProcessAlive(qint64 pid);
+    static QString processExecutablePath(qint64 pid);
 
     /**
      * @brief Query traffic stats through Xray API endpoint.
@@ -1006,9 +1033,11 @@ private:
     qint64 m_txBytes = 0;
     qint64 m_memoryUsageBytes = 0;
     bool m_speedTestRunning = false;
+    QString m_speedTestState = QStringLiteral("Idle");
     QString m_speedTestPhase = QStringLiteral("Idle");
     int m_speedTestElapsedSec = 0;
     int m_speedTestDurationSec = 18;
+    double m_speedTestProgress = 0.0;
     double m_speedTestCurrentMbps = 0.0;
     double m_speedTestPeakMbps = 0.0;
     int m_speedTestPingMs = -1;
@@ -1023,6 +1052,11 @@ private:
     qint64 m_speedTestPingTotalMs = 0;
     bool m_speedTestUploadMode = false;
     qint64 m_speedTestPhaseBytes = 0;
+    qint64 m_speedTestExpectedBytes = 0;
+    bool m_speedTestCancelledByUser = false;
+    bool m_speedTestUsingDirectFallback = false;
+    int m_speedTestSelectedSizeMb = 10;
+    QString m_speedTestDownloadEndpointTemplate = QStringLiteral("https://speed.cloudflare.com/__down?bytes=%1");
     QElapsedTimer m_speedTestRequestTimer;
     QElapsedTimer m_speedTestPhaseTimer;
     QElapsedTimer m_speedTestSampleTimer;
@@ -1031,6 +1065,8 @@ private:
     QString m_currentProfileId;
     QString m_publicIpAddress;
     bool m_publicIpRefreshing = false;
+    int m_publicIpRetryCount = 0;
+    int m_publicIpRetryLimit = 2;
 
     QString m_xrayExecutablePath;
     QString m_xrayVersion = QStringLiteral("Unknown");
@@ -1078,6 +1114,10 @@ private:
     qint64 m_profileUsageLastRxSample = -1;
     qint64 m_profileUsageLastTxSample = -1;
     QString m_activeProfileUsageId;
+    QString m_usageSessionProfileId;
+    qint64 m_usageSessionRxBytes = 0;
+    qint64 m_usageSessionTxBytes = 0;
+    QDateTime m_usageSessionStartedAt;
 
     ServerProfileModel m_profileModel;
     Updater m_updater;
@@ -1092,6 +1132,7 @@ private:
     QNetworkAccessManager m_publicIpNetworkManager;
     QNetworkReply *m_speedTestReply = nullptr;
     QNetworkReply *m_publicIpReply = nullptr;
+    QTimer m_publicIpRetryTimer;
     bool m_statsPolling = false;
     int m_statsQueryFailureCount = 0;
     bool m_stoppingProcess = false;
@@ -1108,6 +1149,11 @@ private:
     QByteArray m_privilegedTunLogBuffer;
     QTimer m_privilegedTunLogTimer;
     QTimer m_profileUsageSaveTimer;
+    QString m_managedRuntimeRecordPath;
+    qint64 m_privilegedTunRuntimePid = -1;
+    std::atomic<quint64> m_connectAttemptCounter {0};
+    std::atomic_bool m_disconnectRequested {false};
+    std::atomic_bool m_shutdownInProgress {false};
     QTimer m_logsFlushTimer;
     bool m_logsDirty = false;
     QString m_selectedTunInterfaceName;

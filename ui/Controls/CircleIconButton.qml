@@ -7,9 +7,9 @@ Item {
     property string iconText: ""
     property string iconFontFamily: FontSystem.contentFontFamily
     property real diameter: 46
-    property color backgroundColor: "#f5f7fb"
-    property color borderColor: "#d9dde7"
-    property color iconColor: "#9da5b2"
+    property color backgroundColor: Colors.lightMode ? "#f5f7fb" : "#1f2f46"
+    property color borderColor: Colors.lightMode ? "#d9dde7" : "#4d6a8d"
+    property color iconColor: Colors.lightMode ? "#9da5b2" : "#a6bad4"
     property real iconPixelSize: Math.round(diameter * 0.46)
     property bool elevated: true
     property bool enabled: true
@@ -31,7 +31,9 @@ Item {
         id: face
         anchors.fill: parent
         radius: width / 2
-        color: root.enabled ? root.backgroundColor : Qt.darker(root.backgroundColor, 1.04)
+        color: root.enabled
+               ? root.backgroundColor
+               : (Colors.lightMode ? Qt.darker(root.backgroundColor, 1.04) : Qt.lighter(root.backgroundColor, 1.12))
         border.width: 1
         border.color: root.borderColor
 

@@ -3,17 +3,19 @@ import QtQuick.Controls
 import QtQuick.Controls.Basic as T
 import QtQuick.Layouts
 import GenyConnect 1.0
+import "../Core"
 
 T.ComboBox {
     id: control
 
-    property color fillColor: Colors.backgroundItemActivated
-    property color strokeColor: Colors.borderActivated
+    readonly property bool darkMode: Theme.mode === Theme.Dark
+    property color fillColor: darkMode ? "#1a2638" : Colors.backgroundItemActivated
+    property color strokeColor: darkMode ? "#3a4f6c" : Colors.borderActivated
     property color focusColor: Colors.secondry
     property int cornerRadius: 15
-    property color popupFillColor: "#ffffff"
-    property color popupBorderColor: "#d8e1ef"
-    property color popupHoverColor: "#edf3ff"
+    property color popupFillColor: darkMode ? "#1a2638" : "#ffffff"
+    property color popupBorderColor: darkMode ? "#3a4f6c" : "#d8e1ef"
+    property color popupHoverColor: darkMode ? "#253753" : "#edf3ff"
 
     font.family: FontSystem.contentFontFamily
     font.pixelSize: Typography.t2
@@ -32,7 +34,7 @@ T.ComboBox {
               : control.displayText
         font.family: control.font.family
         font.pixelSize: control.font.pixelSize
-        color: Colors.textPrimary
+        color: control.darkMode ? "#e1ecfb" : Colors.textPrimary
         verticalAlignment: Text.AlignVCenter
         elide: Text.ElideRight
     }
@@ -41,7 +43,7 @@ T.ComboBox {
         text: "\u25BE"
         font.family: FontSystem.contentFontFamily
         font.pixelSize: Typography.t3
-        color: Colors.textMuted
+        color: control.darkMode ? "#9cb2cf" : Colors.textMuted
         anchors.right: parent.right
         anchors.rightMargin: 10
         anchors.verticalCenter: parent.verticalCenter
@@ -78,7 +80,9 @@ T.ComboBox {
         font.pixelSize: control.font.pixelSize
         contentItem: Text {
             text: comboDelegate.text
-            color: comboDelegate.enabled ? "#2b3648" : "#9aa6ba"
+            color: comboDelegate.enabled
+                   ? (control.darkMode ? "#d4e2f7" : "#2b3648")
+                   : (control.darkMode ? "#6f84a2" : "#9aa6ba")
             font.family: comboDelegate.font.family
             font.pixelSize: comboDelegate.font.pixelSize
             verticalAlignment: Text.AlignVCenter

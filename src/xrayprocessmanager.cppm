@@ -66,6 +66,12 @@ public:
     QString executablePath() const;
 
     /**
+     * @brief Native process id for running child.
+     * @return Process id or `-1` when not running.
+     */
+    qint64 processId() const;
+
+    /**
      * @brief Whether process is currently running.
      * @return True if process state is running.
      */

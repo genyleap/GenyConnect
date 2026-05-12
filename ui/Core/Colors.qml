@@ -11,12 +11,7 @@ QtObject {
     readonly property int outerRadius : 28
     readonly property int innerRadius : 20
 
-    property bool lightMode: {
-        if (!AppGlobals.appWindow)
-        return true
-        return Qt.darker(AppGlobals.appWindow.palette.window, 1.2)
-        !== AppGlobals.appWindow.palette.window
-    }
+    property bool lightMode: Theme.mode === Theme.Light
 
     // Accent and page colors
     readonly property color accent: lightMode ? "#ffffff" : "#1e1e1e"

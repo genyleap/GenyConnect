@@ -31,6 +31,14 @@ QString XrayProcessManager::executablePath() const
     return m_executablePath;
 }
 
+qint64 XrayProcessManager::processId() const
+{
+    if (!isRunning()) {
+        return -1;
+    }
+    return static_cast<qint64>(m_process.processId());
+}
+
 bool XrayProcessManager::isRunning() const
 {
     return m_process.state() != QProcess::NotRunning;
