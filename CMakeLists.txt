@@ -558,16 +558,42 @@ target_sources(${PROJECT_NAME}
 # -------------------------
 if(WIN32)
   string(TIMESTAMP GENYCONNECT_COPYRIGHT_YEAR "%Y")
-  set(GENYCONNECT_WINDOWS_ICON_PATH "${CMAKE_CURRENT_SOURCE_DIR}/ui/Resources/image/GenyConnect.ico")
-  file(TO_NATIVE_PATH "${GENYCONNECT_WINDOWS_ICON_PATH}" GENYCONNECT_WINDOWS_ICON_PATH)
-  set(GENYCONNECT_WINDOWS_RC_IN "${CMAKE_CURRENT_SOURCE_DIR}/properties/Windows/app.rc.in")
-  set(GENYCONNECT_WINDOWS_RC_OUT "${CMAKE_CURRENT_BINARY_DIR}/GenyConnect.rc")
+
+  set(GENYCONNECT_WINDOWS_ICON_SOURCE
+    "${CMAKE_CURRENT_SOURCE_DIR}/ui/Resources/image/GenyConnect.ico"
+  )
+
+  if(NOT EXISTS "${GENYCONNECT_WINDOWS_ICON_SOURCE}")
+    message(FATAL_ERROR
+      "Windows icon file not found: ${GENYCONNECT_WINDOWS_ICON_SOURCE}"
+    )
+  endif()
+
+  # Important:
+  # Do NOT use file(TO_NATIVE_PATH) here.
+  # Windows .rc files can misinterpret backslash escapes like \a in D:\a\...
+  file(TO_CMAKE_PATH
+    "${GENYCONNECT_WINDOWS_ICON_SOURCE}"
+    GENYCONNECT_WINDOWS_ICON_PATH
+  )
+
+  set(GENYCONNECT_WINDOWS_RC_IN
+    "${CMAKE_CURRENT_SOURCE_DIR}/properties/Windows/app.rc.in"
+  )
+
+  set(GENYCONNECT_WINDOWS_RC_OUT
+    "${CMAKE_CURRENT_BINARY_DIR}/GenyConnect.rc"
+  )
+
   configure_file(
     "${GENYCONNECT_WINDOWS_RC_IN}"
     "${GENYCONNECT_WINDOWS_RC_OUT}"
     @ONLY
   )
-  target_sources(${PROJECT_NAME} PRIVATE "${GENYCONNECT_WINDOWS_RC_OUT}")
+
+  target_sources(${PROJECT_NAME} PRIVATE
+    "${GENYCONNECT_WINDOWS_RC_OUT}"
+  )
 endif()
 # -------------------------
 # Xray auto-download
