@@ -1366,15 +1366,28 @@ public:
         m_idleTimer.setInterval(m_idleTimeoutMs);
         m_idleTimer.setSingleShot(true);
         connect(&m_idleTimer, &QTimer::timeout, this, [this]() {
+            // Keep helper alive while TUN runtime is active. Otherwise the helper's
+            // idle timeout would stop the tunnel and force re-elevation on reconnect.
+            if (m_runtimeActive) {
+                m_idleTimer.start();
+                return;
+            }
             stopTrackedRuntimeBestEffort(u"Helper idle timeout cleanup."_s);
             QCoreApplication::quit();
         });
         m_ownerWatchdogTimer.setInterval(2000);
         connect(&m_ownerWatchdogTimer, &QTimer::timeout, this, [this]() {
             if (m_ownerPid <= 0 || !m_runtimeActive) {
+                m_ownerWatchdogMissCount = 0;
                 return;
             }
             if (isProcessAlive(m_ownerPid)) {
+                m_ownerWatchdogMissCount = 0;
+                return;
+            }
+            // Avoid stopping an active tunnel on a transient owner-probe failure.
+            ++m_ownerWatchdogMissCount;
+            if (m_ownerWatchdogMissCount < 3) {
                 return;
             }
             stopTrackedRuntimeBestEffort(u"Owner process exited unexpectedly."_s);
@@ -1469,6 +1482,7 @@ private:
         m_runtimeTunIf.clear();
         m_runtimeServerIp.clear();
         m_ownerPid = 0;
+        m_ownerWatchdogMissCount = 0;
         m_ownerWatchdogTimer.stop();
     }
 
@@ -1751,6 +1765,7 @@ private:
             m_runtimeServerIp = resolveIpForHost(serverHostRequested);
         }
         m_ownerPid = ownerPid;
+        m_ownerWatchdogMissCount = 0;
         if (m_ownerPid > 0) {
             m_ownerWatchdogTimer.start();
         } else {
@@ -1835,6 +1850,7 @@ private:
     bool m_runtimeActive = false;
     qint64 m_runtimePid = -1;
     qint64 m_ownerPid = 0;
+    int m_ownerWatchdogMissCount = 0;
     QString m_runtimePidPath;
     QString m_runtimeTunIf;
     QString m_runtimeServerIp;

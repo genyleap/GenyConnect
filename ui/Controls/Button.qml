@@ -19,7 +19,7 @@ T.Button {
     Layout.fillWidth: true
     implicitWidth: 128
 
-    opacity: control.enabled ? 1 : 0.5
+    opacity: 1.0
 
     contentItem: Item {
 
@@ -34,7 +34,9 @@ T.Button {
             font.pixelSize: Typography.t3
             font.bold: control.isBold ? Font.Bold : Font.Normal
             font.weight: control.isBold ? Font.Bold : Font.Normal
-            color: control.isDefault ? Colors.staticPrimary : Colors.secondry
+            color: !control.enabled
+                   ? (Colors.lightMode ? Colors.mainHex_95a0b3 : Colors.mainHex_8ea1ba)
+                   : (control.isDefault ? Colors.staticPrimary : Colors.secondry)
 
             Behavior on color {
                 ColorAnimation {
@@ -105,9 +107,21 @@ T.Button {
         implicitHeight: control.height
         Layout.fillWidth: true
         radius: Colors.outerRadius
-        color: control.isDefault ? Colors.primaryBack : "transparent"
-        border.width: control.isDefault ? 0 : 1
-        border.color: control.isDefault ? "transparent" : Colors.secondry
+        color: control.isDefault
+               ? (control.enabled
+                  ? Colors.primaryBack
+                  : (Colors.lightMode ? Colors.mainHex_e7edf6 : Colors.mainHex_2f425d))
+               : "transparent"
+        border.width: control.isDefault
+                      ? (control.enabled ? 0 : 1)
+                      : 1
+        border.color: control.isDefault
+                      ? (control.enabled
+                         ? "transparent"
+                         : (Colors.lightMode ? Colors.mainHex_d5deec : Colors.mainHex_3b4e67))
+                      : (control.enabled
+                         ? Colors.secondry
+                         : (Colors.lightMode ? Colors.mainHex_c8d3e2 : Colors.mainHex_3b4e67))
     }
 
     MouseArea {

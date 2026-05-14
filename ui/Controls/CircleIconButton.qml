@@ -7,9 +7,9 @@ Item {
     property string iconText: ""
     property string iconFontFamily: FontSystem.contentFontFamily
     property real diameter: 46
-    property color backgroundColor: Colors.lightMode ? "#f5f7fb" : "#1f2f46"
-    property color borderColor: Colors.lightMode ? "#d9dde7" : "#4d6a8d"
-    property color iconColor: Colors.lightMode ? "#9da5b2" : "#a6bad4"
+    property color backgroundColor: Colors.gcIconButtonBg
+    property color borderColor: Colors.gcIconButtonBorder
+    property color iconColor: Colors.gcIconButtonIcon
     property real iconPixelSize: Math.round(diameter * 0.46)
     property bool elevated: true
     property bool enabled: true
@@ -34,8 +34,6 @@ Item {
         color: root.enabled
                ? root.backgroundColor
                : (Colors.lightMode ? Qt.darker(root.backgroundColor, 1.04) : Qt.lighter(root.backgroundColor, 1.12))
-        border.width: 1
-        border.color: root.borderColor
 
         Text {
             anchors.centerIn: parent

@@ -223,7 +223,11 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 if(MSVC)
-  add_compile_options(/Zc:__cplusplus /permissive-)
+  add_compile_options(
+    /utf-8
+    /Zc:__cplusplus
+    /permissive-
+  )
 endif()
 
 set(CMAKE_AUTOMOC ON)
@@ -492,6 +496,7 @@ set(qml_controls
   ui/Controls/CircleIconButton.qml
   ui/Controls/PrimaryActionButton.qml
   ui/Controls/SignalBars.qml
+  ui/Controls/SpeedTestGauge.qml
 )
 
 set(qml_main ui/Main.qml)

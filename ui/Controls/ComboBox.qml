@@ -9,13 +9,13 @@ T.ComboBox {
     id: control
 
     readonly property bool darkMode: Theme.mode === Theme.Dark
-    property color fillColor: darkMode ? "#1a2638" : Colors.backgroundItemActivated
-    property color strokeColor: darkMode ? "#3a4f6c" : Colors.borderActivated
+    property color fillColor: Colors.gcControlBg
+    property color strokeColor: Colors.gcControlBorder
     property color focusColor: Colors.secondry
     property int cornerRadius: 15
-    property color popupFillColor: darkMode ? "#1a2638" : "#ffffff"
-    property color popupBorderColor: darkMode ? "#3a4f6c" : "#d8e1ef"
-    property color popupHoverColor: darkMode ? "#253753" : "#edf3ff"
+    property color popupFillColor: Colors.gcPopupBg
+    property color popupBorderColor: Colors.gcPopupBorder
+    property color popupHoverColor: Colors.gcPopupHover
 
     font.family: FontSystem.contentFontFamily
     font.pixelSize: Typography.t2
@@ -34,7 +34,7 @@ T.ComboBox {
               : control.displayText
         font.family: control.font.family
         font.pixelSize: control.font.pixelSize
-        color: control.darkMode ? "#e1ecfb" : Colors.textPrimary
+        color: Colors.gcControlText
         verticalAlignment: Text.AlignVCenter
         elide: Text.ElideRight
     }
@@ -43,7 +43,7 @@ T.ComboBox {
         text: "\u25BE"
         font.family: FontSystem.contentFontFamily
         font.pixelSize: Typography.t3
-        color: control.darkMode ? "#9cb2cf" : Colors.textMuted
+        color: Colors.gcControlMuted
         anchors.right: parent.right
         anchors.rightMargin: 10
         anchors.verticalCenter: parent.verticalCenter
@@ -81,8 +81,8 @@ T.ComboBox {
         contentItem: Text {
             text: comboDelegate.text
             color: comboDelegate.enabled
-                   ? (control.darkMode ? "#d4e2f7" : "#2b3648")
-                   : (control.darkMode ? "#6f84a2" : "#9aa6ba")
+                   ? Colors.gcControlText
+                   : Colors.gcControlMuted
             font.family: comboDelegate.font.family
             font.pixelSize: comboDelegate.font.pixelSize
             verticalAlignment: Text.AlignVCenter

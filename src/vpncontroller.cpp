@@ -31,12 +31,15 @@ module;
 #include <QTimer>
 #include <QTcpServer>
 #include <QTcpSocket>
+#include <QTimeZone>
 #include <QUuid>
 #include <QUrlQuery>
+#include <QVector>
 #include <QVariantMap>
 #include <QtConcurrent/QtConcurrentRun>
 
 #include <algorithm>
+#include <cmath>
 #include <cerrno>
 #include <cstring>
 #include <string>
@@ -68,15 +71,22 @@ import genyconnect.backend.linkparser;
 
 namespace {
 constexpr int kMaxLogLines = 200;
-constexpr int kSpeedTestTickIntervalMs = 120;
+constexpr int kSpeedTestTickIntervalMs = 100;
 constexpr int kSpeedTestHistoryMaxItems = 20;
 constexpr qint64 kSpeedTestUploadPayloadBytes = 8 * 1024 * 1024;
+constexpr int kSpeedTestSamplingWindowMs = 280;
+constexpr int kSpeedTestWarmupMs = 1200;
+constexpr int kSpeedTestLatencyProbeCount = 8;
+constexpr int kSpeedTestLatencyProbeTimeoutMs = 1800;
+constexpr int kSpeedTestLatencyProbeGapMs = 120;
 constexpr int kSpeedTestMinimumSizeMb = 5;
 constexpr int kSpeedTestDefaultSizeMb = 10;
 constexpr int kSpeedTestMaximumSizeMb = 25;
 constexpr int kSpeedTestDownloadTimeoutBaseMs = 14000;
 constexpr int kSpeedTestDownloadTimeoutPerMbMs = 1200;
-constexpr int kSpeedTestNoProgressTimeoutMs = 6000;
+constexpr int kSpeedTestNoProgressTimeoutMs = 14000;
+constexpr int kSpeedTestUploadResponseIdleFinalizeMs = 1500;
+constexpr double kSpeedTestDownloadCompletionRatio = 0.92;
 constexpr int kProfilePingTimeoutMs = 3200;
 constexpr int kProfilePingStaggerMs = 140;
 constexpr int kSubscriptionFetchTimeoutMs = 15000;
@@ -1014,6 +1024,16 @@ qint64 currentProcessMemoryBytes()
     return -1;
 #endif
 }
+
+double combinedSpeedTestAverageMbps(double downloadMbps, double uploadMbps)
+{
+    const double down = qMax(0.0, downloadMbps);
+    const double up = qMax(0.0, uploadMbps);
+    if (down > 0.0 && up > 0.0) {
+        return (down + up) * 0.5;
+    }
+    return qMax(down, up);
+}
 }
 
 VpnController::VpnController(QObject *parent)
@@ -1315,9 +1335,44 @@ double VpnController::speedTestPeakMbps() const
     return m_speedTestPeakMbps;
 }
 
+double VpnController::speedTestAverageMbps() const
+{
+    return m_speedTestAverageMbps;
+}
+
 int VpnController::speedTestPingMs() const
 {
     return m_speedTestPingMs;
+}
+
+int VpnController::speedTestJitterMs() const
+{
+    return m_speedTestJitterMs;
+}
+
+double VpnController::speedTestPacketLossPct() const
+{
+    return m_speedTestPacketLossPct;
+}
+
+int VpnController::speedTestRouteStabilityPct() const
+{
+    return m_speedTestRouteStabilityPct;
+}
+
+int VpnController::speedTestQualityScore() const
+{
+    return m_speedTestQualityScore;
+}
+
+int VpnController::speedTestLatencyMinMs() const
+{
+    return m_speedTestLatencyMinMs;
+}
+
+int VpnController::speedTestLatencyMaxMs() const
+{
+    return m_speedTestLatencyMaxMs;
 }
 
 double VpnController::speedTestDownloadMbps() const
@@ -3193,7 +3248,6 @@ void VpnController::setXrayExecutableFromUrl(const QUrl& url)
 
 void VpnController::startSpeedTestRequest(const QUrl& url, bool upload, const QByteArray& payload)
 {
-    Q_UNUSED(payload)
     QUrl requestUrl(url);
     QUrlQuery query(requestUrl);
     query.addQueryItem(QStringLiteral("_gc"), QString::number(QDateTime::currentMSecsSinceEpoch()));
@@ -3206,13 +3260,19 @@ void VpnController::startSpeedTestRequest(const QUrl& url, bool upload, const QB
     request.setRawHeader("Pragma", "no-cache");
     request.setRawHeader("User-Agent", "GenyConnect-SpeedTest/1.0");
     request.setRawHeader("Accept", "application/octet-stream,*/*");
+    if (upload) {
+        request.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/octet-stream"));
+    }
     const int timeoutMs = kSpeedTestDownloadTimeoutBaseMs
                           + (normalizedSpeedTestSizeMb(m_speedTestSelectedSizeMb) * kSpeedTestDownloadTimeoutPerMbMs);
     request.setTransferTimeout(timeoutMs);
 
     m_speedTestUploadMode = upload;
-    m_speedTestReply = m_speedTestNetworkManager.get(request);
+    m_speedTestReply = upload
+                           ? m_speedTestNetworkManager.post(request, payload)
+                           : m_speedTestNetworkManager.get(request);
     connect(m_speedTestReply, &QNetworkReply::downloadProgress, this, &VpnController::onSpeedTestDownloadProgress);
+    connect(m_speedTestReply, &QNetworkReply::uploadProgress, this, &VpnController::onSpeedTestUploadProgress);
     connect(m_speedTestReply, &QNetworkReply::sslErrors, this, [this](const QList<QSslError>& errors) {
         Q_UNUSED(errors)
         if (m_speedTestReply != nullptr) {
@@ -3220,6 +3280,9 @@ void VpnController::startSpeedTestRequest(const QUrl& url, bool upload, const QB
         }
     });
     m_speedTestRequestTimer.restart();
+    m_speedTestSampleWindowStartMs = -1;
+    m_speedTestSampleWindowStartBytes = m_speedTestBytesReceived;
+    m_speedTestLastProgressElapsedMs = 0;
     connect(m_speedTestReply, &QNetworkReply::readyRead, this, &VpnController::onSpeedTestReadyRead);
     connect(m_speedTestReply, &QNetworkReply::finished, this, &VpnController::onSpeedTestFinished);
 }
@@ -3237,7 +3300,10 @@ void VpnController::startCurrentSpeedTestRequest()
         m_speedTestReply = nullptr;
     }
 
-    const QList<QUrl> endpoints = speedTestDownloadFallbackUrls(m_speedTestSelectedSizeMb);
+    const bool uploadPhase = (m_speedTestPhase == QStringLiteral("Upload"));
+    const QList<QUrl> endpoints = uploadPhase
+                                      ? speedTestUploadFallbackUrls(m_speedTestSelectedSizeMb)
+                                      : speedTestDownloadFallbackUrls(m_speedTestSelectedSizeMb);
     if (endpoints.isEmpty()) {
         finishSpeedTest(false, QStringLiteral("No speed test endpoint configured."));
         return;
@@ -3253,43 +3319,71 @@ void VpnController::startCurrentSpeedTestRequest()
         return;
     }
 
-    startSpeedTestRequest(url, false, QByteArray());
+    const QByteArray payload = uploadPhase ? buildUploadPayload() : QByteArray();
+    startSpeedTestRequest(url, uploadPhase, payload);
 }
 
 void VpnController::startPingPhase()
 {
-    m_speedTestState = QStringLiteral("Preparing");
-    m_speedTestPhase = QStringLiteral("Preparing");
-    m_speedTestDurationSec = 1;
+    m_speedTestState = QStringLiteral("Testing");
+    m_speedTestPhase = QStringLiteral("Latency");
+    m_speedTestDurationSec = 2;
     m_speedTestElapsedSec = 0;
     m_speedTestProgress = 0.0;
     m_speedTestCurrentMbps = 0.0;
     m_speedTestPeakMbps = 0.0;
+    m_speedTestAverageMbps = 0.0;
     m_speedTestPhaseBytes = 0;
     m_speedTestLastBytes = 0;
     m_speedTestBytesReceived = 0;
+    m_speedTestLatencyAttemptCount = 0;
+    m_speedTestLatencySuccessCount = 0;
+    m_speedTestLatencySamples.clear();
+    m_speedTestPingMs = -1;
+    m_speedTestJitterMs = -1;
+    m_speedTestLatencyMinMs = -1;
+    m_speedTestLatencyMaxMs = -1;
+    m_speedTestPacketLossPct = 0.0;
+    m_speedTestRouteStabilityPct = 0;
+    m_speedTestQualityScore = -1;
+    m_speedTestMeasuredBytes = 0;
+    m_speedTestMeasuredDurationMs = 0;
+    m_speedTestSampleWindowStartMs = -1;
+    m_speedTestSampleWindowStartBytes = 0;
+    m_speedTestWarmupUntilMs = 0;
     m_speedTestExpectedBytes = 0;
     m_speedTestPhaseTimer.restart();
     m_speedTestSampleTimer.restart();
     emit speedTestChanged();
+
+    QTimer::singleShot(0, this, [this]() {
+        runNextSpeedTestLatencyProbe();
+    });
 }
 
 void VpnController::startDownloadPhase()
 {
     m_speedTestState = QStringLiteral("Testing");
-    m_speedTestPhase = QStringLiteral("Testing");
+    m_speedTestPhase = QStringLiteral("Download");
     m_speedTestDurationSec = qMax(4, normalizedSpeedTestSizeMb(m_speedTestSelectedSizeMb));
     m_speedTestElapsedSec = 0;
     m_speedTestProgress = 0.0;
     m_speedTestCurrentMbps = 0.0;
     m_speedTestPeakMbps = 0.0;
+    m_speedTestAverageMbps = 0.0;
     m_speedTestPhaseBytes = 0;
     m_speedTestLastBytes = 0;
     m_speedTestBytesReceived = 0;
+    m_speedTestMeasuredBytes = 0;
+    m_speedTestMeasuredDurationMs = 0;
+    m_speedTestSampleWindowStartMs = -1;
+    m_speedTestSampleWindowStartBytes = 0;
     m_speedTestAttempt = 0;
     m_speedTestExpectedBytes =
         static_cast<qint64>(normalizedSpeedTestSizeMb(m_speedTestSelectedSizeMb)) * 1024 * 1024;
     m_speedTestPhaseTimer.restart();
+    m_speedTestWarmupUntilMs = kSpeedTestWarmupMs;
+    m_speedTestLastProgressElapsedMs = 0;
     m_speedTestSampleTimer.restart();
     emit speedTestChanged();
 
@@ -3298,7 +3392,178 @@ void VpnController::startDownloadPhase()
 
 void VpnController::startUploadPhase()
 {
-    // Upload phase is intentionally skipped in the quick data-friendly test flow.
+    m_speedTestState = QStringLiteral("Testing");
+    m_speedTestPhase = QStringLiteral("Upload");
+    m_speedTestDurationSec = qMax(3, normalizedSpeedTestSizeMb(m_speedTestSelectedSizeMb) / 2);
+    m_speedTestElapsedSec = 0;
+    m_speedTestProgress = 0.0;
+    m_speedTestCurrentMbps = 0.0;
+    m_speedTestPeakMbps = 0.0;
+    m_speedTestAverageMbps = 0.0;
+    m_speedTestPhaseBytes = 0;
+    m_speedTestLastBytes = 0;
+    m_speedTestBytesReceived = 0;
+    m_speedTestMeasuredBytes = 0;
+    m_speedTestMeasuredDurationMs = 0;
+    m_speedTestSampleWindowStartMs = -1;
+    m_speedTestSampleWindowStartBytes = 0;
+    m_speedTestAttempt = 0;
+    m_speedTestExpectedBytes = kSpeedTestUploadPayloadBytes;
+    m_speedTestPhaseTimer.restart();
+    m_speedTestWarmupUntilMs = kSpeedTestWarmupMs;
+    m_speedTestLastProgressElapsedMs = 0;
+    m_speedTestSampleTimer.restart();
+    emit speedTestChanged();
+    startCurrentSpeedTestRequest();
+}
+
+void VpnController::startAnalyzePhase()
+{
+    m_speedTestState = QStringLiteral("Analyzing");
+    m_speedTestPhase = QStringLiteral("Analyzing");
+    m_speedTestDurationSec = 1;
+    m_speedTestElapsedSec = 0;
+    m_speedTestProgress = 1.0;
+    finalizeSpeedTestQualityMetrics();
+    emit speedTestChanged();
+}
+
+void VpnController::runNextSpeedTestLatencyProbe()
+{
+    if (!m_speedTestRunning || m_speedTestPhase != QStringLiteral("Latency")) {
+        return;
+    }
+
+    if (m_speedTestLatencyAttemptCount >= kSpeedTestLatencyProbeCount) {
+        finalizeSpeedTestLatencyMetrics();
+        startDownloadPhase();
+        return;
+    }
+
+    const QList<QUrl> endpoints = speedTestDownloadFallbackUrls(m_speedTestSelectedSizeMb);
+    if (endpoints.isEmpty()) {
+        finishSpeedTest(false, QStringLiteral("No speed test endpoint available for latency probe."));
+        return;
+    }
+
+    const QUrl endpoint = endpoints.constFirst();
+    const QString host = endpoint.host().trimmed();
+    const int port = endpoint.port(endpoint.scheme().compare(QStringLiteral("https"), Qt::CaseInsensitive) == 0 ? 443 : 80);
+    if (host.isEmpty() || port <= 0) {
+        finishSpeedTest(false, QStringLiteral("Invalid endpoint host for latency probe."));
+        return;
+    }
+
+    ++m_speedTestLatencyAttemptCount;
+    m_speedTestProgress = qBound(
+        0.0,
+        static_cast<double>(m_speedTestLatencyAttemptCount) / static_cast<double>(kSpeedTestLatencyProbeCount),
+        1.0);
+    auto *socket = new QTcpSocket(this);
+    QPointer<QTcpSocket> socketGuard(socket);
+    const qint64 startedAtMs = QDateTime::currentMSecsSinceEpoch();
+
+    auto finishProbe = [this, socketGuard, startedAtMs](bool success) {
+        if (!socketGuard || socketGuard->property("gc_probe_done").toBool()) {
+            return;
+        }
+        socketGuard->setProperty("gc_probe_done", true);
+        if (!m_speedTestRunning || m_speedTestPhase != QStringLiteral("Latency")) {
+            socketGuard->abort();
+            socketGuard->deleteLater();
+            return;
+        }
+        const qint64 elapsedRaw = QDateTime::currentMSecsSinceEpoch() - startedAtMs;
+        const int elapsedMs = static_cast<int>(qMin<qint64>(qMax<qint64>(1, elapsedRaw), 60000));
+        if (success) {
+            ++m_speedTestLatencySuccessCount;
+            m_speedTestLatencySamples.append(elapsedMs);
+        }
+        socketGuard->abort();
+        socketGuard->deleteLater();
+        finalizeSpeedTestLatencyMetrics();
+        m_speedTestProgress = qBound(
+            0.0,
+            static_cast<double>(m_speedTestLatencyAttemptCount) / static_cast<double>(kSpeedTestLatencyProbeCount),
+            1.0);
+        emit speedTestChanged();
+        QTimer::singleShot(kSpeedTestLatencyProbeGapMs, this, [this]() {
+            runNextSpeedTestLatencyProbe();
+        });
+    };
+
+    connect(socket, &QTcpSocket::connected, this, [finishProbe]() {
+        finishProbe(true);
+    });
+    connect(socket, &QTcpSocket::errorOccurred, this, [finishProbe](QAbstractSocket::SocketError) {
+        finishProbe(false);
+    });
+
+    QTimer::singleShot(kSpeedTestLatencyProbeTimeoutMs, this, [socketGuard, finishProbe]() {
+        if (!socketGuard || socketGuard->property("gc_probe_done").toBool()) {
+            return;
+        }
+        finishProbe(false);
+    });
+
+    socket->connectToHost(host, static_cast<quint16>(port));
+}
+
+void VpnController::finalizeSpeedTestLatencyMetrics()
+{
+    if (m_speedTestLatencySamples.isEmpty()) {
+        m_speedTestPingMs = -1;
+        m_speedTestJitterMs = -1;
+        m_speedTestLatencyMinMs = -1;
+        m_speedTestLatencyMaxMs = -1;
+    } else {
+        std::sort(m_speedTestLatencySamples.begin(), m_speedTestLatencySamples.end());
+        m_speedTestLatencyMinMs = m_speedTestLatencySamples.constFirst();
+        m_speedTestLatencyMaxMs = m_speedTestLatencySamples.constLast();
+        const int p50 = percentileLatency(m_speedTestLatencySamples, 50.0);
+        const int p95 = percentileLatency(m_speedTestLatencySamples, 95.0);
+        m_speedTestPingMs = p50;
+        m_speedTestJitterMs = qMax(0, p95 - p50);
+    }
+
+    if (m_speedTestLatencyAttemptCount > 0) {
+        const int losses = qMax(0, m_speedTestLatencyAttemptCount - m_speedTestLatencySuccessCount);
+        m_speedTestPacketLossPct =
+            qBound(0.0, (static_cast<double>(losses) * 100.0) / static_cast<double>(m_speedTestLatencyAttemptCount), 100.0);
+    } else {
+        m_speedTestPacketLossPct = 0.0;
+    }
+}
+
+int VpnController::percentileLatency(const QVector<int>& samples, double percentile)
+{
+    if (samples.isEmpty()) {
+        return -1;
+    }
+    const QVector<int> sorted = [&samples]() {
+        QVector<int> local = samples;
+        std::sort(local.begin(), local.end());
+        return local;
+    }();
+    const double ratio = qBound(0.0, percentile / 100.0, 1.0);
+    const int index = qBound(0, static_cast<int>(std::round((sorted.size() - 1) * ratio)), sorted.size() - 1);
+    return sorted.at(index);
+}
+
+void VpnController::finalizeSpeedTestQualityMetrics()
+{
+    const int latencyMs = m_speedTestPingMs >= 0 ? m_speedTestPingMs : 999;
+    const int jitterMs = m_speedTestJitterMs >= 0 ? m_speedTestJitterMs : 999;
+    const double lossPct = qBound(0.0, m_speedTestPacketLossPct, 100.0);
+
+    // Conservative quality model tuned for stable UX reporting, not marketing-grade numbers.
+    const double latencyPenalty = qMin(45.0, static_cast<double>(latencyMs) * 0.18);
+    const double jitterPenalty = qMin(30.0, static_cast<double>(jitterMs) * 0.55);
+    const double lossPenalty = qMin(40.0, lossPct * 2.2);
+    const int score = static_cast<int>(qRound(qBound(0.0, 100.0 - latencyPenalty - jitterPenalty - lossPenalty, 100.0)));
+
+    m_speedTestQualityScore = score;
+    m_speedTestRouteStabilityPct = qBound(0, score, 100);
 }
 
 void VpnController::finishSpeedTest(bool ok, const QString& error)
@@ -3311,7 +3576,8 @@ void VpnController::finishSpeedTest(bool ok, const QString& error)
     }
     m_speedTestTimer.stop();
     m_speedTestRunning = false;
-    m_speedTestCurrentMbps = ok ? m_speedTestDownloadMbps : 0.0;
+    m_speedTestCurrentMbps = 0.0;
+    m_speedTestAverageMbps = ok ? combinedSpeedTestAverageMbps(m_speedTestDownloadMbps, m_speedTestUploadMbps) : 0.0;
     m_speedTestProgress = ok ? 1.0 : m_speedTestProgress;
     if (ok) {
         m_speedTestState = QStringLiteral("Completed");
@@ -3331,14 +3597,23 @@ void VpnController::finishSpeedTest(bool ok, const QString& error)
     emit speedTestChanged();
 
     if (ok) {
-        const double mbps = qMax(0.0, m_speedTestDownloadMbps);
-        const double mbs = mbps / 8.0;
-        QString resultLine = QStringLiteral("Size %1 MB: %2 Mbps (%3 MB/s)")
+        const double downMbps = qMax(0.0, m_speedTestDownloadMbps);
+        const double upMbps = qMax(0.0, m_speedTestUploadMbps);
+        const double overallMbps = qMax(0.0, m_speedTestAverageMbps);
+        QString resultLine = QStringLiteral("Size %1 MB: DL %2 Mbps | UL %3 Mbps | AVG %4 Mbps")
                                  .arg(normalizedSpeedTestSizeMb(m_speedTestSelectedSizeMb))
-                                 .arg(QString::number(mbps, 'f', 2))
-                                 .arg(QString::number(mbs, 'f', 2));
+                                 .arg(QString::number(downMbps, 'f', 2))
+                                 .arg(QString::number(upMbps, 'f', 2))
+                                 .arg(QString::number(overallMbps, 'f', 2));
         if (m_speedTestPingMs >= 0) {
             resultLine += QStringLiteral(" | Ping %1 ms").arg(m_speedTestPingMs);
+        }
+        if (m_speedTestJitterMs >= 0) {
+            resultLine += QStringLiteral(" | Jitter %1 ms").arg(m_speedTestJitterMs);
+        }
+        resultLine += QStringLiteral(" | Loss %1%").arg(QString::number(m_speedTestPacketLossPct, 'f', 1));
+        if (m_speedTestQualityScore >= 0) {
+            resultLine += QStringLiteral(" | Quality %1/100").arg(m_speedTestQualityScore);
         }
         m_speedTestHistory.prepend(resultLine);
         while (m_speedTestHistory.size() > kSpeedTestHistoryMaxItems) {
@@ -3380,13 +3655,25 @@ void VpnController::startSpeedTest()
     m_speedTestDurationSec = 1;
     m_speedTestProgress = 0.0;
     m_speedTestPingMs = -1;
+    m_speedTestJitterMs = -1;
+    m_speedTestLatencyMinMs = -1;
+    m_speedTestLatencyMaxMs = -1;
+    m_speedTestPacketLossPct = 0.0;
+    m_speedTestRouteStabilityPct = 0;
+    m_speedTestQualityScore = -1;
     m_speedTestDownloadMbps = 0.0;
-    m_speedTestUploadMbps = -1.0;
+    m_speedTestUploadMbps = 0.0;
+    m_speedTestAverageMbps = 0.0;
     m_speedTestError.clear();
     m_speedTestExpectedBytes = 0;
     m_speedTestBytesReceived = 0;
     m_speedTestLastBytes = 0;
     m_speedTestPhaseBytes = 0;
+    m_speedTestMeasuredBytes = 0;
+    m_speedTestMeasuredDurationMs = 0;
+    m_speedTestSampleWindowStartMs = -1;
+    m_speedTestSampleWindowStartBytes = 0;
+    m_speedTestWarmupUntilMs = 0;
     m_speedTestUsingDirectFallback = false;
     m_speedTestPhaseTimer.invalidate();
     m_speedTestSampleTimer.invalidate();
@@ -3401,12 +3688,7 @@ void VpnController::startSpeedTest()
 
     startPingPhase();
     m_speedTestTimer.start();
-    QTimer::singleShot(120, this, [this]() {
-        if (m_speedTestRunning) {
-            startDownloadPhase();
-        }
-    });
-    appendSystemLog(QStringLiteral("[SpeedTest] Starting %1 MB quick test through VPN.")
+    appendSystemLog(QStringLiteral("[SpeedTest] Starting %1 MB reliability test (latency + download + upload).")
                         .arg(normalizedSpeedTestSizeMb(m_speedTestSelectedSizeMb)));
 }
 
@@ -3462,6 +3744,17 @@ QList<QUrl> VpnController::speedTestDownloadFallbackUrls(int sizeMb) const
     urls.append(QUrl(QStringLiteral("http://ipv4.download.thinkbroadband.com/%1MB.zip").arg(archiveSizeMb)));
     urls.append(QUrl(QStringLiteral("https://speedtest.tele2.net/%1MB.zip").arg(archiveSizeMb)));
     urls.append(QUrl(QStringLiteral("http://speedtest.tele2.net/%1MB.zip").arg(archiveSizeMb)));
+    urls.removeIf([](const QUrl& url) { return !url.isValid(); });
+    return urls;
+}
+
+QList<QUrl> VpnController::speedTestUploadFallbackUrls(int sizeMb) const
+{
+    Q_UNUSED(sizeMb)
+    QList<QUrl> urls;
+    urls.append(QUrl(QStringLiteral("https://speed.cloudflare.com/__up")));
+    urls.append(QUrl(QStringLiteral("https://httpbin.org/post")));
+    urls.append(QUrl(QStringLiteral("https://postman-echo.com/post")));
     urls.removeIf([](const QUrl& url) { return !url.isValid(); });
     return urls;
 }
@@ -3762,34 +4055,90 @@ void VpnController::onSpeedTestTick()
         }
     }
 
-    qint64 sampleMs = m_speedTestSampleTimer.isValid() ? m_speedTestSampleTimer.restart() : kSpeedTestTickIntervalMs;
-    if (sampleMs <= 0) {
-        sampleMs = kSpeedTestTickIntervalMs;
-    }
-    const qint64 deltaBytes = qMax<qint64>(0, m_speedTestBytesReceived - m_speedTestLastBytes);
-    m_speedTestLastBytes = m_speedTestBytesReceived;
+    updateSpeedTestSampling(false);
 
-    const double mbps = mbpsFromBytes(deltaBytes, sampleMs);
-    m_speedTestCurrentMbps = mbps;
-    if (mbps > m_speedTestPeakMbps) {
-        m_speedTestPeakMbps = mbps;
-    }
-    if (m_speedTestExpectedBytes > 0) {
-        m_speedTestProgress = qBound(
-            0.0,
-            static_cast<double>(m_speedTestBytesReceived) / static_cast<double>(m_speedTestExpectedBytes),
-            1.0);
-    }
+    const bool transferPhase =
+        (m_speedTestPhase == QStringLiteral("Download") || m_speedTestPhase == QStringLiteral("Upload"));
+    const bool uploadPhase = (m_speedTestPhase == QStringLiteral("Upload"));
+    const qint64 elapsedMs = m_speedTestPhaseTimer.isValid() ? m_speedTestPhaseTimer.elapsed() : 0;
+    const qint64 sinceProgressMs = qMax<qint64>(0, elapsedMs - m_speedTestLastProgressElapsedMs);
+    const bool uploadPayloadSent =
+        uploadPhase && m_speedTestExpectedBytes > 0 && m_speedTestBytesReceived >= m_speedTestExpectedBytes;
 
-    if (m_speedTestPhase == QStringLiteral("Testing")
+    if (transferPhase
         && m_speedTestPhaseTimer.isValid()
-        && m_speedTestPhaseTimer.elapsed() >= kSpeedTestNoProgressTimeoutMs
-        && m_speedTestBytesReceived <= 0) {
-        if (m_speedTestReply != nullptr) {
-            m_speedTestReply->abort();
+        && uploadPayloadSent
+        && sinceProgressMs >= kSpeedTestUploadResponseIdleFinalizeMs) {
+        updateSpeedTestSampling(true);
+        const qint64 elapsedForMbps = qMax<qint64>(
+            1,
+            m_speedTestMeasuredDurationMs > 0
+                ? m_speedTestMeasuredDurationMs
+                : (m_speedTestPhaseTimer.isValid()
+                       ? m_speedTestPhaseTimer.elapsed()
+                       : m_speedTestRequestTimer.elapsed()));
+        const qint64 bytesForMbps = m_speedTestMeasuredBytes > 0 ? m_speedTestMeasuredBytes : m_speedTestBytesReceived;
+        const double averageMbps = mbpsFromBytes(bytesForMbps, elapsedForMbps);
+        m_speedTestUploadMbps = qMax(0.0, qMax(averageMbps, m_speedTestAverageMbps));
+        m_speedTestProgress = 1.0;
+        appendSystemLog(QStringLiteral("[SpeedTest] Upload response idle timeout reached; finalizing upload with transmitted data."));
+        startAnalyzePhase();
+        finishSpeedTest(true);
+        return;
+    }
+
+    if (transferPhase
+        && m_speedTestPhaseTimer.isValid()
+        && elapsedMs >= kSpeedTestNoProgressTimeoutMs
+        && sinceProgressMs >= kSpeedTestNoProgressTimeoutMs) {
+        const QList<QUrl> endpoints = uploadPhase
+                                          ? speedTestUploadFallbackUrls(m_speedTestSelectedSizeMb)
+                                          : speedTestDownloadFallbackUrls(m_speedTestSelectedSizeMb);
+        if (m_speedTestAttempt < endpoints.size()) {
+            appendSystemLog(QStringLiteral("[SpeedTest] No transfer progress on current %1 endpoint. Trying fallback %2/%3.")
+                                .arg(uploadPhase ? QStringLiteral("upload") : QStringLiteral("download"))
+                                .arg(m_speedTestAttempt + 1)
+                                .arg(endpoints.size()));
+            startCurrentSpeedTestRequest();
             return;
         }
-        finishSpeedTest(false, QStringLiteral("Speed test timed out with no data received."));
+        if (!uploadPhase && !m_tunMode && !m_speedTestUsingDirectFallback) {
+            m_speedTestUsingDirectFallback = true;
+            m_speedTestAttempt = 0;
+            m_speedTestNetworkManager.setProxy(QNetworkProxy::NoProxy);
+            appendSystemLog(QStringLiteral("[SpeedTest] No transfer progress through VPN-proxy path, retrying with direct fallback."));
+            startCurrentSpeedTestRequest();
+            return;
+        }
+
+        // If we already sampled a usable amount, gracefully continue instead of hard failing.
+        if (m_speedTestMeasuredBytes > 0 || m_speedTestBytesReceived > 0) {
+            updateSpeedTestSampling(true);
+            const qint64 elapsedForMbps = qMax<qint64>(
+                1,
+                m_speedTestMeasuredDurationMs > 0
+                    ? m_speedTestMeasuredDurationMs
+                    : (m_speedTestPhaseTimer.isValid()
+                           ? m_speedTestPhaseTimer.elapsed()
+                           : m_speedTestRequestTimer.elapsed()));
+            const qint64 bytesForMbps = m_speedTestMeasuredBytes > 0 ? m_speedTestMeasuredBytes : m_speedTestBytesReceived;
+            const double finalMbps = qMax(mbpsFromBytes(bytesForMbps, elapsedForMbps), m_speedTestAverageMbps);
+            if (uploadPhase) {
+                m_speedTestUploadMbps = qMax(0.0, finalMbps);
+                m_speedTestProgress = 1.0;
+                appendSystemLog(QStringLiteral("[SpeedTest] Upload finalized from sampled bytes after idle timeout."));
+                startAnalyzePhase();
+                finishSpeedTest(true);
+                return;
+            }
+            m_speedTestDownloadMbps = qMax(0.0, finalMbps);
+            m_speedTestProgress = 1.0;
+            appendSystemLog(QStringLiteral("[SpeedTest] Download finalized from sampled bytes after idle timeout."));
+            startUploadPhase();
+            return;
+        }
+
+        finishSpeedTest(false, QStringLiteral("Speed test stalled waiting for transfer progress."));
         return;
     }
     emit speedTestChanged();
@@ -3814,6 +4163,9 @@ void VpnController::onSpeedTestDownloadProgress(qint64 received, qint64 total)
     if (!m_speedTestRunning) {
         return;
     }
+    if (m_speedTestUploadMode) {
+        return;
+    }
 
     if (received > m_speedTestBytesReceived) {
         if (m_speedTestPingMs < 0 && m_speedTestRequestTimer.isValid()) {
@@ -3822,6 +4174,9 @@ void VpnController::onSpeedTestDownloadProgress(qint64 received, qint64 total)
         }
         m_speedTestBytesReceived = received;
         m_speedTestPhaseBytes = received;
+        if (m_speedTestPhaseTimer.isValid()) {
+            m_speedTestLastProgressElapsedMs = m_speedTestPhaseTimer.elapsed();
+        }
     }
 
     const qint64 expected = m_speedTestExpectedBytes > 0
@@ -3842,14 +4197,21 @@ void VpnController::onSpeedTestUploadProgress(qint64 sent, qint64 total)
     if (!m_speedTestRunning || !m_speedTestUploadMode) {
         return;
     }
-    if (connected()) {
-        return;
-    }
     if (sent > m_speedTestBytesReceived) {
         const qint64 delta = sent - m_speedTestBytesReceived;
         m_speedTestBytesReceived = sent;
         m_speedTestPhaseBytes += delta;
+        if (m_speedTestPhaseTimer.isValid()) {
+            m_speedTestLastProgressElapsedMs = m_speedTestPhaseTimer.elapsed();
+        }
+        if (m_speedTestExpectedBytes > 0) {
+            m_speedTestProgress = qBound(
+                0.0,
+                static_cast<double>(m_speedTestBytesReceived) / static_cast<double>(m_speedTestExpectedBytes),
+                1.0);
+        }
     }
+    emit speedTestChanged();
 }
 
 void VpnController::onSpeedTestFinished()
@@ -3860,7 +4222,8 @@ void VpnController::onSpeedTestFinished()
 
     const QString phaseAtFinish = m_speedTestPhase;
     const QString errorText = m_speedTestReply->errorString();
-    const bool replyHadError = (m_speedTestReply->error() != QNetworkReply::NoError);
+    const QNetworkReply::NetworkError replyErrorCode = m_speedTestReply->error();
+    const bool replyHadError = (replyErrorCode != QNetworkReply::NoError);
     m_speedTestReply->deleteLater();
     m_speedTestReply = nullptr;
 
@@ -3869,16 +4232,60 @@ void VpnController::onSpeedTestFinished()
     }
 
     if (replyHadError && !m_speedTestCancelledByUser) {
-        const QList<QUrl> endpoints = speedTestDownloadFallbackUrls(m_speedTestSelectedSizeMb);
+        const bool uploadPhase = (phaseAtFinish == QStringLiteral("Upload"));
+        const bool operationCanceled = (replyErrorCode == QNetworkReply::OperationCanceledError);
+        const bool uploadPayloadSent =
+            uploadPhase && m_speedTestExpectedBytes > 0 && m_speedTestBytesReceived >= m_speedTestExpectedBytes;
+        const bool downloadMostlyComplete =
+            !uploadPhase
+            && m_speedTestExpectedBytes > 0
+            && static_cast<double>(m_speedTestBytesReceived) >= (static_cast<double>(m_speedTestExpectedBytes) * kSpeedTestDownloadCompletionRatio);
+        if (operationCanceled && (uploadPayloadSent || downloadMostlyComplete)) {
+            updateSpeedTestSampling(true);
+            const qint64 elapsedMs = qMax<qint64>(
+                1,
+                m_speedTestMeasuredDurationMs > 0
+                    ? m_speedTestMeasuredDurationMs
+                    : (m_speedTestPhaseTimer.isValid()
+                           ? m_speedTestPhaseTimer.elapsed()
+                           : m_speedTestRequestTimer.elapsed()));
+            const double averageMbps = mbpsFromBytes(
+                m_speedTestMeasuredBytes > 0 ? m_speedTestMeasuredBytes : m_speedTestBytesReceived,
+                elapsedMs);
+            const double finalMbps = qMax(averageMbps, m_speedTestAverageMbps);
+
+            if (uploadPhase) {
+                m_speedTestUploadMbps = qMax(0.0, finalMbps);
+                m_speedTestProgress = 1.0;
+                appendSystemLog(QStringLiteral("[SpeedTest] Upload finalized after request cancellation with full payload sent."));
+                startAnalyzePhase();
+                finishSpeedTest(true);
+                return;
+            }
+
+            m_speedTestDownloadMbps = qMax(0.0, finalMbps);
+            m_speedTestProgress = 1.0;
+            if (m_speedTestPingMs < 0) {
+                m_speedTestPingMs = static_cast<int>(qMin<qint64>(elapsedMs, 60000));
+            }
+            appendSystemLog(QStringLiteral("[SpeedTest] Download accepted after cancellation with sufficient sampled bytes."));
+            startUploadPhase();
+            return;
+        }
+
+        const QList<QUrl> endpoints = uploadPhase
+                                          ? speedTestUploadFallbackUrls(m_speedTestSelectedSizeMb)
+                                          : speedTestDownloadFallbackUrls(m_speedTestSelectedSizeMb);
         if (m_speedTestAttempt < endpoints.size()) {
-            appendSystemLog(QStringLiteral("[SpeedTest] Endpoint failed (%1). Trying fallback %2/%3.")
+            appendSystemLog(QStringLiteral("[SpeedTest] %1 endpoint failed (%2). Trying fallback %3/%4.")
+                                .arg(uploadPhase ? QStringLiteral("Upload") : QStringLiteral("Download"))
                                 .arg(errorText.trimmed().isEmpty() ? QStringLiteral("network error") : errorText.trimmed())
                                 .arg(m_speedTestAttempt + 1)
                                 .arg(endpoints.size()));
             startCurrentSpeedTestRequest();
             return;
         }
-        if (!m_tunMode && !m_speedTestUsingDirectFallback) {
+        if (!uploadPhase && !m_tunMode && !m_speedTestUsingDirectFallback) {
             m_speedTestUsingDirectFallback = true;
             m_speedTestAttempt = 0;
             m_speedTestNetworkManager.setProxy(QNetworkProxy::NoProxy);
@@ -3886,30 +4293,129 @@ void VpnController::onSpeedTestFinished()
             startCurrentSpeedTestRequest();
             return;
         }
-        finishSpeedTest(false, errorText);
+        if (uploadPhase) {
+            m_speedTestUploadMbps = 0.0;
+            appendSystemLog(QStringLiteral("[SpeedTest] Upload phase failed across endpoints; keeping download diagnostics."));
+            startAnalyzePhase();
+            finishSpeedTest(true);
+            return;
+        }
+        if (operationCanceled) {
+            finishSpeedTest(false, QStringLiteral("Speed test request timed out or was interrupted."));
+        } else {
+            finishSpeedTest(false, errorText);
+        }
         return;
     }
 
-    if (phaseAtFinish != QStringLiteral("Testing")) {
+    if (phaseAtFinish != QStringLiteral("Download") && phaseAtFinish != QStringLiteral("Upload")) {
         finishSpeedTest(false, QStringLiteral("Speed test finished in invalid state."));
         return;
     }
 
-    const qint64 elapsedMs = m_speedTestPhaseTimer.isValid()
-                                 ? qMax<qint64>(1, m_speedTestPhaseTimer.elapsed())
-                                 : qMax<qint64>(1, m_speedTestRequestTimer.elapsed());
+    updateSpeedTestSampling(true);
+    const qint64 elapsedMs = qMax<qint64>(
+        1,
+        m_speedTestMeasuredDurationMs > 0
+            ? m_speedTestMeasuredDurationMs
+            : (m_speedTestPhaseTimer.isValid()
+                   ? m_speedTestPhaseTimer.elapsed()
+                   : m_speedTestRequestTimer.elapsed()));
     if (m_speedTestBytesReceived <= 0) {
-        finishSpeedTest(false, QStringLiteral("Speed test returned no downloadable data."));
+        finishSpeedTest(false, QStringLiteral("Speed test returned no transferable data."));
         return;
     }
-    const double averageMbps = mbpsFromBytes(m_speedTestBytesReceived, elapsedMs);
-    m_speedTestDownloadMbps = qMax(averageMbps, m_speedTestPeakMbps);
-    m_speedTestProgress = 1.0;
-    if (m_speedTestPingMs < 0) {
-        m_speedTestPingMs = static_cast<int>(qMin<qint64>(elapsedMs, 60000));
+    const double averageMbps = mbpsFromBytes(m_speedTestMeasuredBytes > 0 ? m_speedTestMeasuredBytes : m_speedTestBytesReceived, elapsedMs);
+    const double finalMbps = qMax(averageMbps, m_speedTestAverageMbps);
+
+    if (phaseAtFinish == QStringLiteral("Download")) {
+        m_speedTestDownloadMbps = qMax(0.0, finalMbps);
+        m_speedTestProgress = 1.0;
+        if (m_speedTestPingMs < 0) {
+            m_speedTestPingMs = static_cast<int>(qMin<qint64>(elapsedMs, 60000));
+        }
+        startUploadPhase();
+        return;
     }
-    m_speedTestUploadMbps = -1.0;
+
+    m_speedTestUploadMbps = qMax(0.0, finalMbps);
+    m_speedTestProgress = 1.0;
+    startAnalyzePhase();
     finishSpeedTest(true);
+}
+
+void VpnController::updateSpeedTestSampling(bool finalizeWindow)
+{
+    if (!m_speedTestRunning || !m_speedTestPhaseTimer.isValid()) {
+        return;
+    }
+    const bool transferPhase =
+        (m_speedTestPhase == QStringLiteral("Download") || m_speedTestPhase == QStringLiteral("Upload"));
+    if (!transferPhase) {
+        return;
+    }
+
+    const qint64 elapsedMs = qMax<qint64>(1, m_speedTestPhaseTimer.elapsed());
+    if (m_speedTestSampleWindowStartMs < 0) {
+        m_speedTestSampleWindowStartMs = elapsedMs;
+        m_speedTestSampleWindowStartBytes = m_speedTestBytesReceived;
+        return;
+    }
+
+    const qint64 windowMs = elapsedMs - m_speedTestSampleWindowStartMs;
+    if (!finalizeWindow && windowMs < kSpeedTestSamplingWindowMs) {
+        return;
+    }
+    if (windowMs <= 0) {
+        return;
+    }
+
+    const qint64 windowBytes = qMax<qint64>(0, m_speedTestBytesReceived - m_speedTestSampleWindowStartBytes);
+    const double instantMbps = mbpsFromBytes(windowBytes, windowMs);
+    const double alpha = 0.24;
+    if (m_speedTestCurrentMbps <= 0.01) {
+        m_speedTestCurrentMbps = instantMbps;
+    } else {
+        m_speedTestCurrentMbps = (m_speedTestCurrentMbps * (1.0 - alpha)) + (instantMbps * alpha);
+    }
+    if (m_speedTestCurrentMbps > m_speedTestPeakMbps) {
+        m_speedTestPeakMbps = m_speedTestCurrentMbps;
+    }
+
+    const qint64 warmupAnchor = qMax<qint64>(0, m_speedTestWarmupUntilMs);
+    qint64 effectiveBytes = windowBytes;
+    qint64 effectiveMs = windowMs;
+    if (elapsedMs <= warmupAnchor) {
+        effectiveBytes = 0;
+        effectiveMs = 0;
+    } else if (m_speedTestSampleWindowStartMs < warmupAnchor) {
+        const qint64 afterWarmupMs = elapsedMs - warmupAnchor;
+        if (afterWarmupMs <= 0 || windowMs <= 0) {
+            effectiveBytes = 0;
+            effectiveMs = 0;
+        } else {
+            const double ratio = qBound(0.0, static_cast<double>(afterWarmupMs) / static_cast<double>(windowMs), 1.0);
+            effectiveBytes = static_cast<qint64>(std::llround(static_cast<double>(windowBytes) * ratio));
+            effectiveMs = afterWarmupMs;
+        }
+    }
+    if (effectiveMs > 0 && effectiveBytes > 0) {
+        m_speedTestMeasuredBytes += effectiveBytes;
+        m_speedTestMeasuredDurationMs += qMax<qint64>(1, effectiveMs);
+        if (m_speedTestMeasuredDurationMs > 0 && m_speedTestMeasuredBytes > 0) {
+            m_speedTestAverageMbps = mbpsFromBytes(m_speedTestMeasuredBytes, m_speedTestMeasuredDurationMs);
+        }
+    }
+
+    if (m_speedTestExpectedBytes > 0) {
+        m_speedTestProgress = qBound(
+            0.0,
+            static_cast<double>(m_speedTestBytesReceived) / static_cast<double>(m_speedTestExpectedBytes),
+            1.0);
+    }
+
+    m_speedTestSampleWindowStartMs = elapsedMs;
+    m_speedTestSampleWindowStartBytes = m_speedTestBytesReceived;
 }
 
 void VpnController::onPublicIpFinished()
@@ -4017,19 +4523,35 @@ void VpnController::resetSpeedTestState(bool emitSignal)
     m_speedTestDurationSec = 0;
     m_speedTestProgress = 0.0;
     m_speedTestPingMs = -1;
+    m_speedTestJitterMs = -1;
+    m_speedTestPacketLossPct = 0.0;
+    m_speedTestRouteStabilityPct = 0;
+    m_speedTestQualityScore = -1;
+    m_speedTestLatencyMinMs = -1;
+    m_speedTestLatencyMaxMs = -1;
     m_speedTestDownloadMbps = 0.0;
-    m_speedTestUploadMbps = -1.0;
+    m_speedTestUploadMbps = 0.0;
     m_speedTestError.clear();
     m_speedTestCurrentMbps = 0.0;
     m_speedTestPeakMbps = 0.0;
+    m_speedTestAverageMbps = 0.0;
     m_speedTestBytesReceived = 0;
     m_speedTestLastBytes = 0;
     m_speedTestAttempt = 0;
     m_speedTestPingSampleCount = 0;
     m_speedTestPingTotalMs = 0;
+    m_speedTestLatencyAttemptCount = 0;
+    m_speedTestLatencySuccessCount = 0;
+    m_speedTestLatencySamples.clear();
     m_speedTestUploadMode = false;
     m_speedTestPhaseBytes = 0;
     m_speedTestExpectedBytes = 0;
+    m_speedTestSampleWindowStartMs = -1;
+    m_speedTestSampleWindowStartBytes = 0;
+    m_speedTestMeasuredBytes = 0;
+    m_speedTestMeasuredDurationMs = 0;
+    m_speedTestLastProgressElapsedMs = 0;
+    m_speedTestWarmupUntilMs = 0;
     m_speedTestCancelledByUser = false;
     m_speedTestUsingDirectFallback = false;
     m_speedTestPhaseTimer.invalidate();
@@ -4654,10 +5176,10 @@ QVariantList VpnController::profileUsageSessionsForId(const QString& profileId, 
         row.insert(QStringLiteral("endedAtMs"), endedAt);
         row.insert(
             QStringLiteral("startedAt"),
-            QDateTime::fromMSecsSinceEpoch(startedAt, Qt::UTC).toLocalTime().toString(QStringLiteral("yyyy-MM-dd HH:mm")));
+            QDateTime::fromMSecsSinceEpoch(startedAt, QTimeZone::UTC).toLocalTime().toString(QStringLiteral("yyyy-MM-dd HH:mm")));
         row.insert(
             QStringLiteral("endedAt"),
-            QDateTime::fromMSecsSinceEpoch(endedAt, Qt::UTC).toLocalTime().toString(QStringLiteral("yyyy-MM-dd HH:mm")));
+            QDateTime::fromMSecsSinceEpoch(endedAt, QTimeZone::UTC).toLocalTime().toString(QStringLiteral("yyyy-MM-dd HH:mm")));
         row.insert(QStringLiteral("rxBytes"), rx);
         row.insert(QStringLiteral("txBytes"), tx);
         row.insert(QStringLiteral("totalBytes"), total);

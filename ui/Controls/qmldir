@@ -21,3 +21,5 @@ CircleIconButton 1.0 CircleIconButton.qml
 PrimaryActionButton 1.0 PrimaryActionButton.qml
 SignalBars 1.0 SignalBars.qml
 NumberFlowText 1.0 NumberFlowText.qml
+
+SpeedTestGauge 1.0 SpeedTestGauge.qml

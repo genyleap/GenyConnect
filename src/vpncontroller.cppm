@@ -32,6 +32,7 @@ module;
 #include <QStringList>
 #include <QTimer>
 #include <QUrl>
+#include <QVector>
 #include <QVariantList>
 #include <QVariantMap>
 #include <atomic>
@@ -100,7 +101,14 @@ GENYCONNECT_MODULE_EXPORT class VpnController : public QObject
     Q_PROPERTY(double speedTestProgress READ speedTestProgress NOTIFY speedTestChanged)
     Q_PROPERTY(double speedTestCurrentMbps READ speedTestCurrentMbps NOTIFY speedTestChanged)
     Q_PROPERTY(double speedTestPeakMbps READ speedTestPeakMbps NOTIFY speedTestChanged)
+    Q_PROPERTY(double speedTestAverageMbps READ speedTestAverageMbps NOTIFY speedTestChanged)
     Q_PROPERTY(int speedTestPingMs READ speedTestPingMs NOTIFY speedTestChanged)
+    Q_PROPERTY(int speedTestJitterMs READ speedTestJitterMs NOTIFY speedTestChanged)
+    Q_PROPERTY(double speedTestPacketLossPct READ speedTestPacketLossPct NOTIFY speedTestChanged)
+    Q_PROPERTY(int speedTestRouteStabilityPct READ speedTestRouteStabilityPct NOTIFY speedTestChanged)
+    Q_PROPERTY(int speedTestQualityScore READ speedTestQualityScore NOTIFY speedTestChanged)
+    Q_PROPERTY(int speedTestLatencyMinMs READ speedTestLatencyMinMs NOTIFY speedTestChanged)
+    Q_PROPERTY(int speedTestLatencyMaxMs READ speedTestLatencyMaxMs NOTIFY speedTestChanged)
     Q_PROPERTY(double speedTestDownloadMbps READ speedTestDownloadMbps NOTIFY speedTestChanged)
     Q_PROPERTY(double speedTestUploadMbps READ speedTestUploadMbps NOTIFY speedTestChanged)
     Q_PROPERTY(QString speedTestError READ speedTestError NOTIFY speedTestChanged)
@@ -264,12 +272,19 @@ public:
      * @return Peak Mbps value.
      */
     double speedTestPeakMbps() const;
+    double speedTestAverageMbps() const;
 
     /**
      * @brief Measured ping latency.
      * @return Ping milliseconds or negative when unavailable.
      */
     int speedTestPingMs() const;
+    int speedTestJitterMs() const;
+    double speedTestPacketLossPct() const;
+    int speedTestRouteStabilityPct() const;
+    int speedTestQualityScore() const;
+    int speedTestLatencyMinMs() const;
+    int speedTestLatencyMaxMs() const;
 
     /**
      * @brief Final download test result.
@@ -856,9 +871,11 @@ private:
      * @brief Start request for current phase/attempt.
      */
     void startCurrentSpeedTestRequest();
+    void runNextSpeedTestLatencyProbe();
     void startPingPhase();
     void startDownloadPhase();
     void startUploadPhase();
+    void startAnalyzePhase();
 
     /**
      * @brief Finalize speed-test workflow.
@@ -868,7 +885,12 @@ private:
     void finishSpeedTest(bool ok, const QString& error = QString());
     QUrl speedTestDownloadUrlForSizeMb(int sizeMb) const;
     QList<QUrl> speedTestDownloadFallbackUrls(int sizeMb) const;
+    QList<QUrl> speedTestUploadFallbackUrls(int sizeMb) const;
     int normalizedSpeedTestSizeMb(int requested) const;
+    void updateSpeedTestSampling(bool finalizeWindow = false);
+    void finalizeSpeedTestLatencyMetrics();
+    void finalizeSpeedTestQualityMetrics();
+    static int percentileLatency(const QVector<int>& samples, double percentile);
 
     /**
      * @brief Enable/disable system proxy according to settings/state.
@@ -1040,7 +1062,14 @@ private:
     double m_speedTestProgress = 0.0;
     double m_speedTestCurrentMbps = 0.0;
     double m_speedTestPeakMbps = 0.0;
+    double m_speedTestAverageMbps = 0.0;
     int m_speedTestPingMs = -1;
+    int m_speedTestJitterMs = -1;
+    double m_speedTestPacketLossPct = 0.0;
+    int m_speedTestRouteStabilityPct = 0;
+    int m_speedTestQualityScore = -1;
+    int m_speedTestLatencyMinMs = -1;
+    int m_speedTestLatencyMaxMs = -1;
     double m_speedTestDownloadMbps = 0.0;
     double m_speedTestUploadMbps = 0.0;
     QString m_speedTestError;
@@ -1050,9 +1079,18 @@ private:
     int m_speedTestAttempt = 0;
     int m_speedTestPingSampleCount = 0;
     qint64 m_speedTestPingTotalMs = 0;
+    int m_speedTestLatencyAttemptCount = 0;
+    int m_speedTestLatencySuccessCount = 0;
+    QVector<int> m_speedTestLatencySamples;
     bool m_speedTestUploadMode = false;
     qint64 m_speedTestPhaseBytes = 0;
     qint64 m_speedTestExpectedBytes = 0;
+    qint64 m_speedTestSampleWindowStartMs = -1;
+    qint64 m_speedTestSampleWindowStartBytes = 0;
+    qint64 m_speedTestMeasuredBytes = 0;
+    qint64 m_speedTestMeasuredDurationMs = 0;
+    qint64 m_speedTestLastProgressElapsedMs = 0;
+    qint64 m_speedTestWarmupUntilMs = 0;
     bool m_speedTestCancelledByUser = false;
     bool m_speedTestUsingDirectFallback = false;
     int m_speedTestSelectedSizeMb = 10;
