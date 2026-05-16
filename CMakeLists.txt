@@ -831,7 +831,21 @@ if(APPLE AND GENYCONNECT_MACOS_POSTBUILD_DEPLOY)
     list(APPEND _macdeployqt_args "-no-strip")
   endif()
 
-  set(_codesign_common "--force" "--deep" "--sign" "${GENYCONNECT_CODESIGN_IDENTITY}")
+  if(GENYCONNECT_CODESIGN_IDENTITY STREQUAL "-")
+    set(_codesign_common
+      "--force"
+      "--deep"
+      "--sign" "${GENYCONNECT_CODESIGN_IDENTITY}"
+    )
+  else()
+    set(_codesign_common
+      "--force"
+      "--deep"
+      "--options" "runtime"
+      "--timestamp"
+      "--sign" "${GENYCONNECT_CODESIGN_IDENTITY}"
+    )
+  endif()
 
   set(_codesign_ent "")
   if(GENYCONNECT_CODESIGN_ENTITLEMENTS AND EXISTS "${GENYCONNECT_CODESIGN_ENTITLEMENTS}")
