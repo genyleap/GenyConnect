@@ -52,7 +52,6 @@ jobs:
 
     env:
       CMAKE_VERSION: "4.2.3"
-      APP_VERSION: "1.3.0"
 
     steps:
       - name: Checkout
@@ -192,8 +191,22 @@ jobs:
 
           APP="build/bin/GenyConnect.app"
           OUT_DIR="build/final/macos-${{ matrix.target_arch }}"
-          DMG_NAME="GenyConnect-${APP_VERSION}-macos-${{ matrix.target_arch }}.dmg"
+
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            VERSION="${GITHUB_REF_NAME#v}"
+          else
+            VERSION="$(grep -E 'project\(\$\{PROJECT_NAME\} VERSION ' CMakeLists.txt | sed -E 's/.*VERSION ([0-9]+\.[0-9]+\.[0-9]+).*/\1/')"
+          fi
+
+          if [[ -z "${VERSION}" ]]; then
+            echo "Could not detect project version."
+            exit 1
+          fi
+
+          DMG_NAME="GenyConnect-${VERSION}-macos-${{ matrix.target_arch }}.dmg"
           DMG_PATH="${OUT_DIR}/${DMG_NAME}"
+
+          echo "Package version: ${VERSION}"
 
           if [[ ! -d "$APP" ]]; then
             echo "App not found: $APP"
@@ -236,7 +249,7 @@ jobs:
           while IFS= read -r bundle_path; do
             echo "Signing bundle/plugin: $bundle_path"
             codesign --force --sign - "$bundle_path" || true
-          done < <(find "$APP/Contents" $begin:math:text$ \-name \"\*\.bundle\" \-o \-name \"\*\.plugin\" \-o \-name \"\*\.appex\" $end:math:text$ -type d | sort -r)
+          done < <(find "$APP/Contents" \( -name "*.bundle" -o -name "*.plugin" -o -name "*.appex" \) -type d | sort -r)
 
           echo "Signing main app..."
           codesign --force --deep --sign - "$APP"
