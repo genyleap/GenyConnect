@@ -22,7 +22,7 @@ If GenyConnect helps you, consider supporting its continued development.
 
 **Crypto Donations**
 
-- **GENY / ETH (ERC20)**  
+- **USDC / ETH or GENY on (ERC20)**  
   `0x6E99f7564d060AA141dcC47ede34379Bad0cDCCC`
 
 - **BTC**  
@@ -31,7 +31,8 @@ If GenyConnect helps you, consider supporting its continued development.
 Your support keeps the project alive and evolving.
 ---
 ## Screenshot
-<img width="489" height="833" alt="Screenshot 2026-05-09 at 23 53 18" src="https://github.com/user-attachments/assets/dacc5261-2cd2-4053-a99a-d3408db0373b" />
+<img width="413" alt="photo_2026-05-14_23-46-47" src="https://github.com/user-attachments/assets/c3c4fa7b-997c-4968-a019-ec8f1a88a7a1" />
+<img width="422" alt="photo_2026-05-14_23-46-52" src="https://github.com/user-attachments/assets/e8996ce9-1064-4754-8b4b-5d3c83009fa4" />
 
 ---
 
