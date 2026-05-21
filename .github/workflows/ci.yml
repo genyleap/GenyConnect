@@ -19,7 +19,6 @@ jobs:
       matrix:
         include:
           - name: macos-arm64
-            platform: desktop
             os: macos-14
             qt_version: "6.11.0"
             qt_arch: clang_64
@@ -27,7 +26,6 @@ jobs:
             macos_deployment_target: "14.0"
 
           - name: macos-x86_64
-            platform: desktop
             os: macos-15-intel
             qt_version: "6.11.0"
             qt_arch: clang_64
@@ -35,7 +33,6 @@ jobs:
             macos_deployment_target: "14.0"
 
           - name: windows-x64
-            platform: desktop
             os: windows-latest
             qt_version: "6.10.3"
             qt_arch: win64_msvc2022_64
@@ -43,7 +40,6 @@ jobs:
             target_arch: x86_64
 
           - name: windows-arm64
-            platform: desktop
             os: windows-11-arm
             qt_version: "6.10.3"
             qt_arch: win64_msvc2022_arm64
@@ -51,7 +47,6 @@ jobs:
             target_arch: arm64
 
           - name: android-armeabi-v7a
-            platform: android
             os: ubuntu-latest
             qt_version: "6.10.3"
             qt_arch: android_armv7
@@ -63,7 +58,6 @@ jobs:
             android_ndk_version: "27.2.12479018"
 
           - name: android-arm64-v8a
-            platform: android
             os: ubuntu-latest
             qt_version: "6.10.3"
             qt_arch: android_arm64_v8a
@@ -75,7 +69,6 @@ jobs:
             android_ndk_version: "27.2.12479018"
 
           - name: android-universal
-            platform: android
             os: ubuntu-latest
             qt_version: "6.10.3"
             qt_arch: android_arm64_v8a
@@ -95,18 +88,18 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Setup Java for Android
-        if: ${{ matrix.platform == 'android' }}
+        if: contains(matrix.name, 'android')
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: "17"
 
       - name: Setup Android SDK
-        if: ${{ matrix.platform == 'android' }}
+        if: contains(matrix.name, 'android')
         uses: android-actions/setup-android@v3
 
       - name: Install Android SDK and NDK packages
-        if: ${{ matrix.platform == 'android' }}
+        if: contains(matrix.name, 'android')
         shell: bash
         run: |
           set -euo pipefail
@@ -123,7 +116,7 @@ jobs:
           echo "ANDROID_NDK_HOME=${ANDROID_SDK_ROOT}/ndk/${{ matrix.android_ndk_version }}" >> "${GITHUB_ENV}"
 
       - name: Install Qt Desktop
-        if: ${{ matrix.platform == 'desktop' }}
+        if: ${{ !contains(matrix.name, 'android') }}
         uses: jurplel/install-qt-action@v4
         with:
           version: ${{ matrix.qt_version }}
@@ -131,7 +124,7 @@ jobs:
           cache: true
 
       - name: Install Qt Android
-        if: ${{ matrix.platform == 'android' }}
+        if: contains(matrix.name, 'android')
         uses: jurplel/install-qt-action@v4
         with:
           version: ${{ matrix.qt_version }}
@@ -145,20 +138,20 @@ jobs:
           cmakeVersion: ${{ env.CMAKE_VERSION }}
 
       - name: Install macOS dependencies
-        if: ${{ runner.os == 'macOS' }}
+        if: runner.os == 'macOS'
         shell: bash
         run: |
           set -euo pipefail
           brew install ninja llvm
 
       - name: Install Windows dependencies
-        if: ${{ runner.os == 'Windows' }}
+        if: runner.os == 'Windows'
         shell: pwsh
         run: |
           choco install -y ninja nsis 7zip
 
       - name: Install Linux dependencies
-        if: ${{ runner.os == 'Linux' }}
+        if: runner.os == 'Linux'
         shell: bash
         run: |
           set -euo pipefail
@@ -166,7 +159,7 @@ jobs:
           sudo apt-get install -y ninja-build unzip zip p7zip-full curl file
 
       - name: Prepare Android release keystore
-        if: ${{ matrix.platform == 'android' && startsWith(github.ref, 'refs/tags/') }}
+        if: contains(matrix.name, 'android') && startsWith(github.ref, 'refs/tags/')
         shell: bash
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
@@ -189,7 +182,7 @@ jobs:
           echo "ANDROID_RELEASE_KEYSTORE=${RUNNER_TEMP}/android-signing/release.keystore" >> "${GITHUB_ENV}"
 
       - name: Prepare Android OpenSSL runtime libs
-        if: ${{ matrix.platform == 'android' }}
+        if: contains(matrix.name, 'android')
         shell: bash
         run: |
           set -euo pipefail
@@ -216,7 +209,7 @@ jobs:
           done
 
       - name: Configure LLVM on macOS
-        if: ${{ runner.os == 'macOS' }}
+        if: runner.os == 'macOS'
         shell: bash
         run: |
           set -euo pipefail
@@ -232,7 +225,7 @@ jobs:
           echo "SDKROOT=${SDKROOT}" >> "${GITHUB_ENV}"
 
       - name: Print macOS tool versions
-        if: ${{ runner.os == 'macOS' }}
+        if: runner.os == 'macOS'
         shell: bash
         run: |
           set -euo pipefail
@@ -250,7 +243,7 @@ jobs:
           xcrun --sdk macosx --show-sdk-version
 
       - name: Print Android tool versions
-        if: ${{ matrix.platform == 'android' }}
+        if: contains(matrix.name, 'android')
         shell: bash
         run: |
           set -euo pipefail
@@ -270,13 +263,13 @@ jobs:
           "${ANDROID_NDK_ROOT}/toolchains/llvm/prebuilt/linux-x86_64/bin/clang++" --version
 
       - name: Configure MSVC
-        if: ${{ runner.os == 'Windows' }}
+        if: runner.os == 'Windows'
         uses: ilammy/msvc-dev-cmd@v1
         with:
           arch: ${{ matrix.cmake_arch }}
 
       - name: Configure macOS
-        if: ${{ runner.os == 'macOS' }}
+        if: runner.os == 'macOS'
         shell: bash
         run: |
           set -euo pipefail
@@ -298,7 +291,7 @@ jobs:
             -DGENYCONNECT_CODESIGN_IDENTITY="-"
 
       - name: Configure Windows
-        if: ${{ runner.os == 'Windows' }}
+        if: runner.os == 'Windows'
         shell: pwsh
         run: |
           cmake -S . -B build `
@@ -311,7 +304,7 @@ jobs:
             -DGENYCONNECT_TARGET_BUILD_ARCH="${{ matrix.target_arch }}"
 
       - name: Configure Android
-        if: ${{ matrix.platform == 'android' }}
+        if: contains(matrix.name, 'android')
         shell: bash
         env:
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
@@ -371,32 +364,32 @@ jobs:
             "${SIGN_ARGS[@]}"
 
       - name: Build desktop
-        if: ${{ matrix.platform == 'desktop' }}
+        if: ${{ !contains(matrix.name, 'android') }}
         run: cmake --build build --config Release --parallel
 
       - name: Build Android native target
-        if: ${{ matrix.platform == 'android' }}
+        if: contains(matrix.name, 'android')
         shell: bash
         run: |
           set -euo pipefail
           cmake --build build --config Release --parallel
 
       - name: Build Android APK Release
-        if: ${{ matrix.platform == 'android' }}
+        if: contains(matrix.name, 'android')
         shell: bash
         run: |
           set -euo pipefail
           cmake --build build --config Release --target apk --parallel
 
       - name: Build Android AAB Release
-        if: ${{ matrix.platform == 'android' }}
+        if: contains(matrix.name, 'android')
         shell: bash
         run: |
           set -euo pipefail
           cmake --build build --config Release --target aab --parallel
 
       - name: Verify Android outputs
-        if: ${{ matrix.platform == 'android' }}
+        if: contains(matrix.name, 'android')
         shell: bash
         run: |
           set -euo pipefail
@@ -414,7 +407,7 @@ jobs:
           fi
 
       - name: Normalize Android artifact names
-        if: ${{ matrix.platform == 'android' }}
+        if: contains(matrix.name, 'android')
         shell: bash
         run: |
           set -euo pipefail
@@ -456,7 +449,7 @@ jobs:
           ls \-lah \"\$\{OUT\_DIR\}\"
 
       \- name\: Verify macOS deployment target
-        if\: \$\{\{ runner\.os \=\= \'macOS\' \}\}
+        if\: runner\.os \=\= \'macOS\'
         shell\: bash
         run\: \|
           set \-euo pipefail
@@ -479,7 +472,7 @@ jobs:
           done
 
       \- name\: Re\-sign macOS app ad\-hoc and create DMG
-        if\: \$\{\{ runner\.os \=\= \'macOS\' \}\}
+        if\: runner\.os \=\= \'macOS\'
         shell\: bash
         run\: \|
           set \-euo pipefail
@@ -554,7 +547,7 @@ jobs:
           ls -lh "${DMG_PATH}"
 
       - name: Verify macOS package
-        if: ${{ runner.os == 'macOS' }}
+        if: runner.os == 'macOS'
         shell: bash
         run: |
           set -euo pipefail
@@ -584,7 +577,7 @@ jobs:
           hdiutil detach "${MOUNT_DIR}" -quiet
 
       - name: Package desktop
-        if: ${{ matrix.platform == 'desktop' && runner.os != 'macOS' }}
+        if: ${{ !contains(matrix.name, 'android') && runner.os != 'macOS' }}
         run: cpack --config build/CPackConfig.cmake -C Release
 
       - name: Collect packages
@@ -617,7 +610,7 @@ jobs:
 
       - name: Release
         uses: softprops/action-gh-release@v2
-        if: ${{ startsWith(github.ref, 'refs/tags/') }}
+        if: startsWith(github.ref, 'refs/tags/')
         with:
           files: artifacts/*
           fail_on_unmatched_files: true
