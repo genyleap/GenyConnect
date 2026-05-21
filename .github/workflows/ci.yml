@@ -4,7 +4,6 @@ on:
   push:
     branches: [main, master]
   pull_request:
-  workflow_dispatch:
 
 permissions:
   contents: read
@@ -15,32 +14,8 @@ env:
 
 jobs:
   android:
-    name: Build ${{ matrix.name }}
+    name: Build android-arm64-v8a
     runs-on: ubuntu-latest
-
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - name: android-armeabi-v7a
-            qt_version: "6.8.3"
-            qt_arch: android_armv7
-            android_abi: armeabi-v7a
-            android_abis: "armeabi-v7a"
-            android_output_arch: armv7
-            target_arch: armv7
-            android_api: "26"
-            android_ndk_version: "26.3.11579264"
-
-          - name: android-arm64-v8a
-            qt_version: "6.8.3"
-            qt_arch: android_arm64_v8a
-            android_abi: arm64-v8a
-            android_abis: "arm64-v8a"
-            android_output_arch: arm64
-            target_arch: arm64
-            android_api: "26"
-            android_ndk_version: "26.3.11579264"
 
     steps:
       - name: Checkout
@@ -55,37 +30,35 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Install Android SDK and NDK packages
+      - name: Install Android SDK and NDK
         shell: bash
         run: |
           set -euo pipefail
-
           sdkmanager --install \
             "platform-tools" \
-            "platforms;android-${{ matrix.android_api }}" \
+            "platforms;android-26" \
             "build-tools;${ANDROID_BUILD_TOOLS_VERSION}" \
-            "ndk;${{ matrix.android_ndk_version }}"
+            "ndk;26.3.11579264"
 
-          echo "ANDROID_SDK_ROOT=${ANDROID_SDK_ROOT}" >> "${GITHUB_ENV}"
-          echo "ANDROID_HOME=${ANDROID_SDK_ROOT}" >> "${GITHUB_ENV}"
-          echo "ANDROID_NDK_ROOT=${ANDROID_SDK_ROOT}/ndk/${{ matrix.android_ndk_version }}" >> "${GITHUB_ENV}"
-          echo "ANDROID_NDK_HOME=${ANDROID_SDK_ROOT}/ndk/${{ matrix.android_ndk_version }}" >> "${GITHUB_ENV}"
+          echo "ANDROID_SDK_ROOT=${ANDROID_SDK_ROOT}" >> "$GITHUB_ENV"
+          echo "ANDROID_HOME=${ANDROID_SDK_ROOT}" >> "$GITHUB_ENV"
+          echo "ANDROID_NDK_ROOT=${ANDROID_SDK_ROOT}/ndk/26.3.11579264" >> "$GITHUB_ENV"
+          echo "ANDROID_NDK_HOME=${ANDROID_SDK_ROOT}/ndk/26.3.11579264" >> "$GITHUB_ENV"
 
       - name: Install Qt Android
         uses: jurplel/install-qt-action@v4
         with:
-          version: ${{ matrix.qt_version }}
+          version: "6.8.3"
           target: android
-          arch: ${{ matrix.qt_arch }}
+          arch: android_arm64_v8a
           cache: true
 
       - name: Save Qt paths
         shell: bash
         run: |
           set -euo pipefail
-
-          echo "ANDROID_QT_ROOT=${QT_ROOT_DIR}" >> "${GITHUB_ENV}"
-          echo "QT_HOST_ROOT=$(dirname "${QT_ROOT_DIR}")/gcc_64" >> "${GITHUB_ENV}"
+          echo "ANDROID_QT_ROOT=${QT_ROOT_DIR}" >> "$GITHUB_ENV"
+          echo "QT_HOST_ROOT=$(dirname "${QT_ROOT_DIR}")/gcc_64" >> "$GITHUB_ENV"
 
       - name: Install CMake
         uses: lukka/get-cmake@latest
@@ -96,53 +69,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-
           sudo apt-get update
           sudo apt-get install -y ninja-build unzip zip p7zip-full curl file
-
-      - name: Prepare Android OpenSSL runtime libs
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          SSL_ROOT="${ANDROID_SDK_ROOT}/android_openssl/ssl_3"
-          mkdir -p "${SSL_ROOT}"
-
-          IFS=';' read -ra ABI_LIST <<< "${{ matrix.android_abis }}"
-
-          for ABI in "${ABI_LIST[@]}"; do
-            ABI_DIR="${SSL_ROOT}/${ABI}"
-            mkdir -p "${ABI_DIR}"
-
-            if [[ -f "third_party/android/openssl/ssl_3/${ABI}/libssl_3.so" && -f "third_party/android/openssl/ssl_3/${ABI}/libcrypto_3.so" ]]; then
-              cp "third_party/android/openssl/ssl_3/${ABI}/libssl_3.so" "${ABI_DIR}/libssl_3.so"
-              cp "third_party/android/openssl/ssl_3/${ABI}/libcrypto_3.so" "${ABI_DIR}/libcrypto_3.so"
-            else
-              echo "No Android OpenSSL libs found for ${ABI}; continuing."
-            fi
-          done
-
-      - name: Print Android toolchain paths
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          echo "ANDROID_QT_ROOT=${ANDROID_QT_ROOT}"
-          echo "QT_HOST_ROOT=${QT_HOST_ROOT}"
-          echo "ANDROID_SDK_ROOT=${ANDROID_SDK_ROOT}"
-          echo "ANDROID_NDK_ROOT=${ANDROID_NDK_ROOT}"
-          echo "ANDROID_ABI=${{ matrix.android_abi }}"
-          echo "QT_ANDROID_ABIS=${{ matrix.android_abis }}"
-
-          test -f "${ANDROID_QT_ROOT}/lib/cmake/Qt6/Qt6Config.cmake"
-          test -f "${ANDROID_QT_ROOT}/lib/cmake/Qt6Core/Qt6CoreConfig.cmake"
-          test -f "${ANDROID_QT_ROOT}/lib/cmake/Qt6/qt.toolchain.cmake"
-          test -f "${QT_HOST_ROOT}/lib/cmake/Qt6/Qt6Config.cmake"
-
-          cmake --version
-          ninja --version
-          java -version
-          "${ANDROID_NDK_ROOT}/toolchains/llvm/prebuilt/linux-x86_64/bin/clang++" --version
 
       - name: Configure Android
         shell: bash
@@ -151,100 +79,49 @@ jobs:
 
           cmake -S . -B build -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_TOOLCHAIN_FILE="${ANDROID_QT_ROOT}/lib/cmake/Qt6/qt.toolchain.cmake" \
             -DCMAKE_PREFIX_PATH="${ANDROID_QT_ROOT}" \
             -DQt6_DIR="${ANDROID_QT_ROOT}/lib/cmake/Qt6" \
             -DQT_HOST_PATH="${QT_HOST_ROOT}" \
-            -DANDROID_ABI="${{ matrix.android_abi }}" \
-            -DANDROID_PLATFORM="android-${{ matrix.android_api }}" \
+            -DQT_HOST_PATH_CMAKE_DIR="${QT_HOST_ROOT}/lib/cmake" \
+            -DCMAKE_TOOLCHAIN_FILE="${ANDROID_QT_ROOT}/lib/cmake/Qt6/qt.toolchain.cmake" \
+            -DANDROID_ABI="arm64-v8a" \
+            -DANDROID_PLATFORM="android-26" \
             -DANDROID_SDK_ROOT="${ANDROID_SDK_ROOT}" \
             -DANDROID_NDK_ROOT="${ANDROID_NDK_ROOT}" \
-            -DANDROID_NDK="${ANDROID_NDK_ROOT}" \
-            -DQT_ANDROID_ABIS="${{ matrix.android_abis }}" \
-            -DQT_ANDROID_SIGN_APK=OFF \
-            -DQT_ANDROID_SIGN_AAB=OFF \
+            -DQT_ANDROID_ABIS="arm64-v8a" \
+            -DCMAKE_CXX_SCAN_FOR_MODULES=ON \
             -DGENYCONNECT_BUILD_DESKTOP=OFF \
             -DGENYCONNECT_BUILD_ANDROID=ON \
             -DGENYCONNECT_ENABLE_MOBILE_VPN=ON \
             -DGENYCONNECT_AUTO_DOWNLOAD_XRAY=ON \
-            -DGENYCONNECT_USE_MODULES=OFF \
+            -DGENYCONNECT_USE_MODULES=ON \
             -DGENYCONNECT_TARGET_OS=android \
-            -DGENYCONNECT_TARGET_ARCH="${{ matrix.target_arch }}" \
-            -DGENYCONNECT_TARGET_BUILD_ARCH="${{ matrix.target_arch }}" \
-            -DGENYCONNECT_ANDROID_OPENSSL_ROOT="${ANDROID_SDK_ROOT}/android_openssl/ssl_3"
+            -DGENYCONNECT_TARGET_ARCH="arm64" \
+            -DGENYCONNECT_TARGET_BUILD_ARCH="arm64"
 
-      - name: Build native target
-        shell: bash
-        run: |
-          set -euo pipefail
-          cmake --build build --config Release --parallel
-
-      - name: Build APK
+      - name: Build Android APK
         shell: bash
         run: |
           set -euo pipefail
           cmake --build build --config Release --target apk --parallel
 
-      - name: Build AAB
+      - name: Build Android AAB
         shell: bash
         run: |
           set -euo pipefail
           cmake --build build --config Release --target aab --parallel
 
-      - name: Normalize Android artifact names
+      - name: Collect artifacts
         shell: bash
         run: |
           set -euo pipefail
-
-          OUT_DIR="build/final/android-${{ matrix.android_output_arch }}"
-          mkdir -p "${OUT_DIR}"
-
-          VERSION="$(grep -E 'project\(\$\{PROJECT_NAME\} VERSION ' CMakeLists.txt | sed -E 's/.*VERSION ([0-9]+\.[0-9]+\.[0-9]+).*/\1/')"
-
-          if [[ -z "${VERSION}" ]]; then
-            echo "Could not detect project version."
-            exit 1
-          fi
-
-          APK="$(find build -type f -name "*.apk" | sort | head -n 1)"
-          AAB="$(find build -type f -name "*.aab" | sort | head -n 1)"
-
-          if [[ -z "${APK}" ]]; then
-            echo "No APK found."
-            find build -maxdepth 10 -type f | sort | tail -300
-            exit 1
-          fi
-
-          if [[ -z "${AAB}" ]]; then
-            echo "No AAB found."
-            find build -maxdepth 10 -type f | sort | tail -300
-            exit 1
-          fi
-
-          cp "${APK}" "${OUT_DIR}/GenyConnect-${VERSION}-android-${{ matrix.android_output_arch }}.apk"
-          cp "${AAB}" "${OUT_DIR}/GenyConnect-${VERSION}-android-${{ matrix.android_output_arch }}.aab"
-
-          ls -lah "${OUT_DIR}"
-
-      - name: Collect Android packages
-        shell: bash
-        run: |
-          set -euo pipefail
-
           mkdir -p artifacts
-
-          find build/final -type f -name "*.apk" -exec cp {} artifacts/ \;
-          find build/final -type f -name "*.aab" -exec cp {} artifacts/ \;
-
-          if [ -z "$(find artifacts -type f -print -quit)" ]; then
-            find build -maxdepth 8 -type f | sort | tail -300
-            exit 1
-          fi
-
+          find build -type f -name "*.apk" -exec cp {} artifacts/ \;
+          find build -type f -name "*.aab" -exec cp {} artifacts/ \;
           ls -lah artifacts
 
       - name: Upload Android artifact
         uses: actions/upload-artifact@v4
         with:
-          name: GenyConnect-${{ matrix.name }}
+          name: GenyConnect-android-arm64-v8a
           path: artifacts/*
