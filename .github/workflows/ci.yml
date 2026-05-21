@@ -38,14 +38,14 @@ jobs:
 
           - name: windows-x64
             os: windows-latest
-            qt_version: "6.10.3"
+            qt_version: "6.11.0"
             qt_arch: win64_msvc2022_64
             cmake_arch: x64
             target_arch: x86_64
 
           - name: windows-arm64
             os: windows-11-arm
-            qt_version: "6.10.3"
+            qt_version: "6.11.0"
             qt_arch: win64_msvc2022_arm64
             cmake_arch: ARM64
             target_arch: arm64
@@ -316,7 +316,7 @@ jobs:
       matrix:
         include:
           - name: android-armeabi-v7a
-            qt_version: "6.11.3"
+            qt_version: "6.11.0"
             qt_arch: android_armv7
             android_abi: armeabi-v7a
             android_abis: "armeabi-v7a"
@@ -326,7 +326,7 @@ jobs:
             android_ndk_version: "27.2.12479018"
 
           - name: android-arm64-v8a
-            qt_version: "6.11.3"
+            qt_version: "6.11.0"
             qt_arch: android_arm64_v8a
             android_abi: arm64-v8a
             android_abis: "arm64-v8a"
