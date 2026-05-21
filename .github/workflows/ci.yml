@@ -315,25 +315,25 @@ jobs:
       fail-fast: false
       matrix:
         include:
-        - name: android-armeabi-v7a
-          qt_version: "6.8.3"
-          qt_arch: android_armv7
-          android_abi: armeabi-v7a
-          android_abis: "armeabi-v7a"
-          android_output_arch: armv7
-          target_arch: armv7
-          android_api: "26"
-          android_ndk_version: "26.3.11579264"
+          - name: android-armeabi-v7a
+            qt_version: "6.8.3"
+            qt_arch: android_armv7
+            android_abi: armeabi-v7a
+            android_abis: "armeabi-v7a"
+            android_output_arch: armv7
+            target_arch: armv7
+            android_api: "26"
+            android_ndk_version: "26.3.11579264"
 
-        - name: android-arm64-v8a
-          qt_version: "6.8.3"
-          qt_arch: android_arm64_v8a
-          android_abi: arm64-v8a
-          android_abis: "arm64-v8a"
-          android_output_arch: arm64
-          target_arch: arm64
-          android_api: "26"
-          android_ndk_version: "26.3.11579264"
+          - name: android-arm64-v8a
+            qt_version: "6.8.3"
+            qt_arch: android_arm64_v8a
+            android_abi: arm64-v8a
+            android_abis: "arm64-v8a"
+            android_output_arch: arm64
+            target_arch: arm64
+            android_api: "26"
+            android_ndk_version: "26.3.11579264"
 
     steps:
       - name: Checkout
@@ -363,19 +363,6 @@ jobs:
           echo "ANDROID_HOME=${ANDROID_SDK_ROOT}" >> "${GITHUB_ENV}"
           echo "ANDROID_NDK_ROOT=${ANDROID_SDK_ROOT}/ndk/${{ matrix.android_ndk_version }}" >> "${GITHUB_ENV}"
 
-      - name: Install Qt host tools
-        uses: jurplel/install-qt-action@v4
-        with:
-          version: ${{ matrix.qt_version }}
-          arch: gcc_64
-          cache: true
-
-      - name: Save Qt host path
-        shell: bash
-        run: |
-          set -euo pipefail
-          echo "QT_HOST_ROOT=${QT_ROOT_DIR}" >> "${GITHUB_ENV}"
-
       - name: Install Qt Android
         uses: jurplel/install-qt-action@v4
         with:
@@ -383,12 +370,6 @@ jobs:
           target: android
           arch: ${{ matrix.qt_arch }}
           cache: true
-
-      - name: Save Qt Android path
-        shell: bash
-        run: |
-          set -euo pipefail
-          echo "ANDROID_QT_ROOT=${QT_ROOT_DIR}" >> "${GITHUB_ENV}"
 
       - name: Install CMake
         uses: lukka/get-cmake@latest
@@ -448,16 +429,14 @@ jobs:
         run: |
           set -euo pipefail
 
-          echo "QT_HOST_ROOT=${QT_HOST_ROOT}"
-          echo "ANDROID_QT_ROOT=${ANDROID_QT_ROOT}"
+          echo "QT_ROOT_DIR=${QT_ROOT_DIR}"
           echo "ANDROID_SDK_ROOT=${ANDROID_SDK_ROOT}"
           echo "ANDROID_NDK_ROOT=${ANDROID_NDK_ROOT}"
           echo "ANDROID_ABI=${{ matrix.android_abi }}"
           echo "QT_ANDROID_ABIS=${{ matrix.android_abis }}"
 
-          test -f "${QT_HOST_ROOT}/lib/cmake/Qt6/Qt6Config.cmake"
-          test -f "${ANDROID_QT_ROOT}/lib/cmake/Qt6/Qt6Config.cmake"
-          test -f "${ANDROID_QT_ROOT}/lib/cmake/Qt6Core/Qt6CoreConfig.cmake"
+          test -f "${QT_ROOT_DIR}/lib/cmake/Qt6/Qt6Config.cmake"
+          test -f "${QT_ROOT_DIR}/lib/cmake/Qt6Core/Qt6CoreConfig.cmake"
 
       - name: Configure Android
         shell: bash
@@ -498,9 +477,8 @@ jobs:
 
           cmake -S . -B build -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_PREFIX_PATH="${ANDROID_QT_ROOT}" \
-            -DQt6_DIR="${ANDROID_QT_ROOT}/lib/cmake/Qt6" \
-            -DQT_HOST_PATH="${QT_HOST_ROOT}" \
+            -DCMAKE_PREFIX_PATH="${QT_ROOT_DIR}" \
+            -DQt6_DIR="${QT_ROOT_DIR}/lib/cmake/Qt6" \
             -DCMAKE_TOOLCHAIN_FILE="${ANDROID_NDK_ROOT}/build/cmake/android.toolchain.cmake" \
             -DANDROID_ABI="${{ matrix.android_abi }}" \
             -DANDROID_PLATFORM="android-${{ matrix.android_api }}" \
