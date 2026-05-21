@@ -1,30 +1,331 @@
-name: GenyConnect Android CI
+name: GenyConnect CI
 
 on:
   push:
     branches: [main, master]
+    tags: ["v*"]
   pull_request:
 
 permissions:
-  contents: read
+  contents: write
 
 env:
   CMAKE_VERSION: "4.2.3"
-  QT_VERSION: "6.11.0"
-  ANDROID_API: "28"
   ANDROID_BUILD_TOOLS_VERSION: "35.0.0"
-  ANDROID_NDK_VERSION: "27.2.12479018"
 
 jobs:
-  android:
-    name: Build Android arm64-v8a
-    runs-on: ubuntu-latest
+  desktop:
+    name: Build ${{ matrix.artifact_name }}
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - artifact_name: GenyConnect-macos-arm64
+            os: macos-14
+            qt_version: "6.11.0"
+            qt_arch: clang_64
+            target_arch: arm64
+            macos_deployment_target: "14.0"
+
+          - artifact_name: GenyConnect-macos-x86_64
+            os: macos-15-intel
+            qt_version: "6.11.0"
+            qt_arch: clang_64
+            target_arch: x86_64
+            macos_deployment_target: "14.0"
+
+          - artifact_name: GenyConnect-windows-x64
+            os: windows-latest
+            qt_version: "6.10.3"
+            qt_arch: win64_msvc2022_64
+            cmake_arch: x64
+            target_arch: x86_64
+
+          - artifact_name: GenyConnect-windows-arm64
+            os: windows-11-arm
+            qt_version: "6.10.3"
+            qt_arch: win64_msvc2022_arm64
+            cmake_arch: ARM64
+            target_arch: arm64
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Java 21
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: ${{ matrix.qt_version }}
+          arch: ${{ matrix.qt_arch }}
+          cache: true
+
+      - name: Install CMake
+        uses: lukka/get-cmake@latest
+        with:
+          cmakeVersion: ${{ env.CMAKE_VERSION }}
+
+      - name: Install macOS dependencies
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -euo pipefail
+          brew install ninja llvm
+
+      - name: Install Windows dependencies
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          choco install -y ninja nsis 7zip
+
+      - name: Configure LLVM on macOS
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          LLVM_PREFIX="$(brew --prefix llvm)"
+
+          echo "CC=${LLVM_PREFIX}/bin/clang" >> "$GITHUB_ENV"
+          echo "CXX=${LLVM_PREFIX}/bin/clang++" >> "$GITHUB_ENV"
+          echo "CLANG_SCAN_DEPS=${LLVM_PREFIX}/bin/clang-scan-deps" >> "$GITHUB_ENV"
+          echo "${LLVM_PREFIX}/bin" >> "$GITHUB_PATH"
+
+          SDKROOT="$(xcrun --sdk macosx --show-sdk-path)"
+          echo "SDKROOT=${SDKROOT}" >> "$GITHUB_ENV"
+
+      - name: Configure MSVC
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: ${{ matrix.cmake_arch }}
+
+      - name: Configure macOS
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_PREFIX_PATH="${QT_ROOT_DIR}" \
+            -DQt6_DIR="${QT_ROOT_DIR}/lib/cmake/Qt6" \
+            -DCMAKE_C_COMPILER="${CC}" \
+            -DCMAKE_CXX_COMPILER="${CXX}" \
+            -DCMAKE_CXX_SCAN_FOR_MODULES=ON \
+            -DCMAKE_CXX_COMPILER_CLANG_SCAN_DEPS="${CLANG_SCAN_DEPS}" \
+            -DCMAKE_OSX_DEPLOYMENT_TARGET="${{ matrix.macos_deployment_target }}" \
+            -DGENYCONNECT_MACOS_DEPLOYMENT_TARGET="${{ matrix.macos_deployment_target }}" \
+            -DGENYCONNECT_USE_MODULES=ON \
+            -DGENYCONNECT_LLVM_AUTO_SCAN=ON \
+            -DGENYCONNECT_TARGET_ARCH="${{ matrix.target_arch }}" \
+            -DGENYCONNECT_TARGET_BUILD_ARCH="${{ matrix.target_arch }}" \
+            -DGENYCONNECT_MACOS_CODESIGN=ON \
+            -DGENYCONNECT_CODESIGN_IDENTITY="-"
+
+      - name: Configure Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          cmake -S . -B build `
+            -G "Visual Studio 17 2022" -A "${{ matrix.cmake_arch }}" `
+            -DCMAKE_CONFIGURATION_TYPES="Release" `
+            -DCMAKE_PREFIX_PATH="${env:QT_ROOT_DIR}" `
+            -DQt6_DIR="${env:QT_ROOT_DIR}/lib/cmake/Qt6" `
+            -DCMAKE_CXX_SCAN_FOR_MODULES=ON `
+            -DGENYCONNECT_USE_MODULES=ON `
+            -DGENYCONNECT_TARGET_ARCH="${{ matrix.target_arch }}" `
+            -DGENYCONNECT_TARGET_BUILD_ARCH="${{ matrix.target_arch }}"
+
+      - name: Build
+        run: cmake --build build --config Release --parallel
+
+      - name: Verify macOS deployment target
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          APP="build/bin/GenyConnect.app"
+
+          for f in \
+            "$APP/Contents/MacOS/GenyConnect" \
+            "$APP/Contents/MacOS/GenyConnectUpdater" \
+            "$APP/Contents/MacOS/GenyConnectTunHelper"
+          do
+            echo
+            echo "==== $f ===="
+            otool -l "$f" | grep -A5 LC_BUILD_VERSION || true
+
+            if otool -l "$f" | grep -A5 LC_BUILD_VERSION | grep -q "minos 26."; then
+              echo "ERROR: $f was built with macOS 26.x minimum target."
+              exit 1
+            fi
+          done
+
+      - name: Re-sign macOS app ad-hoc and create DMG
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          APP="build/bin/GenyConnect.app"
+          OUT_DIR="build/final/macos-${{ matrix.target_arch }}"
+
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            VERSION="${GITHUB_REF_NAME#v}"
+          else
+            VERSION="$(grep -E 'project\(\$\{PROJECT_NAME\} VERSION ' CMakeLists.txt | sed -E 's/.*VERSION ([0-9]+\.[0-9]+\.[0-9]+).*/\1/')"
+          fi
+
+          if [[ -z "${VERSION}" ]]; then
+            echo "Could not detect project version."
+            exit 1
+          fi
+
+          DMG_PATH="${OUT_DIR}/GenyConnect-${VERSION}-macos-${{ matrix.target_arch }}.dmg"
+
+          if [[ ! -d "$APP" ]]; then
+            echo "App not found: $APP"
+            exit 1
+          fi
+
+          mkdir -p "$OUT_DIR"
+          rm -f "$DMG_PATH"
+
+          xattr -cr "$APP" || true
+
+          chmod +x "$APP/Contents/MacOS/GenyConnect" || true
+          chmod +x "$APP/Contents/MacOS/GenyConnectUpdater" || true
+          chmod +x "$APP/Contents/MacOS/GenyConnectTunHelper" || true
+          chmod +x "$APP/Contents/MacOS/xray-core" || true
+
+          codesign --remove-signature "$APP" || true
+
+          while IFS= read -r file_path; do
+            if file "$file_path" | grep -q "Mach-O"; then
+              codesign --force --sign - "$file_path" || true
+            fi
+          done < <(find "$APP/Contents" -type f)
+
+          while IFS= read -r framework_path; do
+            codesign --force --sign - "$framework_path" || true
+          done < <(find "$APP/Contents" -type d -name "*.framework" | sort -r)
+
+          while IFS= read -r bundle_path; do
+            codesign --force --sign - "$bundle_path" || true
+          done < <(find "$APP/Contents" \( -name "*.bundle" -o -name "*.plugin" -o -name "*.appex" \) -type d | sort -r)
+
+          codesign --force --deep --sign - "$APP"
+          codesign --verify --deep --strict --verbose=4 "$APP"
+
+          spctl --assess --type execute --verbose=4 "$APP" || true
+
+          STAGING="$(mktemp -d)"
+          cp -R "$APP" "$STAGING/GenyConnect.app"
+          ln -s /Applications "$STAGING/Applications"
+
+          hdiutil create \
+            -volname "GenyConnect" \
+            -srcfolder "$STAGING" \
+            -ov \
+            -format UDZO \
+            "$DMG_PATH"
+
+          rm -rf "$STAGING"
+
+          hdiutil verify "$DMG_PATH"
+          ls -lh "$DMG_PATH"
+
+      - name: Verify macOS package
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          DMG="$(find build/final -type f -name "*.dmg" | head -n 1)"
+
+          if [[ -z "$DMG" ]]; then
+            echo "No DMG found."
+            exit 1
+          fi
+
+          hdiutil verify "$DMG"
+
+          MOUNT_DIR="$(mktemp -d)"
+          hdiutil attach "$DMG" -mountpoint "$MOUNT_DIR" -nobrowse -quiet
+
+          APP="$(find "$MOUNT_DIR" -maxdepth 2 -name "GenyConnect.app" -type d | head -n 1)"
+
+          if [[ -z "$APP" ]]; then
+            hdiutil detach "$MOUNT_DIR" -quiet || true
+            exit 1
+          fi
+
+          codesign --verify --deep --strict --verbose=4 "$APP"
+          spctl --assess --type execute --verbose=4 "$APP" || true
+
+          hdiutil detach "$MOUNT_DIR" -quiet
+
+      - name: Package Windows
+        if: runner.os == 'Windows'
+        run: cpack --config build/CPackConfig.cmake -C Release
+
+      - name: Collect desktop packages
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          mkdir -p artifacts
+
+          find build/final -type f -name "*.dmg" -exec cp {} artifacts/ \;
+          find build/final -type f -name "*.zip" -exec cp {} artifacts/ \;
+          find build/final -type f -name "*.exe" -exec cp {} artifacts/ \;
+          find build/final -type f -name "*.tar.gz" -exec cp {} artifacts/ \;
+          find build/final -type f -name "*.tgz" -exec cp {} artifacts/ \;
+
+          if [ -z "$(find artifacts -type f -print -quit)" ]; then
+            find build -maxdepth 8 -type f | sort | tail -300
+            exit 1
+          fi
+
+          ls -lah artifacts
+
+      - name: Upload desktop artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: artifacts/*
+
+      - name: Release desktop
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: artifacts/*
+          fail_on_unmatched_files: true
+          generate_release_notes: true
+
+  android:
+    name: Build GenyConnect-android-arm64-v8a
+    runs-on: ubuntu-latest
+
+    env:
+      QT_VERSION: "6.11.0"
+      QT_ARCH: android_arm64_v8a
+      ANDROID_ABI: arm64-v8a
+      ANDROID_OUTPUT_ARCH: arm64-v8a
+      TARGET_ARCH: arm64
+      ANDROID_API: "28"
+      ANDROID_DEPLOY_PLATFORM: "36"
+      ANDROID_NDK_VERSION: "27.2.12479018"
+      ARTIFACT_NAME: GenyConnect-android-arm64-v8a
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java
         uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -33,7 +334,7 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Install Android SDK and NDK
+      - name: Install Android SDK and NDK packages
         shell: bash
         run: |
           set -euo pipefail
@@ -41,43 +342,95 @@ jobs:
           sdkmanager --install \
             "platform-tools" \
             "platforms;android-${ANDROID_API}" \
+            "platforms;android-${ANDROID_DEPLOY_PLATFORM}" \
             "build-tools;${ANDROID_BUILD_TOOLS_VERSION}" \
             "ndk;${ANDROID_NDK_VERSION}"
 
-          echo "ANDROID_SDK_ROOT=${ANDROID_SDK_ROOT}" >> "$GITHUB_ENV"
-          echo "ANDROID_HOME=${ANDROID_SDK_ROOT}" >> "$GITHUB_ENV"
-          echo "ANDROID_NDK_ROOT=${ANDROID_SDK_ROOT}/ndk/${ANDROID_NDK_VERSION}" >> "$GITHUB_ENV"
-          echo "ANDROID_NDK_HOME=${ANDROID_SDK_ROOT}/ndk/${ANDROID_NDK_VERSION}" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=${ANDROID_SDK_ROOT}" >> "${GITHUB_ENV}"
+          echo "ANDROID_HOME=${ANDROID_SDK_ROOT}" >> "${GITHUB_ENV}"
+          echo "ANDROID_NDK_ROOT=${ANDROID_SDK_ROOT}/ndk/${ANDROID_NDK_VERSION}" >> "${GITHUB_ENV}"
+          echo "ANDROID_NDK_HOME=${ANDROID_SDK_ROOT}/ndk/${ANDROID_NDK_VERSION}" >> "${GITHUB_ENV}"
 
       - name: Install Qt Android
         uses: jurplel/install-qt-action@v4
         with:
           version: ${{ env.QT_VERSION }}
           target: android
-          arch: android_arm64_v8a
+          arch: ${{ env.QT_ARCH }}
           cache: true
 
-      - name: Save Qt paths
+      - name: Save Qt Android and host paths
         shell: bash
         run: |
           set -euo pipefail
 
-          echo "ANDROID_QT_ROOT=${QT_ROOT_DIR}" >> "$GITHUB_ENV"
-          echo "QT_HOST_ROOT=$(dirname "${QT_ROOT_DIR}")/gcc_64" >> "$GITHUB_ENV"
+          echo "ANDROID_QT_ROOT=${QT_ROOT_DIR}" >> "${GITHUB_ENV}"
+          echo "QT_HOST_ROOT=$(dirname "${QT_ROOT_DIR}")/gcc_64" >> "${GITHUB_ENV}"
 
       - name: Install CMake
         uses: lukka/get-cmake@latest
         with:
           cmakeVersion: ${{ env.CMAKE_VERSION }}
 
-      - name: Install Linux tools
+      - name: Install Linux dependencies
         shell: bash
         run: |
           set -euo pipefail
+
           sudo apt-get update
           sudo apt-get install -y ninja-build unzip zip p7zip-full curl file
 
-      - name: Print toolchain info
+      - name: Prepare Android release keystore
+        shell: bash
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          set -euo pipefail
+
+          if [[ -z "${ANDROID_KEYSTORE_BASE64}" ]]; then
+            echo "ANDROID_KEYSTORE_BASE64 is not set."
+            exit 1
+          fi
+
+          mkdir -p "${RUNNER_TEMP}/android-signing"
+          echo "${ANDROID_KEYSTORE_BASE64}" | base64 --decode > "${RUNNER_TEMP}/android-signing/release.keystore"
+          test -s "${RUNNER_TEMP}/android-signing/release.keystore"
+
+          echo "ANDROID_RELEASE_KEYSTORE=${RUNNER_TEMP}/android-signing/release.keystore" >> "${GITHUB_ENV}"
+
+      - name: Prepare Android OpenSSL runtime libs
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          SSL_ROOT="${ANDROID_SDK_ROOT}/android_openssl/ssl_3"
+          ABI_DIR="${SSL_ROOT}/${ANDROID_ABI}"
+
+          mkdir -p "${ABI_DIR}"
+
+          if [[ -f "third_party/android/openssl/ssl_3/${ANDROID_ABI}/libssl_3.so" && -f "third_party/android/openssl/ssl_3/${ANDROID_ABI}/libcrypto_3.so" ]]; then
+            cp "third_party/android/openssl/ssl_3/${ANDROID_ABI}/libssl_3.so" "${ABI_DIR}/libssl_3.so"
+            cp "third_party/android/openssl/ssl_3/${ANDROID_ABI}/libcrypto_3.so" "${ABI_DIR}/libcrypto_3.so"
+          else
+            echo "No Android OpenSSL libs found for ${ANDROID_ABI}; continuing."
+          fi
+
+      - name: Configure Android module scanner
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          SCAN_DEPS="${ANDROID_NDK_ROOT}/toolchains/llvm/prebuilt/linux-x86_64/bin/clang-scan-deps"
+
+          if [[ ! -x "${SCAN_DEPS}" ]]; then
+            echo "clang-scan-deps not found: ${SCAN_DEPS}"
+            find "${ANDROID_NDK_ROOT}/toolchains/llvm/prebuilt/linux-x86_64/bin" -maxdepth 1 -type f | sort
+            exit 1
+          fi
+
+          echo "CLANG_SCAN_DEPS=${SCAN_DEPS}" >> "${GITHUB_ENV}"
+
+      - name: Print Android Qt paths
         shell: bash
         run: |
           set -euo pipefail
@@ -86,55 +439,144 @@ jobs:
           echo "QT_HOST_ROOT=${QT_HOST_ROOT}"
           echo "ANDROID_SDK_ROOT=${ANDROID_SDK_ROOT}"
           echo "ANDROID_NDK_ROOT=${ANDROID_NDK_ROOT}"
+          echo "ANDROID_ABI=${ANDROID_ABI}"
+          echo "QT_ANDROID_ABIS=${ANDROID_ABI}"
+          echo "CLANG_SCAN_DEPS=${CLANG_SCAN_DEPS}"
 
           test -f "${ANDROID_QT_ROOT}/lib/cmake/Qt6/Qt6Config.cmake"
+          test -f "${ANDROID_QT_ROOT}/lib/cmake/Qt6Core/Qt6CoreConfig.cmake"
           test -f "${ANDROID_QT_ROOT}/lib/cmake/Qt6/qt.toolchain.cmake"
           test -f "${QT_HOST_ROOT}/lib/cmake/Qt6/Qt6Config.cmake"
-          test -x "${ANDROID_NDK_ROOT}/toolchains/llvm/prebuilt/linux-x86_64/bin/clang-scan-deps"
 
-      - name: Configure Android
+      - name: Configure Android Release
         shell: bash
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
           set -euo pipefail
 
+          if [[ -z "${ANDROID_RELEASE_KEYSTORE:-}" ]]; then
+            echo "ANDROID_RELEASE_KEYSTORE is not available."
+            exit 1
+          fi
+
+          if [[ -z "${ANDROID_KEYSTORE_PASSWORD}" || -z "${ANDROID_KEY_ALIAS}" || -z "${ANDROID_KEY_PASSWORD}" ]]; then
+            echo "Android signing secrets are incomplete."
+            exit 1
+          fi
+
           cmake -S . -B build -G Ninja \
-            -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_PREFIX_PATH="${ANDROID_QT_ROOT}" \
             -DQt6_DIR="${ANDROID_QT_ROOT}/lib/cmake/Qt6" \
             -DQT_HOST_PATH="${QT_HOST_ROOT}" \
+            -DQT_HOST_PATH_CMAKE_DIR="${QT_HOST_ROOT}/lib/cmake" \
+            -DQT_ANDROID_BUILD_TYPE=Release \
+            -DQT_ANDROID_DEPLOY_RELEASE=ON \
+            -DQT_ANDROID_SIGN_APK=ON \
+            -DQT_ANDROID_SIGN_AAB=ON \
+            -DQT_ANDROID_KEYSTORE_PATH="${ANDROID_RELEASE_KEYSTORE}" \
+            -DQT_ANDROID_KEYSTORE_STORE_PASS="${ANDROID_KEYSTORE_PASSWORD}" \
+            -DQT_ANDROID_KEYSTORE_KEY_ALIAS="${ANDROID_KEY_ALIAS}" \
+            -DQT_ANDROID_KEYSTORE_KEY_PASS="${ANDROID_KEY_PASSWORD}" \
             -DCMAKE_TOOLCHAIN_FILE="${ANDROID_QT_ROOT}/lib/cmake/Qt6/qt.toolchain.cmake" \
             -DCMAKE_CXX_SCAN_FOR_MODULES=ON \
-            -DCMAKE_CXX_COMPILER_CLANG_SCAN_DEPS="${ANDROID_NDK_ROOT}/toolchains/llvm/prebuilt/linux-x86_64/bin/clang-scan-deps" \
-            -DANDROID_ABI="arm64-v8a" \
+            -DCMAKE_CXX_COMPILER_CLANG_SCAN_DEPS="${CLANG_SCAN_DEPS}" \
+            -DANDROID_ABI="${ANDROID_ABI}" \
             -DANDROID_PLATFORM="android-${ANDROID_API}" \
-            -DANDROID_STL="c++_shared" \
             -DANDROID_SDK_ROOT="${ANDROID_SDK_ROOT}" \
             -DANDROID_NDK_ROOT="${ANDROID_NDK_ROOT}" \
-            -DQT_ANDROID_ABIS="arm64-v8a" \
+            -DQT_ANDROID_ABIS="${ANDROID_ABI}" \
             -DGENYCONNECT_BUILD_DESKTOP=OFF \
             -DGENYCONNECT_BUILD_ANDROID=ON \
             -DGENYCONNECT_ENABLE_MOBILE_VPN=ON \
+            -DGENYCONNECT_AUTO_DOWNLOAD_XRAY=ON \
             -DGENYCONNECT_USE_MODULES=ON \
-            -DGENYCONNECT_AUTO_DOWNLOAD_XRAY=OFF \
             -DGENYCONNECT_TARGET_OS=android \
-            -DGENYCONNECT_TARGET_ARCH=arm64 \
-            -DGENYCONNECT_TARGET_BUILD_ARCH=arm64
+            -DGENYCONNECT_TARGET_ARCH="${TARGET_ARCH}" \
+            -DGENYCONNECT_TARGET_BUILD_ARCH="${TARGET_ARCH}" \
+            -DGENYCONNECT_ANDROID_OPENSSL_ROOT="${ANDROID_SDK_ROOT}/android_openssl/ssl_3"
 
-      - name: Build Android
+      - name: Build Android Release APK
         shell: bash
         run: |
           set -euo pipefail
-          cmake --build build --config Debug --parallel
+          cmake --build build --config Release --target apk --parallel
 
-      - name: Build APK
+      - name: Build Android Release AAB
         shell: bash
         run: |
           set -euo pipefail
-          cmake --build build --config Debug --target apk --parallel
+          cmake --build build --config Release --target aab --parallel
 
-      - name: Upload APK
+      - name: Normalize Android artifact names
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          OUT_DIR="build/final/android-${ANDROID_OUTPUT_ARCH}"
+          mkdir -p "${OUT_DIR}"
+
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            VERSION="${GITHUB_REF_NAME#v}"
+          else
+            VERSION="$(grep -E 'project\(\$\{PROJECT_NAME\} VERSION ' CMakeLists.txt | sed -E 's/.*VERSION ([0-9]+\.[0-9]+\.[0-9]+).*/\1/')"
+          fi
+
+          if [[ -z "${VERSION}" ]]; then
+            echo "Could not detect project version."
+            exit 1
+          fi
+
+          APK="$(find build -type f \( -name "*release*.apk" -o -name "*.apk" \) | grep -vi debug | sort | head -n 1)"
+          AAB="$(find build -type f \( -name "*release*.aab" -o -name "*.aab" \) | grep -vi debug | sort | head -n 1)"
+
+          if [[ -z "${APK}" ]]; then
+            echo "No release APK found."
+            find build -maxdepth 10 -type f | sort | tail -300
+            exit 1
+          fi
+
+          if [[ -z "${AAB}" ]]; then
+            echo "No release AAB found."
+            find build -maxdepth 10 -type f | sort | tail -300
+            exit 1
+          fi
+
+          cp "${APK}" "${OUT_DIR}/GenyConnect-${VERSION}-android-${ANDROID_OUTPUT_ARCH}.apk"
+          cp "${AAB}" "${OUT_DIR}/GenyConnect-${VERSION}-android-${ANDROID_OUTPUT_ARCH}.aab"
+
+          ls -lah "${OUT_DIR}"
+
+      - name: Collect Android packages
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          mkdir -p artifacts
+
+          find build/final -type f -name "*.apk" -exec cp {} artifacts/ \;
+          find build/final -type f -name "*.aab" -exec cp {} artifacts/ \;
+
+          if [ -z "$(find artifacts -type f -print -quit)" ]; then
+            find build -maxdepth 8 -type f | sort | tail -300
+            exit 1
+          fi
+
+          ls -lah artifacts
+
+      - name: Upload Android artifact
         uses: actions/upload-artifact@v4
         with:
-          name: GenyConnect-android-arm64-v8a-debug
-          path: |
-            build/**/*.apk
+          name: GenyConnect-android-arm64-v8a
+          path: artifacts/*
+
+      - name: Release Android
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: artifacts/*
+          fail_on_unmatched_files: true
+          generate_release_notes: true

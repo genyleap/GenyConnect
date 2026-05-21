@@ -231,7 +231,7 @@ ApplicationWindow {
     property var downRateHistoryMbps: []
     property var upRateHistoryMbps: []
     property int rateHistoryMaxPoints: 24
-    property int pendingHomePingProfileIndex: -1
+    property int homeProfilePingMs: -1
     readonly property int powerUiStatsIntervalMs: Math.max(500, Number((vpnController.powerPolicy || {}).uiStatsRefreshIntervalMs || 1000))
     readonly property int powerGaugeRefreshIntervalMs: Math.max(16, Number((vpnController.powerPolicy || {}).uiGaugeRefreshIntervalMs || 40))
     readonly property bool powerVisualAnimationsEnabled: (vpnController.visualPowerPolicy || {}).animationsEnabled !== false
@@ -1404,14 +1404,14 @@ ApplicationWindow {
     }
 
     function currentProfilePingText() {
-        const pingMs = vpnController.currentProfilePingMs()
+        const pingMs = root.homeProfilePingMs
         return pingMs >= 0 ? (pingMs + " ms") : "--"
     }
 
     function currentProfileSignalLevel() {
-        const pingMs = vpnController.currentProfilePingMs()
+        const pingMs = root.homeProfilePingMs
         if (pingMs < 0)
-            return vpnController.connected ? 2 : 1
+            return 0
         if (pingMs < 180)
             return 4
         if (pingMs < 350)
@@ -1422,7 +1422,7 @@ ApplicationWindow {
     }
 
     function currentProfileSignalColor() {
-        const pingMs = vpnController.currentProfilePingMs()
+        const pingMs = root.homeProfilePingMs
         if (pingMs < 0)
             return root.themeColorToken("mainHex_9aa4b6", "mainHex_8fa3be")
         if (pingMs < 180)
@@ -1434,12 +1434,9 @@ ApplicationWindow {
         return Colors.mainHex_ef4444
     }
 
-    function scheduleCurrentProfilePing() {
-        const index = vpnController.currentProfileIndex
-        if (index < 0 || vpnController.currentProfilePingMs() >= 0)
-            return
-        root.pendingHomePingProfileIndex = index
-        homeProfilePingTimer.restart()
+    function refreshCurrentProfilePing() {
+        const pingMs = vpnController.currentProfilePingMs()
+        root.homeProfilePingMs = pingMs
     }
 
     function downloadUsageText() {
@@ -2257,7 +2254,7 @@ ApplicationWindow {
         Theme.mode = darkThemeEnabled ? Theme.Dark : Theme.Light
         syncAndroidSystemBars()
         syncSelectedProfileFromController()
-        scheduleCurrentProfilePing()
+        refreshCurrentProfilePing()
         reloadDonationData()
     }
 
@@ -2278,20 +2275,6 @@ ApplicationWindow {
         interval: 2400
         repeat: false
         onTriggered: root.settingsFeedbackText = ""
-    }
-
-    Timer {
-        id: homeProfilePingTimer
-        interval: 700
-        repeat: false
-        onTriggered: {
-            if (root.pendingHomePingProfileIndex >= 0
-                    && root.pendingHomePingProfileIndex === vpnController.currentProfileIndex
-                    && vpnController.currentProfilePingMs() < 0) {
-                vpnController.pingProfile(root.pendingHomePingProfileIndex)
-            }
-            root.pendingHomePingProfileIndex = -1
-        }
     }
 
     ParallelAnimation {
@@ -2385,7 +2368,13 @@ ApplicationWindow {
 
         function onCurrentProfileIndexChanged() {
             root.syncSelectedProfileFromController()
-            root.scheduleCurrentProfilePing()
+            root.refreshCurrentProfilePing()
+            if (vpnController.currentProfileIndex >= 0)
+                vpnController.pingProfile(vpnController.currentProfileIndex)
+        }
+
+        function onProfileStatsChanged() {
+            root.refreshCurrentProfilePing()
         }
 
         function onLastErrorChanged() {
@@ -2773,6 +2762,8 @@ ApplicationWindow {
         closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
         onAboutToShow: {
             root.profileSearchQuery = ""
+            if (vpnController.currentProfileIndex >= 0)
+                vpnController.pingProfile(vpnController.currentProfileIndex)
             if (vpnController.autoPingProfiles)
                 vpnController.pingAllProfiles()
         }

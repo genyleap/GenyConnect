@@ -106,12 +106,14 @@ std::optional<ServerProfile> ServerProfileModel::profileAt(int row) const
 
 int ServerProfileModel::indexOfId(const QString& id) const
 {
-    if (id.trimmed().isEmpty()) {
+    const QString needle = id.trimmed();
+    if (needle.isEmpty()) {
         return -1;
     }
 
     for (int i = 0; i < m_profiles.size(); ++i) {
-        if (m_profiles.at(i).id == id) {
+        const QString existingId = m_profiles.at(i).id.trimmed();
+        if (existingId == needle) {
             return i;
         }
     }

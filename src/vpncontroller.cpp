@@ -3344,8 +3344,11 @@ void VpnController::pingProfile(int row)
 
     const QString address = profile->address.trimmed();
     const quint16 port = profile->port;
-    const QString profileId = profile->id;
-    const int currentRow = m_profileModel->indexOfId(profileId);
+    const QString profileId = profile->id.trimmed();
+    int currentRow = row;
+    if (!profileId.isEmpty()) {
+        currentRow = m_profileModel->indexOfId(profileId);
+    }
     if (currentRow < 0) {
         return;
     }
@@ -3361,13 +3364,19 @@ void VpnController::pingProfile(int row)
     socket->setProperty("_geny_ping_done", false);
     socket->setProperty("_geny_ping_start_ms", QDateTime::currentMSecsSinceEpoch());
 
-    auto finishPing = [this, socket, profileId](int pingMs) mutable {
+    auto finishPing = [this, socket, profileId, currentRow](int pingMs) mutable {
         if (socket->property("_geny_ping_done").toBool()) {
             return;
         }
         socket->setProperty("_geny_ping_done", true);
 
-        const int rowNow = m_profileModel->indexOfId(profileId);
+        int rowNow = -1;
+        if (!profileId.isEmpty()) {
+            rowNow = m_profileModel->indexOfId(profileId);
+        }
+        if (rowNow < 0) {
+            rowNow = currentRow;
+        }
         if (rowNow >= 0) {
             m_profileModel->setPingResult(rowNow, pingMs);
         }
@@ -3420,9 +3429,16 @@ void VpnController::pingAllProfiles()
             continue;
         }
 
-        const QString profileId = profile->id;
-        QTimer::singleShot(scheduled * kProfilePingStaggerMs, this, [this, profileId]() {
-            const int rowNow = m_profileModel->indexOfId(profileId);
+        const QString profileId = profile->id.trimmed();
+        const int fallbackRow = row;
+        QTimer::singleShot(scheduled * kProfilePingStaggerMs, this, [this, profileId, fallbackRow]() {
+            int rowNow = -1;
+            if (!profileId.isEmpty()) {
+                rowNow = m_profileModel->indexOfId(profileId);
+            }
+            if (rowNow < 0) {
+                rowNow = fallbackRow;
+            }
             if (rowNow >= 0) {
                 pingProfile(rowNow);
             }
