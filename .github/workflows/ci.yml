@@ -66,7 +66,7 @@ jobs:
             qt_target: android
             qt_arch: android_armv7
             android_abi: armeabi-v7a
-            android_abis: armeabi-v7a
+            android_abis: "armeabi-v7a"
             android_output_arch: armv7
             target_arch: armv7
             android_api: "26"
@@ -80,7 +80,7 @@ jobs:
             qt_target: android
             qt_arch: android_arm64_v8a
             android_abi: arm64-v8a
-            android_abis: arm64-v8a
+            android_abis: "arm64-v8a"
             android_output_arch: arm64
             target_arch: arm64
             android_api: "26"
@@ -94,7 +94,7 @@ jobs:
             qt_target: android
             qt_arch: android_arm64_v8a
             android_abi: arm64-v8a
-            android_abis: armeabi-v7a;arm64-v8a
+            android_abis: "armeabi-v7a;arm64-v8a"
             android_output_arch: universal
             target_arch: universal
             android_api: "26"
@@ -213,8 +213,7 @@ jobs:
             echo "  ${ABI_DIR}/libssl_3.so"
             echo "  ${ABI_DIR}/libcrypto_3.so"
 
-            if [[ -f "third_party/android/openssl/ssl_3/${ABI}/libssl_3.so" && \
-                  -f "third_party/android/openssl/ssl_3/${ABI}/libcrypto_3.so" ]]; then
+            if [[ -f "third_party/android/openssl/ssl_3/${ABI}/libssl_3.so" && -f "third_party/android/openssl/ssl_3/${ABI}/libcrypto_3.so" ]]; then
               cp "third_party/android/openssl/ssl_3/${ABI}/libssl_3.so" "${ABI_DIR}/libssl_3.so"
               cp "third_party/android/openssl/ssl_3/${ABI}/libcrypto_3.so" "${ABI_DIR}/libcrypto_3.so"
               echo "Copied Android OpenSSL libs for ${ABI} from repository."
@@ -515,23 +514,17 @@ jobs:
           fi
 
           mkdir \-p \"\$OUT\_DIR\"
-
-          echo \"Cleaning previous DMG\.\.\.\"
           rm \-f \"\$DMG\_PATH\"
 
-          echo \"Cleaning extended attributes\.\.\.\"
           xattr \-cr \"\$APP\" \|\| true
 
-          echo \"Fixing executable permissions\.\.\.\"
           chmod \+x \"\$APP\/Contents\/MacOS\/GenyConnect\" \|\| true
           chmod \+x \"\$APP\/Contents\/MacOS\/GenyConnectUpdater\" \|\| true
           chmod \+x \"\$APP\/Contents\/MacOS\/GenyConnectTunHelper\" \|\| true
           chmod \+x \"\$APP\/Contents\/MacOS\/xray\-core\" \|\| true
 
-          echo \"Removing old signatures from app bundle where possible\.\.\.\"
           codesign \-\-remove\-signature \"\$APP\" \|\| true
 
-          echo \"Ad\-hoc signing nested Mach\-O files\.\.\.\"
           while IFS\= read \-r file\_path\; do
             if file \"\$file\_path\" \| grep \-q \"Mach\-O\"\; then
               echo \"Signing Mach\-O\: \$file\_path\"
@@ -539,28 +532,22 @@ jobs:
             fi
           done \< \<\(find \"\$APP\/Contents\" \-type f\)
 
-          echo \"Ad\-hoc signing frameworks\.\.\.\"
           while IFS\= read \-r framework\_path\; do
             echo \"Signing framework\: \$framework\_path\"
             codesign \-\-force \-\-sign \- \"\$framework\_path\" \|\| true
           done \< \<\(find \"\$APP\/Contents\" \-type d \-name \"\*\.framework\" \| sort \-r\)
 
-          echo \"Ad\-hoc signing bundles\/plugins\.\.\.\"
           while IFS\= read \-r bundle\_path\; do
             echo \"Signing bundle\/plugin\: \$bundle\_path\"
             codesign \-\-force \-\-sign \- \"\$bundle\_path\" \|\| true
           done \< \<\(find \"\$APP\/Contents\" \\\( \-name \"\*\.bundle\" \-o \-name \"\*\.plugin\" \-o \-name \"\*\.appex\" $end:math:text$ -type d | sort -r)
 
-          echo "Signing main app..."
           codesign --force --deep --sign - "$APP"
-
-          echo "Verifying app signature..."
           codesign --verify --deep --strict --verbose=4 "$APP"
 
           echo "Gatekeeper check. Expected to fail without Developer ID/notarization:"
           spctl --assess --type execute --verbose=4 "$APP" || true
 
-          echo "Creating clean DMG..."
           STAGING="$(mktemp -d)"
 
           cp -R "$APP" "$STAGING/GenyConnect.app"
@@ -575,10 +562,7 @@ jobs:
 
           rm -rf "$STAGING"
 
-          echo "Verifying DMG..."
           hdiutil verify "$DMG_PATH"
-
-          echo "Created DMG:"
           ls -lh "$DMG_PATH"
 
       - name: Verify macOS package
