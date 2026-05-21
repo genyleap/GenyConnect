@@ -95,18 +95,18 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Setup Java for Android
-        if: "${{ matrix.platform == 'android' }}"
+        if: ${{ matrix.platform == 'android' }}
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: "17"
 
       - name: Setup Android SDK
-        if: "${{ matrix.platform == 'android' }}"
+        if: ${{ matrix.platform == 'android' }}
         uses: android-actions/setup-android@v3
 
       - name: Install Android SDK and NDK packages
-        if: "${{ matrix.platform == 'android' }}"
+        if: ${{ matrix.platform == 'android' }}
         shell: bash
         run: |
           set -euo pipefail
@@ -123,7 +123,7 @@ jobs:
           echo "ANDROID_NDK_HOME=${ANDROID_SDK_ROOT}/ndk/${{ matrix.android_ndk_version }}" >> "${GITHUB_ENV}"
 
       - name: Install Qt Desktop
-        if: "${{ matrix.platform == 'desktop' }}"
+        if: ${{ matrix.platform == 'desktop' }}
         uses: jurplel/install-qt-action@v4
         with:
           version: ${{ matrix.qt_version }}
@@ -131,7 +131,7 @@ jobs:
           cache: true
 
       - name: Install Qt Android
-        if: "${{ matrix.platform == 'android' }}"
+        if: ${{ matrix.platform == 'android' }}
         uses: jurplel/install-qt-action@v4
         with:
           version: ${{ matrix.qt_version }}
@@ -145,20 +145,20 @@ jobs:
           cmakeVersion: ${{ env.CMAKE_VERSION }}
 
       - name: Install macOS dependencies
-        if: "${{ runner.os == 'macOS' }}"
+        if: ${{ runner.os == 'macOS' }}
         shell: bash
         run: |
           set -euo pipefail
           brew install ninja llvm
 
       - name: Install Windows dependencies
-        if: "${{ runner.os == 'Windows' }}"
+        if: ${{ runner.os == 'Windows' }}
         shell: pwsh
         run: |
           choco install -y ninja nsis 7zip
 
       - name: Install Linux dependencies
-        if: "${{ runner.os == 'Linux' }}"
+        if: ${{ runner.os == 'Linux' }}
         shell: bash
         run: |
           set -euo pipefail
@@ -166,7 +166,7 @@ jobs:
           sudo apt-get install -y ninja-build unzip zip p7zip-full curl file
 
       - name: Prepare Android release keystore
-        if: "${{ matrix.platform == 'android' && startsWith(github.ref, 'refs/tags/') }}"
+        if: ${{ matrix.platform == 'android' && startsWith(github.ref, 'refs/tags/') }}
         shell: bash
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
@@ -189,7 +189,7 @@ jobs:
           echo "ANDROID_RELEASE_KEYSTORE=${RUNNER_TEMP}/android-signing/release.keystore" >> "${GITHUB_ENV}"
 
       - name: Prepare Android OpenSSL runtime libs
-        if: "${{ matrix.platform == 'android' }}"
+        if: ${{ matrix.platform == 'android' }}
         shell: bash
         run: |
           set -euo pipefail
@@ -205,9 +205,6 @@ jobs:
             mkdir -p "${ABI_DIR}"
 
             echo "Preparing Android OpenSSL lookup directory for ABI: ${ABI}"
-            echo "Expected:"
-            echo "  ${ABI_DIR}/libssl_3.so"
-            echo "  ${ABI_DIR}/libcrypto_3.so"
 
             if [[ -f "third_party/android/openssl/ssl_3/${ABI}/libssl_3.so" && -f "third_party/android/openssl/ssl_3/${ABI}/libcrypto_3.so" ]]; then
               cp "third_party/android/openssl/ssl_3/${ABI}/libssl_3.so" "${ABI_DIR}/libssl_3.so"
@@ -219,7 +216,7 @@ jobs:
           done
 
       - name: Configure LLVM on macOS
-        if: "${{ runner.os == 'macOS' }}"
+        if: ${{ runner.os == 'macOS' }}
         shell: bash
         run: |
           set -euo pipefail
@@ -235,7 +232,7 @@ jobs:
           echo "SDKROOT=${SDKROOT}" >> "${GITHUB_ENV}"
 
       - name: Print macOS tool versions
-        if: "${{ runner.os == 'macOS' }}"
+        if: ${{ runner.os == 'macOS' }}
         shell: bash
         run: |
           set -euo pipefail
@@ -253,7 +250,7 @@ jobs:
           xcrun --sdk macosx --show-sdk-version
 
       - name: Print Android tool versions
-        if: "${{ matrix.platform == 'android' }}"
+        if: ${{ matrix.platform == 'android' }}
         shell: bash
         run: |
           set -euo pipefail
@@ -273,13 +270,13 @@ jobs:
           "${ANDROID_NDK_ROOT}/toolchains/llvm/prebuilt/linux-x86_64/bin/clang++" --version
 
       - name: Configure MSVC
-        if: "${{ runner.os == 'Windows' }}"
+        if: ${{ runner.os == 'Windows' }}
         uses: ilammy/msvc-dev-cmd@v1
         with:
           arch: ${{ matrix.cmake_arch }}
 
       - name: Configure macOS
-        if: "${{ runner.os == 'macOS' }}"
+        if: ${{ runner.os == 'macOS' }}
         shell: bash
         run: |
           set -euo pipefail
@@ -301,7 +298,7 @@ jobs:
             -DGENYCONNECT_CODESIGN_IDENTITY="-"
 
       - name: Configure Windows
-        if: "${{ runner.os == 'Windows' }}"
+        if: ${{ runner.os == 'Windows' }}
         shell: pwsh
         run: |
           cmake -S . -B build `
@@ -314,7 +311,7 @@ jobs:
             -DGENYCONNECT_TARGET_BUILD_ARCH="${{ matrix.target_arch }}"
 
       - name: Configure Android
-        if: "${{ matrix.platform == 'android' }}"
+        if: ${{ matrix.platform == 'android' }}
         shell: bash
         env:
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
@@ -374,32 +371,32 @@ jobs:
             "${SIGN_ARGS[@]}"
 
       - name: Build desktop
-        if: "${{ matrix.platform == 'desktop' }}"
+        if: ${{ matrix.platform == 'desktop' }}
         run: cmake --build build --config Release --parallel
 
       - name: Build Android native target
-        if: "${{ matrix.platform == 'android' }}"
+        if: ${{ matrix.platform == 'android' }}
         shell: bash
         run: |
           set -euo pipefail
           cmake --build build --config Release --parallel
 
       - name: Build Android APK Release
-        if: "${{ matrix.platform == 'android' }}"
+        if: ${{ matrix.platform == 'android' }}
         shell: bash
         run: |
           set -euo pipefail
           cmake --build build --config Release --target apk --parallel
 
       - name: Build Android AAB Release
-        if: "${{ matrix.platform == 'android' }}"
+        if: ${{ matrix.platform == 'android' }}
         shell: bash
         run: |
           set -euo pipefail
           cmake --build build --config Release --target aab --parallel
 
       - name: Verify Android outputs
-        if: "${{ matrix.platform == 'android' }}"
+        if: ${{ matrix.platform == 'android' }}
         shell: bash
         run: |
           set -euo pipefail
@@ -412,13 +409,12 @@ jobs:
 
           if [[ "${APK_COUNT}" == "0" && "${AAB_COUNT}" == "0" ]]; then
             echo "No Android APK/AAB was produced."
-            echo "Recent build files:"
             find build -maxdepth 8 -type f | sort | tail -300
             exit 1
           fi
 
       - name: Normalize Android artifact names
-        if: "${{ matrix.platform == 'android' }}"
+        if: ${{ matrix.platform == 'android' }}
         shell: bash
         run: |
           set -euo pipefail
@@ -460,7 +456,7 @@ jobs:
           ls \-lah \"\$\{OUT\_DIR\}\"
 
       \- name\: Verify macOS deployment target
-        if\: \"\$\{\{ runner\.os \=\= \'macOS\' \}\}\"
+        if\: \$\{\{ runner\.os \=\= \'macOS\' \}\}
         shell\: bash
         run\: \|
           set \-euo pipefail
@@ -483,7 +479,7 @@ jobs:
           done
 
       \- name\: Re\-sign macOS app ad\-hoc and create DMG
-        if\: \"\$\{\{ runner\.os \=\= \'macOS\' \}\}\"
+        if\: \$\{\{ runner\.os \=\= \'macOS\' \}\}
         shell\: bash
         run\: \|
           set \-euo pipefail
@@ -505,8 +501,6 @@ jobs:
           DMG\_NAME\=\"GenyConnect\-\$\{VERSION\}\-macos\-\$\{\{ matrix\.target\_arch \}\}\.dmg\"
           DMG\_PATH\=\"\$\{OUT\_DIR\}\/\$\{DMG\_NAME\}\"
 
-          echo \"Package version\: \$\{VERSION\}\"
-
           if \[\[ \! \-d \"\$\{APP\}\" \]\]\; then
             echo \"App not found\: \$\{APP\}\"
             exit 1
@@ -526,29 +520,24 @@ jobs:
 
           while IFS\= read \-r file\_path\; do
             if file \"\$\{file\_path\}\" \| grep \-q \"Mach\-O\"\; then
-              echo \"Signing Mach\-O\: \$\{file\_path\}\"
               codesign \-\-force \-\-sign \- \"\$\{file\_path\}\" \|\| true
             fi
           done \< \<\(find \"\$\{APP\}\/Contents\" \-type f\)
 
           while IFS\= read \-r framework\_path\; do
-            echo \"Signing framework\: \$\{framework\_path\}\"
             codesign \-\-force \-\-sign \- \"\$\{framework\_path\}\" \|\| true
           done \< \<\(find \"\$\{APP\}\/Contents\" \-type d \-name \"\*\.framework\" \| sort \-r\)
 
           while IFS\= read \-r bundle\_path\; do
-            echo \"Signing bundle\/plugin\: \$\{bundle\_path\}\"
             codesign \-\-force \-\-sign \- \"\$\{bundle\_path\}\" \|\| true
           done \< \<\(find \"\$\{APP\}\/Contents\" \\\( \-name \"\*\.bundle\" \-o \-name \"\*\.plugin\" \-o \-name \"\*\.appex\" $end:math:text$ -type d | sort -r)
 
           codesign --force --deep --sign - "${APP}"
           codesign --verify --deep --strict --verbose=4 "${APP}"
 
-          echo "Gatekeeper check. Expected to fail without Developer ID/notarization:"
           spctl --assess --type execute --verbose=4 "${APP}" || true
 
           STAGING="$(mktemp -d)"
-
           cp -R "${APP}" "${STAGING}/GenyConnect.app"
           ln -s /Applications "${STAGING}/Applications"
 
@@ -565,7 +554,7 @@ jobs:
           ls -lh "${DMG_PATH}"
 
       - name: Verify macOS package
-        if: "${{ runner.os == 'macOS' }}"
+        if: ${{ runner.os == 'macOS' }}
         shell: bash
         run: |
           set -euo pipefail
@@ -577,7 +566,6 @@ jobs:
             exit 1
           fi
 
-          echo "Verifying DMG: ${DMG}"
           hdiutil verify "${DMG}"
 
           MOUNT_DIR="$(mktemp -d)"
@@ -586,21 +574,17 @@ jobs:
           APP="$(find "${MOUNT_DIR}" -maxdepth 2 -name "GenyConnect.app" -type d | head -n 1)"
 
           if [[ -z "${APP}" ]]; then
-            echo "GenyConnect.app not found inside DMG."
             hdiutil detach "${MOUNT_DIR}" -quiet || true
             exit 1
           fi
 
-          echo "Verifying app inside DMG: ${APP}"
           codesign --verify --deep --strict --verbose=4 "${APP}"
-
-          echo "Gatekeeper check. Expected to fail without Developer ID/notarization:"
           spctl --assess --type execute --verbose=4 "${APP}" || true
 
           hdiutil detach "${MOUNT_DIR}" -quiet
 
       - name: Package desktop
-        if: "${{ matrix.platform == 'desktop' && runner.os != 'macOS' }}"
+        if: ${{ matrix.platform == 'desktop' && runner.os != 'macOS' }}
         run: cpack --config build/CPackConfig.cmake -C Release
 
       - name: Collect packages
@@ -619,7 +603,6 @@ jobs:
           find build/final -type f -name "*.aab" -exec cp {} artifacts/ \;
 
           if [ -z "$(find artifacts -type f -print -quit)" ]; then
-            echo "No packages found. Listing recent build files:"
             find build -maxdepth 8 -type f | sort | tail -300
             exit 1
           fi
@@ -634,7 +617,7 @@ jobs:
 
       - name: Release
         uses: softprops/action-gh-release@v2
-        if: "${{ startsWith(github.ref, 'refs/tags/') }}"
+        if: ${{ startsWith(github.ref, 'refs/tags/') }}
         with:
           files: artifacts/*
           fail_on_unmatched_files: true
