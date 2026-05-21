@@ -362,6 +362,7 @@ jobs:
           echo "ANDROID_SDK_ROOT=${ANDROID_SDK_ROOT}" >> "${GITHUB_ENV}"
           echo "ANDROID_HOME=${ANDROID_SDK_ROOT}" >> "${GITHUB_ENV}"
           echo "ANDROID_NDK_ROOT=${ANDROID_SDK_ROOT}/ndk/${{ matrix.android_ndk_version }}" >> "${GITHUB_ENV}"
+          echo "ANDROID_NDK_HOME=${ANDROID_SDK_ROOT}/ndk/${{ matrix.android_ndk_version }}" >> "${GITHUB_ENV}"
 
       - name: Install Qt Android
         uses: jurplel/install-qt-action@v4
@@ -370,6 +371,14 @@ jobs:
           target: android
           arch: ${{ matrix.qt_arch }}
           cache: true
+
+      - name: Save Qt Android and host paths
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          echo "ANDROID_QT_ROOT=${QT_ROOT_DIR}" >> "${GITHUB_ENV}"
+          echo "QT_HOST_ROOT=$(dirname "${QT_ROOT_DIR}")/gcc_64" >> "${GITHUB_ENV}"
 
       - name: Install CMake
         uses: lukka/get-cmake@latest
@@ -380,6 +389,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+
           sudo apt-get update
           sudo apt-get install -y ninja-build unzip zip p7zip-full curl file
 
@@ -429,14 +439,16 @@ jobs:
         run: |
           set -euo pipefail
 
-          echo "QT_ROOT_DIR=${QT_ROOT_DIR}"
+          echo "ANDROID_QT_ROOT=${ANDROID_QT_ROOT}"
+          echo "QT_HOST_ROOT=${QT_HOST_ROOT}"
           echo "ANDROID_SDK_ROOT=${ANDROID_SDK_ROOT}"
           echo "ANDROID_NDK_ROOT=${ANDROID_NDK_ROOT}"
           echo "ANDROID_ABI=${{ matrix.android_abi }}"
           echo "QT_ANDROID_ABIS=${{ matrix.android_abis }}"
 
-          test -f "${QT_ROOT_DIR}/lib/cmake/Qt6/Qt6Config.cmake"
-          test -f "${QT_ROOT_DIR}/lib/cmake/Qt6Core/Qt6CoreConfig.cmake"
+          test -f "${ANDROID_QT_ROOT}/lib/cmake/Qt6/Qt6Config.cmake"
+          test -f "${ANDROID_QT_ROOT}/lib/cmake/Qt6Core/Qt6CoreConfig.cmake"
+          test -f "${QT_HOST_ROOT}/lib/cmake/Qt6/Qt6Config.cmake"
 
       - name: Configure Android
         shell: bash
@@ -477,8 +489,9 @@ jobs:
 
           cmake -S . -B build -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_PREFIX_PATH="${QT_ROOT_DIR}" \
-            -DQt6_DIR="${QT_ROOT_DIR}/lib/cmake/Qt6" \
+            -DCMAKE_PREFIX_PATH="${ANDROID_QT_ROOT}" \
+            -DQt6_DIR="${ANDROID_QT_ROOT}/lib/cmake/Qt6" \
+            -DQT_HOST_PATH="${QT_HOST_ROOT}" \
             -DCMAKE_TOOLCHAIN_FILE="${ANDROID_NDK_ROOT}/build/cmake/android.toolchain.cmake" \
             -DANDROID_ABI="${{ matrix.android_abi }}" \
             -DANDROID_PLATFORM="android-${{ matrix.android_api }}" \
@@ -498,11 +511,15 @@ jobs:
 
       - name: Build Android APK Release
         shell: bash
-        run: cmake --build build --config Release --target apk --parallel
+        run: |
+          set -euo pipefail
+          cmake --build build --config Release --target apk --parallel
 
       - name: Build Android AAB Release
         shell: bash
-        run: cmake --build build --config Release --target aab --parallel
+        run: |
+          set -euo pipefail
+          cmake --build build --config Release --target aab --parallel
 
       - name: Normalize Android artifact names
         shell: bash
@@ -518,11 +535,25 @@ jobs:
             VERSION="$(grep -E 'project\(\$\{PROJECT_NAME\} VERSION ' CMakeLists.txt | sed -E 's/.*VERSION ([0-9]+\.[0-9]+\.[0-9]+).*/\1/')"
           fi
 
+          if [[ -z "${VERSION}" ]]; then
+            echo "Could not detect project version."
+            exit 1
+          fi
+
           APK="$(find build -type f -name "*.apk" | sort | head -n 1)"
           AAB="$(find build -type f -name "*.aab" | sort | head -n 1)"
 
-          test -n "${APK}"
-          test -n "${AAB}"
+          if [[ -z "${APK}" ]]; then
+            echo "No APK found."
+            find build -maxdepth 10 -type f | sort | tail -300
+            exit 1
+          fi
+
+          if [[ -z "${AAB}" ]]; then
+            echo "No AAB found."
+            find build -maxdepth 10 -type f | sort | tail -300
+            exit 1
+          fi
 
           cp "${APK}" "${OUT_DIR}/GenyConnect-${VERSION}-android-${{ matrix.android_output_arch }}.apk"
           cp "${AAB}" "${OUT_DIR}/GenyConnect-${VERSION}-android-${{ matrix.android_output_arch }}.aab"
