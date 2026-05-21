@@ -143,7 +143,7 @@ set(GENYCONNECT_WINTUN_VERSION "0.14.1" CACHE STRING "Wintun version for fallbac
 set(GENYCONNECT_WINTUN_URL "" CACHE STRING "Optional explicit wintun zip URL override")
 
 set(GENYCONNECT_TARGET_OS   "" CACHE STRING "Override target OS for output naming (macos|linux|windows)")
-set(GENYCONNECT_TARGET_ARCH "${GENYCONNECT_TARGET_BUILD_ARCH}" CACHE STRING "Override target arch for output naming (arm64|x86_64)" FORCE)
+set(GENYCONNECT_TARGET_ARCH "${GENYCONNECT_TARGET_BUILD_ARCH}" CACHE STRING "Override target arch for output naming (arm64|x86_64|armv7|universal)" FORCE)
 set(GENYCONNECT_OUTPUT_NAME "" CACHE STRING "Optional explicit output name (overrides generated name)")
 
 # -------------------------
@@ -375,6 +375,16 @@ if(GENYCONNECT_BUILD_DESKTOP)
 endif()
 
 find_package(Qt6 6.8 REQUIRED COMPONENTS ${GENYCONNECT_QT_COMPONENTS})
+
+if(ANDROID)
+  if(NOT QT_HOST_PATH AND NOT DEFINED ENV{QT_HOST_PATH})
+    message(WARNING
+      "QT_HOST_PATH is not set. Android Qt builds usually require a host Qt installation. "
+      "Pass -DQT_HOST_PATH=<host-qt-root> from CI."
+    )
+  endif()
+endif()
+
 qt_standard_project_setup(REQUIRES 6.8)
 
 message(STATUS "Qt6_DIR: ${Qt6_DIR}")
