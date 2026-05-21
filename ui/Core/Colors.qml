@@ -276,6 +276,42 @@ QtObject {
     readonly property color gcIconButtonBg: vpnIconButtonBg
     readonly property color gcIconButtonBorder: vpnIconButtonBorder
     readonly property color gcIconButtonIcon: vpnIconButtonIcon
+
+    // Unified modern design system tokens
+    readonly property color dsWindow: lightMode ? "#f5f7fc" : "#050b1d"
+    readonly property color dsSurface: lightMode ? "#ffffff" : "#0f1b36"
+    readonly property color dsSurfaceSoft: lightMode ? "#f2f5fb" : "#162746"
+    readonly property color dsSurfaceElevated: lightMode ? "#ffffff" : "#1c2f4f"
+    readonly property color dsGlass: lightMode ? "#e6edf8ee" : "#7a0d1833"
+    readonly property color dsBorder: lightMode ? "#d7e2f0" : "#2f476a"
+    readonly property color dsBorderSoft: lightMode ? "#e6edf6" : "#243c5f"
+    readonly property color dsBorderStrong: lightMode ? "#bfd1e8" : "#3e628e"
+
+    readonly property color dsText: lightMode ? "#0f172a" : "#edf4ff"
+    readonly property color dsTextMuted: lightMode ? "#5f6f86" : "#9fb4cd"
+    readonly property color dsTextSubtle: lightMode ? "#8392a6" : "#7f97b4"
+
+    readonly property color dsPrimaryStart: lightMode ? "#2f74ff" : "#2f6ff1"
+    readonly property color dsPrimaryEnd: lightMode ? "#7b53ff" : "#7f5bff"
+    readonly property color dsPrimarySolid: lightMode ? "#2f74ff" : "#3a7bff"
+    readonly property color dsPrimaryPressed: lightMode ? "#2a66d1" : "#2f67c6"
+    readonly property color dsPrimaryText: "#ffffff"
+    readonly property color dsPrimaryTint: lightMode ? "#eaf2ff" : "#223753"
+
+    readonly property color dsDanger: lightMode ? "#d6455d" : "#ff5c78"
+    readonly property color dsSuccess: lightMode ? "#14b873" : "#34d18a"
+    readonly property color dsWarning: lightMode ? "#de8a1a" : "#f7b251"
+
+    readonly property color dsShadowSoft: lightMode ? "#140f1b2a" : "#3a000000"
+    readonly property color dsShadowStrong: lightMode ? "#1f1e2c47" : "#70000000"
+
+    readonly property color dsLinkIconBgPurple: lightMode ? "#ede8ff" : "#2d2657"
+    readonly property color dsLinkIconPurple: lightMode ? "#7b53ff" : "#b39cff"
+    readonly property color dsLinkIconBgBlue: lightMode ? "#e8f2ff" : "#21375a"
+    readonly property color dsLinkIconBlue: lightMode ? "#2f74ff" : "#8ab6ff"
+    readonly property color dsLinkIconBgGreen: lightMode ? "#e7f7ed" : "#1f3e32"
+    readonly property color dsLinkIconGreen: lightMode ? "#22a86d" : "#6ae6ac"
+
     readonly property color mainHex_050505: "#050505"
     readonly property color mainHex_070707: "#070707"
     readonly property color mainHex_090909: "#090909"
@@ -724,4 +760,27 @@ QtObject {
     readonly property color mainHex_fff9db: "#fff9db"
     readonly property color mainHex_fffcf4: "#fffcf4"
     readonly property color mainHex_ffffff: "#ffffff"
+    readonly property color mainHex_223654: "#223654"
+    readonly property color mainHex_263248: "#263248"
+    readonly property color mainHex_3c2b55: "#3c2b55"
+    readonly property color mainHex_463260: "#463260"
+    readonly property color mainHex_4d607a: "#4d607a"
+    readonly property color mainHex_65758b: "#65758b"
+    readonly property color mainHex_7050b8: "#7050b8"
+    readonly property color mainHex_7155a2: "#7155a2"
+    readonly property color mainHex_7b53ff: "#7b53ff"
+    readonly property color mainHex_7f72ff: "#7f72ff"
+    readonly property color mainHex_7faeff: "#7faeff"
+    readonly property color mainHex_90a5bf: "#90a5bf"
+    readonly property color mainHex_9eb4ce: "#9eb4ce"
+    readonly property color mainHex_a0682a: "#a0682a"
+    readonly property color mainHex_a0afc4: "#a0afc4"
+    readonly property color mainHex_b5c7de: "#b5c7de"
+    readonly property color mainHex_b89cff: "#b89cff"
+    readonly property color mainHex_d4e2f5: "#d4e2f5"
+    readonly property color mainHex_dce4f1: "#dce4f1"
+    readonly property color mainHex_e3d7ff: "#e3d7ff"
+    readonly property color mainHex_f3efff: "#f3efff"
+    readonly property color mainHex_f5f7fc: "#f5f7fc"
+    readonly property color mainHex_f8f5ff: "#f8f5ff"
 }

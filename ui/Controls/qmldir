@@ -23,3 +23,22 @@ SignalBars 1.0 SignalBars.qml
 NumberFlowText 1.0 NumberFlowText.qml
 
 SpeedTestGauge 1.0 SpeedTestGauge.qml
+AppPage 1.0 AppPage.qml
+AppHeader 1.0 AppHeader.qml
+GlassCard 1.0 GlassCard.qml
+PrimaryButton 1.0 PrimaryButton.qml
+SecondaryButton 1.0 SecondaryButton.qml
+OutlineButton 1.0 OutlineButton.qml
+SelectableCard 1.0 SelectableCard.qml
+StatusPill 1.0 StatusPill.qml
+SettingRow 1.0 SettingRow.qml
+LinkRow 1.0 LinkRow.qml
+StatCard 1.0 StatCard.qml
+InfoBanner 1.0 InfoBanner.qml
+DialogCard 1.0 DialogCard.qml
+SegmentedSelector 1.0 SegmentedSelector.qml
+SupportHeroCard 1.0 SupportHeroCard.qml
+TokenOptionCard 1.0 TokenOptionCard.qml
+AmountButton 1.0 AmountButton.qml
+DonationSummaryCard 1.0 DonationSummaryCard.qml
+UsefulLinkCard 1.0 UsefulLinkCard.qml

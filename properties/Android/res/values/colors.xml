@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="geny_splash_bg">#061730</color>
+    <color name="geny_status_bar">#DDE3EA</color>
+    <color name="geny_nav_bar">#DDE3EA</color>
+    <color name="geny_launcher_bg">#F2F3F5</color>
+</resources>

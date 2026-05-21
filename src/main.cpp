@@ -1,43 +1,55 @@
-#include <QAction>
-#include <QApplication>
 #include <QDir>
 #include <QIcon>
 #include <QLocalServer>
 #include <QLocalSocket>
 #include <QLockFile>
-#include <QMenu>
+#include <QGuiApplication>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
 #include <QQuickWindow>
 #include <QStandardPaths>
-#include <QSystemTrayIcon>
 #include <QTimer>
 #include <QtCore/qglobal.h>
 
-#include "platform/macosappbridge.hpp"
+#if !defined(Q_OS_ANDROID) && !defined(Q_OS_IOS)
+#include <QAction>
+#include <QApplication>
+#include <QMenu>
+#include <QSystemTrayIcon>
+#endif
 
+#if defined(Q_OS_MACOS) && !defined(Q_OS_IOS)
+#include "platform/macosappbridge.hpp"
+#endif
+
+#if !defined(Q_OS_ANDROID) && !defined(Q_OS_IOS)
 import genyconnect.backend.connectionstate;
+#endif
 import genyconnect.backend.vpncontroller;
 
 auto main(int argc, char *argv[]) -> int
 {
+#if !defined(Q_OS_ANDROID) && !defined(Q_OS_IOS)
     QApplication app(argc, argv);
+#else
+    QGuiApplication app(argc, argv);
+#endif
     app.setQuitOnLastWindowClosed(false);
 
-    QCoreApplication::setOrganizationName(QStringLiteral("GenyConnect"));
-    QCoreApplication::setOrganizationDomain(QStringLiteral("genyconnect.local"));
-    QCoreApplication::setApplicationName(QStringLiteral("GenyConnect"));
+    QCoreApplication::setOrganizationName(QString::fromUtf8("GenyConnect"));
+    QCoreApplication::setOrganizationDomain(QString::fromUtf8("genyconnect.local"));
+    QCoreApplication::setApplicationName(QString::fromUtf8("GenyConnect"));
 
 #ifdef APP_VERSION
-    QCoreApplication::setApplicationVersion(QStringLiteral(APP_VERSION));
+    QCoreApplication::setApplicationVersion(QString::fromUtf8(APP_VERSION));
 #else
-    QCoreApplication::setApplicationVersion(QStringLiteral("0.0.0"));
+    QCoreApplication::setApplicationVersion(QString::fromUtf8("0.0.0"));
 #endif
 
 #if defined(Q_OS_WIN)
-    const QIcon appIcon(QStringLiteral(":/ui/Resources/image/GenyConnect.ico"));
+    const QIcon appIcon(QString::fromUtf8(":/ui/Resources/image/GenyConnect.ico"));
 #else
-    const QIcon appIcon(QStringLiteral(":/ui/Resources/image/favicon.png"));
+    const QIcon appIcon(QString::fromUtf8(":/ui/Resources/image/favicon.png"));
 #endif
 
     if (!appIcon.isNull()) {
@@ -54,8 +66,8 @@ auto main(int argc, char *argv[]) -> int
 
     QDir().mkpath(lockDir);
 
-    const QString instanceServerName = QStringLiteral("GenyConnectSingleInstance");
-    QLockFile instanceLock(QDir(lockDir).filePath(QStringLiteral("genyconnect.instance.lock")));
+    const QString instanceServerName = QString::fromUtf8("GenyConnectSingleInstance");
+    QLockFile instanceLock(QDir(lockDir).filePath(QString::fromUtf8("genyconnect.instance.lock")));
     instanceLock.setStaleLockTime(0);
 
     if (!instanceLock.tryLock(100)) {
@@ -70,19 +82,23 @@ auto main(int argc, char *argv[]) -> int
     }
 
     qmlRegisterUncreatableMetaObject(
+#if defined(Q_OS_ANDROID) || defined(Q_OS_IOS)
+        vpnControllerConnectionStateMetaObject(),
+#else
         connectionStateMetaObject(),
+#endif
         "GenyConnect",
         1,
         0,
         "ConnectionState",
-        QStringLiteral("ConnectionState is read-only")
+        QString::fromUtf8("ConnectionState is read-only")
         );
 
     VpnController vpnController;
 
     QQmlApplicationEngine engine;
-    engine.rootContext()->setContextProperty(QStringLiteral("vpnController"), &vpnController);
-    engine.rootContext()->setContextProperty(QStringLiteral("updater"), vpnController.updater());
+    engine.rootContext()->setContextProperty(QString::fromUtf8("vpnController"), &vpnController);
+    engine.rootContext()->setContextProperty(QString::fromUtf8("updater"), vpnController.updater());
 
     QObject::connect(
         &engine,
@@ -92,7 +108,7 @@ auto main(int argc, char *argv[]) -> int
         Qt::QueuedConnection
         );
 
-    engine.loadFromModule(QStringLiteral("GenyConnect"), QStringLiteral("Main"));
+    engine.loadFromModule(QString::fromUtf8("GenyConnect"), QString::fromUtf8("Main"));
 
     if (engine.rootObjects().isEmpty()) {
         return -1;
@@ -161,20 +177,21 @@ auto main(int argc, char *argv[]) -> int
         });
     }
 
+    #if !defined(Q_OS_ANDROID) && !defined(Q_OS_IOS)
     if (!QSystemTrayIcon::isSystemTrayAvailable()) {
         mainWindow->setProperty("allowCloseExit", true);
         return app.exec();
     }
 
-    const QIcon trayBaseIcon(QStringLiteral(":/ui/Resources/image/favicon.png"));
+    const QIcon trayBaseIcon(QString::fromUtf8(":/ui/Resources/image/favicon.png"));
 
     QSystemTrayIcon trayIcon;
     trayIcon.setIcon(trayBaseIcon.isNull() ? app.windowIcon() : trayBaseIcon);
 
     QMenu trayMenu;
-    QAction openAction(QStringLiteral("Open"), &trayMenu);
+    QAction openAction(QString::fromUtf8("Open"), &trayMenu);
     QAction toggleAction(&trayMenu);
-    QAction exitAction(QStringLiteral("Exit"), &trayMenu);
+    QAction exitAction(QString::fromUtf8("Exit"), &trayMenu);
 
     trayMenu.addAction(&openAction);
     trayMenu.addAction(&toggleAction);
@@ -190,26 +207,26 @@ auto main(int argc, char *argv[]) -> int
 
         switch (state) {
         case ConnectionState::Connected:
-            toggleAction.setText(QStringLiteral("🟢 Connected — Disconnect"));
+            toggleAction.setText(QString::fromUtf8("🟢 Connected — Disconnect"));
             toggleAction.setIcon(QIcon());
             toggleAction.setEnabled(true);
             break;
 
         case ConnectionState::Connecting:
-            toggleAction.setText(QStringLiteral("⚪ Connecting..."));
+            toggleAction.setText(QString::fromUtf8("⚪ Connecting..."));
             toggleAction.setIcon(QIcon());
             toggleAction.setEnabled(true);
             break;
 
         case ConnectionState::Error:
-            toggleAction.setText(QStringLiteral("🔴 Failed — Connect"));
+            toggleAction.setText(QString::fromUtf8("🔴 Failed — Connect"));
             toggleAction.setIcon(QIcon());
             toggleAction.setEnabled(true);
             break;
 
         case ConnectionState::Disconnected:
         default:
-            toggleAction.setText(QStringLiteral("🔴 Disconnected — Connect"));
+            toggleAction.setText(QString::fromUtf8("🔴 Disconnected — Connect"));
             toggleAction.setIcon(QIcon());
             toggleAction.setEnabled(vpnController.currentProfileIndex() >= 0);
             break;
@@ -267,6 +284,7 @@ auto main(int argc, char *argv[]) -> int
 
     updateTrayState();
     trayIcon.show();
+    #endif
 
     return app.exec();
 }

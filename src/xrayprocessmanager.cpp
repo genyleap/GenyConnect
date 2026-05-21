@@ -57,18 +57,18 @@ qint64 XrayProcessManager::txBytes() const
 bool XrayProcessManager::start(const QString& configPath, QString *errorMessage)
 {
     if (isRunning()) {
-        setError(errorMessage, QStringLiteral("xray-core is already running."));
+        setError(errorMessage, QString::fromUtf8("xray-core is already running."));
         return false;
     }
 
     if (m_executablePath.trimmed().isEmpty()) {
-        setError(errorMessage, QStringLiteral("xray-core executable path is not set."));
+        setError(errorMessage, QString::fromUtf8("xray-core executable path is not set."));
         return false;
     }
 
     QFileInfo executableInfo(m_executablePath);
     if (!executableInfo.exists()) {
-        setError(errorMessage, QStringLiteral("xray-core executable not found: %1").arg(m_executablePath));
+        setError(errorMessage, QString::fromUtf8("xray-core executable not found: %1").arg(m_executablePath));
         return false;
     }
 
@@ -80,7 +80,7 @@ bool XrayProcessManager::start(const QString& configPath, QString *errorMessage)
     m_stderrBuffer.clear();
 
     m_process.setProgram(m_executablePath);
-    m_process.setArguments({QStringLiteral("run"), QStringLiteral("-config"), configPath});
+    m_process.setArguments({QString::fromUtf8("run"), QString::fromUtf8("-config"), configPath});
 
     if (!m_workingDirectory.trimmed().isEmpty()) {
         m_process.setWorkingDirectory(m_workingDirectory);
@@ -174,10 +174,10 @@ void XrayProcessManager::handleLogLine(const QString& line)
 void XrayProcessManager::parseTraffic(const QString& line)
 {
     static const QRegularExpression rxPattern(
-        QStringLiteral("(?:\\brx\\b|\\bdown(?:link)?\\b)\\D*(\\d+)")
+        QString::fromUtf8("(?:\\brx\\b|\\bdown(?:link)?\\b)\\D*(\\d+)")
     );
     static const QRegularExpression txPattern(
-        QStringLiteral("(?:\\btx\\b|\\bup(?:link)?\\b)\\D*(\\d+)")
+        QString::fromUtf8("(?:\\btx\\b|\\bup(?:link)?\\b)\\D*(\\d+)")
     );
 
     bool changed = false;

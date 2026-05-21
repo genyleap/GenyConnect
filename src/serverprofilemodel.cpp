@@ -10,6 +10,8 @@ module;
 
 module genyconnect.backend.serverprofilemodel;
 
+void ServerProfileModel::__geny_vtable_anchor() {}
+
 ServerProfileModel::ServerProfileModel(QObject *parent)
     : QAbstractListModel(parent)
 {
@@ -51,15 +53,17 @@ QVariant ServerProfileModel::data(const QModelIndex& index, int role) const
         return profile.groupName;
     case SourceRole:
         return profile.sourceName;
+    case OriginalLinkRole:
+        return profile.originalLink;
     case PingMsRole:
         return profile.lastPingMs;
     case PingTextRole:
         if (profile.pingInProgress) {
-            return QStringLiteral("Pinging...");
+            return QString::fromUtf8("Pinging...");
         }
         return profile.lastPingMs >= 0
-            ? QStringLiteral("%1 ms").arg(profile.lastPingMs)
-            : QStringLiteral("--");
+            ? QString::fromUtf8("%1 ms").arg(profile.lastPingMs)
+            : QString::fromUtf8("--");
     case PingingRole:
         return profile.pingInProgress;
     default:
@@ -79,6 +83,7 @@ QHash<int, QByteArray> ServerProfileModel::roleNames() const
         {DisplayLabelRole, "displayLabel"},
         {GroupRole, "groupName"},
         {SourceRole, "sourceName"},
+        {OriginalLinkRole, "originalLink"},
         {PingMsRole, "pingMs"},
         {PingTextRole, "pingText"},
         {PingingRole, "pinging"},

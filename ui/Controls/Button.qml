@@ -7,125 +7,81 @@ import GenyConnect 1.0
 T.Button {
     id: control
 
-    property bool isDefault : true
-    property bool isBold : true
+    property bool isDefault: true
+    property bool isBold: true
+    property string setIcon: ""
+    property color style: Colors.primary
+    property string sizeType: "normal"
+    property bool compact: sizeType === "compact"
+    property bool subtle: sizeType === "subtle"
+    property bool gradientPrimary: false
 
-    property string setIcon : ""
-    property color style : Colors.primary
-    property string sizeType : "normal"
-
-    width: setIcon ? 128 * 1.5 : 128
-    implicitHeight: 46
     Layout.fillWidth: true
-    implicitWidth: 128
-
-    opacity: 1.0
+    implicitWidth: setIcon.length > 0 ? 150 : 128
+    implicitHeight: compact ? Metrics.rowHeightCompact : Metrics.rowHeightLarge
+    hoverEnabled: true
+    opacity: enabled ? 1.0 : 0.52
 
     contentItem: Item {
+        width: control.availableWidth
+        height: control.availableHeight
+        implicitWidth: buttonContent.implicitWidth
+        implicitHeight: buttonContent.implicitHeight
+        clip: false
 
-        anchors.fill: parent
-
-        anchors.topMargin: AppGlobals.rtl ? 0 : 3 // patch fix for unsupported font [latin] position.
-
-        Text {
-            text: control.text
+        RowLayout {
+            id: buttonContent
             anchors.centerIn: parent
-            font.family: FontSystem.getContentFontRegular.font.family
-            font.pixelSize: Typography.t3
-            font.bold: control.isBold ? Font.Bold : Font.Normal
-            font.weight: control.isBold ? Font.Bold : Font.Normal
-            color: !control.enabled
-                   ? (Colors.lightMode ? Colors.mainHex_95a0b3 : Colors.mainHex_8ea1ba)
-                   : (control.isDefault ? Colors.staticPrimary : Colors.secondry)
+            spacing: 8
 
-            Behavior on color {
-                ColorAnimation {
-                    duration: Animations.normal;
-                    easing.type: Easing.Linear;
-                }
+            Text {
+                id: buttonIcon
+                visible: control.setIcon.length > 0
+                text: control.setIcon
+                font.family: FontSystem.getAwesomeSolid.name.length > 0
+                    ? FontSystem.getAwesomeSolid.name
+                    : FontSystem.getAwesomeRegular.name
+                font.pixelSize: compact ? Typography.uiBody : Typography.uiBodyLg
+                color: control.isDefault ? Colors.dsPrimaryText : Colors.dsPrimarySolid
+                Layout.alignment: Qt.AlignVCenter
             }
-            elide: Text.ElideRight
-            scale: control.pressed ? 0.9 : 1.0
-            Behavior on scale { NumberAnimation { duration: 200; } }
+
+            Text {
+                id: buttonLabel
+                text: control.text
+                font.family: control.isBold ? FontSystem.getContentFontBold.name : FontSystem.contentFontFamily
+                font.pixelSize: compact ? Typography.uiBodyLg : Typography.uiTitleSm
+                font.bold: control.isBold
+                color: control.isDefault ? Colors.dsPrimaryText : Colors.dsPrimarySolid
+                width: Math.min(
+                    implicitWidth,
+                    Math.max(
+                        20,
+                        control.availableWidth
+                            - (buttonIcon.visible ? (buttonIcon.implicitWidth + buttonContent.spacing) : 0)
+                            - 8))
+                elide: Text.ElideRight
+                horizontalAlignment: Text.AlignHCenter
+                verticalAlignment: Text.AlignVCenter
+                Layout.alignment: Qt.AlignVCenter
+                scale: control.pressed ? 0.98 : 1.0
+                Behavior on scale { NumberAnimation { duration: 120 } }
+            }
         }
-
-        // Row {
-
-        //     anchors.centerIn: parent
-        //     spacing: 0
-
-        //     Item { width: 5; }
-
-        //     Text {
-        //         text: control.text
-        //         Layout.alignment: Qt.AlignHCenter | Qt.AlignVCenter
-        //         Layout.fillWidth: false
-        //         font.family: FontSystem.contentFontFamily
-        //         font.pixelSize: Typography.t3
-        //         font.bold: isBold ? Font.Bold : Font.Normal
-        //         font.weight: isBold ? Font.Bold : Font.Normal
-        //         color: isDefault ? Colors.textSecondary : Colors.textPrimary
-
-        //         Behavior on color {
-        //             ColorAnimation {
-        //                 duration: Animations.normal;
-        //                 easing.type: Easing.Linear;
-        //             }
-        //         }
-
-        //         horizontalAlignment: Text.AlignHCenter
-        //         verticalAlignment: Text.AlignVCenter
-        //         elide: Text.ElideRight
-        //         scale: control.pressed ? 0.9 : 1.0
-        //         Behavior on scale { NumberAnimation { duration: 200; } }
-        //     }
-
-        //     HorizontalSpacer { visible: setIcon ? true : false }
-
-        //     Text {
-        //         text: setIcon
-        //         font.family: FontSystem.getAwesomeRegular.name
-        //         font.pixelSize: Typography.t3
-        //         font.weight: isBold ? Font.Normal : Font.Light
-        //         font.bold: isBold ? Font.Bold : Font.Normal
-        //         color: isDefault ? Colors.accent : Colors.foregroundFocused
-        //         horizontalAlignment: Text.AlignHCenter
-        //         verticalAlignment: Text.AlignVCenter
-        //         elide: Text.ElideRight
-        //         visible: setIcon ? true : false
-        //         scale: control.pressed ? 0.9 : 1.0
-        //         Behavior on scale { NumberAnimation { duration: 200; } }
-        //     }
-
-        //     Item { width: 5; }
-        // }
-
     }
 
     background: Rectangle {
-        implicitWidth: control.width
-        implicitHeight: control.height
-        Layout.fillWidth: true
-        radius: Colors.outerRadius
-        color: control.isDefault
-               ? (control.enabled
-                  ? Colors.primaryBack
-                  : (Colors.lightMode ? Colors.mainHex_e7edf6 : Colors.mainHex_2f425d))
-               : "transparent"
-        border.width: control.isDefault
-                      ? (control.enabled ? 0 : 1)
-                      : 1
-        border.color: control.isDefault
-                      ? (control.enabled
-                         ? "transparent"
-                         : (Colors.lightMode ? Colors.mainHex_d5deec : Colors.mainHex_3b4e67))
-                      : (control.enabled
-                         ? Colors.secondry
-                         : (Colors.lightMode ? Colors.mainHex_c8d3e2 : Colors.mainHex_3b4e67))
+        id: buttonBg
+        radius: Metrics.radiusPill
+        property color flatFill: control.isDefault
+                                 ? (control.pressed ? Colors.dsPrimaryPressed : Colors.dsPrimarySolid)
+                                 : (control.pressed ? Colors.dsPrimaryTint : (control.subtle ? "transparent" : Colors.dsSurface))
+        border.width: control.isDefault ? 0 : 1
+        border.color: control.isDefault ? "transparent" : Colors.dsPrimarySolid
+        color: flatFill
     }
 
     MouseArea {
-        id: mouseArea
         hoverEnabled: true
         acceptedButtons: Qt.NoButton
         cursorShape: Qt.PointingHandCursor

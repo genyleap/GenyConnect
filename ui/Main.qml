@@ -10,23 +10,130 @@ import "Core"
 import "Controls" as Controls
 
 ApplicationWindow {
+
     id: root
 
+    readonly property bool mobilePlatform: Qt.platform.os === "android" || Qt.platform.os === "ios"
+    readonly property bool mobileLandscape: mobilePlatform && root.width > root.height
+
+    readonly property bool compact: mobilePlatform || root.width < 620
+
+    readonly property real safeTopInset: mobilePlatform ? (Qt.platform.os === "ios" ? 14 : 0) : 0
+    readonly property real safeBottomInset: mobilePlatform ? (Qt.platform.os === "ios" ? 22 : 10) : 0
+
+    readonly property real compactBottomNavVisualHeight: mobilePlatform
+        ? (mobileLandscape ? 44 : 48)
+        : 60
+    readonly property real compactBottomNavHeight: compactBottomNavVisualHeight + safeBottomInset
+    readonly property real compactBottomNavSafeFillHeight: mobilePlatform
+        ? Math.max(mobileLandscape ? 4 : 8, safeBottomInset + (mobileLandscape ? 2 : 4))
+        : Math.max(34, safeBottomInset + 18)
+    readonly property real compactBottomNavTopMargin: mobilePlatform ? (mobileLandscape ? 0 : 2) : 0
+
+    readonly property real compactContentBottomClearance: compactBottomNavHeight + (mobilePlatform ? (mobileLandscape ? 8 : 14) : 18)
+
+    readonly property real compactAvailableHeight: Math.max(
+        1,
+        root.height - safeTopInset - compactContentBottomClearance
+    )
+
+    readonly property real compactHeightScale: compact
+        ? Math.max(0.54, Math.min(1.0, compactAvailableHeight / 700.0))
+        : 1.0
+
+    // Android home geometry tokens to keep spacing proportional and avoid overlap.
+    readonly property real mobileHomeScale: compact
+        ? (mobilePlatform
+           ? (mobileLandscape
+              ? Math.max(0.60, Math.min(0.84, compactAvailableHeight / 560.0))
+              : Math.max(0.72, Math.min(0.92, compactAvailableHeight / 760.0)))
+           : Math.max(0.88, Math.min(1.08, compactAvailableHeight / 640.0)))
+        : 1.0
+    readonly property real mobileHomeTopMargin: safeTopInset + (mobilePlatform ? (mobileLandscape ? 5 : 6) : 10)
+    readonly property real mobileHomeBottomMargin: mobilePlatform
+        ? (mobileLandscape ? 6 : 8)
+        : 10
+    readonly property real mobileHomeHorizontalMargin: mobilePlatform ? (mobileLandscape ? 24 : 18) : 18
+    readonly property real mobileHomeMapVerticalOffset: mobilePlatform
+        ? (mobileLandscape
+           ? Math.round(6 * mobileHomeScale)
+           : Math.round(20 * mobileHomeScale))
+        : Math.round(18 * mobileHomeScale)
+    readonly property real mobileHomeMapWidthFactor: mobilePlatform ? (mobileLandscape ? 1.06 : 1.42) : 1.55
+    readonly property real mobileHomeMapHeightFactor: mobilePlatform ? (mobileLandscape ? 0.52 : 0.66) : 0.82
+    readonly property real mobileHomeMapOpacity: mobilePlatform ? (mobileLandscape ? 0.30 : 0.35) : 0.45
+    readonly property real mobileHomeSectionGap: mobilePlatform
+        ? (mobileLandscape
+           ? Math.max(3, Math.round(4 * mobileHomeScale))
+           : Math.max(6, Math.round(6 * mobileHomeScale)))
+        : Math.max(4, Math.round(4 * mobileHomeScale))
+    readonly property real mobileHomeHeaderHeight: Math.max(42, Math.round(44 * mobileHomeScale))
+    readonly property real mobileHomeTimerHeight: Math.max(46, Math.round(56 * mobileHomeScale))
+    readonly property real mobileHomeInfoPillHeight: mobilePlatform ? (mobileLandscape ? 52 : 58) : 52
+    readonly property real mobileHomeUsageHeight: Math.max(50, Math.round(56 * mobileHomeScale))
+    readonly property real mobileHomeHeroDiameter: mobilePlatform
+        ? (mobileLandscape
+           ? Math.max(104, Math.round(126 * mobileHomeScale))
+           : Math.max(150, Math.round(180 * mobileHomeScale)))
+        : Math.max(150, Math.round(176 * mobileHomeScale))
+    readonly property real mobileHomeHeroExtraHeight: mobilePlatform
+        ? (mobileLandscape
+           ? Math.max(16, Math.round(22 * mobileHomeScale))
+           : Math.max(30, Math.round(36 * mobileHomeScale)))
+        : 20
+    readonly property real mobileHomeHeroBlockHeight: mobileHomeHeroDiameter + mobileHomeHeroExtraHeight
+    readonly property real mobileHomeStatusTopGap: mobilePlatform
+        ? Math.max(12, Math.round(14 * mobileHomeScale))
+        : Math.max(8, Math.round(10 * mobileHomeScale))
+    readonly property real mobileHomeStatusChipHeight: mobilePlatform ? 34 : 32
+    readonly property real mobileHomeStatusMinWidth: mobilePlatform
+        ? Math.max(164, Math.round(188 * mobileHomeScale))
+        : 0
+    readonly property real mobileHomeStatsHeight: mobilePlatform
+        ? (mobileLandscape ? Math.max(66, Math.round(74 * mobileHomeScale))
+                           : Math.max(86, Math.round(94 * mobileHomeScale)))
+        : Math.max(88, Math.round(96 * mobileHomeScale))
+    readonly property real mobileHomeStatsToCardGap: mobilePlatform
+        ? Math.max(14, Math.round(18 * mobileHomeScale))
+        : Math.max(8, Math.round(12 * mobileHomeScale))
+    readonly property real mobileHomeCardHeight: Math.max(56, Math.round(68 * mobileHomeScale))
+
     visible: true
-    width: 430
-    height: 760
-    minimumWidth: 430
-    maximumWidth: 430
-    minimumHeight: 760
-    maximumHeight: 760
-    flags: Qt.Window | Qt.WindowTitleHint | Qt.WindowSystemMenuHint | Qt.WindowMinimizeButtonHint | Qt.WindowCloseButtonHint
+
+    width: mobilePlatform ? Screen.width : 430
+
+    height: mobilePlatform ? Screen.height : 760
+
+    minimumWidth: mobilePlatform ? 0 : 430
+
+    minimumHeight: mobilePlatform ? 0 : 760
+
+    maximumWidth: mobilePlatform ? 16777215 : 430
+
+    maximumHeight: mobilePlatform ? 16777215 : 760
+
+    // visibility: mobilePlatform ? Window.FullScreen : Window.Windowed
+
+    flags: mobilePlatform
+
+           ? Qt.Window
+
+           : Qt.Window
+
+             | Qt.WindowTitleHint
+
+             | Qt.WindowSystemMenuHint
+
+             | Qt.WindowMinimizeButtonHint
+
+             | Qt.WindowCloseButtonHint
+
 
     title: "GenyConnect (Build " + updater.appVersion + ") - " + osNameText()
 
-    color: Colors.gcWindow
+    color: Colors.dsWindow
     font.family: FontSystem.contentFontFamily
 
-    property bool compact: true
     readonly property string faSolid: FontSystem.getAwesomeSolid.name
 
     readonly property string iconGrid: "\uf00a"
@@ -38,6 +145,7 @@ ApplicationWindow {
     readonly property string iconClose: "\uf00d"
     readonly property string iconSpeed: "\uf625"
     readonly property string iconUsage: "\uf201"
+    readonly property string iconHeart: "\uf004"
     readonly property string iconPing: "\ue06f"
     readonly property string iconKeyboard: "\uf11c"
     readonly property string iconImport: "\uf56f"
@@ -48,10 +156,14 @@ ApplicationWindow {
     readonly property string iconCopy: "\uf0c5"
     readonly property string iconSearch: "\uf002"
     readonly property string iconFileLines: "\uf15c"
+    readonly property string iconDna: "\uf471"
     readonly property color brandBlue: Colors.secondry
     readonly property color brandCyan: Colors.brandBlue
     readonly property color brandViolet: Colors.brandPurple
     readonly property color brandInk: Colors.gcTextStrong
+    readonly property string appSiteUrl: "https://genyleap.com"
+    readonly property string appRepoUrl: "https://github.com/genyleap/genyconnect"
+    readonly property string appShareText: "GenyConnect is a cross-platform open-source network connection app."
 
     property string selectedServerLabel: vpnController.currentProfileIndex >= 0
                                          ? "Selected Profile"
@@ -85,25 +197,407 @@ ApplicationWindow {
     property var profilePopupAnchor: null
     property int sessionSeconds: 0
     property string settingsSection: "main"
+    property string pendingSettingsSection: ""
     property var appRuleSuggestions: []
     property var selectedAppRuleProcesses: []
     property string appRuleSearchQuery: ""
     property string usageHistoryPeriod: "day"
     property string usagePanelTab: "current"
     property int usageRefreshNonce: 0
+    property string donationFeedbackText: ""
+    property var donationConfig: ({})
+    property var donationTokens: []
+    property string donationSelectedToken: "GENY"
+    property string donationSelectedAmountPreset: ""
+    property string donationCustomAmount: ""
+    property string donationValidationError: ""
+    property string donationLastDeepLink: ""
+    property var donationPendingPayload: ({})
+    property var donationWalletTargets: []
+    property bool donationSuggestionShown: false
+    property string settingsFeedbackText: ""
+    property real settingsPageShift: 0
+    property real settingsPageOpacity: 1
     property string compactProfileFilter: "All"
     property int editProfileRow: -1
     property string editProfileName: ""
     property string editProfileGroup: ""
+    property string editProfileConfigLink: ""
+    property string editProfileError: ""
+    property bool editProfileVlessSupported: false
+    property var editProfileVlessForm: ({})
     property real speedGaugeDisplayMbps: 0.0
     property string speedGaugeRangePreset: "Auto"
     property var downRateHistoryMbps: []
     property var upRateHistoryMbps: []
     property int rateHistoryMaxPoints: 24
+    property int pendingHomePingProfileIndex: -1
+    readonly property int powerUiStatsIntervalMs: Math.max(500, Number((vpnController.powerPolicy || {}).uiStatsRefreshIntervalMs || 1000))
+    readonly property int powerGaugeRefreshIntervalMs: Math.max(16, Number((vpnController.powerPolicy || {}).uiGaugeRefreshIntervalMs || 40))
+    readonly property bool powerVisualAnimationsEnabled: (vpnController.visualPowerPolicy || {}).animationsEnabled !== false
+    readonly property bool powerDecorativeAnimationsEnabled: (vpnController.visualPowerPolicy || {}).decorativeAnimationsEnabled !== false
+    readonly property bool powerParticlesEnabled: (vpnController.visualPowerPolicy || {}).particlesEnabled === true
+    readonly property bool powerEffectsEnabled: (vpnController.visualPowerPolicy || {}).effectsEnabled !== false
+    readonly property bool powerPauseBackgroundUi: (vpnController.visualPowerPolicy || {}).pauseInBackground === true && !root.active
+
+    component PowerSectionCard: Rectangle {
+        id: sectionCard
+
+        property string title: ""
+        property string subtitle: ""
+        property string glyph: ""
+        property color accentColor: Colors.dsPrimarySolid
+        property bool animated: true
+
+        default property alias content: sectionBody.data
+
+        Layout.fillWidth: true
+        radius: Metrics.radiusLg
+        color: Colors.dsSurface
+        border.width: 1
+        border.color: Colors.dsBorderSoft
+        implicitHeight: sectionLayout.implicitHeight + 28
+
+        Behavior on border.color {
+            enabled: sectionCard.animated
+            ColorAnimation { duration: 120 }
+        }
+
+        ColumnLayout {
+            id: sectionLayout
+            anchors.fill: parent
+            anchors.margins: 14
+            spacing: 12
+
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 10
+
+                Rectangle {
+                    visible: sectionCard.glyph.length > 0
+                    Layout.preferredWidth: 34
+                    Layout.preferredHeight: 34
+                    radius: 17
+                    color: Qt.rgba(sectionCard.accentColor.r, sectionCard.accentColor.g, sectionCard.accentColor.b, Colors.lightMode ? 0.12 : 0.20)
+
+                    Text {
+                        anchors.centerIn: parent
+                        text: sectionCard.glyph
+                        color: sectionCard.accentColor
+                        font.family: root.faSolid
+                        font.pixelSize: 14
+                    }
+                }
+
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: 2
+
+                    Text {
+                        Layout.fillWidth: true
+                        text: sectionCard.title
+                        color: Colors.dsText
+                        font.family: FontSystem.getContentFontBold.name
+                        font.pixelSize: Typography.uiTitleSm
+                        font.bold: true
+                        elide: Text.ElideRight
+                    }
+
+                    Text {
+                        Layout.fillWidth: true
+                        visible: sectionCard.subtitle.length > 0
+                        text: sectionCard.subtitle
+                        color: Colors.dsTextMuted
+                        font.family: FontSystem.contentFontFamily
+                        font.pixelSize: Typography.uiBody
+                        wrapMode: Text.WordWrap
+                    }
+                }
+            }
+
+            ColumnLayout {
+                id: sectionBody
+                Layout.fillWidth: true
+                spacing: 10
+            }
+        }
+    }
+
+    component PowerModeCard: Rectangle {
+        id: modeCard
+
+        property string modeName: ""
+        property string summary: ""
+        property string glyph: ""
+        property color accentColor: Colors.dsPrimarySolid
+        property bool selected: false
+        property bool compact: false
+        property bool animated: true
+
+        signal clicked()
+
+        Layout.fillWidth: true
+        implicitHeight: compact ? 74 : 92
+        radius: Metrics.radiusMd
+        color: modeMouse.pressed
+               ? Colors.dsSurfaceElevated
+               : (selected
+                  ? Qt.rgba(accentColor.r, accentColor.g, accentColor.b, Colors.lightMode ? 0.12 : 0.20)
+                  : (modeMouse.containsMouse ? Colors.dsSurfaceSoft : Colors.dsSurface))
+        border.width: selected ? 2 : 1
+        border.color: selected
+                      ? accentColor
+                      : (modeMouse.containsMouse ? Colors.dsBorder : Colors.dsBorderSoft)
+
+        Behavior on color {
+            enabled: modeCard.animated
+            ColorAnimation { duration: 120 }
+        }
+
+        Behavior on border.color {
+            enabled: modeCard.animated
+            ColorAnimation { duration: 120 }
+        }
+
+        RowLayout {
+            anchors.fill: parent
+            anchors.margins: compact ? 10 : 12
+            spacing: 10
+
+            Rectangle {
+                Layout.preferredWidth: compact ? 34 : 40
+                Layout.preferredHeight: compact ? 34 : 40
+                radius: width / 2
+                color: selected
+                       ? modeCard.accentColor
+                       : Qt.rgba(modeCard.accentColor.r, modeCard.accentColor.g, modeCard.accentColor.b, Colors.lightMode ? 0.10 : 0.18)
+
+                Text {
+                    anchors.centerIn: parent
+                    text: modeCard.glyph
+                    color: selected ? Colors.dsPrimaryText : modeCard.accentColor
+                    font.family: root.faSolid
+                    font.pixelSize: compact ? 13 : 15
+                }
+            }
+
+            ColumnLayout {
+                Layout.fillWidth: true
+                spacing: 3
+
+                Text {
+                    Layout.fillWidth: true
+                    text: modeCard.modeName
+                    color: Colors.dsText
+                    font.family: FontSystem.getContentFontBold.name
+                    font.pixelSize: Typography.uiTitleSm
+                    font.bold: true
+                    elide: Text.ElideRight
+                }
+
+                Text {
+                    Layout.fillWidth: true
+                    text: modeCard.summary
+                    color: Colors.dsTextMuted
+                    font.family: FontSystem.contentFontFamily
+                    font.pixelSize: Typography.uiBody
+                    wrapMode: Text.WordWrap
+                    maximumLineCount: compact ? 2 : 3
+                    elide: Text.ElideRight
+                }
+            }
+
+            Text {
+                visible: modeCard.selected
+                text: "\uf00c"
+                color: modeCard.accentColor
+                font.family: root.faSolid
+                font.pixelSize: 14
+            }
+        }
+
+        MouseArea {
+            id: modeMouse
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: modeCard.clicked()
+        }
+    }
+
+    component PowerMetricChip: Rectangle {
+        id: metricChip
+
+        property string label: ""
+        property string value: ""
+        property string glyph: ""
+        property color accentColor: Colors.dsPrimarySolid
+
+        Layout.fillWidth: true
+        implicitHeight: 58
+        radius: Metrics.radiusMd
+        color: Colors.dsSurfaceSoft
+        border.width: 1
+        border.color: Colors.dsBorderSoft
+
+        RowLayout {
+            anchors.fill: parent
+            anchors.margins: 10
+            spacing: 9
+
+            Rectangle {
+                Layout.preferredWidth: 30
+                Layout.preferredHeight: 30
+                radius: 15
+                color: Qt.rgba(metricChip.accentColor.r, metricChip.accentColor.g, metricChip.accentColor.b, Colors.lightMode ? 0.12 : 0.18)
+
+                Text {
+                    anchors.centerIn: parent
+                    text: metricChip.glyph
+                    color: metricChip.accentColor
+                    font.family: root.faSolid
+                    font.pixelSize: 12
+                }
+            }
+
+            ColumnLayout {
+                Layout.fillWidth: true
+                spacing: 1
+
+                Text {
+                    Layout.fillWidth: true
+                    text: metricChip.label
+                    color: Colors.dsTextMuted
+                    font.family: FontSystem.contentFontFamily
+                    font.pixelSize: Typography.uiCaption
+                    elide: Text.ElideRight
+                }
+
+                Text {
+                    Layout.fillWidth: true
+                    text: metricChip.value
+                    color: Colors.dsText
+                    font.family: FontSystem.getContentFontBold.name
+                    font.pixelSize: Typography.uiBodyLg
+                    font.bold: true
+                    elide: Text.ElideRight
+                }
+            }
+        }
+    }
+
+    component PowerStatusBadge: Rectangle {
+        id: statusBadge
+
+        property string status: "Balanced"
+        readonly property bool friendly: status.indexOf("Battery") >= 0
+        readonly property bool highPower: status.indexOf("High") >= 0
+        readonly property color badgeColor: friendly ? Colors.dsSuccess : (highPower ? Colors.dsWarning : Colors.dsPrimarySolid)
+        readonly property string badgeGlyph: friendly ? "\uf06c" : (highPower ? "\uf0e7" : "\uf3fd")
+
+        radius: Metrics.radiusPill
+        color: Qt.rgba(badgeColor.r, badgeColor.g, badgeColor.b, Colors.lightMode ? 0.13 : 0.20)
+        border.width: 1
+        border.color: Qt.rgba(badgeColor.r, badgeColor.g, badgeColor.b, Colors.lightMode ? 0.36 : 0.55)
+        implicitHeight: 34
+        implicitWidth: badgeRow.implicitWidth + 18
+
+        RowLayout {
+            id: badgeRow
+            anchors.centerIn: parent
+            spacing: 7
+
+            Text {
+                text: statusBadge.badgeGlyph
+                color: statusBadge.badgeColor
+                font.family: root.faSolid
+                font.pixelSize: 12
+            }
+
+            Text {
+                text: statusBadge.status
+                color: statusBadge.badgeColor
+                font.family: FontSystem.getContentFontBold.name
+                font.pixelSize: Typography.uiBody
+                font.bold: true
+            }
+        }
+    }
+
+    component PowerHomeBadge: Rectangle {
+        id: homeBadge
+
+        property string modeName: "Normal"
+        property bool compact: true
+        readonly property color accentColor: root.powerModeAccent(modeName)
+        readonly property string glyph: root.powerModeGlyph(modeName)
+
+        signal clicked()
+
+        Layout.preferredWidth: compact ? 34 : Math.max(82, badgeRow.implicitWidth + 18)
+        Layout.preferredHeight: compact ? 34 : 36
+        Layout.alignment: Qt.AlignVCenter
+        radius: height / 2
+        color: homeBadgeMouse.pressed
+               ? Qt.rgba(accentColor.r, accentColor.g, accentColor.b, Colors.lightMode ? 0.22 : 0.32)
+               : Qt.rgba(accentColor.r, accentColor.g, accentColor.b, Colors.lightMode ? 0.12 : 0.20)
+        border.width: 1
+        border.color: Qt.rgba(accentColor.r, accentColor.g, accentColor.b, Colors.lightMode ? 0.28 : 0.46)
+        scale: homeBadgeMouse.pressed ? 0.96 : 1.0
+
+        Behavior on color {
+            enabled: root.powerVisualAnimationsEnabled
+            ColorAnimation { duration: 140 }
+        }
+
+        Behavior on border.color {
+            enabled: root.powerVisualAnimationsEnabled
+            ColorAnimation { duration: 140 }
+        }
+
+        Behavior on scale {
+            enabled: root.powerVisualAnimationsEnabled
+            NumberAnimation { duration: 90 }
+        }
+
+        RowLayout {
+            id: badgeRow
+            anchors.centerIn: parent
+            spacing: 6
+
+            Text {
+                text: homeBadge.glyph
+                color: homeBadge.accentColor
+                font.family: root.faSolid
+                font.pixelSize: homeBadge.compact ? 13 : 12
+            }
+
+            Text {
+                visible: !homeBadge.compact
+                text: homeBadge.modeName === "High Performance" ? "Performance" : homeBadge.modeName
+                color: homeBadge.accentColor
+                font.family: FontSystem.getContentFontBold.name
+                font.pixelSize: 11
+                font.bold: true
+            }
+        }
+
+        MouseArea {
+            id: homeBadgeMouse
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: homeBadge.clicked()
+        }
+
+        ToolTip.visible: homeBadgeMouse.containsMouse
+        ToolTip.text: homeBadge.modeName + " Power Mode"
+    }
 
     readonly property var speedUnitOptions: ["Auto", "bps", "Kbps", "Mbps", "Gbps", "B/s", "KB/s", "MB/s", "GB/s"]
     readonly property var trafficUnitOptions: ["Auto", "B", "KB", "MB", "GB", "TB"]
     readonly property var themeModeOptions: ["System", "Light", "Dark"]
+    readonly property var ipPrivacyOptions: ["Show", "Partial Mask", "Hidden"]
     readonly property bool systemPrefersDark: Qt.application.styleHints.colorScheme === Qt.ColorScheme.Dark
     readonly property bool darkThemeEnabled: interfaceThemeSettings.mode === "Dark"
                                          || (interfaceThemeSettings.mode === "System" && systemPrefersDark)
@@ -120,6 +614,12 @@ ApplicationWindow {
         property string mode: "System"
     }
 
+    Settings {
+        id: interfacePrivacySettings
+        category: "Interface/Privacy"
+        property string ipDisplayMode: "Show"
+    }
+
     onClosing: function(closeEvent) {
         if (allowCloseExit) {
             return
@@ -128,57 +628,290 @@ ApplicationWindow {
         root.hide()
     }
 
+    onVisibleChanged: {
+        if (visible)
+            syncAndroidSystemBars()
+    }
+
+    onSettingsSectionChanged: {
+        if (!settingsPopup || !settingsPopup.opened)
+            return
+        settingsPageShift = 0
+        settingsPageOpacity = 0.0
+        settingsSectionTransition.restart()
+        if (settingsFlick)
+            settingsFlick.contentY = 0
+    }
+
     function themeColor(lightColor, darkColor) {
-        return darkThemeEnabled ? darkColor : lightColor
+        return Colors.lightMode ? lightColor : darkColor
+    }
+
+    function powerModeGlyph(mode) {
+        if (mode === "Save")
+            return "\uf06c"
+        if (mode === "High Performance")
+            return "\uf0e7"
+        return "\uf3fd"
+    }
+
+    function powerModeAccent(mode) {
+        if (mode === "Save")
+            return Colors.dsSuccess
+        if (mode === "High Performance")
+            return Colors.dsWarning
+        return Colors.dsPrimarySolid
+    }
+
+    function powerModeSummary(mode) {
+        if (mode === "Save")
+            return "Lower wakeups and calmer visuals for battery-sensitive sessions."
+        if (mode === "High Performance")
+            return "Faster refresh and richer feedback for latency-focused use."
+        return "Balanced defaults close to the current GenyConnect behavior."
+    }
+
+    function powerMsText(value) {
+        const ms = Math.max(0, Math.round(Number(value) || 0))
+        if (ms >= 1000)
+            return (ms / 1000.0).toFixed(ms % 1000 === 0 ? 0 : 1) + " s"
+        return ms + " ms"
+    }
+
+    function powerDiagnosticValue(key, fallback) {
+        const diagnostics = vpnController.powerDiagnostics || {}
+        const value = diagnostics[key]
+        if (value === undefined || value === null || value === "")
+            return fallback
+        return value
+    }
+
+    function powerBatteryText() {
+        const status = String(powerDiagnosticValue("batteryStatus", ""))
+        if (status.length > 0 && status !== "Unknown")
+            return status
+        const level = Number(powerDiagnosticValue("batteryLevel", -1))
+        return level >= 0 ? (Math.round(level) + "%") : "Unknown"
+    }
+
+    function powerNetworkText() {
+        const status = String(powerDiagnosticValue("networkStatus", ""))
+        if (status.length > 0 && status !== "Unknown")
+            return status
+        const network = String(powerDiagnosticValue("networkType", "unknown"))
+        if (network.length === 0 || network === "unknown")
+            return "Unknown"
+        return network.charAt(0).toUpperCase() + network.slice(1)
+    }
+
+    function powerAdaptiveInputsAvailable() {
+        const diagnostics = vpnController.powerDiagnostics || {}
+        const level = Number(diagnostics.batteryLevel)
+        const network = String(diagnostics.networkType || "unknown")
+        return level >= 0
+                || network !== "unknown"
+                || String(diagnostics.batteryStatus || "").length > 0
+                || String(diagnostics.networkStatus || "").length > 0
+                || diagnostics.batterySaver === true
+                || diagnostics.charging === true
+                || diagnostics.screenOn === false
+                || diagnostics.backgrounded === true
+    }
+
+    function shortAddress(value, prefixCount, suffixCount) {
+        const text = (value || "").trim()
+        const head = Math.max(2, prefixCount || 6)
+        const tail = Math.max(2, suffixCount || 4)
+        if (text.length <= (head + tail + 1))
+            return text
+        return text.slice(0, head) + "..." + text.slice(text.length - tail)
+    }
+
+    function reloadDonationData() {
+        donationConfig = vpnController.donationConfig()
+        donationTokens = vpnController.donationTokenOptions()
+        if (!donationTokenBySymbol(donationSelectedToken) && donationTokens.length > 0)
+            donationSelectedToken = donationTokens[0].symbol
+        if (donationSelectedAmountPreset === "Custom" && donationCustomAmount.trim().length === 0)
+            donationCustomAmount = ""
+        if (donationSelectedAmountPreset !== "Custom" && donationSelectedAmountPreset.trim().length === 0)
+            donationSelectedAmountPreset = donationDefaultPresetForToken(donationSelectedToken)
+    }
+
+    function donationTokenBySymbol(symbol) {
+        const key = (symbol || "").trim().toUpperCase()
+        for (let i = 0; i < donationTokens.length; ++i) {
+            const token = donationTokens[i]
+            if ((token.symbol || "").toUpperCase() === key)
+                return token
+        }
+        return null
+    }
+
+    function donationDefaultPresetForToken(symbol) {
+        const token = donationTokenBySymbol(symbol)
+        if (!token || !token.presetAmounts || token.presetAmounts.length === 0)
+            return ""
+        for (let i = 0; i < token.presetAmounts.length; ++i) {
+            const preset = token.presetAmounts[i]
+            if (preset !== "Custom")
+                return preset
+        }
+        return token.presetAmounts[0]
+    }
+
+    function donationEffectiveAmountText() {
+        if (donationSelectedAmountPreset === "Custom")
+            return donationCustomAmount.trim()
+        return (donationSelectedAmountPreset || "").trim()
+    }
+
+    function selectDonationToken(symbol) {
+        donationSelectedToken = (symbol || "").trim().toUpperCase()
+        donationSelectedAmountPreset = donationDefaultPresetForToken(donationSelectedToken)
+        donationCustomAmount = ""
+        donationValidationError = ""
+    }
+
+    function donationTargetVisible(target) {
+        if (!target)
+            return false
+        if (Qt.platform.os !== "android")
+            return target.id === "system"
+        return target.visible !== false
+    }
+
+    function openDonationViaTarget(target) {
+        if (!target)
+            return
+        const payload = donationPendingPayload || {}
+        const mode = (target.mode || "").trim()
+        const packageName = (target.packageName || "").trim()
+        let opened = false
+
+        if (mode === "chooser") {
+            opened = vpnController.openUrlWithChooser(payload.deepLink || "", "Choose wallet app")
+        } else if (mode === "swap") {
+            if (packageName.length > 0 && Qt.platform.os === "android")
+                opened = vpnController.openUrlInAndroidPackage(payload.uniswapUrl || "", packageName)
+            if (!opened)
+                opened = Qt.openUrlExternally(payload.uniswapUrl || "")
+        } else {
+            if (packageName.length > 0 && Qt.platform.os === "android")
+                opened = vpnController.openUrlInAndroidPackage(payload.deepLink || "", packageName)
+            if (!opened)
+                opened = Qt.openUrlExternally(payload.deepLink || "")
+        }
+
+        walletPickerPopup.close()
+        if (opened) {
+            donationFeedbackText = mode === "swap"
+                ? "Opened Uniswap. Complete swap/buy then send donation."
+                : "Opened wallet. Complete donation transfer there."
+        } else {
+            donationFeedbackText = "Could not open selected wallet app. Copied receiver wallet and opened Uniswap fallback."
+            vpnController.copyTextToClipboard(payload.receiverWallet || "")
+            Qt.openUrlExternally(payload.uniswapUrl || "")
+        }
+        donationFeedbackTimer.restart()
+    }
+
+    function triggerDonation(preferWalletChooser) {
+        donationValidationError = ""
+        donationFeedbackText = ""
+
+        const token = donationTokenBySymbol(donationSelectedToken)
+        if (!token) {
+            donationValidationError = "Select a donation token first."
+            return
+        }
+
+        const payload = vpnController.buildDonationPayload(
+            donationSelectedToken,
+            donationEffectiveAmountText())
+        if (!payload || payload.ok !== true) {
+            donationValidationError = payload && payload.error ? payload.error : "Unable to prepare donation request."
+            return
+        }
+
+        donationLastDeepLink = payload.deepLink || ""
+        donationPendingPayload = payload
+        if (Qt.platform.os === "android" && preferWalletChooser === true) {
+            donationWalletTargets = vpnController.donationWalletTargets(
+                payload.deepLink || "",
+                payload.uniswapUrl || "")
+            walletPickerPopup.open()
+            return
+        }
+
+        let opened = false
+        opened = Qt.openUrlExternally(donationLastDeepLink)
+        if (opened) {
+            donationFeedbackText = "Opened wallet deep link. Complete the transfer in your wallet."
+        } else {
+            donationFeedbackText = "Wallet deep link could not be opened. Copied receiver wallet and opened Uniswap fallback."
+            vpnController.copyTextToClipboard(payload.receiverWallet || "")
+            Qt.openUrlExternally(payload.uniswapUrl || "")
+        }
+        donationFeedbackTimer.restart()
+    }
+
+    function syncAndroidSystemBars() {
+        if (Qt.platform.os !== "android")
+            return
+        vpnController.syncSystemBars(!Colors.lightMode)
     }
 
     function themeColorToken(lightToken, darkToken) {
         const key = lightToken + "|" + darkToken
         switch (key) {
-        case "mainHex_ffffff|mainHex_090b14": return Colors.gcSurface0
-        case "mainHex_f7f9fc|mainHex_151c32": return Colors.gcSurface1
-        case "mainHex_f7f9fd|mainHex_151c32": return Colors.gcSurface2
-        case "mainHex_ffffff|mainHex_22324a": return Colors.gcSurfacePanel
-        case "mainHex_f3f6fb|mainHex_20314b": return Colors.gcPanelSoft
-        case "mainHex_eaf2ff|mainHex_223753": return Colors.gcPanelTint
+        case "mainHex_ffffff|mainHex_090b14": return Colors.dsWindow
+        case "mainHex_f7f9fc|mainHex_151c32": return Colors.dsSurfaceSoft
+        case "mainHex_f7f9fd|mainHex_151c32": return Colors.dsSurfaceSoft
+        case "mainHex_ffffff|mainHex_22324a": return Colors.dsSurface
+        case "mainHex_f3f6fb|mainHex_20314b": return Colors.dsSurfaceSoft
+        case "mainHex_eaf2ff|mainHex_223753": return Colors.dsPrimaryTint
 
-        case "mainHex_e0e6f0|mainHex_30435d": return Colors.gcBorder0
-        case "mainHex_d8dde8|mainHex_151c32": return Colors.gcBorder1
-        case "mainHex_d6dde8|mainHex_151c32": return Colors.gcBorder2
-        case "mainHex_d9e0ed|mainHex_151c32": return Colors.gcBorder3
-        case "mainHex_dfe7f2|mainHex_151c32": return Colors.gcBorder4
-        case "mainHex_d5deec|mainHex_151c32": return Colors.gcBorder5
+        case "mainHex_e0e6f0|mainHex_30435d": return Colors.dsBorder
+        case "mainHex_d8dde8|mainHex_151c32": return Colors.dsBorderSoft
+        case "mainHex_d6dde8|mainHex_151c32": return Colors.dsBorderSoft
+        case "mainHex_d9e0ed|mainHex_151c32": return Colors.dsBorderSoft
+        case "mainHex_dfe7f2|mainHex_151c32": return Colors.dsBorderSoft
+        case "mainHex_d5deec|mainHex_151c32": return Colors.dsBorderSoft
 
-        case "mainHex_2a3240|mainHex_d7e4f6": return Colors.gcTextStrong
-        case "mainHex_334155|mainHex_d7e4f6": return Colors.gcTextPrimary
-        case "mainHex_1f2530|mainHex_d8e1f0": return Colors.gcTextBody
-        case "mainHex_667487|mainHex_9bb0cb": return Colors.gcTextMuted
-        case "mainHex_667081|mainHex_9ab0ca": return Colors.gcTextMutedAlt
-        case "mainHex_7c8697|mainHex_9bb0cb": return Colors.gcTextSubtle
-        case "mainHex_8f97a6|mainHex_9eb2cb": return Colors.gcTextSubtleAlt
-        case "mainHex_647891|mainHex_9fb4cd": return Colors.gcTextMeta
+        case "mainHex_2a3240|mainHex_d7e4f6": return Colors.dsText
+        case "mainHex_334155|mainHex_d7e4f6": return Colors.dsText
+        case "mainHex_1f2530|mainHex_d8e1f0": return Colors.dsText
+        case "mainHex_667487|mainHex_9bb0cb": return Colors.dsTextMuted
+        case "mainHex_667081|mainHex_9ab0ca": return Colors.dsTextMuted
+        case "mainHex_7c8697|mainHex_9bb0cb": return Colors.dsTextSubtle
+        case "mainHex_8f97a6|mainHex_9eb2cb": return Colors.dsTextSubtle
+        case "mainHex_647891|mainHex_9fb4cd": return Colors.dsTextMuted
 
-        case "mainHex_2f6ff1|mainHex_3a7bff": return Colors.secondry
-        case "mainHex_2a3240|mainHex_9ec1ff": return Colors.secondry
-        case "mainHex_cb4f4f|mainHex_ff8e8e": return Colors.gcDanger
+        case "mainHex_2f6ff1|mainHex_3a7bff": return Colors.dsPrimarySolid
+        case "mainHex_2a3240|mainHex_9ec1ff": return Colors.dsPrimarySolid
+        case "mainHex_cb4f4f|mainHex_ff8e8e": return Colors.dsDanger
         }
 
         const light = Colors[lightToken]
         const dark = Colors[darkToken]
         if (light !== undefined && dark !== undefined)
-            return darkThemeEnabled ? dark : light
+            return Colors.lightMode ? light : dark
         if (dark !== undefined)
             return dark
         if (light !== undefined)
             return light
-        return darkThemeEnabled ? Colors.gcTextPrimary : Colors.gcTextBody
+        return Colors.dsText
     }
 
     function stateText() {
         if (vpnController.connectionState === ConnectionState.Connecting)
             return "Connecting"
-        if (vpnController.connectionState === ConnectionState.Connected)
+        if (vpnController.connectionState === ConnectionState.Connected) {
+            if (vpnController.isMobile && !vpnController.runtimeTunActive)
+                return "Proxy Connected"
             return "Connected"
+        }
         if (vpnController.connectionState === ConnectionState.Error)
             return "Error"
         return "Disconnected"
@@ -190,6 +923,24 @@ ApplicationWindow {
         if (vpnController.connectionState === ConnectionState.Connected)
             return "Disconnect"
         return "Connect"
+    }
+
+    function scrollFlickByWheel(flick, event) {
+        if (!flick || !event)
+            return
+        const pixel = (event.pixelDelta && event.pixelDelta.y !== undefined) ? event.pixelDelta.y : 0
+        const angle = (event.angleDelta && event.angleDelta.y !== undefined) ? event.angleDelta.y : 0
+        const delta = pixel !== 0 ? pixel : (angle * 0.35)
+        if (delta === 0)
+            return
+        const maxY = Math.max(0, flick.contentHeight - flick.height)
+        if (maxY <= 0)
+            return
+        const next = Math.max(0, Math.min(maxY, flick.contentY - delta))
+        if (Math.abs(next - flick.contentY) < 0.5)
+            return
+        flick.contentY = next
+        event.accepted = true
     }
 
     function guessFlag(label) {
@@ -565,16 +1316,76 @@ ApplicationWindow {
         selectedServerFlag = guessFlag(selectedServerLabel)
     }
 
+    function maskedIpToken(sample) {
+        const text = (sample || "").trim()
+        if (text.indexOf(":") >= 0)
+            return "****:****"
+        return "*.*.*.*"
+    }
+
+    function partiallyMaskIpToken(token) {
+        const text = (token || "").trim()
+        if (text.length === 0)
+            return text
+
+        if (text.indexOf(":") >= 0) {
+            const parts = text.split(":")
+            if (parts.length <= 2)
+                return text
+            return parts.slice(0, 2).join(":") + ":****"
+        }
+
+        const octets = text.split(".")
+        if (octets.length === 4)
+            return octets[0] + "." + octets[1] + ".*.*"
+        return text
+    }
+
+    function privacyMaskedIpText(value) {
+        const text = (value || "").trim()
+        const mode = interfacePrivacySettings.ipDisplayMode || "Show"
+        if (text.length === 0 || mode === "Show")
+            return text
+        if (mode === "Hidden")
+            return maskedIpToken(text)
+        return partiallyMaskIpToken(text)
+    }
+
+    function privacyMaskedEndpointText(value) {
+        const text = (value || "").trim()
+        const mode = interfacePrivacySettings.ipDisplayMode || "Show"
+        if (text.length === 0 || mode === "Show")
+            return text
+        if (mode === "Hidden")
+            return "Endpoint hidden"
+
+        let masked = text.replace(/\b(?:\d{1,3}\.){3}\d{1,3}\b/g, function(match) {
+            return partiallyMaskIpToken(match)
+        })
+        masked = masked.replace(/\b[0-9a-fA-F]{1,4}(?::[0-9a-fA-F]{0,4}){2,7}\b/g, function(match) {
+            return partiallyMaskIpToken(match)
+        })
+        return masked
+    }
+
     function infoIpText() {
         const publicAddress = (vpnController.publicIpAddress || "").trim()
         if (publicAddress.length > 0)
-            return publicAddress
-        if (vpnController.connected)
+            return privacyMaskedIpText(publicAddress)
+        if (vpnController.connected) {
+            const profileHint = (selectedServerMeta || "").trim()
+            if (profileHint.length > 0)
+                return privacyMaskedEndpointText(profileHint)
+            return "IP unavailable"
+        }
+        if (vpnController.busy)
             return "Resolving..."
         return "Connect to view"
     }
 
     function infoIpLabel() {
+        if (vpnController.isMobile && vpnController.connected && !vpnController.runtimeTunActive)
+            return "Proxy IP"
         return "Protected IP"
     }
 
@@ -590,6 +1401,45 @@ ApplicationWindow {
         const pingMs = vpnController.currentProfilePingMs()
         const pingText = pingMs >= 0 ? (pingMs + " ms") : "--"
         return "Group: " + group + "  •  Ping: " + pingText
+    }
+
+    function currentProfilePingText() {
+        const pingMs = vpnController.currentProfilePingMs()
+        return pingMs >= 0 ? (pingMs + " ms") : "--"
+    }
+
+    function currentProfileSignalLevel() {
+        const pingMs = vpnController.currentProfilePingMs()
+        if (pingMs < 0)
+            return vpnController.connected ? 2 : 1
+        if (pingMs < 180)
+            return 4
+        if (pingMs < 350)
+            return 3
+        if (pingMs < 650)
+            return 2
+        return 1
+    }
+
+    function currentProfileSignalColor() {
+        const pingMs = vpnController.currentProfilePingMs()
+        if (pingMs < 0)
+            return root.themeColorToken("mainHex_9aa4b6", "mainHex_8fa3be")
+        if (pingMs < 180)
+            return Colors.mainHex_22b26a
+        if (pingMs < 350)
+            return root.themeColorToken("mainHex_2f74ff", "mainHex_7fb0ff")
+        if (pingMs < 650)
+            return Colors.mainHex_dfbf22
+        return Colors.mainHex_ef4444
+    }
+
+    function scheduleCurrentProfilePing() {
+        const index = vpnController.currentProfileIndex
+        if (index < 0 || vpnController.currentProfilePingMs() >= 0)
+            return
+        root.pendingHomePingProfileIndex = index
+        homeProfilePingTimer.restart()
     }
 
     function downloadUsageText() {
@@ -721,6 +1571,8 @@ ApplicationWindow {
             return "App Updates"
         if (settingsSection === "connection")
             return "Connection Mode"
+        if (settingsSection === "power")
+            return "Power Mode"
         if (settingsSection === "routing")
             return "Routing Rules"
         if (settingsSection === "dns")
@@ -728,25 +1580,24 @@ ApplicationWindow {
         if (settingsSection === "logs")
             return "Logs"
         if (settingsSection === "terms")
-            return "Terms And Conditions"
+            return "Terms, Conditions & License"
         if (settingsSection === "share")
             return "Share App"
+        if (settingsSection === "donate")
+            return "Support GenyConnect"
         if (settingsSection === "about")
             return "About App"
         return "Settings"
     }
 
     function openSettingsSection(section) {
+        if (root.contentItem && typeof root.contentItem.forceActiveFocus === "function")
+            root.contentItem.forceActiveFocus()
+        if (Qt.inputMethod && Qt.inputMethod.visible)
+            Qt.inputMethod.hide()
         if (!settingsPopup.opened) {
+            root.pendingSettingsSection = section
             settingsPopup.open()
-            Qt.callLater(function() {
-                root.settingsSection = section
-                if (section === "routing") {
-                    root.appRuleSuggestions = vpnController.availableAppRuleItems()
-                    root.appRuleSearchQuery = ""
-                    root.clearAppSuggestionSelection()
-                }
-            })
             return
         }
         settingsSection = section
@@ -755,6 +1606,22 @@ ApplicationWindow {
             root.appRuleSearchQuery = ""
             root.clearAppSuggestionSelection()
         }
+    }
+
+    function showSettingsFeedback(text) {
+        root.settingsFeedbackText = text || ""
+        if (root.settingsFeedbackText.length > 0)
+            settingsFeedbackTimer.restart()
+    }
+
+    function shareAppNow() {
+        const payload = root.appShareText + "\n" + root.appSiteUrl + "\n" + root.appRepoUrl
+        const shared = vpnController.shareText("GenyConnect", payload)
+        if (!shared)
+            vpnController.copyTextToClipboard(payload)
+        showSettingsFeedback(shared
+                             ? "Share sheet opened."
+                             : "Share sheet unavailable. App details copied to clipboard.")
     }
 
     function currentUsageHistoryModel() {
@@ -767,10 +1634,191 @@ ApplicationWindow {
         return vpnController.currentProfileUsageSessions(20)
     }
 
-    function openEditProfile(row, displayName, groupName) {
+    function safeDecodeUriPart(value) {
+        try {
+            return decodeURIComponent((value || "").replace(/\+/g, "%20"))
+        } catch (e) {
+            return value || ""
+        }
+    }
+
+    function safeEncodeUriPart(value) {
+        return encodeURIComponent(value || "")
+    }
+
+    function parseVlessForm(linkText) {
+        const link = (linkText || "").trim()
+        if (!link.toLowerCase().startsWith("vless://"))
+            return { "ok": false, "error": "Only VLESS profiles are editable with form mode." }
+
+        const body = link.slice(8)
+        const hashIndex = body.indexOf("#")
+        const mainPart = hashIndex >= 0 ? body.slice(0, hashIndex) : body
+        const fragment = hashIndex >= 0 ? body.slice(hashIndex + 1) : ""
+        const queryIndex = mainPart.indexOf("?")
+        const authorityPart = queryIndex >= 0 ? mainPart.slice(0, queryIndex) : mainPart
+        const queryPart = queryIndex >= 0 ? mainPart.slice(queryIndex + 1) : ""
+
+        const atIndex = authorityPart.lastIndexOf("@")
+        if (atIndex <= 0 || atIndex >= authorityPart.length - 1)
+            return { "ok": false, "error": "Invalid VLESS link format." }
+
+        const uuid = authorityPart.slice(0, atIndex).trim()
+        const hostPort = authorityPart.slice(atIndex + 1).trim()
+        if (uuid.length === 0 || hostPort.length === 0)
+            return { "ok": false, "error": "Invalid VLESS endpoint fields." }
+
+        let address = hostPort
+        let portText = "443"
+        if (hostPort.startsWith("[")) {
+            const closing = hostPort.indexOf("]")
+            if (closing <= 1)
+                return { "ok": false, "error": "Invalid IPv6 host format." }
+            address = hostPort.slice(0, closing + 1)
+            const remainder = hostPort.slice(closing + 1)
+            if (remainder.startsWith(":"))
+                portText = remainder.slice(1).trim()
+        } else {
+            const lastColon = hostPort.lastIndexOf(":")
+            if (lastColon > 0 && lastColon < hostPort.length - 1) {
+                address = hostPort.slice(0, lastColon).trim()
+                portText = hostPort.slice(lastColon + 1).trim()
+            } else {
+                address = hostPort.trim()
+            }
+        }
+
+        const knownKeys = {
+            "type": true, "security": true, "encryption": true, "flow": true,
+            "path": true, "host": true, "sni": true, "servername": true,
+            "headertype": true, "servicename": true, "mode": true, "extra": true,
+            "fp": true, "alpn": true, "pbk": true, "sid": true, "spx": true,
+            "allowinsecure": true, "insecure": true
+        }
+
+        const params = {}
+        const unknownPairs = []
+        if (queryPart.length > 0) {
+            const pairs = queryPart.split("&")
+            for (let i = 0; i < pairs.length; i += 1) {
+                const pair = pairs[i]
+                if (!pair)
+                    continue
+                const eqIndex = pair.indexOf("=")
+                const rawKey = eqIndex >= 0 ? pair.slice(0, eqIndex) : pair
+                const rawValue = eqIndex >= 0 ? pair.slice(eqIndex + 1) : ""
+                const key = safeDecodeUriPart(rawKey).trim()
+                const value = safeDecodeUriPart(rawValue)
+                const lowered = key.toLowerCase()
+                if (knownKeys[lowered]) {
+                    params[lowered] = value
+                } else {
+                    unknownPairs.push({ "key": rawKey, "value": rawValue })
+                }
+            }
+        }
+
+        let allowInsecureValue = params["allowinsecure"] || params["insecure"] || ""
+        allowInsecureValue = allowInsecureValue.toString().trim().toLowerCase()
+        const allowInsecure = (allowInsecureValue === "1" || allowInsecureValue === "true")
+
+        return {
+            "ok": true,
+            "uuid": uuid,
+            "address": address,
+            "port": portText.length > 0 ? portText : "443",
+            "network": (params["type"] || "tcp").toLowerCase(),
+            "security": (params["security"] || "none").toLowerCase(),
+            "encryption": (params["encryption"] || "none").toLowerCase(),
+            "flow": params["flow"] || "",
+            "path": params["path"] || "",
+            "host": params["host"] || "",
+            "sni": (params["sni"] || params["servername"] || ""),
+            "headerType": (params["headertype"] || "").toLowerCase(),
+            "serviceName": params["servicename"] || "",
+            "mode": (params["mode"] || "").toLowerCase(),
+            "extra": params["extra"] || "",
+            "fingerprint": params["fp"] || "",
+            "alpn": params["alpn"] || "",
+            "publicKey": params["pbk"] || "",
+            "shortId": params["sid"] || "",
+            "spiderX": params["spx"] || "",
+            "allowInsecure": allowInsecure,
+            "unknownPairs": unknownPairs,
+            "fragment": safeDecodeUriPart(fragment)
+        }
+    }
+
+    function buildVlessLinkFromForm(form, profileName) {
+        const data = form || {}
+        const uuid = (data.uuid || "").trim()
+        const address = (data.address || "").trim()
+        const portText = (data.port || "").toString().trim()
+        const portValue = Number(portText)
+        if (uuid.length === 0)
+            return { "ok": false, "error": "UUID is missing from this profile." }
+        if (address.length === 0)
+            return { "ok": false, "error": "Address is required." }
+        if (!Number.isFinite(portValue) || portValue < 1 || portValue > 65535 || Math.floor(portValue) !== portValue)
+            return { "ok": false, "error": "Port must be a number between 1 and 65535." }
+
+        const params = []
+        function appendParam(key, value) {
+            if ((value || "").toString().trim().length === 0)
+                return
+            params.push(safeEncodeUriPart(key) + "=" + safeEncodeUriPart((value || "").toString().trim()))
+        }
+
+        appendParam("encryption", (data.encryption || "none").toLowerCase())
+        appendParam("type", (data.network || "tcp").toLowerCase())
+        appendParam("security", (data.security || "none").toLowerCase())
+        appendParam("flow", data.flow)
+        appendParam("path", data.path)
+        appendParam("headerType", (data.headerType || "").toLowerCase())
+        appendParam("host", data.host)
+        appendParam("serviceName", data.serviceName)
+        appendParam("mode", (data.mode || "").toLowerCase())
+        appendParam("extra", data.extra)
+        appendParam("sni", data.sni)
+        appendParam("alpn", data.alpn)
+        appendParam("fp", data.fingerprint)
+        appendParam("pbk", data.publicKey)
+        appendParam("sid", data.shortId)
+        appendParam("spx", data.spiderX)
+        if (data.allowInsecure === true)
+            appendParam("allowInsecure", "1")
+
+        const unknownPairs = Array.isArray(data.unknownPairs) ? data.unknownPairs : []
+        for (let i = 0; i < unknownPairs.length; i += 1) {
+            const pair = unknownPairs[i]
+            if (!pair || !pair.key)
+                continue
+            params.push(pair.value !== undefined && pair.value !== null && pair.value !== ""
+                        ? String(pair.key) + "=" + String(pair.value)
+                        : String(pair.key))
+        }
+
+        const encodedName = safeEncodeUriPart((profileName || "").trim())
+        const queryText = params.join("&")
+        const suffix = encodedName.length > 0 ? ("#" + encodedName) : ""
+        return {
+            "ok": true,
+            "link": "vless://" + uuid + "@" + address + ":" + String(portValue) + (queryText.length > 0 ? ("?" + queryText) : "") + suffix
+        }
+    }
+
+    function openEditProfile(row, displayName, groupName, originalLink) {
         editProfileRow = row
         editProfileName = (displayName || "").trim()
         editProfileGroup = normalizeImportGroupName(groupName || "General")
+        editProfileConfigLink = (originalLink || "").trim()
+        editProfileError = ""
+        const parsed = parseVlessForm(editProfileConfigLink)
+        editProfileVlessSupported = parsed.ok === true
+        editProfileVlessForm = parsed.ok ? parsed : ({})
+        if (!parsed.ok) {
+            editProfileError = parsed.error || "This profile cannot be edited in form mode."
+        }
         editProfilePopup.open()
     }
 
@@ -779,7 +1827,8 @@ ApplicationWindow {
     }
 
     function sheetHeight(maxHeight) {
-        return Math.min(root.height - 104, maxHeight)
+        const reserved = root.compact ? (root.compactBottomNavHeight + 18) : 104
+        return Math.min(root.height - reserved, maxHeight)
     }
 
     function drawerY(sheet) {
@@ -1178,6 +2227,20 @@ ApplicationWindow {
         return os
     }
 
+    function handleConnectAction() {
+        if (vpnController.currentProfileIndex < 0 && !vpnController.connected && !vpnController.busy) {
+            if (vpnController.profileCount > 0) {
+                profilePopup.open()
+            } else {
+                importPopup.open()
+                root.importStatusKind = "error"
+                root.importStatusText = "Import or select a profile first."
+            }
+            return
+        }
+        vpnController.toggleConnection()
+    }
+
     function positionProfilePopup() {
         if (!profilePopup)
             return
@@ -1192,19 +2255,66 @@ ApplicationWindow {
         AppGlobals.appWindow = root
         AppGlobals.mainRect = root.contentItem
         Theme.mode = darkThemeEnabled ? Theme.Dark : Theme.Light
+        syncAndroidSystemBars()
         syncSelectedProfileFromController()
+        scheduleCurrentProfilePing()
+        reloadDonationData()
     }
 
-    onDarkThemeEnabledChanged: Theme.mode = darkThemeEnabled ? Theme.Dark : Theme.Light
+    onDarkThemeEnabledChanged: {
+        Theme.mode = darkThemeEnabled ? Theme.Dark : Theme.Light
+        syncAndroidSystemBars()
+    }
+
+    Timer {
+        id: donationFeedbackTimer
+        interval: 2200
+        repeat: false
+        onTriggered: root.donationFeedbackText = ""
+    }
+
+    Timer {
+        id: settingsFeedbackTimer
+        interval: 2400
+        repeat: false
+        onTriggered: root.settingsFeedbackText = ""
+    }
+
+    Timer {
+        id: homeProfilePingTimer
+        interval: 700
+        repeat: false
+        onTriggered: {
+            if (root.pendingHomePingProfileIndex >= 0
+                    && root.pendingHomePingProfileIndex === vpnController.currentProfileIndex
+                    && vpnController.currentProfilePingMs() < 0) {
+                vpnController.pingProfile(root.pendingHomePingProfileIndex)
+            }
+            root.pendingHomePingProfileIndex = -1
+        }
+    }
+
+    ParallelAnimation {
+        id: settingsSectionTransition
+        running: false
+
+        NumberAnimation {
+            target: root
+            property: "settingsPageOpacity"
+            to: 1
+            duration: Animations.fast
+            easing.type: Easing.OutQuad
+        }
+    }
 
     Timer {
         id: trafficRateTimer
-        interval: 1000
+        interval: root.powerUiStatsIntervalMs
         repeat: true
-        running: true
+        running: !root.powerPauseBackgroundUi
         onTriggered: {
             if (vpnController.connected || vpnController.busy) {
-                root.sessionSeconds += 1
+                root.sessionSeconds += Math.max(1, Math.round(interval / 1000))
             } else {
                 root.sessionSeconds = 0
             }
@@ -1239,9 +2349,9 @@ ApplicationWindow {
 
     Timer {
         id: speedGaugeSmoothingTimer
-        interval: 40
+        interval: root.powerGaugeRefreshIntervalMs
         repeat: true
-        running: true
+        running: !root.powerPauseBackgroundUi
         onTriggered: {
             const target = root.speedGaugeTargetValue()
             const delta = target - root.speedGaugeDisplayMbps
@@ -1266,10 +2376,16 @@ ApplicationWindow {
                 root.sessionSeconds = 0
             }
             root.rateSampleInitialized = false
+
+            if (vpnController.connectionState === ConnectionState.Connected && !root.donationSuggestionShown) {
+                root.donationSuggestionShown = true
+                donationSuggestPopup.open()
+            }
         }
 
         function onCurrentProfileIndexChanged() {
             root.syncSelectedProfileFromController()
+            root.scheduleCurrentProfilePing()
         }
 
         function onLastErrorChanged() {
@@ -1348,6 +2464,7 @@ ApplicationWindow {
                 Layout.preferredHeight: 4
                 radius: 2
                 color: root.themeColorToken("mainHex_d6dde8", "mainHex_151c32")
+                visible: !root.compact
             }
 
             RowLayout {
@@ -1419,6 +2536,142 @@ ApplicationWindow {
     }
 
     Popup {
+        id: donationSuggestPopup
+        modal: true
+        focus: true
+        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+        padding: 0
+        width: root.sheetWidth(400)
+        height: donationSuggestContent.implicitHeight + 28 + (root.mobilePlatform ? Math.max(20, root.safeBottomInset + 20) : 0)
+        x: (root.width - width) * 0.5
+        y: root.compact
+           ? root.height - height - (root.mobilePlatform ? 12 : 0)
+           : root.drawerY(height)
+        z: 210
+
+        enter: Transition {
+            ParallelAnimation {
+                NumberAnimation {
+                    property: "y"
+                    from: donationSuggestPopup.y + 26
+                    to: donationSuggestPopup.y
+                    duration: Animations.fast
+                    easing.type: Easing.OutCubic
+                }
+                NumberAnimation {
+                    property: "opacity"
+                    from: 0
+                    to: 1
+                    duration: Animations.fast
+                }
+            }
+        }
+
+        exit: Transition {
+            ParallelAnimation {
+                NumberAnimation {
+                    property: "y"
+                    to: donationSuggestPopup.y + 18
+                    duration: Animations.fast * 0.75
+                    easing.type: Easing.InCubic
+                }
+                NumberAnimation {
+                    property: "opacity"
+                    to: 0
+                    duration: Animations.fast * 0.7
+                }
+            }
+        }
+
+        background: Rectangle {
+            radius: 16
+            color: root.themeColorToken("mainHex_ffffff", "mainHex_090b14")
+            border.width: 0
+            border.color: root.themeColorToken("mainHex_d6dfec", "mainHex_30435d")
+        }
+
+        contentItem: ColumnLayout {
+            id: donationSuggestContent
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.top: parent.top
+            anchors.bottom: parent.bottom
+            anchors.leftMargin: 14
+            anchors.rightMargin: 14
+            anchors.topMargin: 14
+            anchors.bottomMargin: 14 + (root.mobilePlatform ? Math.max(12, root.safeBottomInset) : 0)
+            spacing: 10
+
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 10
+
+                Rectangle {
+                    Layout.preferredWidth: 26
+                    Layout.preferredHeight: 26
+                    radius: 13
+                    color: Qt.rgba(Colors.dsDanger.r, Colors.dsDanger.g, Colors.dsDanger.b, root.darkThemeEnabled ? 0.30 : 0.14)
+
+                    Text {
+                        anchors.centerIn: parent
+                        text: root.iconHeart
+                        font.family: root.faSolid
+                        font.pixelSize: 12
+                        color: Colors.dsDanger
+                    }
+
+                    SequentialAnimation on scale {
+                        running: donationSuggestPopup.visible
+                        loops: Animation.Infinite
+                        NumberAnimation { to: 1.04; duration: 760; easing.type: Easing.InOutSine }
+                        NumberAnimation { to: 1.0; duration: 760; easing.type: Easing.InOutSine }
+                    }
+                }
+
+                Text {
+                    Layout.fillWidth: true
+                    text: "Enjoying GenyConnect?"
+                    color: root.themeColorToken("mainHex_1f2a3a", "mainHex_d8e1f0")
+                    font.family: FontSystem.getContentFontBold.name
+                    font.pixelSize: 17
+                    font.bold: true
+                    wrapMode: Text.WordWrap
+                }
+            }
+
+            Text {
+                Layout.fillWidth: true
+                text: "If it helps, you can support development with a small donation."
+                color: root.themeColorToken("mainHex_667385", "mainHex_9bb0cb")
+                font.family: FontSystem.contentFontFamily
+                font.pixelSize: 13
+                wrapMode: Text.WordWrap
+            }
+
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 8
+
+                Controls.Button {
+                    text: "Not now"
+                    Layout.fillWidth: true
+                    isDefault: false
+                    onClicked: donationSuggestPopup.close()
+                }
+
+                Controls.Button {
+                    text: "Support"
+                    Layout.fillWidth: true
+                    onClicked: {
+                        donationSuggestPopup.close()
+                        root.openSettingsSection("donate")
+                    }
+                }
+            }
+        }
+    }
+
+    Popup {
         id: tunConflictPopup
         modal: true
         focus: true
@@ -1457,7 +2710,10 @@ ApplicationWindow {
 
         contentItem: ColumnLayout {
             anchors.fill: parent
-            anchors.margins: root.compact ? 12 : 16
+            anchors.leftMargin: root.compact ? 12 : 16
+            anchors.rightMargin: root.compact ? 12 : 16
+            anchors.topMargin: root.compact ? 12 : 16
+            anchors.bottomMargin: root.compact ? (12 + root.safeBottomInset) : 16
             spacing: 10
 
             Rectangle {
@@ -1521,7 +2777,10 @@ ApplicationWindow {
                 vpnController.pingAllProfiles()
         }
         onOpened: {
-            profileSearchField.forceActiveFocus()
+            if (!root.compact)
+                profileSearchField.forceActiveFocus()
+            else if (Qt.inputMethod && Qt.inputMethod.visible)
+                Qt.inputMethod.hide()
         }
         width: root.sheetWidth(430)
         height: root.compact ? root.height : root.sheetHeight(640)
@@ -1638,11 +2897,11 @@ ApplicationWindow {
                     Layout.fillWidth: true
                     implicitHeight: root.compact ? 52 : 58
                     radius: 14
-                    color: root.themeColorToken("mainHex_ffffff", "mainHex_5f233851")
+                    color: Colors.dsSurface
                     border.width: 0
                     border.color: profileSearchField.activeFocus
-                                  ? root.themeColorToken("mainHex_b7caee", "mainHex_6b98d5")
-                                  : root.themeColorToken("mainHex_dfe6f1", "mainHex_496688")
+                                  ? Colors.dsPrimarySolid
+                                  : Colors.dsBorder
                     Behavior on border.color { ColorAnimation { duration: 120 } }
 
                     Text {
@@ -1670,6 +2929,7 @@ ApplicationWindow {
                         color: root.themeColorToken("mainHex_1f2a3a", "mainHex_d8e1f0")
                         font.family: FontSystem.contentFontFamily
                         font.pixelSize: 14
+                        selectByMouse: true
                         background: null
                         onTextChanged: {
                             root.profileSearchQuery = text
@@ -1693,7 +2953,8 @@ ApplicationWindow {
                             enabled: root.profileSearchQuery.length > 0
                             onClicked: {
                                 profileSearchField.clear()
-                                profileSearchField.forceActiveFocus()
+                                if (!root.compact)
+                                    profileSearchField.forceActiveFocus()
                             }
                         }
                     }
@@ -1712,9 +2973,9 @@ ApplicationWindow {
                         Layout.preferredWidth: 1
                         Layout.preferredHeight: 36
                         radius: 12
-                        color: addProfileMouse.containsMouse ? Colors.mainHex_2f6ff1 : Colors.mainHex_3f7cf3
+                        color: addProfileMouse.containsMouse ? Colors.dsPrimaryPressed : Colors.dsPrimarySolid
                         border.width: 0
-                        border.color: root.themeColorToken("mainHex_2f6ff1", "mainHex_3a7bff")
+                        border.color: Colors.dsPrimarySolid
                         Behavior on color { ColorAnimation { duration: 120 } }
 
                         Text {
@@ -1744,19 +3005,19 @@ ApplicationWindow {
                         Layout.preferredHeight: 36
                         radius: 12
                         color: clearAllMouse.containsMouse
-                               ? root.themeColorToken("mainHex_fff0f0", "mainHex_5f3b46")
-                               : root.themeColorToken("mainHex_fff6f6", "mainHex_4d313b")
+                               ? Qt.rgba(Colors.dsDanger.r, Colors.dsDanger.g, Colors.dsDanger.b, root.darkThemeEnabled ? 0.34 : 0.18)
+                               : Qt.rgba(Colors.dsDanger.r, Colors.dsDanger.g, Colors.dsDanger.b, root.darkThemeEnabled ? 0.26 : 0.12)
                         border.width: 0
-                        border.color: root.themeColorToken("mainHex_f2cdcd", "mainHex_7d5062")
+                        border.color: Qt.rgba(Colors.dsDanger.r, Colors.dsDanger.g, Colors.dsDanger.b, root.darkThemeEnabled ? 0.45 : 0.24)
                         opacity: listView.count > 0 ? 1.0 : 0.55
                         Behavior on color { ColorAnimation { duration: 120 } }
 
                         Text {
                             anchors.centerIn: parent
-                            text: "Delete All"
-                            color: root.themeColorToken("mainHex_cb4f4f", "mainHex_ff8e8e")
+                            text: "Delete Others"
+                            color: Colors.dsDanger
                             font.family: FontSystem.contentFontFamily
-                            font.pixelSize: 13
+                            font.pixelSize: 12
                             font.bold: false
                         }
 
@@ -1776,10 +3037,10 @@ ApplicationWindow {
                         Layout.preferredHeight: 36
                         radius: 12
                         color: pingAllMouse.containsMouse
-                               ? root.themeColorToken("mainHex_f2f6fd", "mainHex_6a355172")
-                               : root.themeColorToken("mainHex_f7f9fd", "mainHex_5a2d4462")
+                               ? Colors.dsSurfaceSoft
+                               : Colors.dsSurface
                         border.width: 0
-                        border.color: root.themeColorToken("mainHex_d7dfec", "mainHex_151c32")
+                        border.color: Colors.dsBorder
                         opacity: listView.count > 0 ? 1.0 : 0.55
                         Behavior on color { ColorAnimation { duration: 120 } }
 
@@ -1810,10 +3071,10 @@ ApplicationWindow {
                         Layout.preferredHeight: 36
                         radius: 12
                         color: refreshSubsMouse.containsMouse
-                               ? root.themeColorToken("mainHex_f2f6fd", "mainHex_6a355172")
-                               : root.themeColorToken("mainHex_f7f9fd", "mainHex_5a2d4462")
+                               ? Colors.dsSurfaceSoft
+                               : Colors.dsSurface
                         border.width: 0
-                        border.color: root.themeColorToken("mainHex_d7dfec", "mainHex_151c32")
+                        border.color: Colors.dsBorder
                         opacity: vpnController.subscriptions.length > 0 ? 1.0 : 0.55
                         Behavior on color { ColorAnimation { duration: 120 } }
 
@@ -2313,6 +3574,7 @@ ApplicationWindow {
                             required property string security
                             required property string groupName
                             required property string sourceName
+                            required property string originalLink
                             required property string pingText
                             required property bool pinging
                             required property int pingMs
@@ -2384,6 +3646,8 @@ ApplicationWindow {
 
                                 ColumnLayout {
                                     Layout.fillWidth: true
+                                    Layout.minimumWidth: 0
+                                    Layout.maximumWidth: root.compact ? (rowBg.width - 112) : Number.POSITIVE_INFINITY
                                     spacing: root.compact ? 5 : 2
 
                                     Text {
@@ -2438,18 +3702,23 @@ ApplicationWindow {
 
                                         Rectangle {
                                             visible: root.compact
-                                            Layout.preferredWidth: compactBadgeText.implicitWidth + 22
-                                            Layout.preferredHeight: 22
-                                            radius: 12
-                                            color: root.themeColorToken("mainHex_edf2ff", "mainHex_263a58")
+                                            Layout.preferredWidth: Math.min(compactBadgeText.implicitWidth + 16, 86)
+                                            Layout.preferredHeight: 20
+                                            radius: 10
+                                            color: root.themeColorToken("mainHex_edf2ff", "mainHex_223654")
+                                            opacity: 0.92
 
                                             Text {
                                                 id: compactBadgeText
                                                 anchors.centerIn: parent
-                                                text: groupBadge.length > 0 ? groupBadge : (vpnController.tunMode ? "TUN Server" : "Game Server")
+                                                text: groupBadge.length > 0
+                                                      ? groupBadge
+                                                      : (((vpnController.connected ? vpnController.runtimeTunActive : vpnController.tunMode)
+                                                          ? "TUN" : "PROXY"))
                                                 color: root.brandBlue
                                                 font.family: FontSystem.contentFontFamily
-                                                font.pixelSize: 12
+                                                font.pixelSize: 11
+                                                font.bold: true
                                                 elide: Text.ElideRight
                                             }
                                         }
@@ -2549,6 +3818,34 @@ ApplicationWindow {
                                         height: 30
                                         visible: !root.compact
                                         radius: 15
+                                        color: editButtonMouse.containsMouse
+                                               ? root.themeColorToken("mainHex_f3efff", "mainHex_463260")
+                                               : root.themeColorToken("mainHex_f8f5ff", "mainHex_3c2b55")
+                                        border.width: 0
+                                        border.color: root.themeColorToken("mainHex_e3d7ff", "mainHex_7155a2")
+
+                                        Text {
+                                            anchors.centerIn: parent
+                                            text: "\uf044"
+                                            font.family: root.faSolid
+                                            font.pixelSize: 12
+                                            color: root.themeColorToken("mainHex_7050b8", "mainHex_b89cff")
+                                        }
+
+                                        MouseArea {
+                                            id: editButtonMouse
+                                            anchors.fill: parent
+                                            hoverEnabled: true
+                                            cursorShape: Qt.PointingHandCursor
+                                            onClicked: root.openEditProfile(index, displayLabel, groupName, originalLink)
+                                        }
+                                    }
+
+                                    Rectangle {
+                                        width: 30
+                                        height: 30
+                                        visible: !root.compact
+                                        radius: 15
                                         color: removeButtonMouse.containsMouse
                                                ? root.themeColorToken("mainHex_fff0f0", "mainHex_5f3b46")
                                                : root.themeColorToken("mainHex_fff6f6", "mainHex_4d313b")
@@ -2580,11 +3877,11 @@ ApplicationWindow {
 
                                 RowLayout {
                                     visible: root.compact
-                                    Layout.preferredWidth: 98
-                                    spacing: 8
+                                    Layout.preferredWidth: 88
+                                    spacing: 4
 
                                     Text {
-                                        Layout.preferredWidth: 20
+                                        Layout.preferredWidth: 22
                                         text: root.iconPing
                                         color: pinging ? root.brandBlue : root.themeColorToken("mainHex_7c8ca5", "mainHex_9eb2cb")
                                         font.family: root.faSolid
@@ -2600,7 +3897,7 @@ ApplicationWindow {
                                     }
 
                                     Text {
-                                        Layout.preferredWidth: 20
+                                        Layout.preferredWidth: 22
                                         text: "\uf044"
                                         color: root.brandViolet
                                         font.family: root.faSolid
@@ -2611,12 +3908,12 @@ ApplicationWindow {
                                         MouseArea {
                                             anchors.fill: parent
                                             cursorShape: Qt.PointingHandCursor
-                                            onClicked: root.openEditProfile(index, displayLabel, groupName)
+                                            onClicked: root.openEditProfile(index, displayLabel, groupName, originalLink)
                                         }
                                     }
 
                                     Text {
-                                        Layout.preferredWidth: 20
+                                        Layout.preferredWidth: 22
                                         text: root.iconTrash
                                         color: root.themeColorToken("mainHex_cb4f4f", "mainHex_ff8e8e")
                                         font.family: root.faSolid
@@ -2636,15 +3933,6 @@ ApplicationWindow {
                                         }
                                     }
 
-                                    Text {
-                                        Layout.preferredWidth: 20
-                                        text: selected ? "\uf00c" : (groupBadge.length > 0 ? "\uf521" : "")
-                                        color: selected ? Colors.mainHex_36d984 : Colors.mainHex_dfbf22
-                                        font.family: root.faSolid
-                                        font.pixelSize: selected ? 17 : 15
-                                        horizontalAlignment: Text.AlignHCenter
-                                        verticalAlignment: Text.AlignVCenter
-                                    }
                                 }
                             }
                         }
@@ -2726,7 +4014,7 @@ ApplicationWindow {
 
             Text {
                 Layout.fillWidth: true
-                text: "This removes all imported profiles from GenyConnect. This action cannot be undone."
+                text: "This removes inactive profiles only. Active/connected profile(s) will be kept."
                 color: root.themeColorToken("mainHex_6a778b", "mainHex_9eb3cc")
                 font.family: FontSystem.contentFontFamily
                 font.pixelSize: 13
@@ -2747,7 +4035,7 @@ ApplicationWindow {
 
                 Controls.Button {
                     Layout.fillWidth: true
-                    text: "Delete All"
+                    text: "Delete Others"
                     onClicked: {
                         const removed = vpnController.removeAllProfiles()
                         clearProfilesPopup.close()
@@ -2767,9 +4055,16 @@ ApplicationWindow {
         focus: true
         closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
         width: root.sheetWidth(420)
-        height: Math.min(root.height - 58, 294)
+        height: {
+            if (root.compact) {
+                const topGap = root.safeTopInset + 14
+                return Math.max(420, root.height - topGap)
+            }
+            const target = editProfileContent.implicitHeight + 22
+            return Math.min(root.height - 58, target)
+        }
         x: (root.width - width) * 0.5
-        y: root.drawerY(height)
+        y: root.compact ? (root.safeTopInset + 6) : root.drawerY(height)
         padding: 0
 
         enter: Transition {
@@ -2800,9 +4095,13 @@ ApplicationWindow {
         }
 
         contentItem: ColumnLayout {
+            id: editProfileContent
             anchors.fill: parent
-            anchors.margins: 18
-            spacing: 12
+            anchors.leftMargin: 16
+            anchors.rightMargin: 16
+            anchors.topMargin: 16
+            anchors.bottomMargin: root.compact ? 10 : 20
+            spacing: 10
 
             Rectangle {
                 Layout.alignment: Qt.AlignHCenter
@@ -2816,44 +4115,244 @@ ApplicationWindow {
                 text: "Edit Profile"
                 color: root.themeColorToken("mainHex_1f2530", "mainHex_d8e1f0")
                 font.family: FontSystem.getContentFontBold.name
-                font.pixelSize: 22
+                font.pixelSize: root.compact ? 20 : 22
                 font.bold: true
             }
 
-            TextField {
-                id: editProfileNameField
+            Flickable {
+                id: editProfileBodyFlick
                 Layout.fillWidth: true
-                Layout.preferredHeight: 44
-                text: root.editProfileName
-                placeholderText: "Profile name"
-                selectByMouse: true
-                onTextEdited: root.editProfileName = text
-            }
+                Layout.fillHeight: true
+                clip: true
+                contentWidth: width
+                contentHeight: editProfileBodyColumn.implicitHeight
+                boundsBehavior: Flickable.DragAndOvershootBounds
+                flickableDirection: Flickable.VerticalFlick
+                interactive: true
+                pressDelay: 80
+                ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
 
-            TextField {
-                id: editProfileGroupField
-                Layout.fillWidth: true
-                Layout.preferredHeight: 44
-                text: root.editProfileGroup
-                placeholderText: "Group"
-                selectByMouse: true
-                onTextEdited: root.editProfileGroup = text
-            }
+                ColumnLayout {
+                    id: editProfileBodyColumn
+                    width: editProfileBodyFlick.width
+                    spacing: 12
 
-            Text {
-                Layout.fillWidth: true
-                text: "Endpoint settings still come from the imported link. Re-import a link to change protocol, address, port, or security."
-                color: root.themeColorToken("mainHex_7c8697", "mainHex_9bb0cb")
-                font.family: FontSystem.contentFontFamily
-                font.pixelSize: 12
-                wrapMode: Text.WordWrap
-            }
+                    Controls.TextField {
+                        id: editProfileNameField
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 44
+                        text: root.editProfileName
+                        placeholderText: "Profile name"
+                        selectByMouse: true
+                        onTextEdited: {
+                            root.editProfileName = text
+                            root.editProfileError = ""
+                        }
+                    }
 
-            Item { Layout.fillHeight: true }
+                    Controls.TextField {
+                        id: editProfileGroupField
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 44
+                        text: root.editProfileGroup
+                        placeholderText: "Group"
+                        selectByMouse: true
+                        onTextEdited: {
+                            root.editProfileGroup = text
+                            root.editProfileError = ""
+                        }
+                    }
+
+                    Rectangle {
+                        id: editProfileVlessFormCard
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: implicitHeight
+                        implicitHeight: editProfileVlessFormLayout.implicitHeight + 24
+                        visible: root.editProfileVlessSupported
+                        radius: 14
+                        color: root.themeColor(Colors.dsSurfaceSoft, Colors.dsSurface)
+                        border.width: 1
+                        border.color: root.themeColor(Colors.dsBorderSoft, Colors.dsBorder)
+                        clip: true
+
+                        ColumnLayout {
+                            id: editProfileVlessFormLayout
+                            anchors.fill: parent
+                            anchors.margins: 12
+                            spacing: 8
+
+                            RowLayout {
+                                visible: !root.compact
+                                Layout.fillWidth: true
+                                spacing: 8
+
+                                Controls.TextField {
+                                    Layout.preferredWidth: 100
+                                    Layout.preferredHeight: 38
+                                    readOnly: true
+                                    text: "vless"
+                                    selectByMouse: true
+                                }
+                                Controls.TextField {
+                                    id: editProfileUuidFieldDesktop
+                                    Layout.fillWidth: true
+                                    Layout.preferredHeight: 38
+                                    readOnly: true
+                                    text: root.editProfileVlessForm.uuid || ""
+                                    placeholderText: "UUID (read only)"
+                                    selectByMouse: true
+                                    onTextChanged: cursorPosition = 0
+                                }
+                            }
+
+                            ColumnLayout {
+                                visible: root.compact
+                                Layout.fillWidth: true
+                                spacing: 8
+
+                                Controls.TextField {
+                                    Layout.fillWidth: true
+                                    Layout.preferredHeight: 38
+                                    readOnly: true
+                                    text: "vless"
+                                    selectByMouse: true
+                                }
+                                Controls.TextField {
+                                    id: editProfileUuidFieldCompact
+                                    Layout.fillWidth: true
+                                    Layout.preferredHeight: 38
+                                    readOnly: true
+                                    text: root.editProfileVlessForm.uuid || ""
+                                    placeholderText: "UUID (read only)"
+                                    selectByMouse: true
+                                    onTextChanged: cursorPosition = 0
+                                }
+                            }
+
+                            RowLayout {
+                                Layout.fillWidth: true
+                                spacing: 8
+                                Controls.TextField {
+                                    Layout.fillWidth: true
+                                    Layout.preferredHeight: 38
+                                    text: root.editProfileVlessForm.address || ""
+                                    placeholderText: "Address"
+                                    selectByMouse: true
+                                    onTextChanged: {
+                                        root.editProfileVlessForm.address = text
+                                        root.editProfileError = ""
+                                    }
+                                }
+                                Controls.TextField {
+                                    Layout.preferredWidth: 108
+                                    Layout.preferredHeight: 38
+                                    text: root.editProfileVlessForm.port || "443"
+                                    placeholderText: "Port"
+                                    inputMethodHints: Qt.ImhDigitsOnly
+                                    validator: IntValidator { bottom: 1; top: 65535 }
+                                    selectByMouse: true
+                                    onTextChanged: {
+                                        root.editProfileVlessForm.port = text
+                                        root.editProfileError = ""
+                                    }
+                                }
+                            }
+
+                            RowLayout {
+                                Layout.fillWidth: true
+                                spacing: 8
+
+                                Controls.ComboBox {
+                                    Layout.fillWidth: true
+                                    Layout.preferredHeight: 38
+                                    model: ["tcp", "ws", "xhttp", "grpc"]
+                                    currentIndex: Math.max(0, model.indexOf(root.editProfileVlessForm.network || "tcp"))
+                                    onActivated: {
+                                        root.editProfileVlessForm.network = model[index]
+                                        root.editProfileError = ""
+                                    }
+                                }
+                                Controls.ComboBox {
+                                    Layout.fillWidth: true
+                                    Layout.preferredHeight: 38
+                                    model: ["none", "tls", "reality"]
+                                    currentIndex: Math.max(0, model.indexOf(root.editProfileVlessForm.security || "none"))
+                                    onActivated: {
+                                        root.editProfileVlessForm.security = model[index]
+                                        root.editProfileError = ""
+                                    }
+                                }
+                            }
+
+                            RowLayout {
+                                Layout.fillWidth: true
+                                spacing: 8
+                                Controls.TextField {
+                                    Layout.fillWidth: true
+                                    Layout.preferredHeight: 38
+                                    text: root.editProfileVlessForm.sni || ""
+                                    placeholderText: "SNI"
+                                    selectByMouse: true
+                                    onTextChanged: {
+                                        root.editProfileVlessForm.sni = text
+                                        root.editProfileError = ""
+                                    }
+                                }
+                                Controls.TextField {
+                                    Layout.fillWidth: true
+                                    Layout.preferredHeight: 38
+                                    text: root.editProfileVlessForm.host || ""
+                                    placeholderText: "Host header"
+                                    selectByMouse: true
+                                    onTextChanged: {
+                                        root.editProfileVlessForm.host = text
+                                        root.editProfileError = ""
+                                    }
+                                }
+                            }
+
+                            Controls.TextField {
+                                Layout.fillWidth: true
+                                Layout.preferredHeight: 38
+                                text: root.editProfileVlessForm.path || ""
+                                placeholderText: "Path (for ws/xhttp)"
+                                selectByMouse: true
+                                onTextChanged: {
+                                    root.editProfileVlessForm.path = text
+                                    root.editProfileError = ""
+                                }
+                            }
+                        }
+                    }
+
+                    Text {
+                        Layout.fillWidth: true
+                        text: root.editProfileVlessSupported
+                              ? "Editable: address, port, security, host/SNI/path. Locked: protocol (vless) and UUID."
+                              : "Only VLESS profiles can be edited in form mode."
+                        color: root.themeColorToken("mainHex_7c8697", "mainHex_9bb0cb")
+                        font.family: FontSystem.contentFontFamily
+                        font.pixelSize: 12
+                        wrapMode: Text.WordWrap
+                    }
+
+                    Text {
+                        Layout.fillWidth: true
+                        visible: root.editProfileError.length > 0
+                        text: root.editProfileError
+                        color: root.themeColorToken("mainHex_c65050", "mainHex_ff8e8e")
+                        font.family: FontSystem.contentFontFamily
+                        font.pixelSize: 12
+                        wrapMode: Text.WordWrap
+                    }
+                }
+            }
 
             RowLayout {
                 Layout.fillWidth: true
                 spacing: 10
+                Layout.topMargin: 2
+                Layout.bottomMargin: root.safeBottomInset + 12
 
                 Controls.Button {
                     Layout.fillWidth: true
@@ -2865,16 +4364,41 @@ ApplicationWindow {
                     Layout.fillWidth: true
                     text: "Save"
                     onClicked: {
-                        if (vpnController.updateProfileBasics(
-                                    root.editProfileRow,
-                                    editProfileNameField.text,
-                                    editProfileGroupField.text)) {
+                        let saved = false
+                        if (root.editProfileVlessSupported) {
+                            const built = root.buildVlessLinkFromForm(root.editProfileVlessForm, editProfileNameField.text)
+                            if (!built.ok) {
+                                root.editProfileError = built.error || "Invalid config fields."
+                                return
+                            }
+                            root.editProfileConfigLink = built.link
+                            saved = vpnController.updateProfile(
+                                        root.editProfileRow,
+                                        editProfileNameField.text,
+                                        editProfileGroupField.text,
+                                        root.editProfileConfigLink)
+                        } else {
+                            saved = vpnController.updateProfileBasics(
+                                        root.editProfileRow,
+                                        editProfileNameField.text,
+                                        editProfileGroupField.text)
+                        }
+
+                        if (saved) {
+                            root.editProfileError = ""
                             editProfilePopup.close()
                             root.syncSelectedProfileFromController()
                             Qt.callLater(root.positionProfilePopup)
+                        } else {
+                            root.editProfileError = vpnController.lastError || "Failed to update profile."
                         }
                     }
                 }
+            }
+
+            Item {
+                Layout.fillWidth: true
+                Layout.preferredHeight: root.compact ? 6 : 2
             }
         }
     }
@@ -2885,7 +4409,17 @@ ApplicationWindow {
         focus: true
         closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
         onOpened: {
-            root.settingsSection = "main"
+            if (root.pendingSettingsSection.length > 0) {
+                root.settingsSection = root.pendingSettingsSection
+                root.pendingSettingsSection = ""
+            } else {
+                root.settingsSection = "main"
+            }
+            if (root.settingsSection === "routing") {
+                root.appRuleSuggestions = vpnController.availableAppRuleItems()
+                root.appRuleSearchQuery = ""
+                root.clearAppSuggestionSelection()
+            }
             root.syncCustomDnsDraftFromController()
         }
         width: root.sheetWidth(430)
@@ -2915,9 +4449,9 @@ ApplicationWindow {
 
         background: Rectangle {
             radius: root.compact ? 0 : 24
-            color: root.themeColorToken("mainHex_f8fbff", "mainHex_090b14")
+            color: Colors.dsWindow
             border.width: 0
-            border.color: root.themeColorToken("mainHex_d8dde8", "mainHex_151c32")
+            border.color: Colors.dsBorderSoft
             clip: true
         }
 
@@ -2967,9 +4501,23 @@ ApplicationWindow {
                         font.family: FontSystem.getContentFontBold.name
                         font.weight: Font.Bold
                         font.pixelSize: root.compact ? 18 : 24
-                        color: root.themeColor((root.compact ? Colors.mainHex_090909 : Colors.mainHex_1f2530), Colors.mainHex_d8e1f0)
+                        color: Colors.dsText
                     }
                     Item { Layout.fillWidth: true }
+
+                    Controls.CircleIconButton {
+                        visible: root.compact && root.settingsSection === "donate"
+                        diameter: 38
+                        elevated: false
+                        backgroundColor: root.themeColorToken("mainHex_faf9ff", "mainHex_151c32")
+                        borderColor: root.themeColorToken("mainHex_f0eef8", "mainHex_151c32")
+                        iconText: "\uf3ed"
+                        iconFontFamily: root.faSolid
+                        iconColor: root.themeColorToken("mainHex_2f6ff1", "mainHex_7faeff")
+                        iconPixelSize: 15
+                        enabled: false
+                    }
+
                     Controls.CircleIconButton {
                         visible: !root.compact
                         diameter: 34
@@ -2988,13 +4536,22 @@ ApplicationWindow {
                     Layout.fillHeight: true
                     clip: true
                     contentWidth: width
-                    contentHeight: settingsContent.implicitHeight
+                    contentHeight: settingsContent.implicitHeight + (root.compact ? (root.safeBottomInset + 12) : 0)
                     boundsBehavior: Flickable.DragAndOvershootBounds
                     flickableDirection: Flickable.VerticalFlick
+
+                    WheelHandler {
+                        acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
+                        onWheel: function(event) {
+                            root.scrollFlickByWheel(settingsFlick, event)
+                        }
+                    }
 
                     ColumnLayout {
                         id: settingsContent
                         width: settingsFlick.width
+                        x: 0
+                        opacity: root.settingsPageOpacity
                         spacing: root.compact ? 14 : 10
                         clip: true
 
@@ -3015,63 +4572,30 @@ ApplicationWindow {
                                         { "title": "Interface", "icon": "\uf53f", "action": "interface" },
                                         { "title": "App Updates", "icon": "\uf2f1", "action": "updates" },
                                         { "title": "Connection Mode", "icon": "\uf6ff", "action": "connection" },
+                                        { "title": "Power Mode", "icon": "\uf0e7", "action": "power" },
                                         { "title": "Routing Rules", "icon": "\uf542", "action": "routing" },
                                         { "title": "Custom DNS", "icon": "\uf1eb", "action": "dns" },
                                         { "title": "Logs", "icon": "\uf1da", "action": "logs" },
-                                        { "title": "Terms And Conditions", "icon": "\uf15c", "action": "terms" },
+                                        { "title": "Terms & License", "icon": "\uf15c", "action": "terms" },
                                         { "title": "Share App", "icon": "\uf1e0", "action": "share" },
+                                        { "title": "Donate $GENY", "icon": "\uf4b9", "action": "donate" },
                                         { "title": "About App", "icon": "\uf05a", "action": "about" }
                                     ]
 
                                     delegate: Rectangle {
                                         required property var modelData
+                                        color: "transparent"
                                         Layout.fillWidth: true
-                                        Layout.preferredHeight: 76
-                                        radius: 15
-                                        color: root.themeColorToken("mainHex_55f2f2f2", "mainHex_55182538")
+                                        Layout.preferredHeight: rowControl.implicitHeight
 
-                                        RowLayout {
-                                            anchors.fill: parent
-                                            anchors.leftMargin: 16
-                                            anchors.rightMargin: 16
-                                            spacing: 14
-
-                                            Rectangle {
-                                                Layout.preferredWidth: 42
-                                                Layout.preferredHeight: 42
-                                                radius: 21
-                                                color: root.themeColorToken("mainHex_eef0ff", "mainHex_223149")
-
-                                                Text {
-                                                    anchors.centerIn: parent
-                                                    text: modelData.icon
-                                                    color: root.themeColorToken("mainHex_3147d0", "mainHex_8ab2ff")
-                                                    font.family: root.faSolid
-                                                    font.pixelSize: 17
-                                                }
-                                            }
-
-                                            Text {
-                                                Layout.fillWidth: true
-                                                text: modelData.title
-                                                color: root.themeColorToken("mainHex_090909", "mainHex_e7eefb")
-                                                font.family: FontSystem.getContentFontBold.name
-                                                font.pixelSize: 16
-                                                font.bold: true
-                                                elide: Text.ElideRight
-                                            }
-
-                                            Text {
-                                                text: "\uf054"
-                                                color: root.themeColorToken("mainHex_050505", "mainHex_d5e3f8")
-                                                font.family: root.faSolid
-                                                font.pixelSize: 16
-                                            }
-                                        }
-
-                                        MouseArea {
-                                            anchors.fill: parent
-                                            cursorShape: Qt.PointingHandCursor
+                                        Controls.SettingRow {
+                                            id: rowControl
+                                            anchors.left: parent.left
+                                            anchors.right: parent.right
+                                            compact: root.compact
+                                            title: modelData.title
+                                            glyph: modelData.icon
+                                            glyphFontFamily: root.faSolid
                                             onClicked: root.settingsSection = modelData.action
                                         }
                                     }
@@ -3102,7 +4626,7 @@ ApplicationWindow {
 
                                 Text {
                                     Layout.fillWidth: true
-                                    text: "Choose the unit used by live transfer-rate indicators. Auto selects the most readable unit."
+                                    text: "Choose visual behavior, privacy display, and the unit used by live transfer-rate indicators."
                                     color: root.themeColorToken("mainHex_7c8697", "mainHex_93a2b8")
                                     font.family: FontSystem.contentFontFamily
                                     font.pixelSize: 13
@@ -3137,6 +4661,52 @@ ApplicationWindow {
                                     font.family: FontSystem.contentFontFamily
                                     font.pixelSize: 12
                                     wrapMode: Text.WordWrap
+                                }
+
+                                Rectangle {
+                                    Layout.fillWidth: true
+                                    height: 1
+                                    color: root.themeColorToken("mainHex_e3e8f1", "mainHex_30435d")
+                                }
+
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 10
+
+                                    Text {
+                                        Layout.fillWidth: true
+                                        text: "IP Privacy"
+                                        color: root.themeColorToken("mainHex_334155", "mainHex_c8d3e2")
+                                        font.family: FontSystem.contentFontFamily
+                                        font.pixelSize: 14
+                                    }
+
+                                    Controls.ComboBox {
+                                        Layout.preferredWidth: 140
+                                        Layout.preferredHeight: 40
+                                        model: root.ipPrivacyOptions
+                                        currentIndex: root.unitIndex(root.ipPrivacyOptions, interfacePrivacySettings.ipDisplayMode)
+                                        onActivated: interfacePrivacySettings.ipDisplayMode = root.ipPrivacyOptions[currentIndex]
+                                    }
+                                }
+
+                                Text {
+                                    Layout.fillWidth: true
+                                    text: interfacePrivacySettings.ipDisplayMode === "Hidden"
+                                          ? "Home and status panels show *.*.*.* or Endpoint hidden instead of visible IP details."
+                                          : (interfacePrivacySettings.ipDisplayMode === "Partial Mask"
+                                             ? "Home and status panels keep enough context for troubleshooting while masking the precise address."
+                                             : "Visible IP and endpoint details are shown normally.")
+                                    color: root.themeColorToken("mainHex_8a95a8", "mainHex_8ea0b8")
+                                    font.family: FontSystem.contentFontFamily
+                                    font.pixelSize: 12
+                                    wrapMode: Text.WordWrap
+                                }
+
+                                Rectangle {
+                                    Layout.fillWidth: true
+                                    height: 1
+                                    color: root.themeColorToken("mainHex_e3e8f1", "mainHex_30435d")
                                 }
 
                                 RowLayout {
@@ -3210,11 +4780,11 @@ ApplicationWindow {
                             ColumnLayout {
                                 id: termsColumn
                                 anchors.fill: parent
-                                anchors.margins: 14
-                                spacing: 10
+                                anchors.margins: root.compact ? 12 : 14
+                                spacing: 8
 
                                 Text {
-                                    text: "Terms And Conditions"
+                                    text: "Terms, Conditions & License"
                                     color: root.themeColorToken("mainHex_2a3240", "mainHex_d7e4f6")
                                     font.family: FontSystem.getContentFontBold.name
                                     font.pixelSize: 16
@@ -3229,6 +4799,61 @@ ApplicationWindow {
                                     font.pixelSize: 13
                                     wrapMode: Text.WordWrap
                                 }
+
+                                Text {
+                                    Layout.fillWidth: true
+                                    text: "This app is provided without warranty. Review the full license text below before production deployment."
+                                    color: root.themeColorToken("mainHex_7c8697", "mainHex_99abc4")
+                                    font.family: FontSystem.contentFontFamily
+                                    font.pixelSize: 12
+                                    wrapMode: Text.WordWrap
+                                }
+
+                                Controls.Button {
+                                    text: "Copy License Text"
+                                    Layout.fillWidth: true
+                                    isDefault: false
+                                    onClicked: {
+                                        vpnController.copyTextToClipboard(vpnController.licenseText())
+                                        root.showSettingsFeedback("License copied to clipboard.")
+                                    }
+                                }
+
+                                Rectangle {
+                                    Layout.fillWidth: true
+                                    Layout.preferredHeight: root.compact ? 240 : 300
+                                    radius: 12
+                                    color: root.themeColorToken("mainHex_ffffff", "mainHex_1a2b42")
+                                    border.width: 1
+                                    border.color: root.themeColorToken("mainHex_dce4f1", "mainHex_355173")
+                                    clip: true
+
+                                    Flickable {
+                                        id: termsLicenseFlick
+                                        anchors.fill: parent
+                                        anchors.margins: 10
+                                        contentWidth: width
+                                        contentHeight: licenseBody.implicitHeight
+                                        clip: true
+
+                                        WheelHandler {
+                                            acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
+                                            onWheel: function(event) {
+                                                root.scrollFlickByWheel(termsLicenseFlick, event)
+                                            }
+                                        }
+
+                                        Text {
+                                            id: licenseBody
+                                            width: parent.width
+                                            text: vpnController.licenseText()
+                                            color: root.themeColorToken("mainHex_4d607a", "mainHex_b5c7de")
+                                            font.family: FontSystem.contentFontFamily
+                                            font.pixelSize: 11
+                                            wrapMode: Text.Wrap
+                                        }
+                                    }
+                                }
                             }
                         }
 
@@ -3236,38 +4861,100 @@ ApplicationWindow {
                             Layout.fillWidth: true
                             visible: root.settingsSection === "share"
                             implicitHeight: shareColumn.implicitHeight + 28
-                            radius: Colors.innerRadius
-                            color: root.themeColorToken("mainHex_f7f9fc", "mainHex_151c32")
-                            border.width: 0
-                            border.color: root.themeColorToken("mainHex_e0e6f0", "mainHex_30435d")
+                            radius: Metrics.radiusXl
+                            color: Colors.dsSurfaceSoft
+                            border.width: 1
+                            border.color: Colors.dsBorderSoft
 
                             ColumnLayout {
                                 id: shareColumn
                                 anchors.fill: parent
                                 anchors.margins: 14
-                                spacing: 10
+                                spacing: 12
 
                                 Text {
                                     text: "Share App"
-                                    color: root.themeColorToken("mainHex_2a3240", "mainHex_d7e4f6")
+                                    color: Colors.dsText
                                     font.family: FontSystem.getContentFontBold.name
-                                    font.pixelSize: 16
+                                    font.pixelSize: Typography.uiTitleLg
                                     font.bold: true
                                 }
 
                                 Text {
                                     Layout.fillWidth: true
-                                    text: "Share the GenyConnect repository or website with someone who needs the app."
-                                    color: root.themeColorToken("mainHex_667385", "mainHex_9bb0cb")
+                                    text: "Share GenyConnect using the native share sheet on mobile or desktop integrations where available."
+                                    color: Colors.dsTextMuted
                                     font.family: FontSystem.contentFontFamily
-                                    font.pixelSize: 13
+                                    font.pixelSize: Typography.uiBodyLg
                                     wrapMode: Text.WordWrap
                                 }
 
-                                Controls.Button {
-                                    text: "Open Repository"
+                                Controls.PrimaryButton {
+                                    text: "Share Now"
+                                    glyph: "\uf1e0"
+                                    glyphFontFamily: root.faSolid
                                     Layout.fillWidth: true
-                                    onClicked: Qt.openUrlExternally("https://github.com/genyleap/genyconnect")
+                                    onClicked: root.shareAppNow()
+                                }
+
+                                GridLayout {
+                                    Layout.fillWidth: true
+                                    columns: root.compact ? 1 : 2
+                                    columnSpacing: 8
+                                    rowSpacing: 8
+
+                                    Controls.LinkRow {
+                                        title: "Copy App Link"
+                                        glyph: "\uf0c5"
+                                        iconBackground: Colors.dsLinkIconBgPurple
+                                        iconColor: Colors.dsLinkIconPurple
+                                        Layout.fillWidth: true
+                                        onClicked: {
+                                            vpnController.copyTextToClipboard(root.appSiteUrl)
+                                            root.showSettingsFeedback("App link copied.")
+                                        }
+                                    }
+
+                                    Controls.LinkRow {
+                                        title: "Copy Repo Link"
+                                        glyph: "\uf0c5"
+                                        iconBackground: Colors.dsLinkIconBgPurple
+                                        iconColor: Colors.dsLinkIconPurple
+                                        Layout.fillWidth: true
+                                        onClicked: {
+                                            vpnController.copyTextToClipboard(root.appRepoUrl)
+                                            root.showSettingsFeedback("Repository link copied.")
+                                        }
+                                    }
+
+                                    Controls.LinkRow {
+                                        title: "Open Website"
+                                        glyph: "\uf35d"
+                                        iconBackground: Colors.dsLinkIconBgBlue
+                                        iconColor: Colors.dsLinkIconBlue
+                                        Layout.fillWidth: true
+                                        onClicked: Qt.openUrlExternally(root.appSiteUrl)
+                                    }
+
+                                    Controls.LinkRow {
+                                        title: "Open Repository"
+                                        glyph: "\uf09b"
+                                        glyphFontFamily: FontSystem.getAwesomeBrand.name
+                                        iconBackground: Colors.dsSurface
+                                        iconColor: Colors.dsText
+                                        Layout.fillWidth: true
+                                        onClicked: Qt.openUrlExternally(root.appRepoUrl)
+                                    }
+                                }
+
+                                Text {
+                                    Layout.fillWidth: true
+                                    visible: root.settingsFeedbackText.length > 0
+                                    text: root.settingsFeedbackText
+                                    color: root.themeColorToken("mainHex_2c8b57", "mainHex_5adf97")
+                                    font.family: FontSystem.contentFontFamily
+                                    font.pixelSize: 12
+                                    wrapMode: Text.WordWrap
                                 }
                             }
                         }
@@ -3276,51 +4963,589 @@ ApplicationWindow {
                             Layout.fillWidth: true
                             visible: root.settingsSection === "about"
                             implicitHeight: aboutSettingsColumn.implicitHeight + 28
-                            radius: Colors.innerRadius
-                            color: root.themeColorToken("mainHex_f7f9fc", "mainHex_151c32")
-                            border.width: 0
-                            border.color: root.themeColorToken("mainHex_e0e6f0", "mainHex_30435d")
+                            radius: Metrics.radiusXl
+                            color: Colors.dsSurfaceSoft
+                            border.width: 1
+                            border.color: Colors.dsBorderSoft
 
                             ColumnLayout {
                                 id: aboutSettingsColumn
                                 anchors.fill: parent
                                 anchors.margins: 14
-                                spacing: 10
+                                spacing: 12
 
-                                Text {
-                                    text: "GenyConnect"
-                                    color: root.themeColorToken("mainHex_2a3240", "mainHex_d7e4f6")
-                                    font.family: FontSystem.getContentFontBold.name
-                                    font.pixelSize: 16
-                                    font.bold: true
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 10
+
+                                    Rectangle {
+                                        Layout.preferredWidth: 42
+                                        Layout.preferredHeight: 42
+                                        radius: 21
+                                        color: Colors.dsPrimaryTint
+                                        border.width: 1
+                                        border.color: Colors.dsBorder
+
+                                        Text {
+                                            anchors.centerIn: parent
+                                            text: "\uf05a"
+                                            font.family: root.faSolid
+                                            font.pixelSize: 16
+                                            color: Colors.dsPrimarySolid
+                                        }
+                                    }
+
+                                    ColumnLayout {
+                                        Layout.fillWidth: true
+                                        spacing: 1
+
+                                        Text {
+                                            text: "About GenyConnect"
+                                            color: Colors.dsText
+                                            font.family: FontSystem.getContentFontBold.name
+                                            font.pixelSize: Typography.uiTitleLg
+                                            font.bold: true
+                                        }
+
+                                        Text {
+                                            Layout.fillWidth: true
+                                            text: "Secure, profile-based connectivity for desktop and mobile runtimes."
+                                            color: Colors.dsTextMuted
+                                            font.family: FontSystem.contentFontFamily
+                                            font.pixelSize: Typography.uiBody
+                                            wrapMode: Text.WordWrap
+                                        }
+                                    }
                                 }
 
-                                Text {
+                                Rectangle {
                                     Layout.fillWidth: true
-                                    text: "Version " + updater.appVersion + "\nxray-core " + vpnController.xrayVersion + "\nDeveloper: Genyleap LLC\n\nGenyConnect is open source. Donations and community support help keep development active."
-                                    color: root.themeColorToken("mainHex_667385", "mainHex_9bb0cb")
-                                    font.family: FontSystem.contentFontFamily
-                                    font.pixelSize: 13
-                                    wrapMode: Text.WordWrap
+                                    radius: Metrics.radiusMd
+                                    color: Colors.dsPrimaryTint
+                                    border.width: 1
+                                    border.color: Colors.dsBorderSoft
+                                    implicitHeight: visionText.implicitHeight + 16
+
+                                    RowLayout {
+                                        anchors.fill: parent
+                                        anchors.margins: 8
+                                        spacing: 8
+
+                                        Text {
+                                            text: "\uf004"
+                                            font.family: root.faSolid
+                                            font.pixelSize: 13
+                                            color: Colors.dsDanger
+                                        }
+
+                                        Text {
+                                            id: visionText
+                                            Layout.fillWidth: true
+                                            text: "We stand with IRAN, with love."
+                                            color: Colors.dsText
+                                            font.family: FontSystem.getContentFontBold.name
+                                            font.pixelSize: Typography.uiBody
+                                            font.bold: true
+                                            wrapMode: Text.WordWrap
+                                        }
+                                    }
                                 }
 
-                                Controls.Button {
-                                    text: "Open Project"
+                                Rectangle {
                                     Layout.fillWidth: true
-                                    onClicked: Qt.openUrlExternally("https://github.com/genyleap/genyconnect")
+                                    radius: 10
+                                    color: root.themeColorToken("mainHex_ffffff", "mainHex_1a2b42")
+                                    border.width: 1
+                                    border.color: root.themeColorToken("mainHex_dce4f1", "mainHex_355173")
+                                    implicitHeight: aboutDetailsGrid.implicitHeight + 14
+
+                                    GridLayout {
+                                        id: aboutDetailsGrid
+                                        anchors.fill: parent
+                                        anchors.margins: 7
+                                        columns: 2
+                                        columnSpacing: 8
+                                        rowSpacing: 5
+
+                                        Text {
+                                            text: "App Version"
+                                            color: root.themeColorToken("mainHex_7c8697", "mainHex_9bb0cb")
+                                            font.family: FontSystem.contentFontFamily
+                                            font.pixelSize: 12
+                                        }
+                                        Text {
+                                            text: updater.appVersion
+                                            color: root.themeColorToken("mainHex_2a3240", "mainHex_d7e4f6")
+                                            font.family: FontSystem.getContentFontBold.name
+                                            font.pixelSize: 12
+                                            elide: Text.ElideRight
+                                            Layout.fillWidth: true
+                                            horizontalAlignment: Text.AlignRight
+                                        }
+
+                                        Text {
+                                            text: "xray-core"
+                                            color: root.themeColorToken("mainHex_7c8697", "mainHex_9bb0cb")
+                                            font.family: FontSystem.contentFontFamily
+                                            font.pixelSize: 12
+                                        }
+                                        Text {
+                                            text: vpnController.xrayVersion
+                                            color: root.themeColorToken("mainHex_2a3240", "mainHex_d7e4f6")
+                                            font.family: FontSystem.getContentFontBold.name
+                                            font.pixelSize: 12
+                                            elide: Text.ElideRight
+                                            Layout.fillWidth: true
+                                            horizontalAlignment: Text.AlignRight
+                                        }
+
+                                        Text {
+                                            text: "Platform"
+                                            color: root.themeColorToken("mainHex_7c8697", "mainHex_9bb0cb")
+                                            font.family: FontSystem.contentFontFamily
+                                            font.pixelSize: 12
+                                        }
+                                        Text {
+                                            text: osNameText() + (vpnController.isMobile ? " (Mobile)" : " (Desktop)")
+                                            color: root.themeColorToken("mainHex_2a3240", "mainHex_d7e4f6")
+                                            font.family: FontSystem.getContentFontBold.name
+                                            font.pixelSize: 12
+                                            elide: Text.ElideRight
+                                            Layout.fillWidth: true
+                                            horizontalAlignment: Text.AlignRight
+                                        }
+
+                                        Text {
+                                            text: "Developer"
+                                            color: root.themeColorToken("mainHex_7c8697", "mainHex_9bb0cb")
+                                            font.family: FontSystem.contentFontFamily
+                                            font.pixelSize: 12
+                                        }
+                                        Text {
+                                            text: "Genyleap LLC"
+                                            color: root.themeColorToken("mainHex_2a3240", "mainHex_d7e4f6")
+                                            font.family: FontSystem.getContentFontBold.name
+                                            font.pixelSize: 12
+                                            elide: Text.ElideRight
+                                            Layout.fillWidth: true
+                                            horizontalAlignment: Text.AlignRight
+                                        }
+                                    }
                                 }
 
-                                Controls.Button {
-                                    text: "Support Development"
+                                RowLayout {
                                     Layout.fillWidth: true
-                                    onClicked: Qt.openUrlExternally("https://github.com/genyleap/genyconnect#support-development")
+                                    spacing: 8
+
+                                    Controls.PrimaryButton {
+                                        Layout.fillWidth: true
+                                        text: "Open Project"
+                                        onClicked: Qt.openUrlExternally(root.appRepoUrl)
+                                    }
+
+                                    Controls.OutlineButton {
+                                        Layout.fillWidth: true
+                                        text: "Share App"
+                                        onClicked: root.openSettingsSection("share")
+                                    }
+                                }
+
+                                GridLayout {
+                                    Layout.fillWidth: true
+                                    columns: root.compact ? 1 : 2
+                                    columnSpacing: 8
+                                    rowSpacing: 8
+
+                                    Controls.OutlineButton {
+                                        Layout.fillWidth: true
+                                        text: "Website"
+                                        onClicked: Qt.openUrlExternally(root.appSiteUrl)
+                                    }
+
+                                    Controls.OutlineButton {
+                                        Layout.fillWidth: true
+                                        text: "Support"
+                                        onClicked: Qt.openUrlExternally("https://genyleap.com/support")
+                                    }
+
+                                    Controls.PrimaryButton {
+                                        Layout.fillWidth: true
+                                        Layout.columnSpan: root.compact ? 1 : 2
+                                        text: "Support Development"
+                                        onClicked: root.openSettingsSection("donate")
+                                    }
                                 }
                             }
                         }
 
                         Rectangle {
                             Layout.fillWidth: true
-                            visible: root.settingsSection === "updates"
+                            visible: root.settingsSection === "donate"
+                            Layout.alignment: Qt.AlignHCenter
+                            Layout.preferredWidth: root.mobilePlatform ? Math.min(settingsFlick.width, 390) : settingsFlick.width
+                            Layout.maximumWidth: root.mobilePlatform ? Math.min(settingsFlick.width, 390) : settingsFlick.width
+                            implicitHeight: donateColumn.implicitHeight + 24 + (root.compact ? root.safeBottomInset : 0)
+                            radius: 0
+                            color: "transparent"
+                            border.width: 0
+                            border.color: "transparent"
+
+                            ColumnLayout {
+                                id: donateColumn
+                                anchors.fill: parent
+                                anchors.margins: root.compact ? 12 : 16
+                                spacing: root.compact ? 14 : 16
+                                readonly property var activeToken: root.donationTokenBySymbol(root.donationSelectedToken)
+                                readonly property int amountColumns: width < 320 ? 2 : 4
+                                readonly property int usefulLinkColumns: width < 430 ? 1 : 2
+
+                                Controls.SupportHeroCard {
+                                    Layout.fillWidth: true
+                                    compact: root.compact
+                                    title: "Support GenyConnect"
+                                    description: "Your donation helps us improve GenyConnect, maintain infrastructure, and grow the Geny ecosystem."
+                                    networkName: root.donationConfig.networkName || "Base Mainnet"
+                                }
+
+                                Rectangle {
+                                    Layout.fillWidth: true
+                                    color: Colors.dsSurface
+                                    border.width: 1
+                                    border.color: Colors.dsBorder
+                                    radius: 24
+                                    implicitHeight: donationCardColumn.implicitHeight + 26
+
+                                    ColumnLayout {
+                                        id: donationCardColumn
+                                        anchors.fill: parent
+                                        anchors.margins: root.compact ? 16 : 20
+                                        spacing: 14
+
+                                        Text {
+                                            Layout.fillWidth: true
+                                            text: "1. Choose Token"
+                                            color: Colors.dsText
+                                            font.family: FontSystem.getContentFontBold.name
+                                            font.pixelSize: root.compact ? 16 : 18
+                                            font.bold: true
+                                        }
+
+                                        Item {
+                                            id: donationTokenArea
+                                            Layout.fillWidth: true
+                                            implicitHeight: donationTokenFlow.implicitHeight
+                                            readonly property real gap: root.mobilePlatform ? 8 : 10
+                                            readonly property int tokenColumns: root.compact ? 1 : 2
+                                            readonly property real tokenCellWidth: tokenColumns > 1
+                                                                                   ? Math.floor((width - gap) / 2)
+                                                                                   : width
+
+                                            Flow {
+                                                id: donationTokenFlow
+                                                width: parent.width
+                                                spacing: donationTokenArea.gap
+
+                                                Repeater {
+                                                    model: root.donationTokens
+                                                    delegate: Controls.TokenOptionCard {
+                                                        required property var modelData
+                                                        width: donationTokenArea.tokenCellWidth
+                                                        selected: (modelData.symbol || "") === root.donationSelectedToken
+                                                        title: modelData.symbol || ""
+                                                        subtitle: modelData.displayName || ""
+                                                        badgeText: modelData.recommended === true ? "Recommended" : ""
+                                                        iconImageSource: ""
+                                                        iconGlyph: (modelData.symbol || "").toUpperCase() === "GENY"
+                                                                   ? root.iconDna
+                                                                   : ((modelData.symbol || "").toUpperCase() === "USDC" ? "\uf51e" : "")
+                                                        iconBackground: (modelData.symbol || "").toUpperCase() === "GENY"
+                                                                        ? Colors.dsLinkIconBgGreen
+                                                                        : Colors.dsLinkIconBgBlue
+                                                        iconColor: (modelData.symbol || "").toUpperCase() === "GENY"
+                                                                   ? Colors.dsLinkIconGreen
+                                                                   : Colors.dsLinkIconBlue
+                                                        imageFallbackText: "G"
+                                                        onClicked: root.selectDonationToken(modelData.symbol || "")
+                                                    }
+                                                }
+                                            }
+                                        }
+
+                                        Text {
+                                            Layout.fillWidth: true
+                                            visible: donateColumn.activeToken !== null
+                                            text: donateColumn.activeToken ? donateColumn.activeToken.message || "" : ""
+                                            color: Colors.dsTextMuted
+                                            font.family: FontSystem.contentFontFamily
+                                            font.pixelSize: Typography.uiBodySm
+                                            wrapMode: Text.WordWrap
+                                        }
+
+                                        Text {
+                                            Layout.fillWidth: true
+                                            text: "2. Choose Amount"
+                                            color: Colors.dsText
+                                            font.family: FontSystem.getContentFontBold.name
+                                            font.pixelSize: root.compact ? 16 : 18
+                                            font.bold: true
+                                        }
+
+                                        GridLayout {
+                                            Layout.fillWidth: true
+                                            columns: donateColumn.amountColumns
+                                            columnSpacing: 8
+                                            rowSpacing: 8
+
+                                            Repeater {
+                                                model: donateColumn.activeToken && donateColumn.activeToken.presetAmounts
+                                                       ? donateColumn.activeToken.presetAmounts : []
+                                                delegate: Controls.AmountButton {
+                                                    required property var modelData
+                                                    Layout.fillWidth: true
+                                                    label: modelData
+                                                    selected: root.donationSelectedAmountPreset === modelData
+                                                    onClicked: {
+                                                        root.donationSelectedAmountPreset = modelData
+                                                        root.donationValidationError = ""
+                                                        if (modelData !== "Custom")
+                                                            root.donationCustomAmount = ""
+                                                    }
+                                                }
+                                            }
+                                        }
+
+                                        Rectangle {
+                                            Layout.fillWidth: true
+                                            visible: root.donationSelectedAmountPreset === "Custom"
+                                            radius: Metrics.radiusSm
+                                            color: Colors.dsSurfaceSoft
+                                            border.width: 1
+                                            border.color: Colors.dsBorder
+                                            implicitHeight: Metrics.rowHeight
+
+                                            TextField {
+                                                anchors.fill: parent
+                                                anchors.leftMargin: 10
+                                                anchors.rightMargin: 10
+                                                text: root.donationCustomAmount
+                                                placeholderText: "Enter custom amount"
+                                                color: root.themeColorToken("mainHex_2a3240", "mainHex_d7e4f6")
+                                                font.family: FontSystem.contentFontFamily
+                                                font.pixelSize: 13
+                                                background: null
+                                                inputMethodHints: Qt.ImhFormattedNumbersOnly
+                                                onTextChanged: {
+                                                    root.donationCustomAmount = text
+                                                    root.donationValidationError = ""
+                                                }
+                                            }
+                                        }
+
+                                        Controls.DonationSummaryCard {
+                                            Layout.fillWidth: true
+                                            amountText: root.donationEffectiveAmountText()
+                                            tokenSymbol: root.donationSelectedToken
+                                        }
+
+                                        Controls.PrimaryButton {
+                                            text: "Connect Wallet & Donate"
+                                            glyph: "\uf555"
+                                            glyphFontFamily: root.faSolid
+                                            Layout.fillWidth: true
+                                            onClicked: root.triggerDonation(Qt.platform.os === "android")
+                                        }
+
+                                        ColumnLayout {
+                                            Layout.fillWidth: true
+                                            spacing: 2
+
+                                            Text {
+                                                Layout.alignment: Qt.AlignHCenter
+                                                text: "\uf023"
+                                                color: Colors.dsTextSubtle
+                                                font.family: root.faSolid
+                                                font.pixelSize: Typography.uiBodySm
+                                            }
+
+                                            Text {
+                                                Layout.fillWidth: true
+                                                text: "Secure • Non-custodial • You stay in control"
+                                                color: Colors.dsTextSubtle
+                                                font.family: FontSystem.contentFontFamily
+                                                font.pixelSize: Typography.uiBodySm
+                                                horizontalAlignment: Text.AlignHCenter
+                                                wrapMode: Text.WordWrap
+                                            }
+                                        }
+
+                                        Text {
+                                            Layout.fillWidth: true
+                                            visible: root.donationValidationError.length > 0
+                                            text: root.donationValidationError
+                                            color: Colors.dsDanger
+                                            font.family: FontSystem.contentFontFamily
+                                            font.pixelSize: Typography.uiBody
+                                            wrapMode: Text.WordWrap
+                                        }
+                                    }
+                                }
+
+                                Text {
+                                    Layout.fillWidth: true
+                                    text: "Useful Links"
+                                    color: Colors.dsText
+                                    font.family: FontSystem.getContentFontBold.name
+                                    font.pixelSize: root.compact ? 16 : 18
+                                    font.bold: true
+                                }
+
+                                GridLayout {
+                                    Layout.fillWidth: true
+                                    columns: donateColumn.usefulLinkColumns
+                                    columnSpacing: 10
+                                    rowSpacing: 10
+
+                                    Controls.UsefulLinkCard {
+                                        title: "Copy Receiver"
+                                        glyph: "\uf0c5"
+                                        iconBackground: Colors.dsLinkIconBgPurple
+                                        iconColor: Colors.dsLinkIconPurple
+                                        Layout.fillWidth: true
+                                        onClicked: {
+                                            vpnController.copyTextToClipboard(root.donationConfig.receiverWallet || "")
+                                            root.donationFeedbackText = "Receiver wallet copied."
+                                            donationFeedbackTimer.restart()
+                                        }
+                                    }
+
+                                    Controls.UsefulLinkCard {
+                                        title: "Copy GENY Token"
+                                        glyph: "\uf0c5"
+                                        iconBackground: Colors.dsLinkIconBgPurple
+                                        iconColor: Colors.dsLinkIconPurple
+                                        Layout.fillWidth: true
+                                        onClicked: {
+                                            const token = root.donationTokenBySymbol("GENY")
+                                            vpnController.copyTextToClipboard(token ? token.contract || "" : "")
+                                            root.donationFeedbackText = "Token contract copied."
+                                            donationFeedbackTimer.restart()
+                                        }
+                                    }
+
+                                    Controls.UsefulLinkCard {
+                                        title: "Receiver Scan"
+                                        glyph: "\uf029"
+                                        iconBackground: Colors.dsLinkIconBgBlue
+                                        iconColor: Colors.dsLinkIconBlue
+                                        Layout.fillWidth: true
+                                        onClicked: Qt.openUrlExternally(root.donationConfig.receiverBaseScanUrl || "")
+                                    }
+
+                                    Controls.UsefulLinkCard {
+                                        title: "Token Scan"
+                                        glyph: "\uf029"
+                                        iconBackground: Colors.dsLinkIconBgBlue
+                                        iconColor: Colors.dsLinkIconBlue
+                                        Layout.fillWidth: true
+                                        onClicked: {
+                                            const token = donateColumn.activeToken
+                                            Qt.openUrlExternally(token ? token.baseScanUrl || "" : "")
+                                        }
+                                    }
+
+                                    Controls.UsefulLinkCard {
+                                        title: "Swap on Uniswap"
+                                        glyph: "\uf3d1"
+                                        glyphFontFamily: FontSystem.getAwesomeBrand.name
+                                        iconBackground: Colors.dsLinkIconBgPurple
+                                        iconColor: Colors.dsLinkIconPurple
+                                        Layout.fillWidth: true
+                                        onClicked: {
+                                            const token = donateColumn.activeToken
+                                            Qt.openUrlExternally(token ? token.uniswapUrl || "" : "")
+                                        }
+                                    }
+
+                                    Controls.UsefulLinkCard {
+                                        title: "White Paper"
+                                        glyph: "\uf15c"
+                                        iconBackground: Colors.dsLinkIconBgGreen
+                                        iconColor: Colors.dsLinkIconGreen
+                                        Layout.fillWidth: true
+                                        onClicked: Qt.openUrlExternally(root.donationConfig.whitePaperUrl || "")
+                                    }
+
+                                    Controls.UsefulLinkCard {
+                                        title: "GENY Repository"
+                                        glyph: "\uf09b"
+                                        glyphFontFamily: FontSystem.getAwesomeBrand.name
+                                        iconBackground: Colors.dsSurface
+                                        iconColor: Colors.dsText
+                                        Layout.fillWidth: true
+                                        onClicked: Qt.openUrlExternally(root.donationConfig.tokenRepoUrl || "")
+                                    }
+                                }
+
+                                // ColumnLayout {
+                                //     Layout.fillWidth: true
+                                //     spacing: 4
+
+                                //     Row {
+                                //         Layout.alignment: Qt.AlignHCenter
+                                //         spacing: 6
+
+                                //         Text {
+                                //             text: "\uf3ed"
+                                //             color: Colors.dsTextSubtle
+                                //             font.family: root.faSolid
+                                //             font.pixelSize: Typography.uiBody
+                                //         }
+
+                                //         Text {
+                                //             text: "Donations are voluntary and non-refundable."
+                                //             color: Colors.dsTextSubtle
+                                //             font.family: FontSystem.contentFontFamily
+                                //             font.pixelSize: Typography.uiBodySm
+                                //         }
+                                //     }
+
+                                //     Row {
+                                //         Layout.alignment: Qt.AlignHCenter
+                                //         spacing: 6
+
+                                //         Text {
+                                //             text: "\uf3ed"
+                                //             color: Colors.dsTextSubtle
+                                //             font.family: root.faSolid
+                                //             font.pixelSize: Typography.uiBody
+                                //         }
+
+                                //         Text {
+                                //             text: "Always verify the network and receiver address before sending."
+                                //             color: Colors.dsTextSubtle
+                                //             font.family: FontSystem.contentFontFamily
+                                //             font.pixelSize: Typography.uiBodySm
+                                //         }
+                                //     }
+
+                                // }
+
+                                Text {
+                                    Layout.fillWidth: true
+                                    visible: root.donationFeedbackText.length > 0
+                                    text: root.donationFeedbackText
+                                    color: Colors.dsSuccess
+                                    font.family: FontSystem.contentFontFamily
+                                    font.pixelSize: Typography.uiBody
+                                    horizontalAlignment: Text.AlignHCenter
+                                    wrapMode: Text.WordWrap
+                                }
+                            }
+                        }
+
+                        Rectangle {
+                            Layout.fillWidth: true
+                            visible: root.settingsSection === "updates" && vpnController.supportsAutoUpdate
                             Layout.maximumWidth: settingsFlick.width
                             implicitHeight: updateColumn.implicitHeight + 24
                             radius: Colors.innerRadius
@@ -3378,12 +5603,57 @@ ApplicationWindow {
                                     font.pixelSize: 12
                                 }
 
-                                ProgressBar {
+                                Rectangle {
+                                    id: updateProgressTrack
                                     Layout.fillWidth: true
+                                    Layout.preferredHeight: 8
                                     visible: updater.checking
-                                    from: 0
-                                    to: 1
-                                    value: updater.downloadProgress
+                                    radius: 4
+                                    color: root.themeColorToken("mainHex_dfe7f2", "mainHex_223147")
+                                    border.width: 0
+                                    clip: true
+
+                                    readonly property real normalizedProgress: Math.max(0, Math.min(1, updater.downloadProgress))
+                                    readonly property bool indeterminateMode: normalizedProgress <= 0.001 || normalizedProgress >= 0.999
+
+                                    Rectangle {
+                                        id: updateProgressDeterminate
+                                        anchors.left: parent.left
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        height: parent.height
+                                        radius: parent.radius
+                                        visible: !parent.indeterminateMode
+                                        width: parent.width * parent.normalizedProgress
+                                        gradient: Gradient {
+                                            GradientStop { position: 0.0; color: root.themeColorToken("mainHex_2f74ff", "mainHex_3f7cf3") }
+                                            GradientStop { position: 1.0; color: root.themeColorToken("mainHex_7b53ff", "mainHex_7f72ff") }
+                                        }
+                                    }
+
+                                    Rectangle {
+                                        id: updateProgressIndeterminate
+                                        width: Math.max(36, parent.width * 0.26)
+                                        height: parent.height
+                                        y: 0
+                                        x: -width
+                                        radius: parent.radius
+                                        visible: parent.indeterminateMode
+                                        gradient: Gradient {
+                                            GradientStop { position: 0.0; color: "transparent" }
+                                            GradientStop { position: 0.2; color: root.themeColorToken("mainHex_2f74ff", "mainHex_3f7cf3") }
+                                            GradientStop { position: 0.8; color: root.themeColorToken("mainHex_7b53ff", "mainHex_7f72ff") }
+                                            GradientStop { position: 1.0; color: "transparent" }
+                                        }
+
+                                        NumberAnimation on x {
+                                            running: updater.checking && updateProgressIndeterminate.visible
+                                            from: -updateProgressIndeterminate.width
+                                            to: updateProgressTrack.width
+                                            duration: 1100
+                                            loops: Animation.Infinite
+                                            easing.type: Easing.InOutQuad
+                                        }
+                                    }
                                 }
 
                                 GridLayout {
@@ -3421,7 +5691,8 @@ ApplicationWindow {
                                     Controls.Button {
                                         text: "Release Page"
                                         isDefault: false
-                                        enabled: updater.releaseUrl.length > 0
+                                        visible: !root.mobilePlatform
+                                        enabled: !root.mobilePlatform && updater.releaseUrl.length > 0
                                         Layout.fillWidth: true
                                         onClicked: updater.openReleasePage()
                                     }
@@ -3431,34 +5702,57 @@ ApplicationWindow {
 
                         Rectangle {
                             Layout.fillWidth: true
-                            visible: root.settingsSection === "about"
+                            visible: root.settingsSection === "updates" && !vpnController.supportsAutoUpdate && !root.mobilePlatform
                             Layout.maximumWidth: settingsFlick.width
+                            implicitHeight: manualUpdateColumn.implicitHeight + 24
                             radius: Colors.innerRadius
-                            color: root.themeColorToken("mainHex_f7f9fc", "mainHex_151c32")
-                            border.width: 0
-                            border.color: root.themeColorToken("mainHex_e0e6f0", "mainHex_30435d")
-                            implicitHeight: 64
+                            color: root.themeColorToken("mainHex_eff4fb", "mainHex_151c32")
+                            border.width: 1
+                            border.color: root.themeColorToken("mainHex_d7e4f6", "mainHex_30435d")
 
-                            RowLayout {
+                            ColumnLayout {
+                                id: manualUpdateColumn
                                 anchors.fill: parent
                                 anchors.margins: 14
-                                spacing: 10
+                                spacing: 8
 
                                 Text {
-                                    text: "xray-core"
-                                    color: root.themeColorToken("mainHex_667081", "mainHex_9ab0ca")
-                                    font.family: FontSystem.contentFontFamily
-                                    font.pixelSize: 14
-                                }
-
-                                Item { Layout.fillWidth: true }
-
-                                Text {
-                                    text: "Version " + vpnController.xrayVersion
+                                    Layout.fillWidth: true
+                                    text: "App Updates"
                                     color: root.themeColorToken("mainHex_2a3240", "mainHex_d7e4f6")
                                     font.family: FontSystem.contentFontFamily
-                                    font.pixelSize: 14
+                                    font.pixelSize: 15
                                     font.bold: true
+                                }
+
+                                Text {
+                                    Layout.fillWidth: true
+                                    text: "Current " + updater.appVersion
+                                    color: root.themeColorToken("mainHex_677385", "mainHex_9bb0cb")
+                                    font.family: FontSystem.contentFontFamily
+                                    font.pixelSize: 13
+                                }
+
+                                Text {
+                                    Layout.fillWidth: true
+                                    text: "Auto-update is not available on this runtime build. Use the release page to get the latest APK or desktop package."
+                                    color: root.themeColorToken("mainHex_5f6f88", "mainHex_9bb0cb")
+                                    font.family: FontSystem.contentFontFamily
+                                    font.pixelSize: 13
+                                    wrapMode: Text.WordWrap
+                                }
+
+                                Controls.Button {
+                                    text: "Release Page"
+                                    Layout.fillWidth: true
+                                    onClicked: updater.openReleasePage()
+                                }
+
+                                Controls.Button {
+                                    text: "Open Project"
+                                    Layout.fillWidth: true
+                                    isDefault: false
+                                    onClicked: Qt.openUrlExternally("https://github.com/genyleap/genyconnect")
                                 }
                             }
                         }
@@ -3493,7 +5787,9 @@ ApplicationWindow {
                                           ? "Global mode: " + osNameText() + " routes compatible apps through GenyConnect automatically."
                                           : (vpnController.tunMode
                                              ? "TUN mode: " + osNameText() + " routes system traffic through Xray TUN without changing proxy settings."
-                                             : "Clean mode: " + osNameText() + " proxy stays untouched. Only apps set to 127.0.0.1:10808 use the tunnel.")
+                                             : (vpnController.isMobile
+                                                ? "Mobile mode: runtime uses platform VPN APIs and ignores desktop proxy helpers."
+                                                : "Clean mode: " + osNameText() + " proxy stays untouched. Only apps set to 127.0.0.1:10808 use the tunnel."))
                                     color: root.themeColorToken("mainHex_7c8697", "mainHex_9bb0cb")
                                     font.family: FontSystem.contentFontFamily
                                     font.pixelSize: 13
@@ -3509,9 +5805,11 @@ ApplicationWindow {
                                         model: [
                                             {
                                                 "title": "Global Mode",
-                                                "subtitle": "Apply system proxy for compatible apps.",
-                                                "checked": vpnController.useSystemProxy && !vpnController.tunMode,
-                                                "enabled": !vpnController.useSystemProxy || vpnController.tunMode,
+                                                "subtitle": vpnController.supportsSystemProxy
+                                                            ? "Apply system proxy for compatible apps."
+                                                            : "Unavailable on this runtime (system proxy control is not supported).",
+                                                "checked": vpnController.supportsSystemProxy && vpnController.useSystemProxy && !vpnController.tunMode,
+                                                "enabled": vpnController.supportsSystemProxy,
                                                 "apply": function() {
                                                     vpnController.tunMode = false
                                                     vpnController.useSystemProxy = true
@@ -3521,8 +5819,8 @@ ApplicationWindow {
                                             {
                                                 "title": "Clean Mode",
                                                 "subtitle": "Keep OS proxy unchanged and route manual proxy apps only.",
-                                                "checked": !vpnController.useSystemProxy && !vpnController.tunMode,
-                                                "enabled": vpnController.useSystemProxy || vpnController.tunMode,
+                                                "checked": !vpnController.tunMode && (!vpnController.supportsSystemProxy || !vpnController.useSystemProxy),
+                                                "enabled": true,
                                                 "apply": function() {
                                                     vpnController.tunMode = false
                                                     vpnController.useSystemProxy = false
@@ -3533,7 +5831,7 @@ ApplicationWindow {
                                                 "title": "TUN Mode",
                                                 "subtitle": "Route system traffic through Xray TUN.",
                                                 "checked": vpnController.tunMode,
-                                                "enabled": !vpnController.tunMode,
+                                                "enabled": vpnController.supportsTun,
                                                 "apply": function() {
                                                     vpnController.useSystemProxy = false
                                                     vpnController.tunMode = true
@@ -3544,8 +5842,9 @@ ApplicationWindow {
                                         delegate: Rectangle {
                                             required property var modelData
                                             Layout.fillWidth: true
-                                            Layout.preferredHeight: 56
+                                            Layout.preferredHeight: root.compact ? 66 : 56
                                             radius: 8
+                                            opacity: modelData.enabled ? 1.0 : 0.58
                                             color: modelData.checked
                                                    ? root.themeColorToken("mainHex_edf4ff", "mainHex_274062")
                                                    : root.themeColorToken("mainHex_ffffff", "mainHex_22324a")
@@ -3599,7 +5898,9 @@ ApplicationWindow {
                                                         color: root.themeColorToken("mainHex_7c8697", "mainHex_9bb0cb")
                                                         font.family: FontSystem.contentFontFamily
                                                         font.pixelSize: 11
-                                                        elide: Text.ElideRight
+                                                        wrapMode: root.compact ? Text.WordWrap : Text.NoWrap
+                                                        elide: root.compact ? Text.ElideNone : Text.ElideRight
+                                                        maximumLineCount: root.compact ? 2 : 1
                                                     }
                                                 }
                                             }
@@ -3607,7 +5908,7 @@ ApplicationWindow {
                                             MouseArea {
                                                 anchors.fill: parent
                                                 enabled: modelData.enabled
-                                                cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+                                                cursorShape: modelData.enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
                                                 onClicked: modelData.apply()
                                             }
                                         }
@@ -3624,7 +5925,7 @@ ApplicationWindow {
                             Controls.Switch {
                                 id: autoDisableSwitch
                                 checked: vpnController.autoDisableSystemProxyOnDisconnect
-                                enabled: vpnController.useSystemProxy && !vpnController.tunMode
+                                enabled: vpnController.supportsSystemProxy && vpnController.useSystemProxy && !vpnController.tunMode
                                 onToggled: vpnController.autoDisableSystemProxyOnDisconnect = checked
                             }
 
@@ -3645,6 +5946,7 @@ ApplicationWindow {
 
                             Controls.Switch {
                                 checked: vpnController.killSwitchEnabled
+                                enabled: vpnController.supportsSystemProxy
                                 onToggled: vpnController.killSwitchEnabled = checked
                             }
 
@@ -3654,7 +5956,7 @@ ApplicationWindow {
 
                                 Text {
                                     Layout.fillWidth: true
-                                    text: "Kill Switch"
+                                    text: vpnController.supportsSystemProxy ? "Kill Switch" : "Kill Switch (Unavailable)"
                                     color: root.themeColorToken("mainHex_334155", "mainHex_d7e4f6")
                                     font.family: FontSystem.getContentFontBold.name
                                     font.pixelSize: 14
@@ -3672,31 +5974,109 @@ ApplicationWindow {
                             }
                         }
 
-                        RowLayout {
+                        Text {
                             Layout.fillWidth: true
-                            visible: root.settingsSection === "logs"
-                            spacing: 10
-
-                            Controls.Switch {
-                                checked: vpnController.loggingEnabled
-                                onToggled: vpnController.loggingEnabled = checked
-                            }
-
-                            Text {
-                                Layout.fillWidth: true
-                                text: "Enable xray logs"
-                                color: root.themeColorToken("mainHex_334155", "mainHex_d7e4f6")
-                                font.family: FontSystem.contentFontFamily
-                                font.pixelSize: 14
-                                wrapMode: Text.WordWrap
-                            }
+                            visible: root.settingsSection === "connection" && !vpnController.supportsSystemProxy
+                            text: "Global mode and Kill Switch require system proxy control, which is not available on this runtime. Use TUN Mode for full-device routing."
+                            color: root.themeColorToken("mainHex_a0682a", "mainHex_f4c56a")
+                            font.family: FontSystem.contentFontFamily
+                            font.pixelSize: 12
+                            wrapMode: Text.WordWrap
                         }
 
-                        Controls.Button {
-                            visible: root.settingsSection === "logs"
-                            text: "Open Logs Viewer"
+                        Rectangle {
                             Layout.fillWidth: true
-                            onClicked: logsPopup.open()
+                            visible: root.settingsSection === "logs"
+                            radius: Metrics.radiusLg
+                            color: Colors.dsSurfaceSoft
+                            border.width: 1
+                            border.color: Colors.dsBorder
+                            implicitHeight: logsSettingsColumn.implicitHeight + 22
+
+                            ColumnLayout {
+                                id: logsSettingsColumn
+                                anchors.fill: parent
+                                anchors.margins: 11
+                                spacing: 10
+
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 10
+
+                                    ColumnLayout {
+                                        Layout.fillWidth: true
+                                        spacing: 2
+
+                                        Text {
+                                            Layout.fillWidth: true
+                                            text: "Logs & Diagnostics"
+                                            color: Colors.dsText
+                                            font.family: FontSystem.getContentFontBold.name
+                                            font.pixelSize: Typography.uiTitle
+                                            font.bold: true
+                                            wrapMode: Text.WordWrap
+                                        }
+
+                                        Text {
+                                            Layout.fillWidth: true
+                                            text: vpnController.loggingEnabled
+                                                  ? "Captured lines: " + vpnController.recentLogs.length
+                                                  : "Enable logging to capture connection diagnostics."
+                                            color: Colors.dsTextMuted
+                                            font.family: FontSystem.contentFontFamily
+                                            font.pixelSize: Typography.uiBody
+                                            wrapMode: Text.WordWrap
+                                        }
+                                    }
+
+                                    Controls.StatusPill {
+                                        text: vpnController.loggingEnabled ? "Enabled" : "Disabled"
+                                        pillColor: vpnController.loggingEnabled ? Colors.dsPrimarySolid : Colors.dsSurface
+                                        borderColor: vpnController.loggingEnabled ? Colors.dsPrimarySolid : Colors.dsBorder
+                                        textColor: vpnController.loggingEnabled ? Colors.dsPrimaryText : Colors.dsTextMuted
+
+                                        MouseArea {
+                                            anchors.fill: parent
+                                            cursorShape: Qt.PointingHandCursor
+                                            onClicked: vpnController.loggingEnabled = !vpnController.loggingEnabled
+                                        }
+                                    }
+                                }
+
+                                GridLayout {
+                                    Layout.fillWidth: true
+                                    columns: root.compact ? 2 : 3
+                                    columnSpacing: 8
+                                    rowSpacing: 8
+
+                                    Controls.PrimaryButton {
+                                        Layout.fillWidth: true
+                                        Layout.preferredWidth: 1
+                                        Layout.columnSpan: root.compact ? 2 : 1
+                                        compact: true
+                                        text: "Open Viewer"
+                                        onClicked: logsPopup.open()
+                                    }
+
+                                    Controls.OutlineButton {
+                                        Layout.fillWidth: true
+                                        Layout.preferredWidth: 1
+                                        compact: true
+                                        text: "Copy"
+                                        enabled: vpnController.loggingEnabled && vpnController.recentLogs.length > 0
+                                        onClicked: vpnController.copyLogsToClipboard()
+                                    }
+
+                                    Controls.OutlineButton {
+                                        Layout.fillWidth: true
+                                        Layout.preferredWidth: 1
+                                        compact: true
+                                        text: "Clear"
+                                        enabled: vpnController.recentLogs.length > 0
+                                        onClicked: vpnController.clearLogs()
+                                    }
+                                }
+                            }
                         }
 
                         RowLayout {
@@ -3732,7 +6112,9 @@ ApplicationWindow {
                             Layout.fillWidth: true
                             visible: root.settingsSection === "connection"
                             text: vpnController.tunMode
-                                  ? "TUN mode does not change OS proxy settings. If connect fails, run app with elevated privileges."
+                                  ? (vpnController.isMobile
+                                     ? "Mobile TUN uses VPN service permissions and native runtime bridge setup."
+                                     : "TUN mode does not change OS proxy settings. If connect fails, run app with elevated privileges.")
                                   : (vpnController.useSystemProxy
                                      ? "Recommended: keep this enabled to restore system proxy cleanly after tunnel disconnect."
                                      : "In Clean mode this option is ignored because system proxy remains disabled.")
@@ -3740,6 +6122,262 @@ ApplicationWindow {
                             font.family: FontSystem.contentFontFamily
                             font.pixelSize: 12
                             wrapMode: Text.WordWrap
+                        }
+
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            visible: root.settingsSection === "power"
+                            spacing: root.compact ? 12 : 14
+
+                            PowerSectionCard {
+                                title: "Power Mode"
+                                subtitle: "Choose how GenyConnect balances battery use, stats refresh, reconnect pressure, and visual effects. The tunnel lifecycle stays owned by the existing VPN runtime."
+                                glyph: "\uf0e7"
+                                accentColor: root.powerModeAccent(vpnController.powerMode)
+                                animated: root.powerVisualAnimationsEnabled
+
+                                Rectangle {
+                                    Layout.fillWidth: true
+                                    radius: Metrics.radiusMd
+                                    color: Qt.rgba(root.powerModeAccent(vpnController.powerMode).r,
+                                                   root.powerModeAccent(vpnController.powerMode).g,
+                                                   root.powerModeAccent(vpnController.powerMode).b,
+                                                   Colors.lightMode ? 0.08 : 0.14)
+                                    border.width: 1
+                                    border.color: Qt.rgba(root.powerModeAccent(vpnController.powerMode).r,
+                                                          root.powerModeAccent(vpnController.powerMode).g,
+                                                          root.powerModeAccent(vpnController.powerMode).b,
+                                                          Colors.lightMode ? 0.18 : 0.30)
+                                    implicitHeight: introRow.implicitHeight + 22
+
+                                    RowLayout {
+                                        id: introRow
+                                        anchors.fill: parent
+                                        anchors.margins: 11
+                                        spacing: 10
+
+                                        Text {
+                                            Layout.preferredWidth: 22
+                                            text: root.powerModeGlyph(vpnController.powerMode)
+                                            color: root.powerModeAccent(vpnController.powerMode)
+                                            font.family: root.faSolid
+                                            font.pixelSize: 18
+                                            horizontalAlignment: Text.AlignHCenter
+                                        }
+
+                                        Text {
+                                            Layout.fillWidth: true
+                                            text: root.powerModeSummary(vpnController.powerMode)
+                                            color: Colors.dsText
+                                            font.family: FontSystem.contentFontFamily
+                                            font.pixelSize: Typography.uiBodyLg
+                                            wrapMode: Text.WordWrap
+                                        }
+                                    }
+                                }
+                            }
+
+                            GridLayout {
+                                Layout.fillWidth: true
+                                columns: root.compact ? 1 : 3
+                                columnSpacing: 10
+                                rowSpacing: 10
+
+                                Repeater {
+                                    model: ["Save", "Normal", "High Performance"]
+
+                                    delegate: PowerModeCard {
+                                        required property string modelData
+                                        Layout.fillWidth: true
+                                        compact: root.compact
+                                        animated: root.powerVisualAnimationsEnabled
+                                        modeName: modelData
+                                        glyph: root.powerModeGlyph(modelData)
+                                        accentColor: root.powerModeAccent(modelData)
+                                        summary: root.powerModeSummary(modelData)
+                                        selected: vpnController.powerMode === modelData
+                                        onClicked: vpnController.powerMode = modelData
+                                    }
+                                }
+                            }
+
+                            PowerSectionCard {
+                                title: "Active Policy"
+                                subtitle: "Effective runtime and UI intervals after mode and adaptive tuning."
+                                glyph: "\uf085"
+                                accentColor: Colors.dsPrimarySolid
+                                animated: root.powerVisualAnimationsEnabled
+
+                                GridLayout {
+                                    Layout.fillWidth: true
+                                    columns: root.compact ? 2 : 3
+                                    columnSpacing: 8
+                                    rowSpacing: 8
+
+                                    PowerMetricChip {
+                                        label: "Stats Poll"
+                                        value: root.powerMsText((vpnController.powerPolicy || {}).statsPollIntervalMs || 1000)
+                                        glyph: "\uf201"
+                                        accentColor: Colors.dsPrimarySolid
+                                    }
+
+                                    PowerMetricChip {
+                                        label: "UI Refresh"
+                                        value: root.powerMsText(root.powerUiStatsIntervalMs)
+                                        glyph: "\uf2f1"
+                                        accentColor: Colors.dsSuccess
+                                    }
+
+                                    PowerMetricChip {
+                                        label: "Gauge"
+                                        value: root.powerMsText(root.powerGaugeRefreshIntervalMs)
+                                        glyph: "\uf3fd"
+                                        accentColor: Colors.dsWarning
+                                    }
+
+                                    PowerMetricChip {
+                                        label: "Reconnect"
+                                        value: ((vpnController.powerPolicy || {}).conservativeReconnect === true) ? "Backoff" : "Standard"
+                                        glyph: "\uf2f1"
+                                        accentColor: ((vpnController.powerPolicy || {}).conservativeReconnect === true) ? Colors.dsSuccess : Colors.dsPrimarySolid
+                                    }
+
+                                    PowerMetricChip {
+                                        label: "Visuals"
+                                        value: root.powerVisualAnimationsEnabled ? "Enabled" : "Reduced"
+                                        glyph: "\uf53f"
+                                        accentColor: root.powerVisualAnimationsEnabled ? Colors.dsPrimarySolid : Colors.dsSuccess
+                                    }
+
+                                    PowerMetricChip {
+                                        label: "FakeDNS Sniff"
+                                        value: ((vpnController.powerPolicy || {}).reduceFakeDnsSniffing === true) ? "Reduced" : "Standard"
+                                        glyph: "\uf1eb"
+                                        accentColor: ((vpnController.powerPolicy || {}).reduceFakeDnsSniffing === true) ? Colors.dsSuccess : Colors.dsPrimarySolid
+                                    }
+                                }
+                            }
+
+                            PowerSectionCard {
+                                title: "Transport Power Profile"
+                                subtitle: vpnController.transportPowerDescription(vpnController.currentProfileTransportPowerClass())
+                                glyph: "\uf362"
+                                accentColor: root.powerModeAccent(vpnController.powerMode)
+                                animated: root.powerVisualAnimationsEnabled
+
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 10
+
+                                    PowerStatusBadge {
+                                        status: vpnController.currentProfileTransportPowerClass()
+                                    }
+
+                                    Item { Layout.fillWidth: true }
+
+                                    Text {
+                                        text: "Metadata only"
+                                        color: Colors.dsTextSubtle
+                                        font.family: FontSystem.contentFontFamily
+                                        font.pixelSize: Typography.uiCaption
+                                        elide: Text.ElideRight
+                                    }
+                                }
+                            }
+
+                            PowerSectionCard {
+                                title: "Diagnostics"
+                                subtitle: "Clean counters for wakeups, reconnect pressure, and adaptive state."
+                                glyph: "\uf7d9"
+                                accentColor: Colors.dsPrimarySolid
+                                animated: root.powerVisualAnimationsEnabled
+
+                                GridLayout {
+                                    Layout.fillWidth: true
+                                    columns: root.compact ? 2 : 3
+                                    columnSpacing: 8
+                                    rowSpacing: 8
+
+                                    PowerMetricChip {
+                                        label: "Wakeups"
+                                        value: String(root.powerDiagnosticValue("timerWakeups", 0))
+                                        glyph: "\uf017"
+                                        accentColor: Colors.dsPrimarySolid
+                                    }
+
+                                    PowerMetricChip {
+                                        label: "Reconnects"
+                                        value: String(root.powerDiagnosticValue("reconnectAttempts", 0))
+                                        glyph: "\uf2f1"
+                                        accentColor: Colors.dsWarning
+                                    }
+
+                                    PowerMetricChip {
+                                        label: "Instability"
+                                        value: String(root.powerDiagnosticValue("instabilityCount", 0))
+                                        glyph: "\uf071"
+                                        accentColor: Number(root.powerDiagnosticValue("instabilityCount", 0)) > 0 ? Colors.dsDanger : Colors.dsSuccess
+                                    }
+
+                                    PowerMetricChip {
+                                        label: "Battery"
+                                        value: root.powerBatteryText()
+                                        glyph: "\uf240"
+                                        accentColor: Colors.dsSuccess
+                                    }
+
+                                    PowerMetricChip {
+                                        label: "Network"
+                                        value: root.powerNetworkText()
+                                        glyph: "\uf1eb"
+                                        accentColor: Colors.dsPrimarySolid
+                                    }
+                                }
+                            }
+
+                            PowerSectionCard {
+                                visible: root.powerAdaptiveInputsAvailable()
+                                title: "Adaptive Inputs"
+                                subtitle: "Signals that can tune intervals at runtime without reconnecting."
+                                glyph: "\uf1da"
+                                accentColor: Colors.dsSuccess
+                                animated: root.powerVisualAnimationsEnabled
+
+                                GridLayout {
+                                    Layout.fillWidth: true
+                                    columns: root.compact ? 2 : 3
+                                    columnSpacing: 8
+                                    rowSpacing: 8
+
+                                    PowerMetricChip {
+                                        label: "Screen"
+                                        value: (vpnController.powerDiagnostics || {}).screenOn === false ? "Off" : "On"
+                                        glyph: "\uf108"
+                                        accentColor: (vpnController.powerDiagnostics || {}).screenOn === false ? Colors.dsSuccess : Colors.dsPrimarySolid
+                                    }
+
+                                    PowerMetricChip {
+                                        label: "Charging"
+                                        value: (vpnController.powerDiagnostics || {}).charging === true ? "Yes" : "No"
+                                        glyph: "\uf1e6"
+                                        accentColor: (vpnController.powerDiagnostics || {}).charging === true ? Colors.dsSuccess : Colors.dsTextSubtle
+                                    }
+
+                                    PowerMetricChip {
+                                        label: "Battery Saver"
+                                        value: (vpnController.powerDiagnostics || {}).batterySaver === true ? "On" : "Off"
+                                        glyph: "\uf06c"
+                                        accentColor: (vpnController.powerDiagnostics || {}).batterySaver === true ? Colors.dsSuccess : Colors.dsTextSubtle
+                                    }
+
+                                    PowerMetricChip {
+                                        label: "App State"
+                                        value: (vpnController.powerDiagnostics || {}).backgrounded === true ? "Background" : "Foreground"
+                                        glyph: "\uf2d0"
+                                        accentColor: (vpnController.powerDiagnostics || {}).backgrounded === true ? Colors.dsSuccess : Colors.dsPrimarySolid
+                                    }
+                                }
+                            }
                         }
 
                         RowLayout {
@@ -3761,7 +6399,7 @@ ApplicationWindow {
                         }
 
                         Button {
-                            visible: root.settingsSection === "connection"
+                            visible: root.settingsSection === "connection" && vpnController.supportsSystemProxy
                             isDefault: false
                             text: "Reset System Proxy Now"
                             Layout.fillWidth: true
@@ -4064,12 +6702,13 @@ ApplicationWindow {
                             }
                         }
 
-                        RowLayout {
+                        ColumnLayout {
                             Layout.fillWidth: true
                             visible: root.settingsSection === "routing"
                             spacing: 8
 
                             Text {
+                                Layout.fillWidth: true
                                 text: (root.selectedAppRuleProcesses || []).length > 0
                                       ? ((root.selectedAppRuleProcesses || []).length + " selected")
                                       : (((root.visibleAppRuleSuggestions() || []).length > 0)
@@ -4080,41 +6719,89 @@ ApplicationWindow {
                                 font.pixelSize: 12
                             }
 
-                            Item { Layout.fillWidth: true }
+                            RowLayout {
+                                Layout.fillWidth: true
+                                visible: !root.compact
+                                spacing: 8
 
-                            Controls.Button {
-                                text: "Clear"
-                                implicitWidth: 62
-                                implicitHeight: 30
-                                enabled: (root.selectedAppRuleProcesses || []).length > 0
-                                onClicked: root.clearAppSuggestionSelection()
+                                Item { Layout.fillWidth: true }
+
+                                Controls.Button {
+                                    text: "Clear"
+                                    implicitWidth: 62
+                                    implicitHeight: 30
+                                    enabled: (root.selectedAppRuleProcesses || []).length > 0
+                                    onClicked: root.clearAppSuggestionSelection()
+                                }
+
+                                Controls.Button {
+                                    text: "Direct"
+                                    implicitWidth: 72
+                                    implicitHeight: 30
+                                    enabled: vpnController.processRoutingSupported
+                                             && (root.selectedAppRuleProcesses || []).length > 0
+                                    onClicked: root.appendSelectedAppRules("direct")
+                                }
+
+                                Controls.Button {
+                                    text: "Tunnel"
+                                    implicitWidth: 72
+                                    implicitHeight: 30
+                                    enabled: vpnController.processRoutingSupported
+                                             && (root.selectedAppRuleProcesses || []).length > 0
+                                    onClicked: root.appendSelectedAppRules("proxy")
+                                }
+
+                                Controls.Button {
+                                    text: "Block"
+                                    implicitWidth: 72
+                                    implicitHeight: 30
+                                    enabled: vpnController.processRoutingSupported
+                                             && (root.selectedAppRuleProcesses || []).length > 0
+                                    onClicked: root.appendSelectedAppRules("block")
+                                }
                             }
 
-                            Controls.Button {
-                                text: "Direct"
-                                implicitWidth: 72
-                                implicitHeight: 30
-                                enabled: vpnController.processRoutingSupported
-                                         && (root.selectedAppRuleProcesses || []).length > 0
-                                onClicked: root.appendSelectedAppRules("direct")
-                            }
+                            Flow {
+                                id: routingRuleActionFlow
+                                Layout.fillWidth: true
+                                visible: root.compact
+                                spacing: 6
 
-                            Controls.Button {
-                                text: "Tunnel"
-                                implicitWidth: 72
-                                implicitHeight: 30
-                                enabled: vpnController.processRoutingSupported
-                                         && (root.selectedAppRuleProcesses || []).length > 0
-                                onClicked: root.appendSelectedAppRules("proxy")
-                            }
+                                Controls.Button {
+                                    width: Math.max(66, Math.floor((routingRuleActionFlow.width - (routingRuleActionFlow.spacing * 3)) / 4))
+                                    implicitHeight: 30
+                                    text: "Clear"
+                                    enabled: (root.selectedAppRuleProcesses || []).length > 0
+                                    onClicked: root.clearAppSuggestionSelection()
+                                }
 
-                            Controls.Button {
-                                text: "Block"
-                                implicitWidth: 72
-                                implicitHeight: 30
-                                enabled: vpnController.processRoutingSupported
-                                         && (root.selectedAppRuleProcesses || []).length > 0
-                                onClicked: root.appendSelectedAppRules("block")
+                                Controls.Button {
+                                    width: Math.max(66, Math.floor((routingRuleActionFlow.width - (routingRuleActionFlow.spacing * 3)) / 4))
+                                    implicitHeight: 30
+                                    text: "Direct"
+                                    enabled: vpnController.processRoutingSupported
+                                             && (root.selectedAppRuleProcesses || []).length > 0
+                                    onClicked: root.appendSelectedAppRules("direct")
+                                }
+
+                                Controls.Button {
+                                    width: Math.max(66, Math.floor((routingRuleActionFlow.width - (routingRuleActionFlow.spacing * 3)) / 4))
+                                    implicitHeight: 30
+                                    text: "Tunnel"
+                                    enabled: vpnController.processRoutingSupported
+                                             && (root.selectedAppRuleProcesses || []).length > 0
+                                    onClicked: root.appendSelectedAppRules("proxy")
+                                }
+
+                                Controls.Button {
+                                    width: Math.max(66, Math.floor((routingRuleActionFlow.width - (routingRuleActionFlow.spacing * 3)) / 4))
+                                    implicitHeight: 30
+                                    text: "Block"
+                                    enabled: vpnController.processRoutingSupported
+                                             && (root.selectedAppRuleProcesses || []).length > 0
+                                    onClicked: root.appendSelectedAppRules("block")
+                                }
                             }
                         }
 
@@ -4323,6 +7010,78 @@ ApplicationWindow {
                         }
                     }
 
+                }
+            }
+        }
+    }
+
+    Popup {
+        id: walletPickerPopup
+        modal: true
+        focus: true
+        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+        width: root.sheetWidth(420)
+        height: root.compact
+                ? Math.min(root.height, walletPickerColumn.implicitHeight + 52 + Math.max(10, root.safeBottomInset))
+                : walletPickerColumn.implicitHeight + 52
+        x: (root.width - width) * 0.5
+        y: root.compact ? Math.max(0, root.height - height - Math.max(6, root.safeBottomInset * 0.4)) : root.drawerY(height)
+        padding: 0
+
+        background: Rectangle {
+            radius: root.compact ? 20 : 24
+            color: root.themeColorToken("mainHex_f8fbff", "mainHex_090b14")
+            border.width: 1
+            border.color: root.themeColorToken("mainHex_d8dde8", "mainHex_30435d")
+        }
+
+        contentItem: Item {
+            anchors.fill: parent
+
+            ColumnLayout {
+                id: walletPickerColumn
+                anchors.fill: parent
+                anchors.leftMargin: 14
+                anchors.rightMargin: 14
+                anchors.topMargin: 14
+                anchors.bottomMargin: 14 + (root.compact ? Math.max(8, root.safeBottomInset) : 0)
+                spacing: 10
+
+                Text {
+                    text: "Choose Wallet"
+                    color: root.themeColorToken("mainHex_2a3240", "mainHex_d7e4f6")
+                    font.family: FontSystem.getContentFontBold.name
+                    font.pixelSize: 18
+                    font.bold: true
+                }
+
+                Text {
+                    Layout.fillWidth: true
+                    text: "Some apps support direct transfer links, while others (like Uniswap) open swap/buy flow."
+                    color: root.themeColorToken("mainHex_667385", "mainHex_9bb0cb")
+                    font.family: FontSystem.contentFontFamily
+                    font.pixelSize: 12
+                    wrapMode: Text.WordWrap
+                }
+
+                Repeater {
+                    model: root.donationWalletTargets
+                    delegate: Controls.Button {
+                        required property var modelData
+                        visible: root.donationTargetVisible(modelData)
+                        Layout.fillWidth: true
+                        enabled: true
+                        text: modelData.label || "Wallet"
+                        isDefault: modelData.id === "system"
+                        onClicked: root.openDonationViaTarget(modelData)
+                    }
+                }
+
+                Controls.Button {
+                    Layout.fillWidth: true
+                    isDefault: false
+                    text: "Cancel"
+                    onClicked: walletPickerPopup.close()
                 }
             }
         }
@@ -4703,16 +7462,24 @@ ApplicationWindow {
             anchors.fill: parent
             clip: true
             contentWidth: width
-            readonly property int panelPadding: root.compact ? 10 : 14
-            contentHeight: usagePopupContent.implicitHeight + (panelPadding * 2)
+            readonly property int panelPadding: root.compact ? 12 : 14
+            readonly property int bottomPadding: root.compact ? (root.safeBottomInset + 26) : panelPadding
+            contentHeight: usagePopupContent.implicitHeight + panelPadding + bottomPadding
             boundsBehavior: Flickable.StopAtBounds
+
+            WheelHandler {
+                acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
+                onWheel: function(event) {
+                    root.scrollFlickByWheel(usagePopupFlick, event)
+                }
+            }
 
             ColumnLayout {
                 id: usagePopupContent
                 x: usagePopupFlick.panelPadding
                 y: usagePopupFlick.panelPadding
                 width: usagePopupFlick.width - (usagePopupFlick.panelPadding * 2)
-                spacing: 8
+                spacing: 10
 
                 Rectangle {
                     Layout.alignment: Qt.AlignHCenter
@@ -4745,7 +7512,7 @@ ApplicationWindow {
                         color: root.themeColorToken("mainHex_1f2530", "mainHex_d8e1f0")
                         font.family: FontSystem.getContentFontBold.name
                         font.weight: Font.Bold
-                        font.pixelSize: 23
+                        font.pixelSize: 21
                     }
 
                     Item { Layout.fillWidth: true }
@@ -4761,90 +7528,61 @@ ApplicationWindow {
                     }
                 }
 
-                GridLayout {
+                Text {
                     Layout.fillWidth: true
-                    columns: 3
-                    columnSpacing: 8
-                    rowSpacing: 8
+                    text: "Per-profile traffic overview and recent usage history."
+                    color: root.themeColorToken("mainHex_6f7f95", "mainHex_9eb2cb")
+                    font.family: FontSystem.contentFontFamily
+                    font.pixelSize: 12
+                    wrapMode: Text.WordWrap
+                }
 
-                    Repeater {
-                        model: [
-                            { "label": "Day", "value": vpnController.currentProfileUsageDay },
-                            { "label": "Month", "value": vpnController.currentProfileUsageMonth },
-                            { "label": "Total", "value": (vpnController.currentProfileUsageSummary().totalText || "0 B") }
-                        ]
+                Rectangle {
+                    Layout.fillWidth: true
+                    radius: Metrics.radiusLg
+                    color: Colors.dsSurfaceSoft
+                    border.width: 1
+                    border.color: Colors.dsBorderSoft
+                    implicitHeight: summaryGrid.implicitHeight + 14
 
-                        delegate: Rectangle {
-                            required property var modelData
-                            Layout.fillWidth: true
-                            Layout.preferredHeight: 58
-                            radius: 10
-                            color: root.themeColorToken("mainHex_f3f8ff", "mainHex_22324a")
-                            border.width: 1
-                            border.color: root.themeColorToken("mainHex_d7e4f6", "mainHex_39526f")
+                    GridLayout {
+                        id: summaryGrid
+                        anchors.fill: parent
+                        anchors.margins: 7
+                        columns: root.compact ? 2 : 3
+                        columnSpacing: root.compact ? 6 : 8
+                        rowSpacing: root.compact ? 6 : 8
 
-                            Column {
-                                anchors.centerIn: parent
-                                spacing: 2
-                                Text {
-                                    anchors.horizontalCenter: parent.horizontalCenter
-                                    text: modelData.label
-                                    color: root.themeColorToken("mainHex_7b8798", "mainHex_9ab0ca")
-                                    font.family: FontSystem.contentFontFamily
-                                    font.pixelSize: 11
-                                }
-                                Controls.NumberFlowText {
-                                    anchors.horizontalCenter: parent.horizontalCenter
-                                    text: modelData.value
-                                    color: root.themeColorToken("mainHex_1f2937", "mainHex_edf4ff")
-                                    fontSize: 15
-                                    bold: true
-                                }
+                        Repeater {
+                            model: [
+                                { "label": "Day", "value": vpnController.currentProfileUsageDay, "icon": "\uf073" },
+                                { "label": "Month", "value": vpnController.currentProfileUsageMonth, "icon": "\uf783" },
+                                { "label": "Total", "value": (vpnController.currentProfileUsageSummary().totalText || "0 B"), "icon": root.iconUsage }
+                            ]
+
+                            delegate: Controls.StatCard {
+                                required property var modelData
+                                required property int index
+                                Layout.fillWidth: true
+                                Layout.columnSpan: root.compact && index === 2 ? 2 : 1
+                                compact: true
+                                label: modelData.label
+                                value: modelData.value
                             }
                         }
                     }
                 }
 
-                RowLayout {
+                Controls.SegmentedSelector {
                     Layout.fillWidth: true
-                    spacing: 8
-
-                    Repeater {
-                        model: [
-                            { "key": "current", "label": "Current Profile" },
-                            { "key": "recent", "label": "Recent Sessions" }
-                        ]
-
-                        delegate: Rectangle {
-                            required property var modelData
-                            Layout.fillWidth: true
-                            Layout.preferredHeight: 32
-                            radius: 8
-                            color: root.usagePanelTab === modelData.key
-                                   ? root.themeColorToken("mainHex_2f6ff1", "mainHex_3a7bff")
-                                   : root.themeColorToken("mainHex_eff4fb", "mainHex_151c32")
-                            border.width: 1
-                            border.color: root.usagePanelTab === modelData.key
-                                          ? root.themeColorToken("mainHex_2f6ff1", "mainHex_3a7bff")
-                                          : root.themeColorToken("mainHex_d7e2f0", "mainHex_395170")
-
-                            Text {
-                                anchors.centerIn: parent
-                                text: modelData.label
-                                color: root.usagePanelTab === modelData.key
-                                       ? Colors.mainHex_ffffff
-                                       : root.themeColorToken("mainHex_425874", "mainHex_b6c8df")
-                                font.family: FontSystem.getContentFontBold.name
-                                font.pixelSize: 12
-                                font.bold: true
-                            }
-
-                            MouseArea {
-                                anchors.fill: parent
-                                cursorShape: Qt.PointingHandCursor
-                                onClicked: root.usagePanelTab = modelData.key
-                            }
-                        }
+                    compact: true
+                    model: [
+                        { "key": "current", "label": "Current Profile" },
+                        { "key": "recent", "label": "Recent Sessions" }
+                    ]
+                    currentKey: root.usagePanelTab
+                    onActivated: function(key) {
+                        root.usagePanelTab = key
                     }
                 }
 
@@ -4862,8 +7600,8 @@ ApplicationWindow {
                         GridLayout {
                             Layout.fillWidth: true
                             columns: root.compact ? 2 : 3
-                            columnSpacing: 8
-                            rowSpacing: 8
+                            columnSpacing: root.compact ? 6 : 8
+                            rowSpacing: root.compact ? 6 : 8
 
                             Repeater {
                                 model: [
@@ -4872,133 +7610,99 @@ ApplicationWindow {
                                     { "label": "Latest", "value": (vpnController.latestRecordedUsage || "0 B") }
                                 ]
 
-                                delegate: Rectangle {
+                                delegate: Controls.StatCard {
                                     required property var modelData
+                                    required property int index
                                     Layout.fillWidth: true
-                                    Layout.preferredHeight: 52
-                                    radius: 8
-                                    color: root.themeColorToken("mainHex_f3f8ff", "mainHex_22324a")
-                                    border.width: 1
-                                    border.color: root.themeColorToken("mainHex_d7e4f6", "mainHex_39526f")
-
-                                    Column {
-                                        anchors.centerIn: parent
-                                        spacing: 1
-                                        Text {
-                                            anchors.horizontalCenter: parent.horizontalCenter
-                                            text: modelData.label
-                                            color: root.themeColorToken("mainHex_7b8798", "mainHex_9ab0ca")
-                                            font.family: FontSystem.contentFontFamily
-                                            font.pixelSize: 10
-                                        }
-                                        Controls.NumberFlowText {
-                                            anchors.horizontalCenter: parent.horizontalCenter
-                                            text: modelData.value
-                                            color: root.themeColorToken("mainHex_1f2937", "mainHex_edf4ff")
-                                            fontSize: 13
-                                            bold: true
-                                        }
-                                    }
+                                    Layout.columnSpan: root.compact && index === 2 ? 2 : 1
+                                    compact: true
+                                    label: modelData.label
+                                    value: modelData.value
                                 }
                             }
                         }
 
-                        RowLayout {
+                        Controls.SegmentedSelector {
                             Layout.fillWidth: true
-                            spacing: 6
-
-                            Repeater {
-                                model: ["hour", "day", "week", "month"]
-
-                                delegate: Rectangle {
-                                    required property var modelData
-                                    Layout.fillWidth: true
-                                    Layout.preferredHeight: 30
-                                    radius: 7
-                                    color: root.usageHistoryPeriod === modelData
-                                           ? root.themeColorToken("mainHex_2f6ff1", "mainHex_3a7bff")
-                                           : root.themeColorToken("mainHex_eff4fb", "mainHex_151c32")
-                                    border.width: 1
-                                    border.color: root.usageHistoryPeriod === modelData
-                                                  ? root.themeColorToken("mainHex_2f6ff1", "mainHex_3a7bff")
-                                                  : root.themeColorToken("mainHex_d5dfed", "mainHex_395170")
-
-                                    Text {
-                                        anchors.centerIn: parent
-                                        text: modelData.charAt(0).toUpperCase() + modelData.slice(1)
-                                        color: root.usageHistoryPeriod === modelData
-                                               ? Colors.mainHex_ffffff
-                                               : root.themeColorToken("mainHex_4b5d75", "mainHex_b6c8df")
-                                        font.family: FontSystem.contentFontFamily
-                                        font.pixelSize: 11
-                                        font.bold: root.usageHistoryPeriod === modelData
-                                    }
-
-                                    MouseArea {
-                                        anchors.fill: parent
-                                        cursorShape: Qt.PointingHandCursor
-                                        onClicked: {
-                                            root.usageHistoryPeriod = modelData
-                                            root.usageRefreshNonce += 1
-                                        }
-                                    }
-                                }
+                            compact: true
+                            model: ["hour", "day", "week", "month"]
+                            currentKey: root.usageHistoryPeriod
+                            onActivated: function(key) {
+                                root.usageHistoryPeriod = key
+                                root.usageRefreshNonce += 1
                             }
                         }
 
                         ListView {
                             id: usageHistoryListPopup
                             Layout.fillWidth: true
-                            Layout.preferredHeight: count > 0 ? Math.min(176, Math.max(84, count * 44)) : 52
+                            Layout.preferredHeight: count > 0 ? Math.min(260, Math.max(104, count * 48)) : 72
                             clip: true
                             spacing: 6
                             model: root.currentUsageHistoryModel()
 
                             delegate: Rectangle {
                                 required property var modelData
+                                required property int index
                                 width: ListView.view.width
-                                height: 42
+                                height: root.compact ? 62 : 48
                                 radius: 8
                                 color: root.themeColorToken("mainHex_f7f9fd", "mainHex_22324a")
                                 border.width: 1
                                 border.color: root.themeColorToken("mainHex_dbe3ef", "mainHex_3a5470")
 
-                                RowLayout {
+                                ColumnLayout {
                                     anchors.fill: parent
-                                    anchors.leftMargin: 10
-                                    anchors.rightMargin: 10
-                                    spacing: 8
+                                    anchors.leftMargin: root.compact ? 8 : 10
+                                    anchors.rightMargin: root.compact ? 8 : 10
+                                    anchors.topMargin: root.compact ? 5 : 0
+                                    anchors.bottomMargin: root.compact ? 5 : 0
+                                    spacing: root.compact ? 2 : 0
 
-                                    Text {
-                                        Layout.preferredWidth: root.compact ? 88 : 106
-                                        text: modelData.key || ""
-                                        color: root.themeColorToken("mainHex_334155", "mainHex_d2def0")
-                                        font.family: FontSystem.contentFontFamily
-                                        font.pixelSize: 12
-                                        elide: Text.ElideRight
-                                    }
-                                    Text {
+                                    RowLayout {
                                         Layout.fillWidth: true
-                                        text: "Down " + (modelData.rxText || "0 B")
-                                        color: root.themeColorToken("mainHex_64748b", "mainHex_a4b6cd")
-                                        font.family: FontSystem.contentFontFamily
-                                        font.pixelSize: 12
-                                        elide: Text.ElideRight
+                                        spacing: 8
+
+                                        Text {
+                                            Layout.fillWidth: true
+                                            text: modelData.key || ""
+                                            color: root.themeColorToken("mainHex_334155", "mainHex_d2def0")
+                                            font.family: FontSystem.contentFontFamily
+                                            font.pixelSize: 12
+                                            elide: Text.ElideRight
+                                        }
+
+                                        Text {
+                                            text: modelData.totalText || "0 B"
+                                            color: root.themeColor(root.brandBlue, Colors.mainHex_7fb0ff)
+                                            font.family: FontSystem.getContentFontBold.name
+                                            font.pixelSize: 12
+                                            font.bold: true
+                                        }
                                     }
-                                    Text {
+
+                                    RowLayout {
                                         Layout.fillWidth: true
-                                        text: "Up " + (modelData.txText || "0 B")
-                                        color: root.themeColorToken("mainHex_64748b", "mainHex_a4b6cd")
-                                        font.family: FontSystem.contentFontFamily
-                                        font.pixelSize: 12
-                                        elide: Text.ElideRight
-                                    }
-                                    Text {
-                                        text: modelData.totalText || "0 B"
-                                        color: root.themeColor(root.brandBlue, Colors.mainHex_7fb0ff)
-                                        font.family: FontSystem.getContentFontBold.name
-                                        font.pixelSize: 12
-                                        font.bold: true
+                                        spacing: 8
+
+                                        Text {
+                                            Layout.fillWidth: true
+                                            text: "Down " + (modelData.rxText || "0 B")
+                                            color: root.themeColorToken("mainHex_64748b", "mainHex_a4b6cd")
+                                            font.family: FontSystem.contentFontFamily
+                                            font.pixelSize: 11
+                                            elide: Text.ElideRight
+                                        }
+
+                                        Text {
+                                            Layout.fillWidth: true
+                                            text: "Up " + (modelData.txText || "0 B")
+                                            color: root.themeColorToken("mainHex_64748b", "mainHex_a4b6cd")
+                                            font.family: FontSystem.contentFontFamily
+                                            font.pixelSize: 11
+                                            elide: Text.ElideRight
+                                            horizontalAlignment: Text.AlignRight
+                                        }
                                     }
                                 }
                             }
@@ -5031,15 +7735,16 @@ ApplicationWindow {
                         ListView {
                             id: usageSessionsListPopup
                             Layout.fillWidth: true
-                            Layout.preferredHeight: usageSessionsListPopup.count > 0 ? 286 : 90
+                            Layout.preferredHeight: usageSessionsListPopup.count > 0 ? Math.min(300, Math.max(110, usageSessionsListPopup.count * 46)) : 90
                             clip: true
                             spacing: 6
                             model: root.currentUsageSessionsModel()
 
                             delegate: Rectangle {
                                 required property var modelData
+                                required property int index
                                 width: ListView.view.width
-                                height: 40
+                                height: 44
                                 radius: 8
                                 color: root.themeColorToken("mainHex_f7f9fd", "mainHex_22324a")
                                 border.width: 1
@@ -5085,34 +7790,37 @@ ApplicationWindow {
                     }
                 }
 
-                RowLayout {
+                GridLayout {
                     Layout.fillWidth: true
-                    spacing: 8
+                    columns: root.compact ? 2 : 3
+                    rowSpacing: 8
+                    columnSpacing: 8
 
-                    Controls.Button {
+                    Controls.PrimaryButton {
                         text: "Refresh"
-                        implicitWidth: 86
-                        implicitHeight: 34
+                        compact: true
                         Layout.fillWidth: true
+                        Layout.preferredWidth: 1
+                        Layout.columnSpan: root.compact ? 2 : 1
                         onClicked: root.usageRefreshNonce += 1
                     }
 
-                    Controls.Button {
+                    Controls.OutlineButton {
                         text: "Clear Current"
-                        implicitWidth: 106
-                        implicitHeight: 34
+                        compact: true
                         Layout.fillWidth: true
+                        Layout.preferredWidth: 1
                         onClicked: {
                             vpnController.clearCurrentProfileUsage()
                             root.usageRefreshNonce += 1
                         }
                     }
 
-                    Controls.Button {
+                    Controls.OutlineButton {
                         text: "Clear All"
-                        implicitWidth: 96
-                        implicitHeight: 34
+                        compact: true
                         Layout.fillWidth: true
+                        Layout.preferredWidth: 1
                         onClicked: {
                             vpnController.clearAllProfileUsage()
                             root.usageRefreshNonce += 1
@@ -5182,14 +7890,34 @@ ApplicationWindow {
                 spacing: 8
 
                 Text {
-                    Layout.fillWidth: true
-                    text: "Connection History"
+                    text: "Runtime Logs"
                     font.family: FontSystem.getContentFontBold.name
                     font.weight: Font.Bold
                     font.pixelSize: 20
                     color: root.themeColorToken("mainHex_1f2530", "mainHex_d8e1f0")
                     elide: Text.ElideRight
                 }
+
+                Rectangle {
+                    Layout.preferredHeight: 24
+                    Layout.preferredWidth: logModeLabel.implicitWidth + 16
+                    radius: 12
+                    color: vpnController.loggingEnabled ? Colors.dsPrimaryTint : Colors.dsSurface
+                    border.width: 1
+                    border.color: vpnController.loggingEnabled ? Colors.dsPrimarySolid : Colors.dsBorder
+
+                    Text {
+                        id: logModeLabel
+                        anchors.centerIn: parent
+                        text: vpnController.loggingEnabled ? "Live" : "Disabled"
+                        color: vpnController.loggingEnabled ? Colors.dsPrimarySolid : Colors.dsTextMuted
+                        font.family: FontSystem.getContentFontBold.name
+                        font.pixelSize: Typography.uiBodySm
+                        font.bold: true
+                    }
+                }
+
+                Item { Layout.fillWidth: true }
 
                 Controls.CircleIconButton {
                     diameter: 32
@@ -5278,10 +8006,10 @@ ApplicationWindow {
                 TextArea {
                     id: logsTextArea
                     readOnly: true
-                    wrapMode: TextEdit.NoWrap
+                    wrapMode: TextEdit.WrapAnywhere
                     selectByMouse: true
                     text: vpnController.recentLogs.join("\n")
-                    font.family: FontSystem.contentFontFamily
+                    font.family: "monospace"
                     font.pixelSize: 12
                     color: root.themeColorToken("mainHex_1f2530", "mainHex_e7eefb")
                     background: Rectangle {
@@ -5345,7 +8073,8 @@ ApplicationWindow {
             clip: true
             contentWidth: width
             readonly property int panelPadding: root.compact ? 10 : 14
-            contentHeight: speedTestPopupContent.implicitHeight + (panelPadding * 2)
+            readonly property int bottomInsetPadding: root.compact ? (root.safeBottomInset + 12) : panelPadding
+            contentHeight: speedTestPopupContent.implicitHeight + panelPadding + bottomInsetPadding
             boundsBehavior: Flickable.StopAtBounds
 
             ColumnLayout {
@@ -5434,10 +8163,12 @@ ApplicationWindow {
                     unit: root.speedGaugeUnitText()
                     darkMode: root.darkThemeEnabled
                     useOwnBackground: false
-                    particlesEnabled: vpnController.speedTestRunning
-                    particleIntensity: vpnController.speedTestRunning ? 1.0 : 0.22
-                    particleCount: root.compact ? 54 : 72
-                    sparkCount: root.compact ? 10 : 14
+                    animationsEnabled: root.powerVisualAnimationsEnabled
+                    effectsEnabled: root.powerEffectsEnabled
+                    particlesEnabled: root.powerParticlesEnabled && vpnController.speedTestRunning
+                    particleIntensity: (root.powerParticlesEnabled && vpnController.speedTestRunning) ? 1.0 : 0.0
+                    particleCount: root.powerParticlesEnabled ? (root.compact ? 54 : 72) : 0
+                    sparkCount: root.powerParticlesEnabled ? (root.compact ? 10 : 14) : 0
                 }
             }
 
@@ -5519,49 +8250,58 @@ ApplicationWindow {
                 }
             }
 
-            RowLayout {
+            ColumnLayout {
                 Layout.fillWidth: true
-                Layout.alignment: Qt.AlignHCenter
-                spacing: 8
+                spacing: 6
 
                 Text {
+                    Layout.alignment: Qt.AlignHCenter
                     text: "Gauge Range"
                     color: root.themeColorToken("mainHex_64748b", "mainHex_9db2cc")
                     font.family: FontSystem.contentFontFamily
                     font.pixelSize: 12
                 }
 
-                Repeater {
-                    model: ["Small", "Medium", "Large", "Auto"]
+                Flow {
+                    id: speedRangeFlow
+                    Layout.fillWidth: true
+                    Layout.alignment: Qt.AlignHCenter
+                    spacing: 8
 
-                    delegate: Rectangle {
-                        required property string modelData
-                        Layout.preferredWidth: modelData === "Medium" ? 72 : 62
-                        Layout.preferredHeight: 26
-                        radius: 8
-                        color: root.speedGaugeRangePreset === modelData
-                               ? root.themeColorToken("mainHex_2f6ff1", "mainHex_3a7bff")
-                               : root.themeColorToken("mainHex_f5f8fc", "mainHex_151c32")
-                        border.width: 0
-                        border.color: root.speedGaugeRangePreset === modelData
-                                      ? root.themeColorToken("mainHex_2f6ff1", "mainHex_3a7bff")
-                                      : root.themeColorToken("mainHex_dbe3ef", "mainHex_151c32")
+                    Repeater {
+                        model: ["Small", "Medium", "Large", "Auto"]
 
-                        Text {
-                            anchors.centerIn: parent
-                            text: modelData
+                        delegate: Rectangle {
+                            required property string modelData
+                            width: root.compact
+                                   ? (modelData === "Medium" ? 66 : 58)
+                                   : (modelData === "Medium" ? 72 : 62)
+                            height: 26
+                            radius: 8
                             color: root.speedGaugeRangePreset === modelData
-                                   ? Colors.mainHex_ffffff
-                                   : root.themeColorToken("mainHex_495971", "mainHex_b7cae2")
-                            font.family: FontSystem.contentFontFamily
-                            font.pixelSize: 11
-                            font.bold: root.speedGaugeRangePreset === modelData
-                        }
+                                   ? root.themeColorToken("mainHex_2f6ff1", "mainHex_3a7bff")
+                                   : root.themeColorToken("mainHex_f5f8fc", "mainHex_151c32")
+                            border.width: 0
+                            border.color: root.speedGaugeRangePreset === modelData
+                                          ? root.themeColorToken("mainHex_2f6ff1", "mainHex_3a7bff")
+                                          : root.themeColorToken("mainHex_dbe3ef", "mainHex_151c32")
 
-                        MouseArea {
-                            anchors.fill: parent
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: root.speedGaugeRangePreset = modelData
+                            Text {
+                                anchors.centerIn: parent
+                                text: modelData
+                                color: root.speedGaugeRangePreset === modelData
+                                       ? Colors.mainHex_ffffff
+                                       : root.themeColorToken("mainHex_495971", "mainHex_b7cae2")
+                                font.family: FontSystem.contentFontFamily
+                                font.pixelSize: 11
+                                font.bold: root.speedGaugeRangePreset === modelData
+                            }
+
+                            MouseArea {
+                                anchors.fill: parent
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: root.speedGaugeRangePreset = modelData
+                            }
                         }
                     }
                 }
@@ -5615,21 +8355,26 @@ ApplicationWindow {
                 spacing: 8
 
                 Text {
+                    Layout.fillWidth: true
                     text: "Route stability " + ((vpnController.speedTestRunning || vpnController.speedTestState === "Completed")
                                                 ? (vpnController.speedTestRouteStabilityPct + "%")
                                                 : "--")
                     color: root.themeColorToken("mainHex_5d6d84", "mainHex_9db2cc")
                     font.family: FontSystem.contentFontFamily
                     font.pixelSize: 11
+                    elide: Text.ElideRight
+                    maximumLineCount: 1
                 }
 
-                Item { Layout.fillWidth: true }
-
                 Text {
+                    Layout.preferredWidth: root.compact ? 102 : implicitWidth
+                    horizontalAlignment: Text.AlignRight
                     text: "Overall " + root.speedOverallDisplayText()
                     color: root.themeColorToken("mainHex_5d6d84", "mainHex_9db2cc")
                     font.family: FontSystem.contentFontFamily
                     font.pixelSize: 11
+                    elide: Text.ElideRight
+                    maximumLineCount: 1
             }
             }
 
@@ -5859,9 +8604,9 @@ ApplicationWindow {
                      ? Popup.NoAutoClose
                      : (Popup.CloseOnEscape | Popup.CloseOnPressOutside)
         width: root.sheetWidth(430)
-        height: root.sheetHeight(660)
+        height: root.compact ? root.height : root.sheetHeight(660)
         x: (root.width - width) * 0.5
-        y: root.drawerY(height)
+        y: root.compact ? 0 : root.drawerY(height)
         padding: 0
 
         onAboutToShow: {
@@ -5882,7 +8627,7 @@ ApplicationWindow {
             NumberAnimation {
                 property: "y"
                 from: root.height
-                to: root.drawerY(importPopup.height)
+                to: root.compact ? 0 : root.drawerY(importPopup.height)
                 duration: Animations.fast * 1.15
                 easing.type: Easing.OutCubic
             }
@@ -5928,7 +8673,10 @@ ApplicationWindow {
 
         contentItem: ColumnLayout {
             anchors.fill: parent
-            anchors.margins: root.compact ? 12 : 16
+            anchors.leftMargin: root.compact ? 12 : 16
+            anchors.rightMargin: root.compact ? 12 : 16
+            anchors.topMargin: root.compact ? 12 : 16
+            anchors.bottomMargin: root.compact ? (20 + root.safeBottomInset) : 16
             spacing: 10
 
             Rectangle {
@@ -5969,7 +8717,7 @@ ApplicationWindow {
 
             Text {
                 Layout.fillWidth: true
-                text: "Paste vmess/vless, batch text, base64 payload, or an https subscription URL."
+                text: "Paste vmess/vless links, batch text, base64 payload, or an https subscription URL. Multi-line import is supported."
                 color: root.themeColorToken("mainHex_6f7f95", "mainHex_9eb2cb")
                 font.family: FontSystem.contentFontFamily
                 font.pixelSize: 12
@@ -6493,10 +9241,12 @@ ApplicationWindow {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 Layout.preferredHeight: 128
+                Layout.minimumHeight: root.compact ? 180 : 128
                 fillColor: root.themeColorToken("mainHex_f8fbff", "mainHex_8a18283d")
                 strokeColor: root.themeColorToken("mainHex_d8e2f0", "mainHex_3f587a")
                 focusColor: root.themeColorToken("mainHex_8bb8ff", "mainHex_6ba0ff")
-                placeholderText: "Paste vmess/vless, batch list, base64 subscription payload, or https subscription URL"
+                placeholderText: "Paste links/configs here (multi-line supported)"
+                wrapMode: TextEdit.WrapAtWordBoundaryOrAnywhere
                 text: root.importDraft
                 onTextChanged: root.importDraft = text
             }
@@ -6545,21 +9295,24 @@ ApplicationWindow {
                 Layout.fillWidth: true
 
                 Controls.Button {
-                    implicitWidth: 104
+                    implicitWidth: root.compact ? 96 : 104
                     isDefault: false
                     text: vpnController.subscriptionBusy ? "Working..." : "Close"
-                    Layout.fillWidth: false
+                    Layout.fillWidth: root.compact
                     enabled: !vpnController.subscriptionBusy
                     onClicked: importPopup.close()
                 }
 
-                Item { Layout.fillWidth: true }
+                Item {
+                    Layout.fillWidth: !root.compact
+                    Layout.preferredWidth: root.compact ? 0 : 1
+                }
 
                 Controls.Button {
-                    implicitWidth: 218
+                    implicitWidth: root.compact ? 140 : 218
                     isDefault: true
                     text: vpnController.subscriptionBusy ? "Please wait..." : "Import"
-                    Layout.fillWidth: false
+                    Layout.fillWidth: true
                     enabled: !vpnController.subscriptionBusy && importPopup.hasExplicitGroup
                     onClicked: {
                         const raw = importTextArea.text.trim()
@@ -6898,7 +9651,7 @@ ApplicationWindow {
                             GradientStop { position: 0.0; color: Colors.mainHex_2f6ff1 }
                             GradientStop { position: 1.0; color: Colors.mainHex_2d65d8 }
                         }
-                        opacity: (vpnController.currentProfileIndex >= 0 || vpnController.connected || vpnController.busy) ? 1.0 : 0.55
+                        opacity: (vpnController.currentProfileIndex >= 0 || vpnController.connected || vpnController.busy) ? 1.0 : 0.82
                         scale: connectMouse.pressed ? 0.985 : 1.0
                         Behavior on scale { NumberAnimation { duration: 90 } }
                         Behavior on opacity { NumberAnimation { duration: 140 } }
@@ -6935,9 +9688,9 @@ ApplicationWindow {
                         MouseArea {
                             id: connectMouse
                             anchors.fill: parent
-                            enabled: vpnController.currentProfileIndex >= 0 || vpnController.connected || vpnController.busy
-                            cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
-                            onClicked: vpnController.toggleConnection()
+                            enabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: root.handleConnectAction()
                         }
                     }
                 }
@@ -7074,6 +9827,7 @@ ApplicationWindow {
                                     color: root.themeColorToken("mainHex_3f5e93", "mainHex_c7dbf8")
                                     fontSize: Typography.t3
                                     bold: true
+                                    animated: root.powerVisualAnimationsEnabled
                                 }
                             }
 
@@ -7083,6 +9837,7 @@ ApplicationWindow {
                                 text: downloadUsageText()
                                 color: root.themeColorToken("mainHex_1f2b3d", "mainHex_edf4ff")
                                 fontSize: Typography.h3
+                                animated: root.powerVisualAnimationsEnabled
                             }
 
                             Item { Layout.preferredWidth: 15 }
@@ -7125,6 +9880,7 @@ ApplicationWindow {
                                     color: root.themeColorToken("mainHex_2e7b58", "mainHex_bee9d3")
                                     fontSize: Typography.t3
                                     bold: true
+                                    animated: root.powerVisualAnimationsEnabled
                                 }
                             }
 
@@ -7134,6 +9890,7 @@ ApplicationWindow {
                                 text: uploadUsageText()
                                 color: root.themeColorToken("mainHex_1f2b3d", "mainHex_edf4ff")
                                 fontSize: Typography.h3
+                                animated: root.powerVisualAnimationsEnabled
                             }
 
                             Item { Layout.preferredWidth: 15 }
@@ -7264,6 +10021,7 @@ ApplicationWindow {
 
     Item {
         id: compactDashboard
+        visible: root.compact
         anchors.fill: parent
 
         Rectangle {
@@ -7279,165 +10037,126 @@ ApplicationWindow {
         Image {
             anchors.horizontalCenter: parent.horizontalCenter
             anchors.verticalCenter: parent.verticalCenter
-            anchors.verticalCenterOffset: 34
-            width: parent.width * 1.55
-            height: parent.height * 0.74
+            anchors.verticalCenterOffset: root.mobileHomeMapVerticalOffset
+            width: parent.width * root.mobileHomeMapWidthFactor
+            height: parent.height * root.mobileHomeMapHeightFactor
             fillMode: Image.PreserveAspectFit
             smooth: true
-            opacity: 0.45
+            opacity: root.mobileHomeMapOpacity
             source: root.mapPrimarySource
         }
 
-        ColumnLayout {
-            anchors.fill: parent
-            anchors.leftMargin: 18
-            anchors.rightMargin: 18
-            anchors.topMargin: 20
-            anchors.bottomMargin: 104
-            spacing: 5
+        Flickable {
+            id: compactHomeFlick
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.top: parent.top
+            anchors.bottom: compactBottomNav.top
+            clip: true
+            contentWidth: width
+            contentHeight: compactHomeContent.implicitHeight + root.mobileHomeTopMargin + root.mobileHomeBottomMargin
+            boundsBehavior: Flickable.StopAtBounds
+            flickableDirection: Flickable.VerticalFlick
+            interactive: contentHeight > height
 
-            RowLayout {
-                Layout.fillWidth: true
-                Layout.preferredHeight: 42
-                spacing: 10
-
-                Item {
-                    Layout.preferredWidth: 36
-                    Layout.preferredHeight: 36
-
-                    Controls.CircleIconButton {
-                        anchors.fill: parent
-                        diameter: 36
-                        elevated: false
-                        backgroundColor: vpnController.loggingEnabled
-                                         ? root.themeColorToken("mainHex_ecfaf3", "mainHex_102b1f")
-                                         : root.themeColorToken("mainHex_edf7ff", "mainHex_151c32")
-                        iconText: root.iconUsage
-                        iconFontFamily: root.faSolid
-                        iconColor: root.themeColor(root.brandBlue, Colors.mainHex_84b2ff)
-                        iconPixelSize: 15
-                        onClicked: dataUsagePopup.open()
-                    }
-
-                    Rectangle {
-                        anchors.right: parent.right
-                        anchors.top: parent.top
-                        anchors.rightMargin: 1
-                        anchors.topMargin: 1
-                        width: 9
-                        height: 9
-                        radius: 4.5
-                        visible: false
-                        color: Colors.mainHex_22b26a
-                    }
-                }
-
-                Text {
-                    text: "<strong>GENY</strong>CONNECT"
-                    color: root.themeColor(root.brandInk, Colors.mainHex_e5edf9)
-                    font.family: FontSystem.contentFontFamily
-                    font.pixelSize: 15
-                }
-
-                Item { Layout.fillWidth: true }
-
-                Text {
-                    text: "Speed"
-                    color: root.themeColor(root.brandInk, Colors.mainHex_e5edf9)
-                    font.family: FontSystem.getContentFontBold.name
-                    font.pixelSize: 15
-                    font.bold: true
-                }
-
-                Rectangle {
-                    Layout.preferredWidth: 42
-                    Layout.preferredHeight: 42
-                    radius: 21
-                    color: root.themeColorToken("mainHex_f0edff", "mainHex_221c36")
-
-                    Text {
-                        anchors.centerIn: parent
-                        text: root.iconSpeed
-                        color: root.brandViolet
-                        font.family: root.faSolid
-                        font.pixelSize: 17
-                    }
-
-                    MouseArea {
-                        anchors.fill: parent
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: speedTestPopup.open()
-                    }
-                }
-            }
-
-            Text {
-                id: dashboardTimerText
-                Layout.alignment: Qt.AlignHCenter
-                Layout.preferredHeight: 54
-                        text: vpnController.connected || vpnController.busy ? root.sessionTimeText() : "00:00:00"
-                color: root.themeColorToken("mainHex_050505", "mainHex_f1f5ff")
-                font.family: FontSystem.getContentFontBold.name
-                font.pixelSize: 44
-                font.bold: true
-                transformOrigin: Item.Center
-
-            }
-
-            Rectangle {
-                Layout.alignment: Qt.AlignHCenter
-                Layout.preferredWidth: Math.min(ipPillRow.implicitWidth + 26, parent.width - 38)
-                Layout.preferredHeight: 40
-                radius: 23
-                color: root.themeColorToken("mainHex_f5f7fb", "mainHex_182230")
+            ColumnLayout {
+                id: compactHomeContent
+                width: Math.max(0, compactHomeFlick.width - (root.mobileHomeHorizontalMargin * 2))
+                height: Math.max(implicitHeight, compactHomeFlick.height - root.mobileHomeTopMargin - root.mobileHomeBottomMargin)
+                x: root.mobileHomeHorizontalMargin
+                y: root.mobileHomeTopMargin
+                spacing: root.mobileHomeSectionGap
 
                 RowLayout {
-                    id: ipPillRow
-                    anchors.centerIn: parent
-                    spacing: 8
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: root.mobileHomeHeaderHeight
+                    spacing: 10
 
-                    Rectangle {
-                        Layout.preferredWidth: 22
-                        Layout.preferredHeight: 22
-                        radius: 11
-                        color: vpnController.connected
-                               ? root.themeColorToken("mainHex_e8faef", "mainHex_173323")
-                               : root.themeColorToken("mainHex_f1edff", "mainHex_241f3d")
-                        Text {
-                            anchors.centerIn: parent
-                            text: root.iconShield
-                            color: vpnController.connected ? Colors.mainHex_22a557 : root.themeColor(root.brandViolet, Colors.mainHex_a88dff)
-                            font.family: root.faSolid
-                            font.pixelSize: 11
+                    Item {
+                        Layout.preferredWidth: 36
+                        Layout.preferredHeight: 36
+
+                        Controls.CircleIconButton {
+                            anchors.fill: parent
+                            diameter: 36
+                            elevated: false
+                            backgroundColor: vpnController.loggingEnabled
+                                             ? root.themeColorToken("mainHex_ecfaf3", "mainHex_102b1f")
+                                             : root.themeColorToken("mainHex_edf7ff", "mainHex_151c32")
+                            iconText: root.iconUsage
+                            iconFontFamily: root.faSolid
+                            iconColor: root.themeColor(root.brandBlue, Colors.mainHex_84b2ff)
+                            iconPixelSize: 15
+                            onClicked: dataUsagePopup.open()
+                        }
+
+                        Rectangle {
+                            anchors.right: parent.right
+                            anchors.top: parent.top
+                            anchors.rightMargin: 1
+                            anchors.topMargin: 1
+                            width: 9
+                            height: 9
+                            radius: 4.5
+                            visible: false
+                            color: Colors.mainHex_22b26a
                         }
                     }
 
                     Text {
-                        id: ipPillText
-                        text: root.infoIpLabel() + " " + (vpnController.publicIpRefreshing ? "securing..." : root.infoIpText())
-                        color: root.themeColorToken("mainHex_344053", "mainHex_c7d4e6")
-                        font.family: FontSystem.getContentFontBold.name
-                        font.pixelSize: 13
-                        font.bold: true
-                        elide: Text.ElideMiddle
+                        text: "<strong>GENY</strong>CONNECT"
+                        color: root.themeColor(root.brandInk, Colors.mainHex_e5edf9)
+                        font.family: FontSystem.contentFontFamily
+                        font.pixelSize: 15
+                        elide: Text.ElideRight
+                        Layout.maximumWidth: Math.max(112, compactHomeContent.width * 0.40)
+                    }
+
+                    Item { Layout.fillWidth: true }
+
+                    PowerHomeBadge {
+                        modeName: vpnController.powerMode
+                        compact: compactHomeContent.width < 410
+                        onClicked: root.openSettingsSection("power")
+                    }
+
+                    Rectangle {
+                        Layout.preferredWidth: 42
+                        Layout.preferredHeight: 42
+                        radius: 21
+                        color: root.themeColorToken("mainHex_f0edff", "mainHex_221c36")
+
+                        Text {
+                            anchors.centerIn: parent
+                            text: root.iconSpeed
+                            color: root.brandViolet
+                            font.family: root.faSolid
+                            font.pixelSize: 17
+                        }
+
+                        MouseArea {
+                            anchors.fill: parent
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: speedTestPopup.open()
+                        }
                     }
                 }
 
-                MouseArea {
-                    anchors.fill: parent
-                    enabled: vpnController.connected
-                    cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
-                    onClicked: {
-                        if (enabled)
-                            vpnController.refreshPublicIp()
-                    }
-                }
+                Text {
+                id: dashboardTimerText
+                Layout.alignment: Qt.AlignHCenter
+                Layout.preferredHeight: root.mobileHomeTimerHeight
+                text: vpnController.connected || vpnController.busy ? root.sessionTimeText() : "00:00:00"
+                color: root.themeColorToken("mainHex_050505", "mainHex_f1f5ff")
+                font.family: FontSystem.getContentFontBold.name
+                font.pixelSize: Math.max(32, Math.round(44 * root.mobileHomeScale))
+                font.bold: true
             }
 
-            Item {
+                Item {
                 Layout.alignment: Qt.AlignHCenter
                 Layout.preferredWidth: Math.min(parent.width - 44, 276)
-                Layout.preferredHeight: 56
+                Layout.preferredHeight: root.mobileHomeUsageHeight
 
                 ColumnLayout {
                     anchors.centerIn: parent
@@ -7460,6 +10179,7 @@ ApplicationWindow {
                             color: root.themeColorToken("mainHex_173f75", "mainHex_d2e1f6")
                             fontSize: 24
                             bold: true
+                            animated: root.powerVisualAnimationsEnabled
                         }
 
                         Text {
@@ -7473,18 +10193,18 @@ ApplicationWindow {
                 }
             }
 
-            Item {
+                Item {
                 Layout.fillWidth: true
-                Layout.preferredHeight: 248
-                Layout.minimumHeight: 248
-                Layout.maximumHeight: 248
+                Layout.preferredHeight: root.mobileHomeHeroBlockHeight
+                Layout.minimumHeight: root.mobileHomeHeroBlockHeight
+                Layout.maximumHeight: root.mobileHomeHeroBlockHeight
 
                 Item {
                     id: heroPowerCluster
                     anchors.horizontalCenter: parent.horizontalCenter
                     anchors.top: parent.top
                     anchors.topMargin: 0
-                    width: Math.min(parent.width, 210)
+                    width: Math.min(parent.width, root.mobileHomeHeroDiameter)
                     height: width
 
                     Repeater {
@@ -7492,31 +10212,40 @@ ApplicationWindow {
                         delegate: Rectangle {
                             required property int index
                             anchors.centerIn: parent
-                            width: 90 + (index * 30)
+                            width: heroPowerCluster.width * (0.58 + (index * 0.14))
                             height: width
                             radius: width / 2
                             color: root.connectRingColor()
                             opacity: index === 0 ? 1.0 : (vpnController.connectionState === ConnectionState.Disconnected ? 0.12 : 0.16)
                             border.width: index === 3 ? 1 : 0
                             border.color: root.connectRingColor()
-                            scale: vpnController.connectionState === ConnectionState.Connecting && index > 0 ? 1.04 : 1.0
+                            scale: root.powerDecorativeAnimationsEnabled && vpnController.connectionState === ConnectionState.Connecting && index > 0 ? 1.04 : 1.0
                             Behavior on color { ColorAnimation { duration: 280 } }
                             Behavior on border.color { ColorAnimation { duration: 280 } }
-                            Behavior on scale { NumberAnimation { duration: 520; easing.type: Easing.InOutQuad } }
+                            Behavior on scale {
+                                enabled: root.powerVisualAnimationsEnabled
+                                NumberAnimation { duration: 520; easing.type: Easing.InOutQuad }
+                            }
                         }
                     }
 
                     Rectangle {
                         id: heroConnectButton
                         anchors.centerIn: parent
-                        width: 108
-                        height: 108
-                        radius: 54
+                        width: Math.max(82, Math.round(104 * root.mobileHomeScale))
+                        height: width
+                        radius: width * 0.5
                         color: root.connectCoreColor()
-                        opacity: (vpnController.currentProfileIndex >= 0 || vpnController.connected || vpnController.busy) ? 1.0 : 0.55
+                        opacity: (vpnController.currentProfileIndex >= 0 || vpnController.connected || vpnController.busy) ? 1.0 : 0.82
                         scale: heroConnectMouse.pressed ? 0.96 : 1.0
-                        Behavior on color { ColorAnimation { duration: 280 } }
-                        Behavior on scale { NumberAnimation { duration: 90 } }
+                        Behavior on color {
+                            enabled: root.powerVisualAnimationsEnabled
+                            ColorAnimation { duration: 280 }
+                        }
+                        Behavior on scale {
+                            enabled: root.powerVisualAnimationsEnabled
+                            NumberAnimation { duration: 90 }
+                        }
 
                         Text {
                             anchors.centerIn: parent
@@ -7529,31 +10258,41 @@ ApplicationWindow {
                         MouseArea {
                             id: heroConnectMouse
                             anchors.fill: parent
-                            enabled: vpnController.currentProfileIndex >= 0 || vpnController.connected || vpnController.busy
-                            cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
-                            onClicked: vpnController.toggleConnection()
+                            enabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: root.handleConnectAction()
                         }
                     }
                 }
 
                 Rectangle {
                     anchors.horizontalCenter: parent.horizontalCenter
-                    anchors.bottom: parent.bottom
-                    width: statusChipText.implicitWidth + 38
-                    height: 32
-                    radius: 16
+                    anchors.top: heroPowerCluster.bottom
+                    anchors.topMargin: root.mobileHomeStatusTopGap
+                    width: Math.max(statusChipText.implicitWidth + 38, root.mobileHomeStatusMinWidth)
+                    height: root.mobileHomeStatusChipHeight
+                    radius: height * 0.5
                     color: vpnController.connected
                            ? root.themeColorToken("mainHex_e7faef", "mainHex_6646a77c")
                            : (vpnController.busy
                               ? root.themeColorToken("mainHex_fff5d8", "mainHex_666f5b2e")
                               : root.themeColorToken("mainHex_f1f3f7", "mainHex_66557a9f"))
-                    scale: vpnController.busy ? 1.04 : 1.0
-                    Behavior on color { ColorAnimation { duration: 260 } }
-                    Behavior on border.color { ColorAnimation { duration: 260 } }
-                    Behavior on scale { NumberAnimation { duration: 260; easing.type: Easing.InOutQuad } }
+                    scale: root.powerDecorativeAnimationsEnabled && vpnController.busy ? 1.04 : 1.0
+                    Behavior on color {
+                        enabled: root.powerVisualAnimationsEnabled
+                        ColorAnimation { duration: 260 }
+                    }
+                    Behavior on border.color {
+                        enabled: root.powerVisualAnimationsEnabled
+                        ColorAnimation { duration: 260 }
+                    }
+                    Behavior on scale {
+                        enabled: root.powerVisualAnimationsEnabled
+                        NumberAnimation { duration: 260; easing.type: Easing.InOutQuad }
+                    }
 
                     SequentialAnimation on opacity {
-                        running: vpnController.connectionState === ConnectionState.Connecting
+                        running: root.powerVisualAnimationsEnabled && vpnController.connectionState === ConnectionState.Connecting
                         loops: Animation.Infinite
                         NumberAnimation { from: 0.72; to: 1.0; duration: 520; easing.type: Easing.InOutQuad }
                         NumberAnimation { from: 1.0; to: 0.72; duration: 520; easing.type: Easing.InOutQuad }
@@ -7574,27 +10313,128 @@ ApplicationWindow {
                         Behavior on color { ColorAnimation { duration: 260 } }
                     }
                 }
-            }
+                }
 
 
-            Rectangle {
+                Item {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    Layout.minimumHeight: 0
+                    Layout.maximumHeight: root.mobileLandscape ? 10 : (root.mobilePlatform ? 26 : 34)
+                }
+
+                Rectangle {
+                    Layout.alignment: Qt.AlignHCenter
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: root.mobileHomeInfoPillHeight
+                    radius: 23
+                    color: root.themeColorToken("mainHex_f5f7fb", "mainHex_182230")
+
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.leftMargin: 14
+                        anchors.rightMargin: 14
+                        spacing: 10
+
+                        Rectangle {
+                            Layout.preferredWidth: 24
+                            Layout.preferredHeight: 24
+                            radius: 12
+                            color: vpnController.connected
+                                   ? root.themeColorToken("mainHex_e8faef", "mainHex_173323")
+                                   : root.themeColorToken("mainHex_f1edff", "mainHex_241f3d")
+
+                            Text {
+                                anchors.centerIn: parent
+                                text: root.iconShield
+                                color: vpnController.connected ? Colors.mainHex_22a557 : root.themeColor(root.brandViolet, Colors.mainHex_a88dff)
+                                font.family: root.faSolid
+                                font.pixelSize: 11
+                            }
+                        }
+
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            spacing: 0
+
+                            Text {
+                                Layout.fillWidth: true
+                                text: selectedServerLabel
+                                color: root.themeColorToken("mainHex_263248", "mainHex_d4e2f5")
+                                font.family: FontSystem.getContentFontBold.name
+                                font.pixelSize: 13
+                                font.bold: true
+                                elide: Text.ElideRight
+                            }
+
+                            Text {
+                                Layout.fillWidth: true
+                                text: root.infoIpText()
+                                color: root.themeColorToken("mainHex_65758b", "mainHex_9eb4ce")
+                                font.family: FontSystem.contentFontFamily
+                                font.pixelSize: 11
+                                elide: Text.ElideMiddle
+                            }
+                        }
+
+                        RowLayout {
+                            Layout.alignment: Qt.AlignVCenter
+                            spacing: 5
+
+                            Controls.SignalBars {
+                                Layout.preferredWidth: 20
+                                Layout.preferredHeight: 18
+                                level: root.currentProfileSignalLevel()
+                                activeColor: root.currentProfileSignalColor()
+                                inactiveColor: root.themeColorToken("mainHex_d5deeb", "mainHex_33465f")
+                            }
+
+                            Text {
+                                text: root.currentProfilePingText()
+                                color: root.currentProfileSignalColor()
+                                font.family: FontSystem.getContentFontBold.name
+                                font.pixelSize: 10
+                                font.bold: true
+                            }
+                        }
+
+                        Text {
+                            text: root.iconChevronDown
+                            color: root.themeColorToken("mainHex_a0afc4", "mainHex_90a5bf")
+                            font.family: root.faSolid
+                            font.pixelSize: 11
+                        }
+                    }
+
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: {
+                            root.profilePopupAnchor = null
+                            profilePopup.open()
+                        }
+                    }
+                }
+
+                Rectangle {
                 Layout.fillWidth: true
                 Layout.preferredHeight: 1
                 color: root.themeColorToken("mainHex_f0f1f5", "mainHex_223147")
                 opacity: 0.8
-            }
+                }
 
 
-            RowLayout {
+                RowLayout {
                 Layout.fillWidth: true
-                Layout.preferredHeight: 68
-                Layout.minimumHeight: 68
-                Layout.maximumHeight: 68
+                Layout.preferredHeight: root.mobileHomeStatsHeight
+                Layout.minimumHeight: root.mobileHomeStatsHeight
+                Layout.maximumHeight: root.mobileHomeStatsHeight
                 spacing: 0
 
                 Item {
                     Layout.fillWidth: true
                     Layout.fillHeight: true
+                    clip: true
 
                     ColumnLayout {
                         anchors.fill: parent
@@ -7636,18 +10476,19 @@ ApplicationWindow {
                                     spacing: 4
                                     Controls.NumberFlowText {
                                         id: downStatValueText
-                                        width: 58
+                                        width: root.mobileLandscape ? 52 : 56
                                         text: root.formatSpeedValue(Math.max(0, downRateBytesPerSec), dashboardStatsSettings.speedUnit).value
                                         color: root.themeColorToken("mainHex_050505", "mainHex_eef4ff")
-                                        fontSize: 17
+                                        fontSize: root.mobileLandscape ? 15 : 16
                                         bold: true
+                                        animated: root.powerVisualAnimationsEnabled
                                     }
                                     Text {
-                                        width: 40
+                                        width: root.mobileLandscape ? 38 : 42
                                         text: root.formatSpeedValue(Math.max(0, downRateBytesPerSec), dashboardStatsSettings.speedUnit).unit
                                         color: root.themeColorToken("mainHex_5b5d66", "mainHex_9db0c9")
                                         font.family: FontSystem.contentFontFamily
-                                        font.pixelSize: 12
+                                        font.pixelSize: root.mobileLandscape ? 11 : 12
                                         elide: Text.ElideRight
                                     }
                                 }
@@ -7657,9 +10498,9 @@ ApplicationWindow {
                         Canvas {
                             id: downSparkline
                             Layout.fillWidth: true
-                            Layout.preferredHeight: 22
-                            Layout.minimumHeight: 22
-                            antialiasing: true
+                            Layout.preferredHeight: root.mobileLandscape ? 16 : 18
+                            Layout.minimumHeight: root.mobileLandscape ? 16 : 18
+                            antialiasing: root.powerEffectsEnabled
                             property var samples: root.downRateHistoryMbps
                             onSamplesChanged: requestPaint()
                             onWidthChanged: requestPaint()
@@ -7693,8 +10534,8 @@ ApplicationWindow {
                                 }
                                 ctx.lineWidth = 1
                                 ctx.strokeStyle = Colors.mainHex_6f5cff
-                                ctx.shadowColor = "rgba(111,92,255,0.45)"
-                                ctx.shadowBlur = 4
+                                ctx.shadowColor = root.powerEffectsEnabled ? "rgba(111,92,255,0.45)" : "transparent"
+                                ctx.shadowBlur = root.powerEffectsEnabled ? 4 : 0
                                 ctx.stroke()
 
                                 ctx.shadowBlur = 0
@@ -7720,6 +10561,7 @@ ApplicationWindow {
                 Item {
                     Layout.fillWidth: true
                     Layout.fillHeight: true
+                    clip: true
 
                     ColumnLayout {
                         anchors.fill: parent
@@ -7761,18 +10603,19 @@ ApplicationWindow {
                                     spacing: 4
                                     Controls.NumberFlowText {
                                         id: upStatValueText
-                                        width: 58
+                                        width: root.mobileLandscape ? 52 : 56
                                         text: root.formatSpeedValue(Math.max(0, upRateBytesPerSec), dashboardStatsSettings.speedUnit).value
                                         color: root.themeColorToken("mainHex_050505", "mainHex_eef4ff")
-                                        fontSize: 17
+                                        fontSize: root.mobileLandscape ? 15 : 16
                                         bold: true
+                                        animated: root.powerVisualAnimationsEnabled
                                     }
                                     Text {
-                                        width: 40
+                                        width: root.mobileLandscape ? 38 : 42
                                         text: root.formatSpeedValue(Math.max(0, upRateBytesPerSec), dashboardStatsSettings.speedUnit).unit
                                         color: root.themeColorToken("mainHex_5b5d66", "mainHex_9db0c9")
                                         font.family: FontSystem.contentFontFamily
-                                        font.pixelSize: 12
+                                        font.pixelSize: root.mobileLandscape ? 11 : 12
                                         elide: Text.ElideRight
                                     }
                                 }
@@ -7782,9 +10625,9 @@ ApplicationWindow {
                         Canvas {
                             id: upSparkline
                             Layout.fillWidth: true
-                            Layout.preferredHeight: 22
-                            Layout.minimumHeight: 22
-                            antialiasing: true
+                            Layout.preferredHeight: root.mobileLandscape ? 16 : 18
+                            Layout.minimumHeight: root.mobileLandscape ? 16 : 18
+                            antialiasing: root.powerEffectsEnabled
                             property var samples: root.upRateHistoryMbps
                             onSamplesChanged: requestPaint()
                             onWidthChanged: requestPaint()
@@ -7818,8 +10661,8 @@ ApplicationWindow {
                                 }
                                 ctx.lineWidth = 1
                                 ctx.strokeStyle = Colors.mainHex_3db4ff
-                                ctx.shadowColor = "rgba(61,180,255,0.45)"
-                                ctx.shadowBlur = 4
+                                ctx.shadowColor = root.powerEffectsEnabled ? "rgba(61,180,255,0.45)" : "transparent"
+                                ctx.shadowBlur = root.powerEffectsEnabled ? 4 : 0
                                 ctx.stroke()
 
                                 ctx.shadowBlur = 0
@@ -7837,121 +10680,45 @@ ApplicationWindow {
                 }
             }
 
-            Item { Layout.preferredHeight: 5;}
-
-            Rectangle {
-                id: mobileLocationCard
-                Layout.fillWidth: true
-                Layout.preferredHeight: 78
-                Layout.minimumHeight: 78
-                Layout.maximumHeight: 78
-                radius: 18
-                color: mobileLocationMouse.containsMouse
-                       ? root.themeColorToken("mainHex_fbfcff", "mainHex_151c32")
-                       : root.themeColorToken("mainHex_ffffff", "mainHex_142032")
-
-                RowLayout {
-                    anchors.fill: parent
-                    anchors.leftMargin: 16
-                    anchors.rightMargin: 16
-                    spacing: 12
-
-                    Rectangle {
-                        Layout.preferredWidth: 42
-                        Layout.preferredHeight: 42
-                        radius: 21
-                        color: root.themeColorToken("mainHex_f0f1ff", "mainHex_111425")
-
-                        Text {
-                            anchors.centerIn: parent
-                            text: selectedServerFlag
-                            font.pixelSize: 25
-                        }
-                    }
-
-                    ColumnLayout {
-                        Layout.fillWidth: true
-                        spacing: 2
-
-                        Text {
-                            Layout.fillWidth: true
-                            text: selectedServerLabel
-                            color: root.themeColorToken("mainHex_070707", "mainHex_edf3fe")
-                            font.family: FontSystem.getContentFontBold.name
-                            font.pixelSize: 16
-                            font.bold: true
-                            elide: Text.ElideRight
-                        }
-
-                        Rectangle {
-                            Layout.preferredWidth: Math.min(serverBadgeText.implicitWidth + 20, 118)
-                            Layout.preferredHeight: 21
-                            radius: 11
-                            color: root.themeColorToken("mainHex_edf2ff", "mainHex_263858")
-
-                            Text {
-                                id: serverBadgeText
-                                anchors.centerIn: parent
-                                text: vpnController.tunMode ? "TUN Server" : "Game Server"
-                                color: root.themeColor(root.brandBlue, Colors.mainHex_9ec1ff)
-                                font.family: FontSystem.contentFontFamily
-                                font.pixelSize: 11
-                                elide: Text.ElideRight
-                            }
-                        }
-
-                        Text {
-                            Layout.fillWidth: true
-                            text: selectedServerMeta
-                            color: root.themeColorToken("mainHex_7385a0", "mainHex_97acc8")
-                            font.family: FontSystem.contentFontFamily
-                            font.pixelSize: 10
-                            elide: Text.ElideMiddle
-                        }
-                    }
-
-                    Text {
-                        text: "\uf054"
-                        color: root.themeColorToken("mainHex_050505", "mainHex_dce7f8")
-                        font.family: root.faSolid
-                        font.pixelSize: 17
-                    }
-                }
-
-                MouseArea {
-                    id: mobileLocationMouse
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: {
-                        root.profilePopupAnchor = mobileLocationCard
-                        profilePopup.open()
-                    }
+                Item {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 0
                 }
             }
         }
 
         Rectangle {
+            id: compactBottomNav
+
             anchors.left: parent.left
             anchors.right: parent.right
             anchors.bottom: parent.bottom
-            height: 88
-            radius: 28
+
+            height: root.compactBottomNavHeight
+
+            topLeftRadius: 22
+            topRightRadius: 22
+            bottomLeftRadius: 0
+            bottomRightRadius: 0
+
             color: root.themeColorToken("mainHex_ffffff", "mainHex_121d2e")
 
             Rectangle {
                 anchors.left: parent.left
                 anchors.right: parent.right
                 anchors.bottom: parent.bottom
-                height: 28
+                height: root.compactBottomNavSafeFillHeight
                 color: root.themeColorToken("mainHex_ffffff", "mainHex_121d2e")
             }
 
             RowLayout {
-                anchors.fill: parent
-                anchors.leftMargin: 44
-                anchors.rightMargin: 44
-                anchors.bottomMargin: 4
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.top: parent.top
+                anchors.topMargin: root.compactBottomNavTopMargin
+                height: root.compactBottomNavVisualHeight
+                anchors.leftMargin: root.mobileLandscape ? 24 : 42
+                anchors.rightMargin: root.mobileLandscape ? 24 : 42
 
                 Item {
                     Layout.fillWidth: true

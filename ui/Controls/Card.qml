@@ -4,15 +4,16 @@ import GenyConnect 1.0
 Rectangle {
     id: card
 
-    property int padding: 14
+    property int padding: Metrics.cardPadding
     property bool soft: false
     property bool outlined: true
-    property color fillColor: soft ? Colors.backgroundItemActivated : Colors.backgroundActivated
-    property color strokeColor: Colors.borderActivated
+    property color fillColor: soft ? Colors.dsSurfaceSoft : Colors.dsSurface
+    property color strokeColor: Colors.dsBorder
 
-    radius: Colors.radius
+    radius: Metrics.radiusLg
     color: fillColor
     border.color: outlined ? strokeColor : "transparent"
+    border.width: outlined ? 1 : 0
 
     default property alias content: contentItem.data
     implicitWidth: contentItem.childrenRect.width + padding * 2

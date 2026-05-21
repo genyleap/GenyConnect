@@ -50,45 +50,45 @@ QString ServerProfile::displayLabel() const
         return name.trimmed();
     }
 
-    return QStringLiteral("%1:%2 (%3)")
+    return QString::fromUtf8("%1:%2 (%3)")
         .arg(address.trimmed(), QString::number(port), protocol.toUpper());
 }
 
 QJsonObject ServerProfile::toJson() const
 {
     QJsonObject json;
-    json[QStringLiteral("id")] = id;
-    json[QStringLiteral("name")] = name;
-    json[QStringLiteral("protocol")] = protocol;
-    json[QStringLiteral("address")] = address;
-    json[QStringLiteral("port")] = static_cast<int>(port);
+    json[QString::fromUtf8("id")] = id;
+    json[QString::fromUtf8("name")] = name;
+    json[QString::fromUtf8("protocol")] = protocol;
+    json[QString::fromUtf8("address")] = address;
+    json[QString::fromUtf8("port")] = static_cast<int>(port);
 
-    json[QStringLiteral("userId")] = userId;
-    json[QStringLiteral("encryption")] = encryption;
-    json[QStringLiteral("flow")] = flow;
-    json[QStringLiteral("network")] = network;
-    json[QStringLiteral("security")] = security;
+    json[QString::fromUtf8("userId")] = userId;
+    json[QString::fromUtf8("encryption")] = encryption;
+    json[QString::fromUtf8("flow")] = flow;
+    json[QString::fromUtf8("network")] = network;
+    json[QString::fromUtf8("security")] = security;
 
-    json[QStringLiteral("sni")] = sni;
-    json[QStringLiteral("alpn")] = alpn;
-    json[QStringLiteral("fingerprint")] = fingerprint;
-    json[QStringLiteral("publicKey")] = publicKey;
-    json[QStringLiteral("shortId")] = shortId;
-    json[QStringLiteral("spiderX")] = spiderX;
+    json[QString::fromUtf8("sni")] = sni;
+    json[QString::fromUtf8("alpn")] = alpn;
+    json[QString::fromUtf8("fingerprint")] = fingerprint;
+    json[QString::fromUtf8("publicKey")] = publicKey;
+    json[QString::fromUtf8("shortId")] = shortId;
+    json[QString::fromUtf8("spiderX")] = spiderX;
 
-    json[QStringLiteral("path")] = path;
-    json[QStringLiteral("hostHeader")] = hostHeader;
-    json[QStringLiteral("serviceName")] = serviceName;
-    json[QStringLiteral("headerType")] = headerType;
-    json[QStringLiteral("xhttpMode")] = xhttpMode;
-    json[QStringLiteral("xhttpExtra")] = xhttpExtra;
+    json[QString::fromUtf8("path")] = path;
+    json[QString::fromUtf8("hostHeader")] = hostHeader;
+    json[QString::fromUtf8("serviceName")] = serviceName;
+    json[QString::fromUtf8("headerType")] = headerType;
+    json[QString::fromUtf8("xhttpMode")] = xhttpMode;
+    json[QString::fromUtf8("xhttpExtra")] = xhttpExtra;
 
-    json[QStringLiteral("allowInsecure")] = allowInsecure;
-    json[QStringLiteral("originalLink")] = originalLink;
-    json[QStringLiteral("groupName")] = groupName;
-    json[QStringLiteral("sourceName")] = sourceName;
-    json[QStringLiteral("sourceId")] = sourceId;
-    json[QStringLiteral("extra")] = extra;
+    json[QString::fromUtf8("allowInsecure")] = allowInsecure;
+    json[QString::fromUtf8("originalLink")] = originalLink;
+    json[QString::fromUtf8("groupName")] = groupName;
+    json[QString::fromUtf8("sourceName")] = sourceName;
+    json[QString::fromUtf8("sourceId")] = sourceId;
+    json[QString::fromUtf8("extra")] = extra;
 
     return json;
 }
@@ -96,42 +96,42 @@ QJsonObject ServerProfile::toJson() const
 std::optional<ServerProfile> ServerProfile::fromJson(const QJsonObject& json)
 {
     ServerProfile profile;
-    profile.id = json.value(QStringLiteral("id")).toString().trimmed();
-    profile.name = json.value(QStringLiteral("name")).toString().trimmed();
-    profile.protocol = json.value(QStringLiteral("protocol")).toString().trimmed().toLower();
-    profile.address = json.value(QStringLiteral("address")).toString().trimmed();
-    const std::optional<quint16> port = parseJsonPort(json.value(QStringLiteral("port")));
+    profile.id = json.value(QString::fromUtf8("id")).toString().trimmed();
+    profile.name = json.value(QString::fromUtf8("name")).toString().trimmed();
+    profile.protocol = json.value(QString::fromUtf8("protocol")).toString().trimmed().toLower();
+    profile.address = json.value(QString::fromUtf8("address")).toString().trimmed();
+    const std::optional<quint16> port = parseJsonPort(json.value(QString::fromUtf8("port")));
     if (!port.has_value()) {
         return std::nullopt;
     }
     profile.port = *port;
 
-    profile.userId = json.value(QStringLiteral("userId")).toString().trimmed();
-    profile.encryption = json.value(QStringLiteral("encryption")).toString().trimmed();
-    profile.flow = json.value(QStringLiteral("flow")).toString().trimmed();
-    profile.network = json.value(QStringLiteral("network")).toString().trimmed().toLower();
-    profile.security = json.value(QStringLiteral("security")).toString().trimmed().toLower();
+    profile.userId = json.value(QString::fromUtf8("userId")).toString().trimmed();
+    profile.encryption = json.value(QString::fromUtf8("encryption")).toString().trimmed();
+    profile.flow = json.value(QString::fromUtf8("flow")).toString().trimmed();
+    profile.network = json.value(QString::fromUtf8("network")).toString().trimmed().toLower();
+    profile.security = json.value(QString::fromUtf8("security")).toString().trimmed().toLower();
 
-    profile.sni = json.value(QStringLiteral("sni")).toString().trimmed();
-    profile.alpn = json.value(QStringLiteral("alpn")).toString().trimmed();
-    profile.fingerprint = json.value(QStringLiteral("fingerprint")).toString().trimmed();
-    profile.publicKey = json.value(QStringLiteral("publicKey")).toString().trimmed();
-    profile.shortId = json.value(QStringLiteral("shortId")).toString().trimmed();
-    profile.spiderX = json.value(QStringLiteral("spiderX")).toString().trimmed();
+    profile.sni = json.value(QString::fromUtf8("sni")).toString().trimmed();
+    profile.alpn = json.value(QString::fromUtf8("alpn")).toString().trimmed();
+    profile.fingerprint = json.value(QString::fromUtf8("fingerprint")).toString().trimmed();
+    profile.publicKey = json.value(QString::fromUtf8("publicKey")).toString().trimmed();
+    profile.shortId = json.value(QString::fromUtf8("shortId")).toString().trimmed();
+    profile.spiderX = json.value(QString::fromUtf8("spiderX")).toString().trimmed();
 
-    profile.path = json.value(QStringLiteral("path")).toString().trimmed();
-    profile.hostHeader = json.value(QStringLiteral("hostHeader")).toString().trimmed();
-    profile.serviceName = json.value(QStringLiteral("serviceName")).toString().trimmed();
-    profile.headerType = json.value(QStringLiteral("headerType")).toString().trimmed().toLower();
-    profile.xhttpMode = json.value(QStringLiteral("xhttpMode")).toString().trimmed().toLower();
-    profile.xhttpExtra = json.value(QStringLiteral("xhttpExtra")).toObject();
+    profile.path = json.value(QString::fromUtf8("path")).toString().trimmed();
+    profile.hostHeader = json.value(QString::fromUtf8("hostHeader")).toString().trimmed();
+    profile.serviceName = json.value(QString::fromUtf8("serviceName")).toString().trimmed();
+    profile.headerType = json.value(QString::fromUtf8("headerType")).toString().trimmed().toLower();
+    profile.xhttpMode = json.value(QString::fromUtf8("xhttpMode")).toString().trimmed().toLower();
+    profile.xhttpExtra = json.value(QString::fromUtf8("xhttpExtra")).toObject();
 
-    profile.allowInsecure = json.value(QStringLiteral("allowInsecure")).toBool(false);
-    profile.originalLink = json.value(QStringLiteral("originalLink")).toString().trimmed();
-    profile.groupName = json.value(QStringLiteral("groupName")).toString().trimmed();
-    profile.sourceName = json.value(QStringLiteral("sourceName")).toString().trimmed();
-    profile.sourceId = json.value(QStringLiteral("sourceId")).toString().trimmed();
-    profile.extra = json.value(QStringLiteral("extra")).toObject();
+    profile.allowInsecure = json.value(QString::fromUtf8("allowInsecure")).toBool(false);
+    profile.originalLink = json.value(QString::fromUtf8("originalLink")).toString().trimmed();
+    profile.groupName = json.value(QString::fromUtf8("groupName")).toString().trimmed();
+    profile.sourceName = json.value(QString::fromUtf8("sourceName")).toString().trimmed();
+    profile.sourceId = json.value(QString::fromUtf8("sourceId")).toString().trimmed();
+    profile.extra = json.value(QString::fromUtf8("extra")).toObject();
 
     if (profile.id.isEmpty()) {
         profile.id = createProfileId();

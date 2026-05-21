@@ -26,6 +26,10 @@ module;
 
 #include <limits>
 
+#if defined(Q_OS_ANDROID)
+#include <QJniObject>
+#endif
+
 #if defined(Q_OS_WIN)
 #ifndef NOMINMAX
 #define NOMINMAX
@@ -35,14 +39,19 @@ module;
 
 module genyconnect.backend.updater;
 
+void Updater::__geny_vtable_anchor() {}
+
 namespace {
-const QUrl kReleaseApiUrl(QStringLiteral("https://api.github.com/repos/genyleap/GenyConnect/releases/latest"));
-const QString kReleasesPageUrl = QStringLiteral("https://github.com/genyleap/GenyConnect/releases");
+const QUrl kReleaseApiUrl(QString::fromUtf8("https://api.github.com/repos/genyleap/GenyConnect/releases/latest"));
+const QString kReleasesPageUrl = QString::fromUtf8("https://github.com/genyleap/GenyConnect/releases");
+#if defined(Q_OS_ANDROID)
+constexpr const char kAndroidRuntimeBridgeClass[] = "com/genyleap/genyconnect/AndroidRuntimeBridge";
+#endif
 
 QString normalizeVersionToken(const QString& version)
 {
     QString cleaned = version.trimmed();
-    if (cleaned.startsWith(QStringLiteral("v"), Qt::CaseInsensitive)) {
+    if (cleaned.startsWith(QString::fromUtf8("v"), Qt::CaseInsensitive)) {
         cleaned.remove(0, 1);
     }
     return cleaned;
@@ -51,20 +60,20 @@ QString normalizeVersionToken(const QString& version)
 QString normalizeSha256Digest(const QString& digest)
 {
     QString value = digest.trimmed().toLower();
-    if (value.startsWith(QStringLiteral("sha256:"))) {
-        value.remove(0, QStringLiteral("sha256:").size());
+    if (value.startsWith(QString::fromUtf8("sha256:"))) {
+        value.remove(0, QString::fromUtf8("sha256:").size());
     }
-    static const QRegularExpression hex64Rx(QStringLiteral("^[0-9a-f]{64}$"));
+    static const QRegularExpression hex64Rx(QString::fromUtf8("^[0-9a-f]{64}$"));
     return hex64Rx.match(value).hasMatch() ? value : QString();
 }
 
 bool isLikelyChecksumAsset(const QString& lowerAssetName)
 {
-    return lowerAssetName.contains(QStringLiteral("sha256"))
-        || lowerAssetName.contains(QStringLiteral("checksum"))
-        || lowerAssetName.endsWith(QStringLiteral(".sha256"))
-        || lowerAssetName.endsWith(QStringLiteral(".sha256.txt"))
-        || lowerAssetName.endsWith(QStringLiteral("checksums.txt"));
+    return lowerAssetName.contains(QString::fromUtf8("sha256"))
+        || lowerAssetName.contains(QString::fromUtf8("checksum"))
+        || lowerAssetName.endsWith(QString::fromUtf8(".sha256"))
+        || lowerAssetName.endsWith(QString::fromUtf8(".sha256.txt"))
+        || lowerAssetName.endsWith(QString::fromUtf8("checksums.txt"));
 }
 
 QString extractSha256FromManifest(const QByteArray& content, const QString& targetAssetName)
@@ -73,11 +82,11 @@ QString extractSha256FromManifest(const QByteArray& content, const QString& targ
     const QString text = QString::fromUtf8(content);
     const QStringList lines = text.split('\n');
     static const QRegularExpression hashAndNameRx(
-        QStringLiteral("^([0-9A-Fa-f]{64})\\s+\\*?(.+)$"));
+        QString::fromUtf8("^([0-9A-Fa-f]{64})\\s+\\*?(.+)$"));
     static const QRegularExpression sha256StyleRx(
-        QStringLiteral("^SHA256\\s*\\((.+)\\)\\s*=\\s*([0-9A-Fa-f]{64})$"),
+        QString::fromUtf8("^SHA256\\s*\\((.+)\\)\\s*=\\s*([0-9A-Fa-f]{64})$"),
         QRegularExpression::CaseInsensitiveOption);
-    static const QRegularExpression hashOnlyRx(QStringLiteral("^[0-9A-Fa-f]{64}$"));
+    static const QRegularExpression hashOnlyRx(QString::fromUtf8("^[0-9A-Fa-f]{64}$"));
 
     QString hashOnlyCandidate;
     int meaningfulLines = 0;
@@ -128,7 +137,7 @@ bool fetchUrlContentSync(
 {
     if (manager == nullptr || contentOut == nullptr || !url.isValid() || url.isEmpty()) {
         if (errorOut != nullptr) {
-            *errorOut = QStringLiteral("Invalid checksum URL.");
+            *errorOut = QString::fromUtf8("Invalid checksum URL.");
         }
         return false;
     }
@@ -161,7 +170,7 @@ bool fetchUrlContentSync(
     const bool hadError = timedOut || (reply->error() != QNetworkReply::NoError);
     QString errorText;
     if (timedOut) {
-        errorText = QStringLiteral("Checksum download timed out.");
+        errorText = QString::fromUtf8("Checksum download timed out.");
     } else if (hadError) {
         errorText = reply->errorString().trimmed();
     }
@@ -175,7 +184,7 @@ bool fetchUrlContentSync(
     if (hadError) {
         if (errorOut != nullptr) {
             *errorOut = errorText.isEmpty()
-                ? QStringLiteral("Checksum download failed.")
+                ? QString::fromUtf8("Checksum download failed.")
                 : errorText;
         }
         return false;
@@ -188,7 +197,7 @@ bool fetchUrlContentSync(
 QVector<int> parseVersionParts(const QString& version)
 {
     QVector<int> parts;
-    const QRegularExpression numberRx(QStringLiteral("(\\d+)"));
+    const QRegularExpression numberRx(QString::fromUtf8("(\\d+)"));
     QRegularExpressionMatchIterator it = numberRx.globalMatch(version);
     while (it.hasNext()) {
         const QRegularExpressionMatch m = it.next();
@@ -200,9 +209,9 @@ QVector<int> parseVersionParts(const QString& version)
 QString appUpdaterHelperPath()
 {
 #if defined(Q_OS_WIN)
-    return QDir(QCoreApplication::applicationDirPath()).filePath(QStringLiteral("GenyConnectUpdater.exe"));
+    return QDir(QCoreApplication::applicationDirPath()).filePath(QString::fromUtf8("GenyConnectUpdater.exe"));
 #else
-    return QDir(QCoreApplication::applicationDirPath()).filePath(QStringLiteral("GenyConnectUpdater"));
+    return QDir(QCoreApplication::applicationDirPath()).filePath(QString::fromUtf8("GenyConnectUpdater"));
 #endif
 }
 
@@ -217,14 +226,25 @@ bool copyWithOverwrite(const QString& fromPath, const QString& toPath)
 bool looksLikeManualInstaller(const QString& path)
 {
     const QString lower = QFileInfo(path).fileName().toLower();
-    return lower.endsWith(QStringLiteral(".dmg"))
-        || lower.endsWith(QStringLiteral(".pkg"))
-        || lower.endsWith(QStringLiteral(".msi"))
-        || lower.endsWith(QStringLiteral(".zip"))
-        || lower.endsWith(QStringLiteral(".tar.gz"))
-        || lower.endsWith(QStringLiteral(".tar.xz"))
-        || lower.endsWith(QStringLiteral(".deb"))
-        || lower.endsWith(QStringLiteral(".rpm"));
+#if defined(Q_OS_WIN)
+    const bool windowsInstallerExe = lower.endsWith(QString::fromUtf8(".exe"))
+        && (lower.contains(QString::fromUtf8("setup"))
+            || lower.contains(QString::fromUtf8("installer"))
+            || lower.contains(QString::fromUtf8("install"))
+            || lower.contains(QString::fromUtf8("nsis"))
+            || lower.contains(QString::fromUtf8("inno")));
+#else
+    constexpr bool windowsInstallerExe = false;
+#endif
+    return lower.endsWith(QString::fromUtf8(".dmg"))
+        || lower.endsWith(QString::fromUtf8(".pkg"))
+        || windowsInstallerExe
+        || lower.endsWith(QString::fromUtf8(".msi"))
+        || lower.endsWith(QString::fromUtf8(".zip"))
+        || lower.endsWith(QString::fromUtf8(".tar.gz"))
+        || lower.endsWith(QString::fromUtf8(".tar.xz"))
+        || lower.endsWith(QString::fromUtf8(".deb"))
+        || lower.endsWith(QString::fromUtf8(".rpm"));
 }
 
 bool startUpdaterHelperDetached(const QString& helperPath, const QString& jobPath, QString *errorOut)
@@ -232,12 +252,12 @@ bool startUpdaterHelperDetached(const QString& helperPath, const QString& jobPat
 #if defined(Q_OS_WIN)
     const QString nativeHelper = QDir::toNativeSeparators(helperPath);
     const QString nativeJob = QDir::toNativeSeparators(jobPath);
-    const bool launchedDirect = QProcess::startDetached(helperPath, {QStringLiteral("--job"), jobPath});
+    const bool launchedDirect = QProcess::startDetached(helperPath, {QString::fromUtf8("--job"), jobPath});
     if (launchedDirect) {
         return true;
     }
 
-    const QString args = QStringLiteral("--job \"%1\"").arg(nativeJob);
+    const QString args = QString::fromUtf8("--job \"%1\"").arg(nativeJob);
     const int rc = static_cast<int>(reinterpret_cast<qintptr>(
         ShellExecuteW(
             nullptr,
@@ -251,20 +271,47 @@ bool startUpdaterHelperDetached(const QString& helperPath, const QString& jobPat
     if (rc <= 32) {
         if (errorOut != nullptr) {
             *errorOut = (rc == 1223)
-                ? QStringLiteral("Administrator permission was denied.")
-                : QStringLiteral("Failed to launch updater helper (code %1).").arg(rc);
+                ? QString::fromUtf8("Administrator permission was denied.")
+                : QString::fromUtf8("Failed to launch updater helper (code %1).").arg(rc);
         }
         return false;
     }
     return true;
 #else
-    const bool launched = QProcess::startDetached(helperPath, {QStringLiteral("--job"), jobPath});
+    const bool launched = QProcess::startDetached(helperPath, {QString::fromUtf8("--job"), jobPath});
     if (!launched && errorOut != nullptr) {
-        *errorOut = QStringLiteral("Failed to launch updater helper.");
+        *errorOut = QString::fromUtf8("Failed to launch updater helper.");
     }
     return launched;
 #endif
 }
+
+#if defined(Q_OS_ANDROID)
+bool installDownloadedApkViaBridge(const QString& path, QString *errorOut)
+{
+    if (!QJniObject::isClassAvailable(kAndroidRuntimeBridgeClass)) {
+        if (errorOut != nullptr) {
+            *errorOut = QString::fromUtf8("Android runtime bridge is not packaged into the APK.");
+        }
+        return false;
+    }
+
+    const QJniObject sourcePath = QJniObject::fromString(path);
+    const QJniObject errorObject = QJniObject::callStaticObjectMethod(
+        kAndroidRuntimeBridgeClass,
+        "installDownloadedApk",
+        "(Ljava/lang/String;)Ljava/lang/String;",
+        sourcePath.object<jstring>());
+    const QString bridgeError = errorObject.isValid() ? errorObject.toString().trimmed() : QString();
+    if (!bridgeError.isEmpty()) {
+        if (errorOut != nullptr) {
+            *errorOut = bridgeError;
+        }
+        return false;
+    }
+    return true;
+}
+#endif
 }
 
 Updater::Updater(QObject *parent)
@@ -308,7 +355,7 @@ QString Updater::appVersion() const
 
 void Updater::setAppVersion(const QString& version)
 {
-    const QString normalized = version.trimmed().isEmpty() ? QStringLiteral("0.0.0") : version.trimmed();
+    const QString normalized = version.trimmed().isEmpty() ? QString::fromUtf8("0.0.0") : version.trimmed();
     if (m_appVersion == normalized) {
         return;
     }
@@ -365,8 +412,13 @@ QString Updater::downloadedFilePath() const
 
 bool Updater::canInstallDownloadedUpdate() const
 {
+#if defined(Q_OS_ANDROID)
+    const QString path = m_downloadedFilePath.trimmed();
+    return QFileInfo::exists(path) && path.toLower().endsWith(QString::fromUtf8(".apk"));
+#else
     return isSelfInstallSupportedAsset(m_downloadedFilePath)
         && !normalizeSha256Digest(m_assetExpectedSha256).isEmpty();
+#endif
 }
 
 void Updater::checkForUpdates(bool userInitiated)
@@ -380,7 +432,7 @@ void Updater::checkForUpdates(bool userInitiated)
     m_userInitiatedCheck = userInitiated;
     m_checking = true;
     m_error.clear();
-    m_status = QStringLiteral("Checking for updates...");
+    m_status = QString::fromUtf8("Checking for updates...");
     emit changed();
 
     QNetworkRequest request(kReleaseApiUrl);
@@ -400,13 +452,13 @@ void Updater::consumePendingUpdateStatus()
         return;
     }
 
-    QDir updatesDir(QDir(appDataDir).filePath(QStringLiteral("updates")));
+    QDir updatesDir(QDir(appDataDir).filePath(QString::fromUtf8("updates")));
     if (!updatesDir.exists()) {
         return;
     }
 
     const QFileInfoList statusFiles = updatesDir.entryInfoList(
-        QStringList() << QStringLiteral("update-job-*.json.status.json"),
+        QStringList() << QString::fromUtf8("update-job-*.json.status.json"),
         QDir::Files,
         QDir::Time | QDir::Reversed
     );
@@ -429,20 +481,20 @@ void Updater::consumePendingUpdateStatus()
     }
 
     const QJsonObject root = doc.object();
-    const bool ok = root.value(QStringLiteral("ok")).toBool(false);
-    const QString message = root.value(QStringLiteral("message")).toString().trimmed();
+    const bool ok = root.value(QString::fromUtf8("ok")).toBool(false);
+    const QString message = root.value(QString::fromUtf8("message")).toString().trimmed();
     if (ok) {
         m_error.clear();
         m_status = message.isEmpty()
-            ? QStringLiteral("Update applied successfully.")
-            : QStringLiteral("Update: %1").arg(message);
-        emit systemLog(QStringLiteral("[Updater] %1").arg(m_status));
+            ? QString::fromUtf8("Update applied successfully.")
+            : QString::fromUtf8("Update: %1").arg(message);
+        emit systemLog(QString::fromUtf8("[Updater] %1").arg(m_status));
     } else {
         m_error = message.isEmpty()
-            ? QStringLiteral("Updater helper failed.")
+            ? QString::fromUtf8("Updater helper failed.")
             : message;
-        m_status = QStringLiteral("Install failed.");
-        emit systemLog(QStringLiteral("[Updater] Install failed: %1").arg(m_error));
+        m_status = QString::fromUtf8("Install failed.");
+        emit systemLog(QString::fromUtf8("[Updater] Install failed: %1").arg(m_error));
     }
     emit changed();
 
@@ -458,8 +510,8 @@ bool Updater::downloadUpdate()
     }
 
     if (!m_updateAvailable || m_assetUrl.trimmed().isEmpty()) {
-        m_error = QStringLiteral("No downloadable update asset is available.");
-        m_status = QStringLiteral("Download unavailable.");
+        m_error = QString::fromUtf8("No downloadable update asset is available.");
+        m_status = QString::fromUtf8("Download unavailable.");
         emit changed();
         return false;
     }
@@ -469,15 +521,15 @@ bool Updater::downloadUpdate()
         ? QStandardPaths::writableLocation(QStandardPaths::TempLocation)
         : downloadsDir;
     if (baseDir.isEmpty()) {
-        m_error = QStringLiteral("Could not resolve download directory.");
-        m_status = QStringLiteral("Download failed.");
+        m_error = QString::fromUtf8("Could not resolve download directory.");
+        m_status = QString::fromUtf8("Download failed.");
         emit changed();
         return false;
     }
 
     QDir().mkpath(baseDir);
-    const QString fallbackName = QStringLiteral("genyconnect-update-%1.bin")
-        .arg(m_latestVersion.isEmpty() ? QStringLiteral("latest") : m_latestVersion);
+    const QString fallbackName = QString::fromUtf8("genyconnect-update-%1.bin")
+        .arg(m_latestVersion.isEmpty() ? QString::fromUtf8("latest") : m_latestVersion);
     const QString fileName = m_assetName.trimmed().isEmpty() ? fallbackName : m_assetName.trimmed();
     m_downloadedFilePath = QDir(baseDir).filePath(fileName);
 
@@ -491,8 +543,8 @@ bool Updater::downloadUpdate()
 
     m_downloadFile = new QFile(m_downloadedFilePath, this);
     if (!m_downloadFile->open(QIODevice::WriteOnly | QIODevice::Truncate)) {
-        m_error = QStringLiteral("Failed to create update file: %1").arg(m_downloadedFilePath);
-        m_status = QStringLiteral("Download failed.");
+        m_error = QString::fromUtf8("Failed to create update file: %1").arg(m_downloadedFilePath);
+        m_status = QString::fromUtf8("Download failed.");
         m_downloadFile->deleteLater();
         m_downloadFile = nullptr;
         emit changed();
@@ -503,7 +555,7 @@ bool Updater::downloadUpdate()
     m_downloadTotal = 0;
     m_checking = true;
     m_error.clear();
-    m_status = QStringLiteral("Downloading update...");
+    m_status = QString::fromUtf8("Downloading update...");
     emit changed();
 
     QNetworkRequest request {QUrl(m_assetUrl)};
@@ -516,7 +568,7 @@ bool Updater::downloadUpdate()
     connect(m_downloadReply, &QNetworkReply::downloadProgress, this, &Updater::onDownloadProgress);
     connect(m_downloadReply, &QNetworkReply::finished, this, &Updater::onDownloadFinished);
 
-    emit systemLog(QStringLiteral("[Updater] Downloading %1").arg(fileName));
+    emit systemLog(QString::fromUtf8("[Updater] Downloading %1").arg(fileName));
     return true;
 }
 
@@ -524,73 +576,137 @@ bool Updater::openDownloadedUpdate()
 {
     const QString path = m_downloadedFilePath.trimmed();
     if (path.isEmpty() || !QFileInfo::exists(path)) {
-        m_error = QStringLiteral("Downloaded update file was not found.");
+        m_error = QString::fromUtf8("Downloaded update file was not found.");
+        m_status = QString::fromUtf8("Open installer failed.");
         emit changed();
         return false;
     }
-    return QDesktopServices::openUrl(QUrl::fromLocalFile(path));
+
+#if defined(Q_OS_WIN)
+    if (looksLikeManualInstaller(path)) {
+        const QString nativePath = QDir::toNativeSeparators(path);
+        const QString delayedLaunchCommand = QString::fromUtf8(
+            "ping 127.0.0.1 -n 2 > NUL && start \"\" \"%1\"").arg(nativePath);
+
+        bool opened = QProcess::startDetached(
+            QString::fromUtf8("cmd.exe"),
+            {QString::fromUtf8("/C"), delayedLaunchCommand});
+        if (!opened) {
+            opened = QProcess::startDetached(path, QStringList());
+        }
+        if (!opened) {
+            opened = QDesktopServices::openUrl(QUrl::fromLocalFile(path));
+        }
+        if (!opened) {
+            m_error = QString::fromUtf8("Failed to open installer.");
+            m_status = QString::fromUtf8("Open installer failed.");
+            emit changed();
+            return false;
+        }
+
+        m_error.clear();
+        m_status = QString::fromUtf8("Closing app and launching installer...");
+        emit systemLog(QString::fromUtf8("[Updater] %1").arg(m_status));
+        emit changed();
+        QTimer::singleShot(120, qApp, []() { QCoreApplication::quit(); });
+        return true;
+    }
+#endif
+
+    const bool opened = QDesktopServices::openUrl(QUrl::fromLocalFile(path));
+    if (!opened) {
+        m_error = QString::fromUtf8("Failed to open downloaded update.");
+        m_status = QString::fromUtf8("Open installer failed.");
+        emit changed();
+        return false;
+    }
+    m_error.clear();
+    return true;
 }
 
 bool Updater::installDownloadedUpdate()
 {
     const QString sourcePath = m_downloadedFilePath.trimmed();
     if (sourcePath.isEmpty() || !QFileInfo::exists(sourcePath)) {
-        m_error = QStringLiteral("Downloaded update file was not found.");
-        m_status = QStringLiteral("Install failed.");
+        m_error = QString::fromUtf8("Downloaded update file was not found.");
+        m_status = QString::fromUtf8("Install failed.");
         emit changed();
         return false;
     }
 
     if (looksLikeManualInstaller(sourcePath)) {
-        m_status = QStringLiteral("This asset requires manual install. Opening installer...");
+        m_status = QString::fromUtf8("This asset requires manual install. Opening installer...");
         m_error.clear();
         emit changed();
         return openDownloadedUpdate();
     }
 
     const QString expectedSha256 = normalizeSha256Digest(m_assetExpectedSha256);
+#if !defined(Q_OS_ANDROID)
     if (expectedSha256.isEmpty()) {
-        m_error = QStringLiteral(
+        m_error = QString::fromUtf8(
             "Release does not provide trusted SHA-256 metadata for this asset. Publish digest/checksum first.");
-        m_status = QStringLiteral("Install blocked.");
-        emit systemLog(QStringLiteral("[Updater] %1").arg(m_error));
+        m_status = QString::fromUtf8("Install blocked.");
+        emit systemLog(QString::fromUtf8("[Updater] %1").arg(m_error));
+        emit changed();
+        return false;
+    }
+#endif
+
+    if (!expectedSha256.isEmpty()) {
+        const QString downloadedHash = fileSha256Hex(sourcePath).toLower();
+        if (downloadedHash.isEmpty() || downloadedHash != expectedSha256) {
+            m_error = QString::fromUtf8("Downloaded update hash verification failed.");
+            m_status = QString::fromUtf8("Install failed.");
+            emit systemLog(QString::fromUtf8("[Updater] %1").arg(m_error));
+            emit changed();
+            return false;
+        }
+    }
+
+#if defined(Q_OS_ANDROID)
+    QString installError;
+    if (!installDownloadedApkViaBridge(sourcePath, &installError)) {
+        m_error = installError.isEmpty()
+            ? QString::fromUtf8("Failed to open Android package installer.")
+            : installError;
+        m_status = QString::fromUtf8("Install failed.");
+        emit systemLog(QString::fromUtf8("[Updater] %1").arg(m_error));
         emit changed();
         return false;
     }
 
-    const QString downloadedHash = fileSha256Hex(sourcePath).toLower();
-    if (downloadedHash.isEmpty() || downloadedHash != expectedSha256) {
-        m_error = QStringLiteral("Downloaded update hash verification failed.");
-        m_status = QStringLiteral("Install failed.");
-        emit systemLog(QStringLiteral("[Updater] %1").arg(m_error));
-        emit changed();
-        return false;
-    }
+    m_error.clear();
+    m_status = QString::fromUtf8("Opened package installer. Confirm update to continue.");
+    emit systemLog(QString::fromUtf8("[Updater] %1").arg(m_status));
+    emit changed();
+    return true;
+#endif
 
     const QString helperPath = appUpdaterHelperPath();
     if (!QFileInfo::exists(helperPath)) {
-        m_error = QStringLiteral("Updater helper executable not found.");
-        m_status = QStringLiteral("Install failed.");
+        m_error = QString::fromUtf8("Updater helper executable not found.");
+        m_status = QString::fromUtf8("Install failed.");
         emit changed();
         return false;
     }
 
     const QString appDir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
     if (appDir.trimmed().isEmpty()) {
-        m_error = QStringLiteral("Could not resolve app data directory.");
-        m_status = QStringLiteral("Install failed.");
+        m_error = QString::fromUtf8("Could not resolve app data directory.");
+        m_status = QString::fromUtf8("Install failed.");
         emit changed();
         return false;
     }
 
-    const QString updateDir = QDir(appDir).filePath(QStringLiteral("updates"));
+    const QString updateDir = QDir(appDir).filePath(QString::fromUtf8("updates"));
     QDir().mkpath(updateDir);
 
     const QString sourceName = QFileInfo(sourcePath).fileName();
-    const QString stagedPath = QDir(updateDir).filePath(QStringLiteral("staged-%1").arg(sourceName));
+    const QString stagedPath = QDir(updateDir).filePath(QString::fromUtf8("staged-%1").arg(sourceName));
     if (!copyWithOverwrite(sourcePath, stagedPath)) {
-        m_error = QStringLiteral("Failed to stage update file.");
-        m_status = QStringLiteral("Install failed.");
+        m_error = QString::fromUtf8("Failed to stage update file.");
+        m_status = QString::fromUtf8("Install failed.");
         emit changed();
         return false;
     }
@@ -600,38 +716,38 @@ bool Updater::installDownloadedUpdate()
     bool installDirWritable = true;
     {
         const QString exeDir = QFileInfo(currentExe).absolutePath();
-        QTemporaryFile probe(QDir(exeDir).filePath(QStringLiteral(".__geny_write_probe_XXXXXX.tmp")));
+        QTemporaryFile probe(QDir(exeDir).filePath(QString::fromUtf8(".__geny_write_probe_XXXXXX.tmp")));
         probe.setAutoRemove(true);
         if (!probe.open()) {
             installDirWritable = false;
-            emit systemLog(QStringLiteral(
+            emit systemLog(QString::fromUtf8(
                 "[Updater] Install folder is not writable. Will request Administrator permission."));
         } else {
             probe.close();
         }
     }
 #endif
-    const QString backupPath = currentExe + QStringLiteral(".backup.old");
+    const QString backupPath = currentExe + QString::fromUtf8(".backup.old");
     const QString jobPath = QDir(updateDir).filePath(
-        QStringLiteral("update-job-%1.json").arg(QString::number(QDateTime::currentMSecsSinceEpoch()))
+        QString::fromUtf8("update-job-%1.json").arg(QString::number(QDateTime::currentMSecsSinceEpoch()))
     );
 
     QJsonObject job;
-    job.insert(QStringLiteral("pid"), static_cast<qint64>(QCoreApplication::applicationPid()));
-    job.insert(QStringLiteral("current_executable"), currentExe);
-    job.insert(QStringLiteral("staged_executable"), stagedPath);
-    job.insert(QStringLiteral("backup_executable"), backupPath);
-    job.insert(QStringLiteral("working_directory"), QCoreApplication::applicationDirPath());
-    job.insert(QStringLiteral("expected_sha256"), expectedSha256);
-    job.insert(QStringLiteral("cleanup_source_on_success"), true);
-    job.insert(QStringLiteral("timeout_ms"), 45000);
-    job.insert(QStringLiteral("args"), QJsonArray());
+    job.insert(QString::fromUtf8("pid"), static_cast<qint64>(QCoreApplication::applicationPid()));
+    job.insert(QString::fromUtf8("current_executable"), currentExe);
+    job.insert(QString::fromUtf8("staged_executable"), stagedPath);
+    job.insert(QString::fromUtf8("backup_executable"), backupPath);
+    job.insert(QString::fromUtf8("working_directory"), QCoreApplication::applicationDirPath());
+    job.insert(QString::fromUtf8("expected_sha256"), expectedSha256);
+    job.insert(QString::fromUtf8("cleanup_source_on_success"), true);
+    job.insert(QString::fromUtf8("timeout_ms"), 45000);
+    job.insert(QString::fromUtf8("args"), QJsonArray());
 
     QFile jobFile(jobPath);
     if (!jobFile.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
         QFile::remove(stagedPath);
-        m_error = QStringLiteral("Failed to write update job file.");
-        m_status = QStringLiteral("Install failed.");
+        m_error = QString::fromUtf8("Failed to write update job file.");
+        m_status = QString::fromUtf8("Install failed.");
         emit changed();
         return false;
     }
@@ -642,9 +758,9 @@ bool Updater::installDownloadedUpdate()
     if (!startUpdaterHelperDetached(helperPath, jobPath, &launchError)) {
         QFile::remove(jobPath);
         QFile::remove(stagedPath);
-        m_error = launchError.isEmpty() ? QStringLiteral("Failed to launch updater helper.") : launchError;
-        m_status = QStringLiteral("Install failed.");
-        emit systemLog(QStringLiteral("[Updater] %1").arg(m_error));
+        m_error = launchError.isEmpty() ? QString::fromUtf8("Failed to launch updater helper.") : launchError;
+        m_status = QString::fromUtf8("Install failed.");
+        emit systemLog(QString::fromUtf8("[Updater] %1").arg(m_error));
         emit changed();
         return false;
     }
@@ -652,14 +768,14 @@ bool Updater::installDownloadedUpdate()
     m_error.clear();
 #if defined(Q_OS_WIN)
     if (!installDirWritable) {
-        m_status = QStringLiteral("Waiting for Administrator approval to install update...");
+        m_status = QString::fromUtf8("Waiting for Administrator approval to install update...");
     } else {
-        m_status = QStringLiteral("Installing update and restarting...");
+        m_status = QString::fromUtf8("Installing update and restarting...");
     }
 #else
-    m_status = QStringLiteral("Installing update and restarting...");
+    m_status = QString::fromUtf8("Installing update and restarting...");
 #endif
-    emit systemLog(QStringLiteral("[Updater] Handed off update to helper process."));
+    emit systemLog(QString::fromUtf8("[Updater] Handed off update to helper process."));
     emit changed();
 
     QTimer::singleShot(250, qApp, []() { QCoreApplication::quit(); });
@@ -698,10 +814,10 @@ void Updater::onCheckFinished()
         const QJsonDocument statusDoc = QJsonDocument::fromJson(payload, &statusParseError);
         QString apiMessage;
         if (statusParseError.error == QJsonParseError::NoError && statusDoc.isObject()) {
-            apiMessage = statusDoc.object().value(QStringLiteral("message")).toString().trimmed();
+            apiMessage = statusDoc.object().value(QString::fromUtf8("message")).toString().trimmed();
         }
 
-        if (statusCode == 404 || apiMessage.compare(QStringLiteral("Not Found"), Qt::CaseInsensitive) == 0) {
+        if (statusCode == 404 || apiMessage.compare(QString::fromUtf8("Not Found"), Qt::CaseInsensitive) == 0) {
             m_updateAvailable = false;
             m_latestVersion.clear();
             m_assetUrl.clear();
@@ -712,9 +828,9 @@ void Updater::onCheckFinished()
             m_downloadReceived = 0;
             m_downloadTotal = 0;
             m_error.clear();
-            m_status = QStringLiteral("No published release yet. Current version %1.").arg(m_appVersion);
+            m_status = QString::fromUtf8("No published release yet. Current version %1.").arg(m_appVersion);
             if (m_userInitiatedCheck) {
-                emit systemLog(QStringLiteral("[Updater] %1").arg(m_status));
+                emit systemLog(QString::fromUtf8("[Updater] %1").arg(m_status));
             }
             m_userInitiatedCheck = false;
             emit changed();
@@ -725,11 +841,11 @@ void Updater::onCheckFinished()
         m_assetExpectedSha256.clear();
         m_assetChecksumUrl.clear();
         m_error = networkError.isEmpty()
-            ? QStringLiteral("Failed to check updates.")
+            ? QString::fromUtf8("Failed to check updates.")
             : networkError;
-        m_status = QStringLiteral("Update check failed.");
+        m_status = QString::fromUtf8("Update check failed.");
         if (m_userInitiatedCheck) {
-            emit systemLog(QStringLiteral("[Updater] %1").arg(m_error));
+            emit systemLog(QString::fromUtf8("[Updater] %1").arg(m_error));
         }
         m_userInitiatedCheck = false;
         emit changed();
@@ -742,17 +858,17 @@ void Updater::onCheckFinished()
         m_updateAvailable = false;
         m_assetExpectedSha256.clear();
         m_assetChecksumUrl.clear();
-        m_error = QStringLiteral("Release metadata parse failed.");
-        m_status = QStringLiteral("Update check failed.");
+        m_error = QString::fromUtf8("Release metadata parse failed.");
+        m_status = QString::fromUtf8("Update check failed.");
         m_userInitiatedCheck = false;
         emit changed();
         return;
     }
 
     const QJsonObject root = doc.object();
-    const QString latestRaw = root.value(QStringLiteral("tag_name")).toString().trimmed();
+    const QString latestRaw = root.value(QString::fromUtf8("tag_name")).toString().trimmed();
     const QString latest = normalizeVersionToken(latestRaw);
-    m_releaseUrl = root.value(QStringLiteral("html_url")).toString().trimmed();
+    m_releaseUrl = root.value(QString::fromUtf8("html_url")).toString().trimmed();
     m_latestVersion = latest;
     m_error.clear();
     m_assetUrl.clear();
@@ -763,32 +879,32 @@ void Updater::onCheckFinished()
     m_downloadReceived = 0;
     m_downloadTotal = 0;
 
-    const QJsonArray assets = root.value(QStringLiteral("assets")).toArray();
+    const QJsonArray assets = root.value(QString::fromUtf8("assets")).toArray();
     selectBestReleaseAsset(assets, &m_assetUrl, &m_assetName, &m_assetExpectedSha256, &m_assetChecksumUrl);
     if (!m_assetName.isEmpty()) {
-        emit systemLog(QStringLiteral("[Updater] Selected asset: %1").arg(m_assetName));
+        emit systemLog(QString::fromUtf8("[Updater] Selected asset: %1").arg(m_assetName));
         if (!m_assetExpectedSha256.isEmpty()) {
-            emit systemLog(QStringLiteral("[Updater] Found release digest for selected asset."));
+            emit systemLog(QString::fromUtf8("[Updater] Found release digest for selected asset."));
         } else if (!m_assetChecksumUrl.isEmpty()) {
-            emit systemLog(QStringLiteral("[Updater] Using checksum manifest for selected asset."));
+            emit systemLog(QString::fromUtf8("[Updater] Using checksum manifest for selected asset."));
         } else {
-            emit systemLog(QStringLiteral(
+            emit systemLog(QString::fromUtf8(
                 "[Updater] No checksum metadata for selected asset. Install will require a published SHA-256."));
         }
     }
 
     if (latest.isEmpty()) {
         m_updateAvailable = false;
-        m_status = QStringLiteral("No version info in release feed.");
+        m_status = QString::fromUtf8("No version info in release feed.");
     } else if (isVersionNewer(m_appVersion, latest)) {
         m_updateAvailable = true;
-        m_status = QStringLiteral("Update available: %1").arg(latest);
-        emit systemLog(QStringLiteral("[Updater] %1").arg(m_status));
+        m_status = QString::fromUtf8("Update available: %1").arg(latest);
+        emit systemLog(QString::fromUtf8("[Updater] %1").arg(m_status));
     } else {
         m_updateAvailable = false;
-        m_status = QStringLiteral("You are up to date (%1).").arg(m_appVersion);
+        m_status = QString::fromUtf8("You are up to date (%1).").arg(m_appVersion);
         if (m_userInitiatedCheck) {
-            emit systemLog(QStringLiteral("[Updater] %1").arg(m_status));
+            emit systemLog(QString::fromUtf8("[Updater] %1").arg(m_status));
         }
     }
 
@@ -851,10 +967,10 @@ void Updater::onDownloadFinished()
             m_downloadFile = nullptr;
         }
         m_error = errorText.isEmpty()
-            ? QStringLiteral("Update download failed.")
+            ? QString::fromUtf8("Update download failed.")
             : errorText;
-        m_status = QStringLiteral("Download failed.");
-        emit systemLog(QStringLiteral("[Updater] %1").arg(m_error));
+        m_status = QString::fromUtf8("Download failed.");
+        emit systemLog(QString::fromUtf8("[Updater] %1").arg(m_error));
         emit changed();
         return;
     }
@@ -871,12 +987,12 @@ void Updater::onDownloadFinished()
             const QString extracted = extractSha256FromManifest(manifestPayload, m_assetName);
             if (!extracted.isEmpty()) {
                 m_assetExpectedSha256 = extracted;
-                emit systemLog(QStringLiteral("[Updater] Checksum resolved from manifest for %1.").arg(m_assetName));
+                emit systemLog(QString::fromUtf8("[Updater] Checksum resolved from manifest for %1.").arg(m_assetName));
             } else {
-                emit systemLog(QStringLiteral("[Updater] Checksum manifest did not include %1.").arg(m_assetName));
+                emit systemLog(QString::fromUtf8("[Updater] Checksum manifest did not include %1.").arg(m_assetName));
             }
         } else if (!manifestError.trimmed().isEmpty()) {
-            emit systemLog(QStringLiteral("[Updater] Checksum fetch failed: %1").arg(manifestError.trimmed()));
+            emit systemLog(QString::fromUtf8("[Updater] Checksum fetch failed: %1").arg(manifestError.trimmed()));
         }
     }
 
@@ -884,23 +1000,23 @@ void Updater::onDownloadFinished()
         const QString downloadedHash = fileSha256Hex(m_downloadedFilePath).toLower();
         if (downloadedHash.isEmpty() || downloadedHash != m_assetExpectedSha256) {
             QFile::remove(m_downloadedFilePath);
-            m_error = QStringLiteral("Downloaded update hash verification failed.");
-            m_status = QStringLiteral("Download failed.");
-            emit systemLog(QStringLiteral("[Updater] %1").arg(m_error));
+            m_error = QString::fromUtf8("Downloaded update hash verification failed.");
+            m_status = QString::fromUtf8("Download failed.");
+            emit systemLog(QString::fromUtf8("[Updater] %1").arg(m_error));
             emit changed();
             return;
         }
-        emit systemLog(QStringLiteral("[Updater] Downloaded file hash verified."));
+        emit systemLog(QString::fromUtf8("[Updater] Downloaded file hash verified."));
     }
 
     m_error.clear();
     if (m_assetExpectedSha256.isEmpty()) {
-        m_status = QStringLiteral("Update downloaded, but release checksum is missing.");
+        m_status = QString::fromUtf8("Update downloaded, but release checksum is missing.");
     } else {
-        m_status = QStringLiteral("Update downloaded. Open installer to continue.");
+        m_status = QString::fromUtf8("Update downloaded. Open installer to continue.");
     }
     m_downloadReceived = m_downloadTotal > 0 ? m_downloadTotal : m_downloadReceived;
-    emit systemLog(QStringLiteral("[Updater] %1").arg(m_status));
+    emit systemLog(QString::fromUtf8("[Updater] %1").arg(m_status));
     emit changed();
 }
 
@@ -950,15 +1066,23 @@ bool Updater::selectBestReleaseAsset(
     if (arch.isEmpty()) {
         arch = QSysInfo::currentCpuArchitecture().toLower();
     }
-#if defined(Q_OS_MACOS)
+#if defined(Q_OS_ANDROID)
+    constexpr bool isAndroid = true;
+    constexpr bool isMac = false;
+    constexpr bool isWin = false;
+    constexpr bool isLinux = false;
+#elif defined(Q_OS_MACOS)
+    constexpr bool isAndroid = false;
     constexpr bool isMac = true;
     constexpr bool isWin = false;
     constexpr bool isLinux = false;
 #elif defined(Q_OS_WIN)
+    constexpr bool isAndroid = false;
     constexpr bool isMac = false;
     constexpr bool isWin = true;
     constexpr bool isLinux = false;
 #else
+    constexpr bool isAndroid = false;
     constexpr bool isMac = false;
     constexpr bool isWin = false;
     constexpr bool isLinux = true;
@@ -974,24 +1098,32 @@ bool Updater::selectBestReleaseAsset(
             continue;
         }
         const QJsonObject obj = entry.toObject();
-        const QString name = obj.value(QStringLiteral("name")).toString().trimmed();
-        const QString url = obj.value(QStringLiteral("browser_download_url")).toString().trimmed();
+        const QString name = obj.value(QString::fromUtf8("name")).toString().trimmed();
+        const QString url = obj.value(QString::fromUtf8("browser_download_url")).toString().trimmed();
         if (name.isEmpty() || url.isEmpty()) {
             continue;
         }
 
         const QString lower = name.toLower();
-        const bool mentionsMac = lower.contains(QStringLiteral("mac"))
-            || lower.contains(QStringLiteral("darwin"))
-            || lower.contains(QStringLiteral("osx"));
-        const bool mentionsWin = lower.contains(QStringLiteral("win"))
-            || lower.contains(QStringLiteral("windows"));
-        const bool mentionsLinux = lower.contains(QStringLiteral("linux"))
-            || lower.contains(QStringLiteral("appimage"))
-            || lower.contains(QStringLiteral(".deb"))
-            || lower.contains(QStringLiteral(".rpm"));
+        const bool mentionsMac = lower.contains(QString::fromUtf8("mac"))
+            || lower.contains(QString::fromUtf8("darwin"))
+            || lower.contains(QString::fromUtf8("osx"));
+        const bool mentionsWin = lower.contains(QString::fromUtf8("win"))
+            || lower.contains(QString::fromUtf8("windows"));
+        const bool mentionsLinux = lower.contains(QString::fromUtf8("linux"))
+            || lower.contains(QString::fromUtf8("appimage"))
+            || lower.contains(QString::fromUtf8(".deb"))
+            || lower.contains(QString::fromUtf8(".rpm"));
+        const bool mentionsAndroid = lower.contains(QString::fromUtf8("android"))
+            || lower.endsWith(QString::fromUtf8(".apk"));
 
         // Hard filter when asset explicitly targets a different platform.
+        if (isAndroid && (mentionsMac || mentionsWin || mentionsLinux)) {
+            continue;
+        }
+        if (isAndroid && !mentionsAndroid) {
+            continue;
+        }
         if (isWin && mentionsMac) {
             continue;
         }
@@ -1011,12 +1143,12 @@ bool Updater::selectBestReleaseAsset(
             continue;
         }
 
-        const bool assetArm = lower.contains(QStringLiteral("arm64")) || lower.contains(QStringLiteral("aarch64"));
-        const bool assetX86 = lower.contains(QStringLiteral("x64"))
-            || lower.contains(QStringLiteral("x86_64"))
-            || lower.contains(QStringLiteral("amd64"))
-            || lower.contains(QStringLiteral("x86-64"));
-        const bool hostArm = arch.contains(QStringLiteral("arm")) || arch.contains(QStringLiteral("aarch64"));
+        const bool assetArm = lower.contains(QString::fromUtf8("arm64")) || lower.contains(QString::fromUtf8("aarch64"));
+        const bool assetX86 = lower.contains(QString::fromUtf8("x64"))
+            || lower.contains(QString::fromUtf8("x86_64"))
+            || lower.contains(QString::fromUtf8("amd64"))
+            || lower.contains(QString::fromUtf8("x86-64"));
+        const bool hostArm = arch.contains(QString::fromUtf8("arm")) || arch.contains(QString::fromUtf8("aarch64"));
 
         // Hard filter when asset explicitly targets a different architecture.
         if (hostArm && assetX86 && !assetArm) {
@@ -1027,10 +1159,10 @@ bool Updater::selectBestReleaseAsset(
         }
 
         int score = 0;
-        if (lower.contains(QStringLiteral("genyconnect"))) {
+        if (lower.contains(QString::fromUtf8("genyconnect"))) {
             score += 25;
         }
-        if (lower.contains(QStringLiteral("selfupdate"))) {
+        if (lower.contains(QString::fromUtf8("selfupdate"))) {
             score += 30;
         }
 
@@ -1038,30 +1170,37 @@ bool Updater::selectBestReleaseAsset(
             if (mentionsMac) {
                 score += 40;
             }
-            if (lower.endsWith(QStringLiteral(".dmg"))) {
+            if (lower.endsWith(QString::fromUtf8(".dmg"))) {
                 score += 35;
-            } else if (lower.endsWith(QStringLiteral(".pkg"))) {
+            } else if (lower.endsWith(QString::fromUtf8(".pkg"))) {
                 score += 25;
-            } else if (lower.endsWith(QStringLiteral(".zip"))) {
+            } else if (lower.endsWith(QString::fromUtf8(".zip"))) {
                 score += 10;
             }
         } else if (isWin) {
             if (mentionsWin) {
                 score += 40;
             }
-            if (lower.endsWith(QStringLiteral(".exe")) || lower.endsWith(QStringLiteral(".msi"))) {
+            if (lower.endsWith(QString::fromUtf8(".exe")) || lower.endsWith(QString::fromUtf8(".msi"))) {
                 score += 35;
-            } else if (lower.endsWith(QStringLiteral(".zip"))) {
+            } else if (lower.endsWith(QString::fromUtf8(".zip"))) {
                 score += 10;
             }
         } else if (isLinux) {
             if (mentionsLinux) {
                 score += 40;
             }
-            if (lower.endsWith(QStringLiteral(".appimage")) || lower.endsWith(QStringLiteral(".deb")) || lower.endsWith(QStringLiteral(".rpm"))) {
+            if (lower.endsWith(QString::fromUtf8(".appimage")) || lower.endsWith(QString::fromUtf8(".deb")) || lower.endsWith(QString::fromUtf8(".rpm"))) {
                 score += 35;
-            } else if (lower.endsWith(QStringLiteral(".tar.gz")) || lower.endsWith(QStringLiteral(".zip"))) {
+            } else if (lower.endsWith(QString::fromUtf8(".tar.gz")) || lower.endsWith(QString::fromUtf8(".zip"))) {
                 score += 15;
+            }
+        } else if (isAndroid) {
+            if (mentionsAndroid) {
+                score += 60;
+            }
+            if (lower.endsWith(QString::fromUtf8(".apk"))) {
+                score += 70;
             }
         }
 
@@ -1079,15 +1218,15 @@ bool Updater::selectBestReleaseAsset(
             bestScore = score;
             bestUrl = url;
             bestName = name;
-            bestDigest = normalizeSha256Digest(obj.value(QStringLiteral("digest")).toString());
+            bestDigest = normalizeSha256Digest(obj.value(QString::fromUtf8("digest")).toString());
         }
     }
 
     if (bestUrl.isEmpty()) {
         const QJsonObject firstObj = assets.first().toObject();
-        bestName = firstObj.value(QStringLiteral("name")).toString().trimmed();
-        bestUrl = firstObj.value(QStringLiteral("browser_download_url")).toString().trimmed();
-        bestDigest = normalizeSha256Digest(firstObj.value(QStringLiteral("digest")).toString());
+        bestName = firstObj.value(QString::fromUtf8("name")).toString().trimmed();
+        bestUrl = firstObj.value(QString::fromUtf8("browser_download_url")).toString().trimmed();
+        bestDigest = normalizeSha256Digest(firstObj.value(QString::fromUtf8("digest")).toString());
     }
 
     if (bestUrl.isEmpty()) {
@@ -1103,8 +1242,8 @@ bool Updater::selectBestReleaseAsset(
                 continue;
             }
             const QJsonObject obj = entry.toObject();
-            const QString candidateName = obj.value(QStringLiteral("name")).toString().trimmed();
-            const QString candidateUrl = obj.value(QStringLiteral("browser_download_url")).toString().trimmed();
+            const QString candidateName = obj.value(QString::fromUtf8("name")).toString().trimmed();
+            const QString candidateUrl = obj.value(QString::fromUtf8("browser_download_url")).toString().trimmed();
             if (candidateName.isEmpty() || candidateUrl.isEmpty()) {
                 continue;
             }
@@ -1114,17 +1253,17 @@ bool Updater::selectBestReleaseAsset(
             }
 
             int score = 0;
-            if (candidateLower == bestNameLower + QStringLiteral(".sha256")) {
+            if (candidateLower == bestNameLower + QString::fromUtf8(".sha256")) {
                 score += 300;
-            } else if (candidateLower == bestNameLower + QStringLiteral(".sha256.txt")) {
+            } else if (candidateLower == bestNameLower + QString::fromUtf8(".sha256.txt")) {
                 score += 280;
             } else if (candidateLower.contains(bestNameLower)) {
                 score += 180;
             }
-            if (candidateLower.contains(QStringLiteral("sha256"))) {
+            if (candidateLower.contains(QString::fromUtf8("sha256"))) {
                 score += 80;
             }
-            if (candidateLower.contains(QStringLiteral("checksum"))) {
+            if (candidateLower.contains(QString::fromUtf8("checksum"))) {
                 score += 40;
             }
             if (score > checksumScoreBest) {
@@ -1175,7 +1314,7 @@ bool Updater::isSelfInstallSupportedAsset(const QString& path)
         return false;
     }
     if (info.isDir()) {
-        return info.fileName().toLower().endsWith(QStringLiteral(".app"));
+        return info.fileName().toLower().endsWith(QString::fromUtf8(".app"));
     }
     return !looksLikeManualInstaller(path);
 }

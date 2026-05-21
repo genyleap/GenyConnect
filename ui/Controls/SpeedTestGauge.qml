@@ -15,6 +15,8 @@ Item {
     property bool useOwnBackground: false
     property color darkBackgroundColor: "#000000"
     property color lightBackgroundColor: "transparent"
+    property bool animationsEnabled: true
+    property bool effectsEnabled: true
 
     // Particle controls
     property bool particlesEnabled: true
@@ -100,6 +102,7 @@ Item {
 
     // ── Animation ──────────────────────────────────────────────────────────────
     Behavior on value {
+        enabled: root.animationsEnabled
         NumberAnimation {
             duration: 600
             easing.type: Easing.OutCubic
@@ -332,10 +335,12 @@ Item {
 
             // Active band
             band(rO, rI, sA, cur, angularGradient)
-            band(rO, rI, sA, cur, depthGradient)
+            if (root.effectsEnabled)
+                band(rO, rI, sA, cur, depthGradient)
 
             // Contained inner bloom
-            band(rI, rI * 0.72, sA, cur, bloomGradient)
+            if (root.effectsEnabled)
+                band(rI, rI * 0.72, sA, cur, bloomGradient)
 
             // Active outer rim — soft neutral glow
             ctx.beginPath()
@@ -450,6 +455,7 @@ Item {
                 scale: 0.88 + Math.sin(phase * Math.PI * 2.0) * 0.10
 
                 NumberAnimation on phase {
+                    running: root.animationsEnabled && root.particlesEnabled
                     from: 0
                     to: 1
                     duration: Math.max(260, (1450 + index * 41) / root.particleSpeedFactor)
@@ -491,6 +497,7 @@ Item {
                 // Glow
                 Rectangle {
                     id: glowDot
+                    visible: root.effectsEnabled
 
                     anchors.centerIn: parent
 
@@ -556,6 +563,7 @@ Item {
                 scale: 0.56 + pulse * 0.82
 
                 NumberAnimation on pulse {
+                    running: root.animationsEnabled && root.particlesEnabled
                     from: 0
                     to: 1
                     duration: Math.max(180, (560 + index * 36) / root.particleSpeedFactor)
@@ -565,6 +573,7 @@ Item {
 
                 Rectangle {
                     anchors.centerIn: parent
+                    visible: root.effectsEnabled
 
                     width: spark.sparkSize * 4.2
                     height: width
@@ -602,6 +611,7 @@ Item {
             opacity: root.progress > 0.03 ? 0.28 + root.progress * 0.32 : 0
 
             SequentialAnimation on scale {
+                running: root.animationsEnabled
                 loops: Animation.Infinite
 
                 NumberAnimation {

@@ -3,6 +3,7 @@ import QtQuick.Controls
 import QtQuick.Controls.Basic as T
 import QtQuick.Layouts
 import GenyConnect 1.0
+
 import "../Core"
 
 T.ComboBox {
@@ -39,14 +40,28 @@ T.ComboBox {
         elide: Text.ElideRight
     }
 
-    indicator: Text {
-        text: "\u25BE"
-        font.family: FontSystem.contentFontFamily
-        font.pixelSize: Typography.t3
-        color: Colors.gcControlMuted
+    indicator: Item {
+        width: 12
+        height: 8
         anchors.right: parent.right
         anchors.rightMargin: 10
         anchors.verticalCenter: parent.verticalCenter
+
+        Canvas {
+            anchors.fill: parent
+            onPaint: {
+                const ctx = getContext("2d")
+                ctx.reset()
+                ctx.strokeStyle = Colors.gcControlMuted
+                ctx.lineWidth = 1.8
+                ctx.lineCap = "round"
+                ctx.beginPath()
+                ctx.moveTo(1, 2)
+                ctx.lineTo(width / 2, height - 1)
+                ctx.lineTo(width - 1, 2)
+                ctx.stroke()
+            }
+        }
     }
 
     background: Rectangle {

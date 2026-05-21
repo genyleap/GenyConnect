@@ -22,4 +22,14 @@ QtObject {
     readonly property int       display6 : 24
 
     readonly property int       paragraph : 14
+
+    // Unified naming used by shared app components
+    readonly property int uiCaption: 11
+    readonly property int uiBodySm: 12
+    readonly property int uiBody: 13
+    readonly property int uiBodyLg: 14
+    readonly property int uiTitleSm: 16
+    readonly property int uiTitle: 18
+    readonly property int uiTitleLg: 22
+    readonly property int uiHero: 30
 }

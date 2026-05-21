@@ -9,6 +9,7 @@ Item {
     property bool bold: false
     property int duration: 220
     property int fontSize: 18
+    property bool animated: true
     property string currentText: text
     property string previousText: text
 
@@ -21,7 +22,13 @@ Item {
             return
         previousText = currentText
         currentText = text
-        flowAnimation.restart()
+        if (animated) {
+            flowAnimation.restart()
+        } else {
+            previousLabel.opacity = 0.0
+            currentLabel.y = 0
+            currentLabel.opacity = 1.0
+        }
     }
 
     Text {

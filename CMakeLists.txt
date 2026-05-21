@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Genyleap Labs.
+
 cmake_minimum_required(VERSION 3.28)
 
 # -----------------------------------------------------------------------------
@@ -20,7 +23,7 @@ set(GENYCONNECT_TARGET_BUILD_ARCH "" CACHE STRING "Override target arch for outp
 # Must be defined before project() on macOS.
 set(GENYCONNECT_MACOS_DEPLOYMENT_TARGET "14.0" CACHE STRING "Minimum macOS version")
 
-if(APPLE)
+if(APPLE AND NOT IOS)
   if(NOT GENYCONNECT_TARGET_BUILD_ARCH)
     set(GENYCONNECT_TARGET_BUILD_ARCH "arm64" CACHE STRING "Override target arch for output build/package (arm64|x86_64)" FORCE)
   endif()
@@ -29,7 +32,7 @@ if(APPLE)
   set(CMAKE_OSX_DEPLOYMENT_TARGET "${GENYCONNECT_MACOS_DEPLOYMENT_TARGET}" CACHE STRING "Minimum macOS version" FORCE)
 endif()
 
-project(${PROJECT_NAME} VERSION 1.3.1 LANGUAGES CXX)
+project(${PROJECT_NAME} VERSION 1.3.768 LANGUAGES CXX)
 
 # -------------------------
 # Detect Windows generator architecture
@@ -79,6 +82,35 @@ option(GENYCONNECT_LLVM_AUTO_SCAN       "Auto-detect LLVM/clang for modules" ON)
 option(GENYCONNECT_QT_AUTO_SCAN         "Auto-detect Qt installation prefix" ON)
 option(GENYCONNECT_AUTO_DOWNLOAD_XRAY   "Automatically download and bundle xray-core" ON)
 option(GENYCONNECT_AUTO_DOWNLOAD_WINTUN "Automatically download official wintun.dll on Windows if missing" ON)
+option(GENYCONNECT_BUILD_DESKTOP "Build desktop runtime and packaging flow" ON)
+option(GENYCONNECT_BUILD_ANDROID "Build Android mobile runtime layer" OFF)
+option(GENYCONNECT_BUILD_IOS "Build iOS mobile runtime layer" OFF)
+option(GENYCONNECT_ENABLE_DESKTOP_HELPERS "Build desktop helper binaries" ON)
+option(GENYCONNECT_ENABLE_MOBILE_VPN "Enable mobile VPN runtime bridge stubs" ON)
+set(GENYCONNECT_ANDROID_OPENSSL_ROOT "" CACHE PATH "Android OpenSSL root containing ABI folders with libssl_3.so/libcrypto_3.so (e.g. <sdk>/android_openssl/ssl_3)")
+
+if(ANDROID)
+  set(GENYCONNECT_BUILD_DESKTOP OFF CACHE BOOL "Build desktop runtime and packaging flow" FORCE)
+  set(GENYCONNECT_BUILD_ANDROID ON CACHE BOOL "Build Android mobile runtime layer" FORCE)
+  set(GENYCONNECT_BUILD_IOS OFF CACHE BOOL "Build iOS mobile runtime layer" FORCE)
+  set(GENYCONNECT_AUTO_DOWNLOAD_XRAY ON CACHE BOOL "Automatically download and bundle xray-core" FORCE)
+elseif(IOS)
+  set(GENYCONNECT_BUILD_DESKTOP OFF CACHE BOOL "Build desktop runtime and packaging flow" FORCE)
+  set(GENYCONNECT_BUILD_ANDROID OFF CACHE BOOL "Build Android mobile runtime layer" FORCE)
+  set(GENYCONNECT_BUILD_IOS ON CACHE BOOL "Build iOS mobile runtime layer" FORCE)
+else()
+  if(NOT GENYCONNECT_BUILD_ANDROID AND NOT GENYCONNECT_BUILD_IOS)
+    set(GENYCONNECT_BUILD_DESKTOP ON CACHE BOOL "Build desktop runtime and packaging flow" FORCE)
+  endif()
+endif()
+
+if(NOT GENYCONNECT_BUILD_DESKTOP)
+  set(GENYCONNECT_ENABLE_DESKTOP_HELPERS OFF CACHE BOOL "Build desktop helper binaries" FORCE)
+  set(GENYCONNECT_AUTO_DOWNLOAD_WINTUN OFF CACHE BOOL "Automatically download official wintun.dll on Windows if missing" FORCE)
+  if(NOT GENYCONNECT_BUILD_ANDROID)
+    set(GENYCONNECT_AUTO_DOWNLOAD_XRAY OFF CACHE BOOL "Automatically download and bundle xray-core" FORCE)
+  endif()
+endif()
 
 # macOS deploy/sign (POST_BUILD)
 option(GENYCONNECT_MACOS_POSTBUILD_DEPLOY   "Run macdeployqt on the build .app in POST_BUILD (recommended)" ON)
@@ -120,7 +152,11 @@ set(GENYCONNECT_OUTPUT_NAME "" CACHE STRING "Optional explicit output name (over
 if(GENYCONNECT_TARGET_OS AND NOT GENYCONNECT_TARGET_OS STREQUAL "")
   string(TOLOWER "${GENYCONNECT_TARGET_OS}" GENY_OS)
 else()
-  if(APPLE)
+  if(GENYCONNECT_BUILD_ANDROID)
+    set(GENY_OS "android")
+  elseif(GENYCONNECT_BUILD_IOS OR IOS)
+    set(GENY_OS "ios")
+  elseif(APPLE)
     set(GENY_OS "macos")
   elseif(WIN32)
     set(GENY_OS "windows")
@@ -140,9 +176,12 @@ else()
   set(GENY_ARCH_RAW "x86_64")
 endif()
 
-string(TOLOWER "${GENY_ARCH_RAW}" GENY_ARCH)
 if(GENY_ARCH MATCHES "^(arm64|aarch64|arm64-v8a)$")
   set(GENY_ARCH "arm64")
+elseif(GENY_ARCH MATCHES "^(armeabi-v7a|armv7|armv7a|arm)$")
+  set(GENY_ARCH "armv7")
+elseif(GENY_ARCH MATCHES "^(universal|multi|fat)$")
+  set(GENY_ARCH "universal")
 elseif(GENY_ARCH MATCHES "^(x86_64|amd64|x64|64)$")
   set(GENY_ARCH "x86_64")
 endif()
@@ -328,7 +367,12 @@ if(CMAKE_PREFIX_PATH)
   set(CMAKE_PREFIX_PATH "${CMAKE_PREFIX_PATH}" CACHE STRING "Qt search prefixes" FORCE)
 endif()
 
-find_package(Qt6 6.8 REQUIRED COMPONENTS Core Gui Network Qml Quick QuickControls2 Widgets)
+set(GENYCONNECT_QT_COMPONENTS Core Gui Network Qml Quick QuickControls2)
+if(GENYCONNECT_BUILD_DESKTOP)
+  list(APPEND GENYCONNECT_QT_COMPONENTS Widgets)
+endif()
+
+find_package(Qt6 6.8 REQUIRED COMPONENTS ${GENYCONNECT_QT_COMPONENTS})
 qt_standard_project_setup(REQUIRES 6.8)
 
 message(STATUS "Qt6_DIR: ${Qt6_DIR}")
@@ -337,7 +381,7 @@ message(STATUS "CMAKE_PREFIX_PATH: ${CMAKE_PREFIX_PATH}")
 # -------------------------
 # macOS RPATH policy to avoid noisy -delete_rpath during CPack install step
 # -------------------------
-if(APPLE)
+if(APPLE AND NOT IOS AND GENYCONNECT_BUILD_DESKTOP)
   set(CMAKE_INSTALL_RPATH "@executable_path/../Frameworks")
   set(CMAKE_BUILD_RPATH   "@executable_path/../Frameworks")
   # Keep build-tree binaries runnable from Qt Creator by preserving build-time
@@ -357,54 +401,115 @@ set(GENYCONNECT_MODULE_IFS
   src/updater.cppm
   src/xrayconfigbuilder.cppm
   src/systemproxymanager.cppm
-  src/xrayprocessmanager.cppm
   src/vpncontroller.cppm
 )
+
 
 set(GENYCONNECT_IMPL_SOURCES
   src/serverprofile.cpp
   src/serverprofilemodel.cpp
   src/linkparser.cpp
+  src/powermodemanager.cpp
   src/updater.cpp
   src/xrayconfigbuilder.cpp
-  src/systemproxymanager.cpp
-  src/xrayprocessmanager.cpp
   src/vpncontroller.cpp
+  src/runtime/vpnruntimebackend.cpp
+  src/runtime/runtimefactory.cpp
+  src/runtime/androidvpnruntime.cpp
+  src/runtime/iosvpnruntime.cpp
 )
 
-if(APPLE)
+if(GENYCONNECT_BUILD_DESKTOP)
+  list(APPEND GENYCONNECT_IMPL_SOURCES
+    src/systemproxymanager.cpp
+    src/runtime/desktopvpnruntime.cpp
+  )
+else()
+  list(APPEND GENYCONNECT_IMPL_SOURCES
+    src/systemproxymanager_mobile.cpp
+  )
+endif()
+
+if(APPLE AND NOT IOS)
   list(APPEND GENYCONNECT_IMPL_SOURCES
     src/platform/macosappbridge.mm
   )
 endif()
 
-qt_add_executable(${PROJECT_NAME}
-  WIN32
-  MACOSX_BUNDLE
-  src/main.cpp
-  ${GENYCONNECT_IMPL_SOURCES}
-)
+if(IOS AND GENYCONNECT_ENABLE_MOBILE_VPN)
+  list(APPEND GENYCONNECT_IMPL_SOURCES
+    src/platform/ios/iosruntimebridge.mm
+  )
+endif()
 
-set_target_properties(${PROJECT_NAME} PROPERTIES OUTPUT_NAME "${GENY_OUTPUT_NAME}")
+if(GENYCONNECT_BUILD_DESKTOP)
+  qt_add_executable(${PROJECT_NAME}
+    WIN32
+    MACOSX_BUNDLE
+    src/main.cpp
+    ${GENYCONNECT_IMPL_SOURCES}
+  )
+else()
+  qt_add_executable(${PROJECT_NAME}
+    src/main.cpp
+    ${GENYCONNECT_IMPL_SOURCES}
+  )
+endif()
+
+set_target_properties(${PROJECT_NAME} PROPERTIES OUTPUT_NAME "${GENY_OUTPUT_NAME}"
+  QT_ANDROID_PACKAGE_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/android")
 set_target_properties(${PROJECT_NAME} PROPERTIES
   RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
   LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib"
   ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib"
 )
 
-qt_add_executable(GenyConnectUpdater
-  src/updaterhelper/main.cpp
-)
-target_link_libraries(GenyConnectUpdater PRIVATE Qt6::Core)
-set_target_properties(GenyConnectUpdater PROPERTIES OUTPUT_NAME "GenyConnectUpdater")
+if(ANDROID)
+  math(EXPR GENY_ANDROID_VERSION_CODE
+       "${PROJECT_VERSION_MAJOR} * 10000 + ${PROJECT_VERSION_MINOR} * 100 + ${PROJECT_VERSION_PATCH}")
+  set(ANDROID_VERSION_NAME "${PROJECT_VERSION}" CACHE STRING "Android package versionName" FORCE)
+  set(ANDROID_VERSION_CODE "${GENY_ANDROID_VERSION_CODE}" CACHE STRING "Android package versionCode" FORCE)
+  set_property(TARGET ${PROJECT_NAME} PROPERTY QT_ANDROID_VERSION_NAME "${PROJECT_VERSION}")
+  set_property(TARGET ${PROJECT_NAME} PROPERTY QT_ANDROID_VERSION_CODE "${GENY_ANDROID_VERSION_CODE}")
 
-qt_add_executable(GenyConnectTunHelper
-  src/tunhelper/main.cpp
-)
-target_link_libraries(GenyConnectTunHelper PRIVATE Qt6::Core Qt6::Network)
-set_target_properties(GenyConnectTunHelper PROPERTIES OUTPUT_NAME "GenyConnectTunHelper")
+  set(GENY_ANDROID_PACKAGE_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/properties/Android")
+  set(GENY_ANDROID_PACKAGE_BUILD_DIR "${CMAKE_CURRENT_BINARY_DIR}/android-package")
 
-if(WIN32 AND MSVC)
+  if(EXISTS "${GENY_ANDROID_PACKAGE_SOURCE_DIR}")
+    file(REMOVE_RECURSE "${GENY_ANDROID_PACKAGE_BUILD_DIR}")
+    file(MAKE_DIRECTORY "${GENY_ANDROID_PACKAGE_BUILD_DIR}")
+    file(COPY "${GENY_ANDROID_PACKAGE_SOURCE_DIR}/" DESTINATION "${GENY_ANDROID_PACKAGE_BUILD_DIR}")
+
+    if(EXISTS "${GENY_ANDROID_PACKAGE_SOURCE_DIR}/AndroidManifest.xml.in")
+      configure_file(
+        "${GENY_ANDROID_PACKAGE_SOURCE_DIR}/AndroidManifest.xml.in"
+        "${GENY_ANDROID_PACKAGE_BUILD_DIR}/AndroidManifest.xml"
+        @ONLY
+      )
+    endif()
+
+    set_property(TARGET ${PROJECT_NAME} PROPERTY QT_ANDROID_PACKAGE_SOURCE_DIR "${GENY_ANDROID_PACKAGE_BUILD_DIR}")
+    message(STATUS "Android package source dir: ${GENY_ANDROID_PACKAGE_BUILD_DIR}")
+  else()
+    message(WARNING "Android package source dir not found: ${GENY_ANDROID_PACKAGE_SOURCE_DIR}")
+  endif()
+endif()
+
+if(GENYCONNECT_BUILD_DESKTOP AND GENYCONNECT_ENABLE_DESKTOP_HELPERS)
+  qt_add_executable(GenyConnectUpdater
+    src/updaterhelper/main.cpp
+  )
+  target_link_libraries(GenyConnectUpdater PRIVATE Qt6::Core)
+  set_target_properties(GenyConnectUpdater PROPERTIES OUTPUT_NAME "GenyConnectUpdater")
+
+  qt_add_executable(GenyConnectTunHelper
+    src/tunhelper/main.cpp
+  )
+  target_link_libraries(GenyConnectTunHelper PRIVATE Qt6::Core Qt6::Network)
+  set_target_properties(GenyConnectTunHelper PROPERTIES OUTPUT_NAME "GenyConnectTunHelper")
+endif()
+
+if(TARGET GenyConnectUpdater AND TARGET GenyConnectTunHelper AND WIN32 AND MSVC)
   target_link_options(GenyConnectUpdater PRIVATE
     "/MANIFESTUAC:level='requireAdministrator' uiAccess='false'"
   )
@@ -413,7 +518,7 @@ if(WIN32 AND MSVC)
   )
 endif()
 
-if(APPLE)
+if(APPLE AND TARGET GenyConnectUpdater AND TARGET GenyConnectTunHelper)
   add_dependencies(${PROJECT_NAME} GenyConnectUpdater)
   add_dependencies(${PROJECT_NAME} GenyConnectTunHelper)
   set_target_properties(GenyConnectUpdater PROPERTIES MACOSX_BUNDLE FALSE)
@@ -446,8 +551,11 @@ target_link_libraries(${PROJECT_NAME}
     Qt6::Qml
     Qt6::Quick
     Qt6::QuickControls2
-    Qt6::Widgets
 )
+
+if(GENYCONNECT_BUILD_DESKTOP)
+  target_link_libraries(${PROJECT_NAME} PRIVATE Qt6::Widgets)
+endif()
 
 target_compile_definitions(${PROJECT_NAME} PRIVATE APP_VERSION="${PROJECT_VERSION}")
 
@@ -456,7 +564,7 @@ target_compile_definitions(${PROJECT_NAME} PRIVATE APP_VERSION="${PROJECT_VERSIO
 # -------------------------
 set(GENY_MAC_ICON_ICNS "${CMAKE_CURRENT_SOURCE_DIR}/ui/Resources/image/GenyConnect.icns")
 
-if(APPLE)
+if(APPLE AND NOT IOS AND GENYCONNECT_BUILD_DESKTOP)
   set_target_properties(${PROJECT_NAME} PROPERTIES
     MACOSX_BUNDLE TRUE
     MACOSX_BUNDLE_BUNDLE_VERSION ${PROJECT_VERSION}
@@ -497,6 +605,25 @@ set(qml_controls
   ui/Controls/PrimaryActionButton.qml
   ui/Controls/SignalBars.qml
   ui/Controls/SpeedTestGauge.qml
+  ui/Controls/AppPage.qml
+  ui/Controls/AppHeader.qml
+  ui/Controls/GlassCard.qml
+  ui/Controls/PrimaryButton.qml
+  ui/Controls/SecondaryButton.qml
+  ui/Controls/OutlineButton.qml
+  ui/Controls/DialogCard.qml
+  ui/Controls/InfoBanner.qml
+  ui/Controls/SelectableCard.qml
+  ui/Controls/StatusPill.qml
+  ui/Controls/SettingRow.qml
+  ui/Controls/LinkRow.qml
+  ui/Controls/StatCard.qml
+  ui/Controls/SegmentedSelector.qml
+  ui/Controls/SupportHeroCard.qml
+  ui/Controls/TokenOptionCard.qml
+  ui/Controls/AmountButton.qml
+  ui/Controls/DonationSummaryCard.qml
+  ui/Controls/UsefulLinkCard.qml
 )
 
 set(qml_main ui/Main.qml)
@@ -528,6 +655,20 @@ endif()
 if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/images/map.png")
   list(APPEND genyconnect_image_assets images/map.png)
 endif()
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/ui/Resources/image/token-white.png")
+  list(APPEND genyconnect_image_assets ui/Resources/image/token-white.png)
+endif()
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/ui/Resources/image/token-dark.png")
+  list(APPEND genyconnect_image_assets ui/Resources/image/token-dark.png)
+endif()
+
+set(genyconnect_text_assets)
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE")
+  list(APPEND genyconnect_text_assets LICENSE)
+endif()
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE.txt")
+  list(APPEND genyconnect_text_assets LICENSE.txt)
+endif()
 
 qt_add_resources(${PROJECT_NAME} GenyConnectAssets
   PREFIX /
@@ -538,6 +679,7 @@ qt_add_resources(${PROJECT_NAME} GenyConnectAssets
     ui/Resources/fonts/fa-regular-400.otf
     ui/Resources/fonts/fa-solid-900.otf
     ${genyconnect_image_assets}
+    ${genyconnect_text_assets}
 )
 
 qt_add_qml_module(${PROJECT_NAME}
@@ -613,26 +755,60 @@ if(GENYCONNECT_AUTO_DOWNLOAD_XRAY AND NOT GENYCONNECT_BUNDLED_XRAY_PATH)
   if(GENYCONNECT_XRAY_ASSET_NAME)
     set(_geny_xray_asset "${GENYCONNECT_XRAY_ASSET_NAME}")
   else()
-    if(GENY_ARCH MATCHES "^(arm64|aarch64)$")
-      set(_geny_xray_arch "arm64-v8a")
-    elseif(GENY_ARCH MATCHES "^(x86_64|amd64|x64)$")
-      set(_geny_xray_arch "64")
-    else()
-      message(FATAL_ERROR "Unsupported CPU architecture for automatic Xray download: ${GENY_ARCH}")
-    endif()
-
     if(GENY_OS STREQUAL "windows")
       set(_geny_xray_platform "windows")
+      if(GENY_ARCH MATCHES "^(arm64|aarch64)$")
+        set(_geny_xray_arch "arm64-v8a")
+      elseif(GENY_ARCH MATCHES "^(x86_64|amd64|x64)$")
+        set(_geny_xray_arch "64")
+      else()
+        message(FATAL_ERROR "Unsupported CPU architecture for automatic Xray download: ${GENY_ARCH}")
+      endif()
     elseif(GENY_OS STREQUAL "macos")
       set(_geny_xray_platform "macos")
+      if(GENY_ARCH MATCHES "^(arm64|aarch64)$")
+        set(_geny_xray_arch "arm64-v8a")
+      elseif(GENY_ARCH MATCHES "^(x86_64|amd64|x64)$")
+        set(_geny_xray_arch "64")
+      else()
+        message(FATAL_ERROR "Unsupported CPU architecture for automatic Xray download: ${GENY_ARCH}")
+      endif()
+    elseif(GENY_OS STREQUAL "android")
+      set(_geny_xray_platform "android")
+      if(GENY_ARCH MATCHES "^(arm64|aarch64|arm64-v8a)$")
+        set(_geny_xray_arch "arm64-v8a")
+      elseif(GENY_ARCH MATCHES "^(armv7|armv7a|armeabi-v7a|arm)$")
+        set(_geny_xray_arch "arm32-v7a")
+      elseif(GENY_ARCH MATCHES "^(x86_64|amd64|x64)$")
+        set(_geny_xray_arch "x64")
+      elseif(GENY_ARCH STREQUAL "universal")
+        # The universal Android package should not use a single Xray binary.
+        # It must bundle one executable per ABI from separate downloaded assets.
+        message(WARNING
+          "GENY_ARCH=universal selected. Automatic single Xray download is not enough. "
+          "Prefer per-ABI Android builds or add multi-ABI Xray bundling logic."
+        )
+        set(_geny_xray_arch "arm64-v8a")
+      else()
+        message(FATAL_ERROR "Unsupported Android architecture for automatic Xray download: ${GENY_ARCH}")
+      endif()
     else()
       set(_geny_xray_platform "linux")
+      if(GENY_ARCH MATCHES "^(arm64|aarch64)$")
+        set(_geny_xray_arch "arm64-v8a")
+      elseif(GENY_ARCH MATCHES "^(x86_64|amd64|x64)$")
+        set(_geny_xray_arch "64")
+      else()
+        message(FATAL_ERROR "Unsupported CPU architecture for automatic Xray download: ${GENY_ARCH}")
+      endif()
     endif()
 
     set(_geny_xray_asset "Xray-${_geny_xray_platform}-${_geny_xray_arch}.zip")
   endif()
 
-  if(NOT CMAKE_CONFIGURATION_TYPES)
+  if(GENYCONNECT_BUILD_ANDROID)
+    set(_geny_do_xray_download TRUE)
+  elseif(NOT CMAKE_CONFIGURATION_TYPES)
     if(CMAKE_BUILD_TYPE MATCHES "Release|RelWithDebInfo")
       set(_geny_do_xray_download TRUE)
     else()
@@ -649,7 +825,19 @@ if(GENYCONNECT_AUTO_DOWNLOAD_XRAY AND NOT GENYCONNECT_BUNDLED_XRAY_PATH)
     set(_geny_xray_extract_dir "${_geny_xray_cache_dir}/extract-${_geny_xray_version}-${GENY_OS}-${GENY_ARCH}")
     set(_geny_xray_url         "https://github.com/XTLS/Xray-core/releases/download/${_geny_xray_version}/${_geny_xray_asset}")
 
+    set(_geny_need_xray_download FALSE)
     if(NOT EXISTS "${_geny_xray_archive}")
+      set(_geny_need_xray_download TRUE)
+    else()
+      file(SIZE "${_geny_xray_archive}" _geny_xray_archive_size)
+      if(_geny_xray_archive_size LESS_EQUAL 0)
+        message(STATUS "Cached Xray archive is empty; forcing re-download: ${_geny_xray_archive}")
+        file(REMOVE "${_geny_xray_archive}")
+        set(_geny_need_xray_download TRUE)
+      endif()
+    endif()
+
+    if(_geny_need_xray_download)
       message(STATUS "Downloading Xray-core: ${_geny_xray_url}")
       file(DOWNLOAD
         "${_geny_xray_url}"
@@ -662,6 +850,10 @@ if(GENYCONNECT_AUTO_DOWNLOAD_XRAY AND NOT GENYCONNECT_BUNDLED_XRAY_PATH)
       list(GET _geny_xray_download_status 1 _geny_xray_download_message)
       if(NOT _geny_xray_download_code EQUAL 0)
         message(FATAL_ERROR "Failed to download Xray-core: ${_geny_xray_download_message}")
+      endif()
+      file(SIZE "${_geny_xray_archive}" _geny_xray_downloaded_size)
+      if(_geny_xray_downloaded_size LESS_EQUAL 0)
+        message(FATAL_ERROR "Downloaded Xray-core archive is empty: ${_geny_xray_archive}")
       endif()
     else()
       message(STATUS "Using cached Xray archive: ${_geny_xray_archive}")
@@ -681,12 +873,25 @@ if(GENYCONNECT_AUTO_DOWNLOAD_XRAY AND NOT GENYCONNECT_BUNDLED_XRAY_PATH)
     endif()
 
     set(_geny_xray_extracted_bin "${_geny_xray_extract_dir}/xray")
+    set(_geny_xray_expected_name "xray")
     if(_geny_xray_platform STREQUAL "windows")
       set(_geny_xray_extracted_bin "${_geny_xray_extract_dir}/xray.exe")
+      set(_geny_xray_expected_name "xray.exe")
     endif()
 
     if(NOT EXISTS "${_geny_xray_extracted_bin}")
-      message(FATAL_ERROR "Xray binary not found after extraction: ${_geny_xray_extracted_bin}")
+      file(GLOB_RECURSE _geny_xray_discovered LIST_DIRECTORIES FALSE "${_geny_xray_extract_dir}/*")
+      foreach(_geny_candidate IN LISTS _geny_xray_discovered)
+        get_filename_component(_geny_candidate_name "${_geny_candidate}" NAME)
+        if(_geny_candidate_name STREQUAL "${_geny_xray_expected_name}")
+          set(_geny_xray_extracted_bin "${_geny_candidate}")
+          break()
+        endif()
+      endforeach()
+    endif()
+
+    if(NOT EXISTS "${_geny_xray_extracted_bin}")
+      message(FATAL_ERROR "Xray binary not found after extraction: ${_geny_xray_extract_dir}")
     endif()
 
     set(GENYCONNECT_BUNDLED_XRAY_PATH "${_geny_xray_extracted_bin}")
@@ -710,6 +915,99 @@ if(GENYCONNECT_AUTO_DOWNLOAD_XRAY AND NOT GENYCONNECT_BUNDLED_XRAY_PATH)
       endif()
     endif()
   endif()
+endif()
+
+if(ANDROID AND DEFINED GENY_ANDROID_PACKAGE_BUILD_DIR AND NOT GENY_ANDROID_PACKAGE_BUILD_DIR STREQUAL "")
+  set(_geny_android_abis "")
+  if(DEFINED QT_ANDROID_ABIS AND NOT QT_ANDROID_ABIS STREQUAL "")
+    set(_geny_android_abis ${QT_ANDROID_ABIS})
+  elseif(DEFINED CMAKE_ANDROID_ARCH_ABI AND NOT CMAKE_ANDROID_ARCH_ABI STREQUAL "")
+    list(APPEND _geny_android_abis "${CMAKE_ANDROID_ARCH_ABI}")
+  endif()
+
+  if(NOT _geny_android_abis)
+    message(WARNING "No Android ABI detected; skipping Android xray bundle.")
+  endif()
+
+  foreach(_geny_android_abi IN LISTS _geny_android_abis)
+    set(_geny_android_xray_asset_name "")
+
+    if(_geny_android_abi STREQUAL "arm64-v8a")
+      set(_geny_android_xray_asset_name "Xray-${GENYCONNECT_XRAY_VERSION}-android-arm64-v8a.zip")
+    elseif(_geny_android_abi STREQUAL "armeabi-v7a")
+      set(_geny_android_xray_asset_name "Xray-${GENYCONNECT_XRAY_VERSION}-android-arm32-v7a.zip")
+    elseif(_geny_android_abi STREQUAL "x86_64")
+      set(_geny_android_xray_asset_name "Xray-${GENYCONNECT_XRAY_VERSION}-android-x64.zip")
+    else()
+      message(WARNING "Unsupported Android ABI for xray bundling: ${_geny_android_abi}")
+      continue()
+    endif()
+
+    # Reuse the already downloaded binary for the primary ABI.
+    # For universal builds, the CI should run separate per-ABI builds OR this block
+    # should be extended to download each ABI archive into _deps/xray.
+    if(_geny_android_abi STREQUAL "${CMAKE_ANDROID_ARCH_ABI}" AND
+       GENYCONNECT_BUNDLED_XRAY_PATH AND
+       EXISTS "${GENYCONNECT_BUNDLED_XRAY_PATH}")
+
+      set(_geny_android_libs_dir "${GENY_ANDROID_PACKAGE_BUILD_DIR}/libs/${_geny_android_abi}")
+      file(MAKE_DIRECTORY "${_geny_android_libs_dir}")
+      file(COPY_FILE
+        "${GENYCONNECT_BUNDLED_XRAY_PATH}"
+        "${_geny_android_libs_dir}/libxraycore.so"
+        ONLY_IF_DIFFERENT
+      )
+
+      message(STATUS "Bundled Android xray executable lib for ${_geny_android_abi}: ${_geny_android_libs_dir}/libxraycore.so")
+    else()
+      message(WARNING
+        "Xray binary for Android ABI '${_geny_android_abi}' is not bundled by current single-ABI configure. "
+        "For a real universal APK/AAB, add per-ABI Xray download/copy logic."
+      )
+    endif()
+  endforeach()
+
+  if(GENYCONNECT_BUNDLED_XRAY_PATH AND EXISTS "${GENYCONNECT_BUNDLED_XRAY_PATH}")
+    set(_geny_android_assets_dir "${GENY_ANDROID_PACKAGE_BUILD_DIR}/assets")
+    file(MAKE_DIRECTORY "${_geny_android_assets_dir}")
+    file(COPY_FILE "${GENYCONNECT_BUNDLED_XRAY_PATH}" "${_geny_android_assets_dir}/xray-core" ONLY_IF_DIFFERENT)
+    message(STATUS "Bundled Android primary xray asset: ${_geny_android_assets_dir}/xray-core")
+  endif()
+
+  foreach(_geny_android_abi IN LISTS _geny_android_abis)
+    set(_geny_android_ssl_root "${GENYCONNECT_ANDROID_OPENSSL_ROOT}")
+    if(_geny_android_ssl_root STREQUAL "")
+      set(_geny_android_sdk_root "")
+      if(DEFINED CMAKE_ANDROID_NDK AND NOT CMAKE_ANDROID_NDK STREQUAL "")
+        get_filename_component(_geny_android_ndk_parent "${CMAKE_ANDROID_NDK}" DIRECTORY)
+        get_filename_component(_geny_android_sdk_root "${_geny_android_ndk_parent}" DIRECTORY)
+      elseif(DEFINED ENV{ANDROID_SDK_ROOT} AND NOT "$ENV{ANDROID_SDK_ROOT}" STREQUAL "")
+        set(_geny_android_sdk_root "$ENV{ANDROID_SDK_ROOT}")
+      elseif(DEFINED ENV{ANDROID_HOME} AND NOT "$ENV{ANDROID_HOME}" STREQUAL "")
+        set(_geny_android_sdk_root "$ENV{ANDROID_HOME}")
+      endif()
+      if(NOT _geny_android_sdk_root STREQUAL "")
+        set(_geny_android_ssl_root "${_geny_android_sdk_root}/android_openssl/ssl_3")
+      endif()
+    endif()
+
+    if(NOT _geny_android_ssl_root STREQUAL "")
+      set(_geny_android_ssl_abi_dir "${_geny_android_ssl_root}/${_geny_android_abi}")
+      set(_geny_android_ssl_lib "${_geny_android_ssl_abi_dir}/libssl_3.so")
+      set(_geny_android_crypto_lib "${_geny_android_ssl_abi_dir}/libcrypto_3.so")
+      if(EXISTS "${_geny_android_ssl_lib}" AND EXISTS "${_geny_android_crypto_lib}")
+        set(_geny_android_libs_dir "${GENY_ANDROID_PACKAGE_BUILD_DIR}/libs/${_geny_android_abi}")
+        file(MAKE_DIRECTORY "${_geny_android_libs_dir}")
+        file(COPY_FILE "${_geny_android_ssl_lib}" "${_geny_android_libs_dir}/libssl_3.so" ONLY_IF_DIFFERENT)
+        file(COPY_FILE "${_geny_android_crypto_lib}" "${_geny_android_libs_dir}/libcrypto_3.so" ONLY_IF_DIFFERENT)
+        message(STATUS "Bundled Android OpenSSL libs for ${_geny_android_abi} from: ${_geny_android_ssl_abi_dir}")
+      else()
+        message(WARNING
+          "Android OpenSSL libs not found for ABI '${_geny_android_abi}' under '${_geny_android_ssl_abi_dir}'. "
+          "Qt TLS backend may fail to load.")
+      endif()
+    endif()
+  endforeach()
 endif()
 
 if(WIN32 AND GENYCONNECT_AUTO_DOWNLOAD_WINTUN AND NOT GENYCONNECT_BUNDLED_WINTUN_PATH)
@@ -802,7 +1100,7 @@ endif()
 # -----------------------------------------------------------------------------
 # macOS: POST_BUILD bundle assembly + macdeployqt + codesign (Release-only)
 # -----------------------------------------------------------------------------
-if(APPLE AND GENYCONNECT_MACOS_POSTBUILD_DEPLOY)
+if(APPLE AND GENYCONNECT_BUILD_DESKTOP AND TARGET GenyConnectUpdater AND TARGET GenyConnectTunHelper AND GENYCONNECT_MACOS_POSTBUILD_DEPLOY)
 
   find_program(MACDEPLOYQT_EXECUTABLE
     NAMES macdeployqt
@@ -896,6 +1194,7 @@ endif()
 # -----------------------------------------------------------------------------
 # Install rules (used by CPack)
 # -----------------------------------------------------------------------------
+if(GENYCONNECT_BUILD_DESKTOP)
 if(WIN32 AND MSVC)
   set(CMAKE_INSTALL_SYSTEM_RUNTIME_DESTINATION ".")
   set(CMAKE_INSTALL_UCRT_LIBRARIES TRUE)
@@ -925,28 +1224,36 @@ install(TARGETS ${PROJECT_NAME}
 )
 
 # Put updater inside app on macOS, otherwise next to exe (root on Windows)
-if(APPLE)
-  install(TARGETS GenyConnectUpdater
-    CONFIGURATIONS Release RelWithDebInfo
-    RUNTIME DESTINATION "${GENY_OUTPUT_NAME}.app/Contents/MacOS"
-  )
-  install(TARGETS GenyConnectTunHelper
-    CONFIGURATIONS Release RelWithDebInfo
-    RUNTIME DESTINATION "${GENY_OUTPUT_NAME}.app/Contents/MacOS"
-  )
-else()
-  install(TARGETS GenyConnectUpdater
-    CONFIGURATIONS Release RelWithDebInfo
-    RUNTIME DESTINATION "${_GENY_WIN_RUNTIME_DEST}"
-  )
-  install(TARGETS GenyConnectTunHelper
-    CONFIGURATIONS Release RelWithDebInfo
-    RUNTIME DESTINATION "${_GENY_WIN_RUNTIME_DEST}"
-  )
+if(TARGET GenyConnectUpdater)
+  if(APPLE)
+    install(TARGETS GenyConnectUpdater
+      CONFIGURATIONS Release RelWithDebInfo
+      RUNTIME DESTINATION "${GENY_OUTPUT_NAME}.app/Contents/MacOS"
+    )
+  else()
+    install(TARGETS GenyConnectUpdater
+      CONFIGURATIONS Release RelWithDebInfo
+      RUNTIME DESTINATION "${_GENY_WIN_RUNTIME_DEST}"
+    )
+  endif()
+endif()
+
+if(TARGET GenyConnectTunHelper)
+  if(APPLE)
+    install(TARGETS GenyConnectTunHelper
+      CONFIGURATIONS Release RelWithDebInfo
+      RUNTIME DESTINATION "${GENY_OUTPUT_NAME}.app/Contents/MacOS"
+    )
+  else()
+    install(TARGETS GenyConnectTunHelper
+      CONFIGURATIONS Release RelWithDebInfo
+      RUNTIME DESTINATION "${_GENY_WIN_RUNTIME_DEST}"
+    )
+  endif()
 endif()
 
 # Install xray into package too
-if(GENYCONNECT_BUNDLED_XRAY_PATH)
+if(GENYCONNECT_BUILD_DESKTOP AND GENYCONNECT_BUNDLED_XRAY_PATH)
   if(APPLE)
     install(FILES "${GENYCONNECT_BUNDLED_XRAY_PATH}"
       CONFIGURATIONS Release RelWithDebInfo
@@ -1168,3 +1475,4 @@ include(CPack)
 message(STATUS "Build dir: ${CMAKE_BINARY_DIR}")
 message(STATUS "Packages dir: ${GENY_FINAL_DIR}")
 message(STATUS "Packaging: run cpack (multi-config add: -C Release)")
+endif()

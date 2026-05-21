@@ -20,47 +20,127 @@ jobs:
         include:
           # macOS Apple Silicon
           - name: macos-arm64
+            platform: desktop
             os: macos-14
             qt_version: "6.11.0"
+            qt_target: desktop
             qt_arch: clang_64
             target_arch: arm64
             macos_deployment_target: "14.0"
 
           # macOS Intel
           - name: macos-x86_64
+            platform: desktop
             os: macos-15-intel
             qt_version: "6.11.0"
+            qt_target: desktop
             qt_arch: clang_64
             target_arch: x86_64
             macos_deployment_target: "14.0"
 
           # Windows Intel/AMD 64-bit
           - name: windows-x64
+            platform: desktop
             os: windows-latest
             qt_version: "6.10.3"
+            qt_target: desktop
             qt_arch: win64_msvc2022_64
             cmake_arch: x64
             target_arch: x86_64
 
           # Windows ARM64
           - name: windows-arm64
+            platform: desktop
             os: windows-11-arm
             qt_version: "6.10.3"
+            qt_target: desktop
             qt_arch: win64_msvc2022_arm64
             cmake_arch: ARM64
             target_arch: arm64
 
+          # Android ARMv7 / 32-bit
+          - name: android-armeabi-v7a
+            platform: android
+            os: ubuntu-latest
+            qt_version: "6.10.3"
+            qt_target: android
+            qt_arch: android_armv7
+            android_abi: armeabi-v7a
+            android_abis: armeabi-v7a
+            android_output_arch: armv7
+            target_arch: armv7
+            android_api: "26"
+            android_ndk_version: "27.2.12479018"
+
+          # Android ARMv8 / 64-bit
+          - name: android-arm64-v8a
+            platform: android
+            os: ubuntu-latest
+            qt_version: "6.10.3"
+            qt_target: android
+            qt_arch: android_arm64_v8a
+            android_abi: arm64-v8a
+            android_abis: arm64-v8a
+            android_output_arch: arm64
+            target_arch: arm64
+            android_api: "26"
+            android_ndk_version: "27.2.12479018"
+
+          # Android Universal ARMv7 + ARMv8
+          - name: android-universal
+            platform: android
+            os: ubuntu-latest
+            qt_version: "6.10.3"
+            qt_target: android
+            qt_arch: android_arm64_v8a
+            android_abi: arm64-v8a
+            android_abis: armeabi-v7a;arm64-v8a
+            android_output_arch: universal
+            target_arch: universal
+            android_api: "26"
+            android_ndk_version: "27.2.12479018"
+
     env:
       CMAKE_VERSION: "4.2.3"
+      ANDROID_BUILD_TOOLS_VERSION: "35.0.0"
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Setup Java for Android
+        if: matrix.platform == 'android'
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Setup Android SDK
+        if: matrix.platform == 'android'
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK/NDK packages
+        if: matrix.platform == 'android'
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          sdkmanager --install \
+            "platform-tools" \
+            "platforms;android-${{ matrix.android_api }}" \
+            "build-tools;${ANDROID_BUILD_TOOLS_VERSION}" \
+            "ndk;${{ matrix.android_ndk_version }}"
+
+          echo "ANDROID_SDK_ROOT=${ANDROID_SDK_ROOT}" >> "$GITHUB_ENV"
+          echo "ANDROID_HOME=${ANDROID_SDK_ROOT}" >> "$GITHUB_ENV"
+          echo "ANDROID_NDK_ROOT=${ANDROID_SDK_ROOT}/ndk/${{ matrix.android_ndk_version }}" >> "$GITHUB_ENV"
+          echo "ANDROID_NDK_HOME=${ANDROID_SDK_ROOT}/ndk/${{ matrix.android_ndk_version }}" >> "$GITHUB_ENV"
+
       - name: Install Qt
         uses: jurplel/install-qt-action@v4
         with:
           version: ${{ matrix.qt_version }}
+          target: ${{ matrix.qt_target }}
           arch: ${{ matrix.qt_arch }}
           cache: true
 
@@ -81,6 +161,67 @@ jobs:
         shell: pwsh
         run: |
           choco install -y ninja nsis 7zip
+
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y ninja-build unzip zip p7zip-full curl file
+
+      - name: Prepare Android release keystore
+        if: matrix.platform == 'android' && startsWith(github.ref, 'refs/tags/')
+        shell: bash
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          set -euo pipefail
+
+          if [[ -z "${ANDROID_KEYSTORE_BASE64}" ]]; then
+            echo "ANDROID_KEYSTORE_BASE64 is not set."
+            exit 1
+          fi
+
+          mkdir -p "${RUNNER_TEMP}/android-signing"
+          echo "${ANDROID_KEYSTORE_BASE64}" | base64 --decode > "${RUNNER_TEMP}/android-signing/release.keystore"
+
+          if [[ ! -s "${RUNNER_TEMP}/android-signing/release.keystore" ]]; then
+            echo "Decoded Android keystore is empty."
+            exit 1
+          fi
+
+          echo "ANDROID_RELEASE_KEYSTORE=${RUNNER_TEMP}/android-signing/release.keystore" >> "$GITHUB_ENV"
+
+      - name: Prepare Android OpenSSL runtime libs
+        if: matrix.platform == 'android'
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          SSL_ROOT="${ANDROID_SDK_ROOT}/android_openssl/ssl_3"
+          mkdir -p "${SSL_ROOT}"
+
+          IFS=';' read -ra ABI_LIST <<< "${{ matrix.android_abis }}"
+
+          for ABI in "${ABI_LIST[@]}"; do
+            ABI_DIR="${SSL_ROOT}/${ABI}"
+            mkdir -p "${ABI_DIR}"
+
+            echo "Preparing Android OpenSSL lookup directory for ABI: ${ABI}"
+            echo "Expected:"
+            echo "  ${ABI_DIR}/libssl_3.so"
+            echo "  ${ABI_DIR}/libcrypto_3.so"
+
+            if [[ -f "third_party/android/openssl/ssl_3/${ABI}/libssl_3.so" && \
+                  -f "third_party/android/openssl/ssl_3/${ABI}/libcrypto_3.so" ]]; then
+              cp "third_party/android/openssl/ssl_3/${ABI}/libssl_3.so" "${ABI_DIR}/libssl_3.so"
+              cp "third_party/android/openssl/ssl_3/${ABI}/libcrypto_3.so" "${ABI_DIR}/libcrypto_3.so"
+              echo "Copied Android OpenSSL libs for ${ABI} from repository."
+            else
+              echo "No repository OpenSSL libs found for ${ABI}; CMake may warn if Qt TLS backend needs them."
+            fi
+          done
 
       - name: Configure LLVM on macOS
         if: runner.os == 'macOS'
@@ -115,6 +256,24 @@ jobs:
           cmake --version
           ninja --version
           xcrun --sdk macosx --show-sdk-version
+
+      - name: Print Android tool versions
+        if: matrix.platform == 'android'
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          echo "QT_ROOT_DIR=${QT_ROOT_DIR}"
+          echo "ANDROID_SDK_ROOT=${ANDROID_SDK_ROOT}"
+          echo "ANDROID_NDK_ROOT=${ANDROID_NDK_ROOT}"
+          echo "ANDROID_ABI=${{ matrix.android_abi }}"
+          echo "ANDROID_ABIS=${{ matrix.android_abis }}"
+          echo "ANDROID_API=${{ matrix.android_api }}"
+
+          cmake --version
+          ninja --version
+          java -version
+          "${ANDROID_NDK_ROOT}/toolchains/llvm/prebuilt/linux-x86_64/bin/clang++" --version
 
       - name: Configure MSVC
         if: runner.os == 'Windows'
@@ -157,99 +316,240 @@ jobs:
             -DGENYCONNECT_TARGET_ARCH="${{ matrix.target_arch }}" `
             -DGENYCONNECT_TARGET_BUILD_ARCH="${{ matrix.target_arch }}"
 
-      - name: Build
-        run: cmake --build build --config Release --parallel
-
-      - name: Verify macOS deployment target
-        if: runner.os == 'macOS'
+      - name: Configure Android
+        if: matrix.platform == 'android'
         shell: bash
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
           set -euo pipefail
 
-          APP="build/bin/GenyConnect.app"
+          SIGN_ARGS=()
 
-          for f in \
-            "$APP/Contents/MacOS/GenyConnect" \
-            "$APP/Contents/MacOS/GenyConnectUpdater" \
-            "$APP/Contents/MacOS/GenyConnectTunHelper"
-          do
-            echo
-            echo "==== $f ===="
-            otool -l "$f" | grep -A5 LC_BUILD_VERSION || true
-
-            if otool -l "$f" | grep -A5 LC_BUILD_VERSION | grep -q "minos 26."; then
-              echo "ERROR: $f was built with macOS 26.x minimum target."
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            if [[ -z "${ANDROID_RELEASE_KEYSTORE:-}" ]]; then
+              echo "ANDROID_RELEASE_KEYSTORE is not available."
               exit 1
             fi
-          done
 
-      - name: Re-sign macOS app ad-hoc and create DMG
-        if: runner.os == 'macOS'
+            if [[ -z "${ANDROID_KEYSTORE_PASSWORD}" || -z "${ANDROID_KEY_ALIAS}" || -z "${ANDROID_KEY_PASSWORD}" ]]; then
+              echo "Android signing secrets are incomplete."
+              exit 1
+            fi
+
+            SIGN_ARGS+=(
+              -DQT_ANDROID_SIGN_APK=ON
+              -DQT_ANDROID_SIGN_AAB=ON
+              -DQT_ANDROID_KEYSTORE_PATH="${ANDROID_RELEASE_KEYSTORE}"
+              -DQT_ANDROID_KEYSTORE_STORE_PASS="${ANDROID_KEYSTORE_PASSWORD}"
+              -DQT_ANDROID_KEYSTORE_KEY_ALIAS="${ANDROID_KEY_ALIAS}"
+              -DQT_ANDROID_KEYSTORE_KEY_PASS="${ANDROID_KEY_PASSWORD}"
+            )
+          else
+            SIGN_ARGS+=(
+              -DQT_ANDROID_SIGN_APK=OFF
+              -DQT_ANDROID_SIGN_AAB=OFF
+            )
+          fi
+
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_PREFIX_PATH="${QT_ROOT_DIR}" \
+            -DCMAKE_TOOLCHAIN_FILE="${ANDROID_NDK_ROOT}/build/cmake/android.toolchain.cmake" \
+            -DANDROID_ABI="${{ matrix.android_abi }}" \
+            -DANDROID_PLATFORM="android-${{ matrix.android_api }}" \
+            -DANDROID_SDK_ROOT="${ANDROID_SDK_ROOT}" \
+            -DANDROID_NDK_ROOT="${ANDROID_NDK_ROOT}" \
+            -DQT_ANDROID_ABIS="${{ matrix.android_abis }}" \
+            -DGENYCONNECT_BUILD_DESKTOP=OFF \
+            -DGENYCONNECT_BUILD_ANDROID=ON \
+            -DGENYCONNECT_ENABLE_MOBILE_VPN=ON \
+            -DGENYCONNECT_AUTO_DOWNLOAD_XRAY=ON \
+            -DGENYCONNECT_USE_MODULES=OFF \
+            -DGENYCONNECT_TARGET_OS=android \
+            -DGENYCONNECT_TARGET_ARCH="${{ matrix.target_arch }}" \
+            -DGENYCONNECT_TARGET_BUILD_ARCH="${{ matrix.target_arch }}" \
+            -DGENYCONNECT_OUTPUT_NAME="GenyConnect" \
+            -DGENYCONNECT_ANDROID_OPENSSL_ROOT="${ANDROID_SDK_ROOT}/android_openssl/ssl_3" \
+            "${SIGN_ARGS[@]}"
+
+      - name: Build desktop
+        if: matrix.platform == 'desktop'
+        run: cmake --build build --config Release --parallel
+
+      - name: Build Android native target
+        if: matrix.platform == 'android'
+        shell: bash
+        run: |
+          set -euo pipefail
+          cmake --build build --config Release --parallel
+
+      - name: Build Android APK Release
+        if: matrix.platform == 'android'
+        shell: bash
+        run: |
+          set -euo pipefail
+          cmake --build build --config Release --target apk --parallel
+
+      - name: Build Android AAB Release
+        if: matrix.platform == 'android'
+        shell: bash
+        run: |
+          set -euo pipefail
+          cmake --build build --config Release --target aab --parallel
+
+      - name: Verify Android outputs
+        if: matrix.platform == 'android'
         shell: bash
         run: |
           set -euo pipefail
 
-          APP="build/bin/GenyConnect.app"
-          OUT_DIR="build/final/macos-${{ matrix.target_arch }}"
+          echo "Android build outputs:"
+          find build -type f $begin:math:text$ \-name \"\*\.apk\" \-o \-name \"\*\.aab\" \-o \-name \"\*\.so\" $end:math:text$ | sort
+
+          APK_COUNT="$(find build -type f -name "*.apk" | wc -l | tr -d ' ')"
+          AAB_COUNT="$(find build -type f -name "*.aab" | wc -l | tr -d ' ')"
+
+          if [[ "${APK_COUNT}" == "0" && "${AAB_COUNT}" == "0" ]]; then
+            echo "No Android APK/AAB was produced."
+            echo "Recent build files:"
+            find build -maxdepth 8 -type f | sort | tail -300
+            exit 1
+          fi
+
+      - name: Normalize Android artifact names
+        if: matrix.platform == 'android'
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          OUT_DIR="build/final/android-${{ matrix.android_output_arch }}"
+          mkdir -p "${OUT_DIR}"
 
           if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
             VERSION="${GITHUB_REF_NAME#v}"
           else
-            VERSION="$(grep -E 'project\(\$\{PROJECT_NAME\} VERSION ' CMakeLists.txt | sed -E 's/.*VERSION ([0-9]+\.[0-9]+\.[0-9]+).*/\1/')"
+            VERSION="$(grep -E 'project$begin:math:text$\\\$\\\{PROJECT\_NAME\\\} VERSION \' CMakeLists\.txt \| sed \-E \'s\/\.\*VERSION \(\[0\-9\]\+\\\.\[0\-9\]\+\\\.\[0\-9\]\+\)\.\*\/\\1\/\'\)\"
           fi
 
-          if [[ -z "${VERSION}" ]]; then
-            echo "Could not detect project version."
+          if \[\[ \-z \"\$\{VERSION\}\" \]\]\; then
+            echo \"Could not detect project version\.\"
             exit 1
           fi
 
-          DMG_NAME="GenyConnect-${VERSION}-macos-${{ matrix.target_arch }}.dmg"
-          DMG_PATH="${OUT_DIR}/${DMG_NAME}"
-
-          echo "Package version: ${VERSION}"
-
-          if [[ ! -d "$APP" ]]; then
-            echo "App not found: $APP"
-            exit 1
-          fi
-
-          mkdir -p "$OUT_DIR"
-
-          echo "Cleaning previous DMG..."
-          rm -f "$DMG_PATH"
-
-          echo "Cleaning extended attributes..."
-          xattr -cr "$APP" || true
-
-          echo "Fixing executable permissions..."
-          chmod +x "$APP/Contents/MacOS/GenyConnect" || true
-          chmod +x "$APP/Contents/MacOS/GenyConnectUpdater" || true
-          chmod +x "$APP/Contents/MacOS/GenyConnectTunHelper" || true
-          chmod +x "$APP/Contents/MacOS/xray-core" || true
-
-          echo "Removing old signatures from app bundle where possible..."
-          codesign --remove-signature "$APP" || true
-
-          echo "Ad-hoc signing nested Mach-O files..."
-
-          while IFS= read -r file_path; do
-            if file "$file_path" | grep -q "Mach-O"; then
-              echo "Signing Mach-O: $file_path"
-              codesign --force --sign - "$file_path" || true
+          APK\_INDEX\=0
+          while IFS\= read \-r apk\; do
+            APK\_INDEX\=\$\(\(APK\_INDEX \+ 1\)\)
+            if \[\[ \"\$\{APK\_INDEX\}\" \-eq 1 \]\]\; then
+              cp \"\$apk\" \"\$\{OUT\_DIR\}\/GenyConnect\-\$\{VERSION\}\-android\-\$\{\{ matrix\.android\_output\_arch \}\}\.apk\"
+            else
+              cp \"\$apk\" \"\$\{OUT\_DIR\}\/GenyConnect\-\$\{VERSION\}\-android\-\$\{\{ matrix\.android\_output\_arch \}\}\-\$\{APK\_INDEX\}\.apk\"
             fi
-          done < <(find "$APP/Contents" -type f)
+          done \< \<\(find build \-type f \-name \"\*\.apk\" \| sort\)
 
-          echo "Ad-hoc signing frameworks..."
-          while IFS= read -r framework_path; do
-            echo "Signing framework: $framework_path"
-            codesign --force --sign - "$framework_path" || true
-          done < <(find "$APP/Contents" -type d -name "*.framework" | sort -r)
+          AAB\_INDEX\=0
+          while IFS\= read \-r aab\; do
+            AAB\_INDEX\=\$\(\(AAB\_INDEX \+ 1\)\)
+            if \[\[ \"\$\{AAB\_INDEX\}\" \-eq 1 \]\]\; then
+              cp \"\$aab\" \"\$\{OUT\_DIR\}\/GenyConnect\-\$\{VERSION\}\-android\-\$\{\{ matrix\.android\_output\_arch \}\}\.aab\"
+            else
+              cp \"\$aab\" \"\$\{OUT\_DIR\}\/GenyConnect\-\$\{VERSION\}\-android\-\$\{\{ matrix\.android\_output\_arch \}\}\-\$\{AAB\_INDEX\}\.aab\"
+            fi
+          done \< \<\(find build \-type f \-name \"\*\.aab\" \| sort\)
 
-          echo "Ad-hoc signing bundles/plugins..."
-          while IFS= read -r bundle_path; do
-            echo "Signing bundle/plugin: $bundle_path"
-            codesign --force --sign - "$bundle_path" || true
-          done < <(find "$APP/Contents" \( -name "*.bundle" -o -name "*.plugin" -o -name "*.appex" \) -type d | sort -r)
+          ls \-lah \"\$\{OUT\_DIR\}\"
+
+      \- name\: Verify macOS deployment target
+        if\: runner\.os \=\= \'macOS\'
+        shell\: bash
+        run\: \|
+          set \-euo pipefail
+
+          APP\=\"build\/bin\/GenyConnect\.app\"
+
+          for f in \\
+            \"\$APP\/Contents\/MacOS\/GenyConnect\" \\
+            \"\$APP\/Contents\/MacOS\/GenyConnectUpdater\" \\
+            \"\$APP\/Contents\/MacOS\/GenyConnectTunHelper\"
+          do
+            echo
+            echo \"\=\=\=\= \$f \=\=\=\=\"
+            otool \-l \"\$f\" \| grep \-A5 LC\_BUILD\_VERSION \|\| true
+
+            if otool \-l \"\$f\" \| grep \-A5 LC\_BUILD\_VERSION \| grep \-q \"minos 26\.\"\; then
+              echo \"ERROR\: \$f was built with macOS 26\.x minimum target\.\"
+              exit 1
+            fi
+          done
+
+      \- name\: Re\-sign macOS app ad\-hoc and create DMG
+        if\: runner\.os \=\= \'macOS\'
+        shell\: bash
+        run\: \|
+          set \-euo pipefail
+
+          APP\=\"build\/bin\/GenyConnect\.app\"
+          OUT\_DIR\=\"build\/final\/macos\-\$\{\{ matrix\.target\_arch \}\}\"
+
+          if \[\[ \"\$\{GITHUB\_REF\}\" \=\= refs\/tags\/v\* \]\]\; then
+            VERSION\=\"\$\{GITHUB\_REF\_NAME\#v\}\"
+          else
+            VERSION\=\"\$\(grep \-E \'project\\\(\\\$\\\{PROJECT\_NAME\\\} VERSION \' CMakeLists\.txt \| sed \-E \'s\/\.\*VERSION \(\[0\-9\]\+\\\.\[0\-9\]\+\\\.\[0\-9\]\+\)\.\*\/\\1\/\'\)\"
+          fi
+
+          if \[\[ \-z \"\$\{VERSION\}\" \]\]\; then
+            echo \"Could not detect project version\.\"
+            exit 1
+          fi
+
+          DMG\_NAME\=\"GenyConnect\-\$\{VERSION\}\-macos\-\$\{\{ matrix\.target\_arch \}\}\.dmg\"
+          DMG\_PATH\=\"\$\{OUT\_DIR\}\/\$\{DMG\_NAME\}\"
+
+          echo \"Package version\: \$\{VERSION\}\"
+
+          if \[\[ \! \-d \"\$APP\" \]\]\; then
+            echo \"App not found\: \$APP\"
+            exit 1
+          fi
+
+          mkdir \-p \"\$OUT\_DIR\"
+
+          echo \"Cleaning previous DMG\.\.\.\"
+          rm \-f \"\$DMG\_PATH\"
+
+          echo \"Cleaning extended attributes\.\.\.\"
+          xattr \-cr \"\$APP\" \|\| true
+
+          echo \"Fixing executable permissions\.\.\.\"
+          chmod \+x \"\$APP\/Contents\/MacOS\/GenyConnect\" \|\| true
+          chmod \+x \"\$APP\/Contents\/MacOS\/GenyConnectUpdater\" \|\| true
+          chmod \+x \"\$APP\/Contents\/MacOS\/GenyConnectTunHelper\" \|\| true
+          chmod \+x \"\$APP\/Contents\/MacOS\/xray\-core\" \|\| true
+
+          echo \"Removing old signatures from app bundle where possible\.\.\.\"
+          codesign \-\-remove\-signature \"\$APP\" \|\| true
+
+          echo \"Ad\-hoc signing nested Mach\-O files\.\.\.\"
+          while IFS\= read \-r file\_path\; do
+            if file \"\$file\_path\" \| grep \-q \"Mach\-O\"\; then
+              echo \"Signing Mach\-O\: \$file\_path\"
+              codesign \-\-force \-\-sign \- \"\$file\_path\" \|\| true
+            fi
+          done \< \<\(find \"\$APP\/Contents\" \-type f\)
+
+          echo \"Ad\-hoc signing frameworks\.\.\.\"
+          while IFS\= read \-r framework\_path\; do
+            echo \"Signing framework\: \$framework\_path\"
+            codesign \-\-force \-\-sign \- \"\$framework\_path\" \|\| true
+          done \< \<\(find \"\$APP\/Contents\" \-type d \-name \"\*\.framework\" \| sort \-r\)
+
+          echo \"Ad\-hoc signing bundles\/plugins\.\.\.\"
+          while IFS\= read \-r bundle\_path\; do
+            echo \"Signing bundle\/plugin\: \$bundle\_path\"
+            codesign \-\-force \-\-sign \- \"\$bundle\_path\" \|\| true
+          done \< \<\(find \"\$APP\/Contents\" \\\( \-name \"\*\.bundle\" \-o \-name \"\*\.plugin\" \-o \-name \"\*\.appex\" $end:math:text$ -type d | sort -r)
 
           echo "Signing main app..."
           codesign --force --deep --sign - "$APP"
@@ -316,8 +616,8 @@ jobs:
 
           hdiutil detach "$MOUNT_DIR" -quiet
 
-      - name: Package
-        if: runner.os != 'macOS'
+      - name: Package desktop
+        if: matrix.platform == 'desktop' && runner.os != 'macOS'
         run: cpack --config build/CPackConfig.cmake -C Release
 
       - name: Collect packages
@@ -332,10 +632,12 @@ jobs:
           find build/final -type f -name "*.exe" -exec cp {} artifacts/ \;
           find build/final -type f -name "*.tar.gz" -exec cp {} artifacts/ \;
           find build/final -type f -name "*.tgz" -exec cp {} artifacts/ \;
+          find build/final -type f -name "*.apk" -exec cp {} artifacts/ \;
+          find build/final -type f -name "*.aab" -exec cp {} artifacts/ \;
 
           if [ -z "$(find artifacts -type f -print -quit)" ]; then
             echo "No packages found. Listing recent build files:"
-            find build -maxdepth 5 -type f | sort | tail -200
+            find build -maxdepth 8 -type f | sort | tail -300
             exit 1
           fi
 

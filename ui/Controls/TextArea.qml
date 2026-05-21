@@ -5,16 +5,16 @@ import GenyConnect 1.0
 T.TextArea {
     id: control
 
-    property color fillColor: Colors.backgroundItemActivated
-    property color strokeColor: Colors.borderActivated
-    property color focusColor: Colors.secondry
-    property int cornerRadius: 14
+    property color fillColor: Colors.dsSurface
+    property color strokeColor: Colors.dsBorder
+    property color focusColor: Colors.dsPrimarySolid
+    property int cornerRadius: Metrics.radiusMd
 
     font.family: FontSystem.contentFontFamily
-    font.pixelSize: Typography.t2
-    color: Colors.textPrimary
-    placeholderTextColor: Colors.textMuted
-    selectionColor: Colors.secondry
+    font.pixelSize: Typography.uiBodyLg
+    color: Colors.dsText
+    placeholderTextColor: Colors.dsTextSubtle
+    selectionColor: Colors.dsPrimarySolid
     selectedTextColor: Colors.staticPrimary
 
     leftPadding: 12

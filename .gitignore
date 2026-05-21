@@ -46,6 +46,7 @@ cmake-build-debug/
 cmake-build-release/
 third-party/
 dynamics/
+publish/
 CMakeLists.txt.user
 .qtcreator
 TODO.txt

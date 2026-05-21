@@ -35,7 +35,7 @@ export module genyconnect.backend.updater;
  */
 export class Updater : public QObject
 {
-    Q_OBJECT
+public:
     Q_PROPERTY(QString appVersion READ appVersion WRITE setAppVersion NOTIFY changed)
     Q_PROPERTY(bool checking READ checking NOTIFY changed)
     Q_PROPERTY(bool updateAvailable READ updateAvailable NOTIFY changed)
@@ -47,7 +47,10 @@ export class Updater : public QObject
     Q_PROPERTY(QString downloadedFilePath READ downloadedFilePath NOTIFY changed)
     Q_PROPERTY(bool canInstallDownloadedUpdate READ canInstallDownloadedUpdate NOTIFY changed)
 
+    virtual void __geny_vtable_anchor();
+    Q_OBJECT
 public:
+
     /**
      * @brief Construct updater object.
      * @param parent Optional QObject parent.
@@ -189,14 +192,14 @@ private:
     static bool isSelfInstallSupportedAsset(const QString& path);
     void consumePendingUpdateStatus();
 
-    QString m_appVersion = QStringLiteral("0.0.0");
+    QString m_appVersion = QString::fromUtf8("0.0.0");
     bool m_checking = false;
     bool m_updateAvailable = false;
     bool m_userInitiatedCheck = false;
     QString m_latestVersion;
-    QString m_status = QStringLiteral("Idle");
+    QString m_status = QString::fromUtf8("Idle");
     QString m_error;
-    QString m_releaseUrl = QStringLiteral("https://github.com/genyleap/GenyConnect/releases");
+    QString m_releaseUrl = QString::fromUtf8("https://github.com/genyleap/GenyConnect/releases");
     QString m_assetUrl;
     QString m_assetName;
     QString m_assetExpectedSha256;

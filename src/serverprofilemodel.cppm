@@ -37,9 +37,11 @@ struct ServerProfile;
 
 GENYCONNECT_MODULE_EXPORT class ServerProfileModel : public QAbstractListModel
 {
-    Q_OBJECT
-
 public:
+    virtual void __geny_vtable_anchor();
+    Q_OBJECT
+public:
+
     /**
      * @enum Roles
      * @brief Custom model roles exposed to QML.
@@ -54,6 +56,7 @@ public:
         DisplayLabelRole,          //!< Pre-formatted label.
         GroupRole,                 //!< Profile group/category.
         SourceRole,                //!< Profile source/subscription name.
+        OriginalLinkRole,          //!< Original imported share/config link.
         PingMsRole,                //!< Last ping in milliseconds.
         PingTextRole,              //!< Formatted ping label.
         PingingRole                //!< True while ping is in progress.

@@ -36,16 +36,38 @@ module;
 #include <QVariantList>
 #include <QVariantMap>
 #include <atomic>
+#include "runtime/vpnruntimebackend.hpp"
+
+class ServerProfileModel;
+class SystemProxyManager;
+class Updater;
+class PowerModeManager;
 
 #ifndef Q_MOC_RUN
 export module genyconnect.backend.vpncontroller;
-import genyconnect.backend.connectionstate;
 import genyconnect.backend.serverprofile;
-import genyconnect.backend.serverprofilemodel;
-import genyconnect.backend.systemproxymanager;
-import genyconnect.backend.updater;
 import genyconnect.backend.xrayconfigbuilder;
-import genyconnect.backend.xrayprocessmanager;
+#endif
+
+#if defined(Q_OS_ANDROID) || defined(Q_OS_IOS)
+namespace App {
+Q_NAMESPACE
+enum class ConnectionState
+{
+    Disconnected,
+    Connecting,
+    Connected,
+    Error
+};
+Q_ENUM_NS(ConnectionState)
+}
+using ConnectionState = App::ConnectionState;
+#else
+import genyconnect.backend.connectionstate;
+#endif
+
+#ifndef Q_MOC_RUN
+export const QMetaObject& vpnControllerConnectionStateMetaObject();
 #endif
 
 #ifdef Q_MOC_RUN
@@ -53,14 +75,12 @@ namespace App {
 enum class ConnectionState;
 }
 struct ServerProfile;
-class ServerProfileModel;
-class SystemProxyManager;
-class Updater;
-class XrayProcessManager;
+class VpnRuntimeBackend;
 class XrayConfigBuilder {
 public:
     struct BuildOptions;
 };
+
 #define GENYCONNECT_MODULE_EXPORT
 #else
 #define GENYCONNECT_MODULE_EXPORT export
@@ -77,8 +97,7 @@ public:
  */
 GENYCONNECT_MODULE_EXPORT class VpnController : public QObject
 {
-    Q_OBJECT
-
+public:
     Q_PROPERTY(ConnectionState connectionState READ connectionState NOTIFY connectionStateChanged)
     Q_PROPERTY(bool connected READ connected NOTIFY connectionStateChanged)
     Q_PROPERTY(bool busy READ busy NOTIFY connectionStateChanged)
@@ -113,12 +132,7 @@ GENYCONNECT_MODULE_EXPORT class VpnController : public QObject
     Q_PROPERTY(double speedTestUploadMbps READ speedTestUploadMbps NOTIFY speedTestChanged)
     Q_PROPERTY(QString speedTestError READ speedTestError NOTIFY speedTestChanged)
     Q_PROPERTY(QStringList speedTestHistory READ speedTestHistory NOTIFY speedTestChanged)
-    Q_PROPERTY(
-        int speedTestSelectedSizeMb
-        READ speedTestSelectedSizeMb
-        WRITE setSpeedTestSelectedSizeMb
-        NOTIFY speedTestChanged
-    )
+    Q_PROPERTY(int speedTestSelectedSizeMb READ speedTestSelectedSizeMb WRITE setSpeedTestSelectedSizeMb NOTIFY speedTestChanged)
 
     Q_PROPERTY(int currentProfileIndex READ currentProfileIndex WRITE setCurrentProfileIndex NOTIFY currentProfileIndexChanged)
     Q_PROPERTY(QString currentProfileAddressValue READ currentProfileAddress NOTIFY currentProfileIndexChanged)
@@ -143,13 +157,9 @@ GENYCONNECT_MODULE_EXPORT class VpnController : public QObject
     Q_PROPERTY(double profileScore READ profileScore NOTIFY profileStatsChanged)
     Q_PROPERTY(bool useSystemProxy READ useSystemProxy WRITE setUseSystemProxy NOTIFY useSystemProxyChanged)
     Q_PROPERTY(bool tunMode READ tunMode WRITE setTunMode NOTIFY tunModeChanged)
+    Q_PROPERTY(bool runtimeTunActive READ runtimeTunActive NOTIFY connectionStateChanged)
     Q_PROPERTY(bool killSwitchEnabled READ killSwitchEnabled WRITE setKillSwitchEnabled NOTIFY killSwitchEnabledChanged)
-    Q_PROPERTY(
-        bool autoDisableSystemProxyOnDisconnect
-        READ autoDisableSystemProxyOnDisconnect
-        WRITE setAutoDisableSystemProxyOnDisconnect
-        NOTIFY autoDisableSystemProxyOnDisconnectChanged
-    )
+    Q_PROPERTY(bool autoDisableSystemProxyOnDisconnect READ autoDisableSystemProxyOnDisconnect WRITE setAutoDisableSystemProxyOnDisconnect NOTIFY autoDisableSystemProxyOnDisconnectChanged)
     Q_PROPERTY(bool whitelistMode READ whitelistMode WRITE setWhitelistMode NOTIFY whitelistModeChanged)
     Q_PROPERTY(QString proxyDomainRules READ proxyDomainRules WRITE setProxyDomainRules NOTIFY routingRulesChanged)
     Q_PROPERTY(QString directDomainRules READ directDomainRules WRITE setDirectDomainRules NOTIFY routingRulesChanged)
@@ -165,8 +175,26 @@ GENYCONNECT_MODULE_EXPORT class VpnController : public QObject
     Q_PROPERTY(bool processRoutingSupported READ processRoutingSupported NOTIFY processRoutingSupportChanged)
     Q_PROPERTY(quint16 socksPort READ socksPort CONSTANT)
     Q_PROPERTY(quint16 httpPort READ httpPort CONSTANT)
+    Q_PROPERTY(bool isMobile READ isMobile NOTIFY runtimeCapabilitiesChanged)
+    Q_PROPERTY(bool isDesktop READ isDesktop NOTIFY runtimeCapabilitiesChanged)
+    Q_PROPERTY(bool supportsSystemProxy READ supportsSystemProxy NOTIFY runtimeCapabilitiesChanged)
+    Q_PROPERTY(bool supportsTun READ supportsTun NOTIFY runtimeCapabilitiesChanged)
+    Q_PROPERTY(bool supportsPerAppRouting READ supportsPerAppRouting NOTIFY runtimeCapabilitiesChanged)
+    Q_PROPERTY(bool supportsAutoUpdate READ supportsAutoUpdate NOTIFY runtimeCapabilitiesChanged)
+    Q_PROPERTY(bool requiresVpnPermission READ requiresVpnPermission NOTIFY runtimeCapabilitiesChanged)
+    Q_PROPERTY(bool requiresForegroundService READ requiresForegroundService NOTIFY runtimeCapabilitiesChanged)
+    Q_PROPERTY(bool requiresNetworkExtension READ requiresNetworkExtension NOTIFY runtimeCapabilitiesChanged)
+    Q_PROPERTY(QObject *powerModeManager READ powerModeManager CONSTANT)
+    Q_PROPERTY(QString powerMode READ powerMode WRITE setPowerMode NOTIFY powerModeChanged)
+    Q_PROPERTY(QStringList powerModeOptions READ powerModeOptions CONSTANT)
+    Q_PROPERTY(QVariantMap powerPolicy READ powerPolicy NOTIFY powerPolicyChanged)
+    Q_PROPERTY(QVariantMap visualPowerPolicy READ visualPowerPolicy NOTIFY powerPolicyChanged)
+    Q_PROPERTY(QVariantMap powerDiagnostics READ powerDiagnostics NOTIFY powerDiagnosticsChanged)
 
+    virtual void __geny_vtable_anchor();
+    Q_OBJECT
 public:
+
     /**
      * @brief Construct controller and initialize runtime state.
      * @param parent Optional QObject parent.
@@ -335,6 +363,13 @@ public:
      * @return Pointer to updater service.
      */
     QObject *updater();
+    QObject *powerModeManager();
+    QString powerMode() const;
+    void setPowerMode(const QString& mode);
+    QStringList powerModeOptions() const;
+    QVariantMap powerPolicy() const;
+    QVariantMap visualPowerPolicy() const;
+    QVariantMap powerDiagnostics() const;
 
     /**
      * @brief Configured Xray executable path.
@@ -436,6 +471,7 @@ public:
      */
     bool useSystemProxy() const;
     bool tunMode() const;
+    bool runtimeTunActive() const;
     bool killSwitchEnabled() const;
 
     /**
@@ -595,6 +631,15 @@ public:
      * @return HTTP port value.
      */
     quint16 httpPort() const;
+    bool isMobile() const;
+    bool isDesktop() const;
+    bool supportsSystemProxy() const;
+    bool supportsTun() const;
+    bool supportsPerAppRouting() const;
+    bool supportsAutoUpdate() const;
+    bool requiresVpnPermission() const;
+    bool requiresForegroundService() const;
+    bool requiresNetworkExtension() const;
 
     /**
      * @brief Import a share link and append profile.
@@ -640,6 +685,12 @@ public:
      */
     Q_INVOKABLE bool removeProfile(int row);
     Q_INVOKABLE bool updateProfileBasics(int row, const QString& name, const QString& groupName);
+    Q_INVOKABLE bool updateProfile(
+        int row,
+        const QString& name,
+        const QString& groupName,
+        const QString& configLink
+    );
     /**
      * @brief Remove all stored profiles.
      * @return Number of removed profiles.
@@ -731,6 +782,16 @@ public:
      * @brief Copy buffered logs to clipboard.
      */
     Q_INVOKABLE void copyLogsToClipboard() const;
+    Q_INVOKABLE void copyTextToClipboard(const QString& text) const;
+    Q_INVOKABLE bool shareText(const QString& subject, const QString& text) const;
+    Q_INVOKABLE QString licenseText() const;
+    Q_INVOKABLE bool openUrlWithChooser(const QString& url, const QString& chooserTitle) const;
+    Q_INVOKABLE bool openUrlInAndroidPackage(const QString& url, const QString& packageName) const;
+    Q_INVOKABLE bool isAndroidPackageInstalled(const QString& packageName) const;
+    Q_INVOKABLE QVariantList donationWalletTargets(const QString& transferUrl, const QString& swapUrl) const;
+    Q_INVOKABLE QVariantMap donationConfig() const;
+    Q_INVOKABLE QVariantList donationTokenOptions() const;
+    Q_INVOKABLE QVariantMap buildDonationPayload(const QString& tokenSymbol, const QString& amountText) const;
 
     /**
      * @brief Clear in-memory log history shown in UI.
@@ -755,6 +816,11 @@ public:
     Q_INVOKABLE void clearAllProfileUsage();
     Q_INVOKABLE QVariantList availableAppRuleItems() const;
     Q_INVOKABLE void appendAppRule(const QString& target, const QString& process);
+    Q_INVOKABLE void syncSystemBars(bool darkThemeEnabled);
+    Q_INVOKABLE QString currentProfileTransportPowerClass() const;
+    Q_INVOKABLE QString classifyTransportPower(const QString& network, const QString& security, const QString& alpn = QString()) const;
+    Q_INVOKABLE QString transportPowerDescription(const QString& powerClass) const;
+    Q_INVOKABLE void updatePowerAdaptiveState(bool screenOn, bool charging, bool batterySaver, int batteryLevel, const QString& networkType);
 
 signals:
     //! Emitted when connection state changes.
@@ -804,8 +870,12 @@ signals:
     void profileUsageChanged();
     //! Emitted when process-routing capability is re-evaluated.
     void processRoutingSupportChanged();
+    void runtimeCapabilitiesChanged();
     void publicIpAddressChanged();
     void killSwitchEnabledChanged();
+    void powerModeChanged();
+    void powerPolicyChanged();
+    void powerDiagnosticsChanged();
 
 private slots:
     //! Handle process started signal from process manager.
@@ -818,6 +888,7 @@ private slots:
     void onLogLine(const QString& line);
     //! Handle traffic-updated signal from process manager.
     void onTrafficUpdated();
+    void onProfileModelDataChanged();
     //! Poll Xray API traffic stats.
     void pollTrafficStats();
     //! Tick handler for speed-test phase timings/samples.
@@ -905,6 +976,8 @@ private:
      * @param message Log text.
      */
     void appendSystemLog(const QString& message);
+    void completeRuntimeConnectedStartup();
+    void gateRuntimeStartupUntilProxyReady(quint64 connectAttempt);
 
     /**
      * @brief Perform local proxy self-connectivity check.
@@ -1033,6 +1106,8 @@ private:
     static QString deriveSubscriptionName(const QString& url);
     void recomputeProfileStats();
     void scheduleLogsChanged();
+    void applyPowerPolicy();
+    int startupSelfCheckDelayMs() const;
     int profileGroupOptionsIndex(const QString& groupName) const;
     ProfileGroupOptions profileGroupOptionsFor(const QString& groupName) const;
     void upsertProfileGroupOptions(const ProfileGroupOptions& options, bool save = true);
@@ -1055,8 +1130,8 @@ private:
     qint64 m_txBytes = 0;
     qint64 m_memoryUsageBytes = 0;
     bool m_speedTestRunning = false;
-    QString m_speedTestState = QStringLiteral("Idle");
-    QString m_speedTestPhase = QStringLiteral("Idle");
+    QString m_speedTestState = QString::fromUtf8("Idle");
+    QString m_speedTestPhase = QString::fromUtf8("Idle");
     int m_speedTestElapsedSec = 0;
     int m_speedTestDurationSec = 18;
     double m_speedTestProgress = 0.0;
@@ -1094,7 +1169,7 @@ private:
     bool m_speedTestCancelledByUser = false;
     bool m_speedTestUsingDirectFallback = false;
     int m_speedTestSelectedSizeMb = 10;
-    QString m_speedTestDownloadEndpointTemplate = QStringLiteral("https://speed.cloudflare.com/__down?bytes=%1");
+    QString m_speedTestDownloadEndpointTemplate = QString::fromUtf8("https://speed.cloudflare.com/__down?bytes=%1");
     QElapsedTimer m_speedTestRequestTimer;
     QElapsedTimer m_speedTestPhaseTimer;
     QElapsedTimer m_speedTestSampleTimer;
@@ -1107,7 +1182,7 @@ private:
     int m_publicIpRetryLimit = 2;
 
     QString m_xrayExecutablePath;
-    QString m_xrayVersion = QStringLiteral("Unknown");
+    QString m_xrayVersion = QString::fromUtf8("Unknown");
     bool m_loggingEnabled = true;
     bool m_autoPingProfiles = false;
     QList<SubscriptionEntry> m_subscriptionEntries;
@@ -1118,7 +1193,7 @@ private:
     int m_subscriptionRefreshSuccessCount = 0;
     int m_subscriptionRefreshFailCount = 0;
     QStringList m_profileGroups;
-    QString m_currentProfileGroup = QStringLiteral("All");
+    QString m_currentProfileGroup = QString::fromUtf8("All");
     int m_profileCount = 0;
     int m_filteredProfileCount = 0;
     int m_bestPingMs = -1;
@@ -1130,6 +1205,7 @@ private:
     int m_pendingProxyApplyState = -1; // -1 none, 0 disable, 1 enable
     bool m_pendingProxyApplyForce = false;
     bool m_tunMode = false;
+    bool m_effectiveTunMode = false;
     bool m_killSwitchEnabled = false;
     bool m_autoDisableSystemProxyOnDisconnect = false;
     bool m_whitelistMode = false;
@@ -1157,10 +1233,20 @@ private:
     qint64 m_usageSessionTxBytes = 0;
     QDateTime m_usageSessionStartedAt;
 
-    ServerProfileModel m_profileModel;
-    Updater m_updater;
-    SystemProxyManager m_systemProxyManager;
-    XrayProcessManager m_processManager;
+    ServerProfileModel *m_profileModel = nullptr;
+    Updater *m_updater = nullptr;
+    PowerModeManager *m_powerModeManager = nullptr;
+    SystemProxyManager *m_systemProxyManager = nullptr;
+    VpnRuntimeBackend *m_runtimeBackend = nullptr;
+    bool m_runtimeIsMobile = false;
+    bool m_runtimeIsDesktop = true;
+    bool m_runtimeSupportsTun = true;
+    bool m_runtimeSupportsSystemProxy = true;
+    bool m_runtimeSupportsPerAppRouting = true;
+    bool m_runtimeSupportsAutoUpdate = true;
+    bool m_runtimeRequiresVpnPermission = false;
+    bool m_runtimeRequiresForegroundService = false;
+    bool m_runtimeRequiresNetworkExtension = false;
     XrayConfigBuilder::BuildOptions m_buildOptions;
     QTimer m_memoryUsageTimer;
     QTimer m_statsPollTimer;

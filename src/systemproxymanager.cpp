@@ -8,15 +8,15 @@ namespace {
 QString shellQuote(const QString& value)
 {
     QString quoted = value;
-    quoted.replace(QStringLiteral("'"), QStringLiteral("'\\''"));
-    return QStringLiteral("'") + quoted + QStringLiteral("'");
+    quoted.replace(QString::fromUtf8("'"), QString::fromUtf8("'\\''"));
+    return QString::fromUtf8("'") + quoted + QString::fromUtf8("'");
 }
 
 QString appleScriptQuote(const QString& value)
 {
     QString escaped = value;
-    escaped.replace(QStringLiteral("\\"), QStringLiteral("\\\\"));
-    escaped.replace(QStringLiteral("\""), QStringLiteral("\\\""));
+    escaped.replace(QString::fromUtf8("\\"), QString::fromUtf8("\\\\"));
+    escaped.replace(QString::fromUtf8("\""), QString::fromUtf8("\\\""));
     return escaped;
 }
 }
@@ -33,7 +33,7 @@ bool SystemProxyManager::enable(quint16 socksPort, quint16 httpPort, QString *er
 #else
     Q_UNUSED(socksPort)
     Q_UNUSED(httpPort)
-    setError(errorMessage, QStringLiteral("Automatic system proxy is currently implemented only on macOS."));
+    setError(errorMessage, QString::fromUtf8("Automatic system proxy is currently implemented only on macOS."));
     return false;
 #endif
 }
@@ -80,7 +80,7 @@ bool SystemProxyManager::applyOnMac(bool enable, quint16 socksPort, quint16 http
     QString listError;
     const QStringList services = listActiveMacNetworkServices(&listError);
     if (services.isEmpty()) {
-        setError(errorMessage, listError.isEmpty() ? QStringLiteral("No active macOS network services were found.") : listError);
+        setError(errorMessage, listError.isEmpty() ? QString::fromUtf8("No active macOS network services were found.") : listError);
         return false;
     }
 
@@ -89,28 +89,28 @@ bool SystemProxyManager::applyOnMac(bool enable, quint16 socksPort, quint16 http
         if (enable) {
             // Keep command sequence aligned with v2rayN's known-working macOS script.
             commands.append(
-                {QStringLiteral("-setwebproxy"), service, QStringLiteral("127.0.0.1"), QString::number(httpPort)}
+                {QString::fromUtf8("-setwebproxy"), service, QString::fromUtf8("127.0.0.1"), QString::number(httpPort)}
             );
             commands.append(
-                {QStringLiteral("-setsecurewebproxy"), service, QStringLiteral("127.0.0.1"), QString::number(httpPort)}
+                {QString::fromUtf8("-setsecurewebproxy"), service, QString::fromUtf8("127.0.0.1"), QString::number(httpPort)}
             );
             commands.append(
-                {QStringLiteral("-setsocksfirewallproxy"), service, QStringLiteral("127.0.0.1"), QString::number(socksPort)}
+                {QString::fromUtf8("-setsocksfirewallproxy"), service, QString::fromUtf8("127.0.0.1"), QString::number(socksPort)}
             );
             commands.append(
-                {QStringLiteral("-setproxybypassdomains"), service, QStringLiteral("localhost"), QStringLiteral("127.0.0.1"), QStringLiteral("::1")}
+                {QString::fromUtf8("-setproxybypassdomains"), service, QString::fromUtf8("localhost"), QString::fromUtf8("127.0.0.1"), QString::fromUtf8("::1")}
             );
         } else {
-            commands.append({QStringLiteral("-setsocksfirewallproxystate"), service, QStringLiteral("off")});
-            commands.append({QStringLiteral("-setwebproxystate"), service, QStringLiteral("off")});
-            commands.append({QStringLiteral("-setsecurewebproxystate"), service, QStringLiteral("off")});
+            commands.append({QString::fromUtf8("-setsocksfirewallproxystate"), service, QString::fromUtf8("off")});
+            commands.append({QString::fromUtf8("-setwebproxystate"), service, QString::fromUtf8("off")});
+            commands.append({QString::fromUtf8("-setsecurewebproxystate"), service, QString::fromUtf8("off")});
         }
     }
 
     for (const QStringList& command : commands) {
         QString commandError;
         if (!runNetworkSetup(command, &commandError)) {
-            if (commandError.contains(QStringLiteral("requires admin privileges"), Qt::CaseInsensitive)) {
+            if (commandError.contains(QString::fromUtf8("requires admin privileges"), Qt::CaseInsensitive)) {
                 if (!runNetworkSetupBatchAsAdmin(commands, errorMessage)) {
                     return false;
                 }
@@ -132,17 +132,17 @@ bool SystemProxyManager::applyOnMac(bool enable, quint16 socksPort, quint16 http
 bool SystemProxyManager::runNetworkSetup(const QStringList& arguments, QString *errorMessage)
 {
     QProcess process;
-    process.start(QStringLiteral("/usr/sbin/networksetup"), arguments);
+    process.start(QString::fromUtf8("/usr/sbin/networksetup"), arguments);
 
     if (!process.waitForStarted(5000)) {
-        setError(errorMessage, QStringLiteral("Failed to run networksetup."));
+        setError(errorMessage, QString::fromUtf8("Failed to run networksetup."));
         return false;
     }
 
     if (!process.waitForFinished(10000)) {
         process.kill();
         process.waitForFinished(2000);
-        setError(errorMessage, QStringLiteral("networksetup command timed out."));
+        setError(errorMessage, QString::fromUtf8("networksetup command timed out."));
         return false;
     }
 
@@ -153,7 +153,7 @@ bool SystemProxyManager::runNetworkSetup(const QStringList& arguments, QString *
         }
 
         if (detail.isEmpty()) {
-            detail = QStringLiteral("networksetup failed with exit code %1.").arg(process.exitCode());
+            detail = QString::fromUtf8("networksetup failed with exit code %1.").arg(process.exitCode());
         }
 
         setError(errorMessage, detail);
@@ -173,29 +173,29 @@ bool SystemProxyManager::runNetworkSetupBatchAsAdmin(const QList<QStringList>& c
     for (const QStringList& arguments : commands) {
         QStringList parts;
         parts.reserve(arguments.size() + 1);
-        parts.append(QStringLiteral("/usr/sbin/networksetup"));
+        parts.append(QString::fromUtf8("/usr/sbin/networksetup"));
         for (const QString& argument : arguments) {
             parts.append(shellQuote(argument));
         }
         commandLines.append(parts.join(' '));
     }
 
-    const QString shellCommand = commandLines.join(QStringLiteral(" && "));
-    const QString script = QStringLiteral("do shell script \"%1\" with administrator privileges")
+    const QString shellCommand = commandLines.join(QString::fromUtf8(" && "));
+    const QString script = QString::fromUtf8("do shell script \"%1\" with administrator privileges")
         .arg(appleScriptQuote(shellCommand));
 
     QProcess process;
-    process.start(QStringLiteral("/usr/bin/osascript"), {QStringLiteral("-e"), script});
+    process.start(QString::fromUtf8("/usr/bin/osascript"), {QString::fromUtf8("-e"), script});
 
     if (!process.waitForStarted(5000)) {
-        setError(errorMessage, QStringLiteral("Failed to request admin privileges for proxy setup."));
+        setError(errorMessage, QString::fromUtf8("Failed to request admin privileges for proxy setup."));
         return false;
     }
 
     if (!process.waitForFinished(30000)) {
         process.kill();
         process.waitForFinished(2000);
-        setError(errorMessage, QStringLiteral("Admin proxy setup timed out."));
+        setError(errorMessage, QString::fromUtf8("Admin proxy setup timed out."));
         return false;
     }
 
@@ -205,7 +205,7 @@ bool SystemProxyManager::runNetworkSetupBatchAsAdmin(const QList<QStringList>& c
             detail = QString::fromUtf8(process.readAllStandardOutput()).trimmed();
         }
         if (detail.isEmpty()) {
-            detail = QStringLiteral("Admin proxy setup failed.");
+            detail = QString::fromUtf8("Admin proxy setup failed.");
         }
         setError(errorMessage, detail);
         return false;
@@ -220,7 +220,7 @@ bool SystemProxyManager::anyProxyEnabledOnMac(quint16 socksPort, quint16 httpPor
         return true;
     }
 
-    setError(errorMessage, QStringLiteral("System proxy state is not fully set to local Xray ports."));
+    setError(errorMessage, QString::fromUtf8("System proxy state is not fully set to local Xray ports."));
     return false;
 }
 
@@ -232,22 +232,22 @@ bool SystemProxyManager::readServiceProxyInfo(
 )
 {
     if (!info) {
-        setError(errorMessage, QStringLiteral("Internal proxy query error."));
+        setError(errorMessage, QString::fromUtf8("Internal proxy query error."));
         return false;
     }
 
     QProcess process;
-    process.start(QStringLiteral("/usr/sbin/networksetup"), {queryArgument, service});
+    process.start(QString::fromUtf8("/usr/sbin/networksetup"), {queryArgument, service});
 
     if (!process.waitForStarted(5000)) {
-        setError(errorMessage, QStringLiteral("Failed to query macOS proxy state."));
+        setError(errorMessage, QString::fromUtf8("Failed to query macOS proxy state."));
         return false;
     }
 
     if (!process.waitForFinished(8000)) {
         process.kill();
         process.waitForFinished(1000);
-        setError(errorMessage, QStringLiteral("Timed out querying macOS proxy state."));
+        setError(errorMessage, QString::fromUtf8("Timed out querying macOS proxy state."));
         return false;
     }
 
@@ -258,7 +258,7 @@ bool SystemProxyManager::readServiceProxyInfo(
         }
         setError(
             errorMessage,
-            detail.isEmpty() ? QStringLiteral("Failed to query macOS proxy state.") : detail
+            detail.isEmpty() ? QString::fromUtf8("Failed to query macOS proxy state.") : detail
         );
         return false;
     }
@@ -276,13 +276,13 @@ bool SystemProxyManager::readServiceProxyInfo(
 
         const QString key = line.left(colon).trimmed();
         const QString value = line.mid(colon + 1).trimmed();
-        if (key.compare(QStringLiteral("Enabled"), Qt::CaseInsensitive) == 0) {
-            info->enabled = value.compare(QStringLiteral("Yes"), Qt::CaseInsensitive) == 0
-                || value == QStringLiteral("1")
-                || value.compare(QStringLiteral("On"), Qt::CaseInsensitive) == 0;
-        } else if (key.compare(QStringLiteral("Server"), Qt::CaseInsensitive) == 0) {
+        if (key.compare(QString::fromUtf8("Enabled"), Qt::CaseInsensitive) == 0) {
+            info->enabled = value.compare(QString::fromUtf8("Yes"), Qt::CaseInsensitive) == 0
+                || value == QString::fromUtf8("1")
+                || value.compare(QString::fromUtf8("On"), Qt::CaseInsensitive) == 0;
+        } else if (key.compare(QString::fromUtf8("Server"), Qt::CaseInsensitive) == 0) {
             info->server = value;
-        } else if (key.compare(QStringLiteral("Port"), Qt::CaseInsensitive) == 0) {
+        } else if (key.compare(QString::fromUtf8("Port"), Qt::CaseInsensitive) == 0) {
             info->port = value.toInt();
         }
     }
@@ -295,12 +295,12 @@ bool SystemProxyManager::areAllServicesConfiguredForLocalProxy(quint16 socksPort
     QString listError;
     const QStringList services = listActiveMacNetworkServices(&listError);
     if (services.isEmpty()) {
-        setError(errorMessage, listError.isEmpty() ? QStringLiteral("No active macOS network services were found.") : listError);
+        setError(errorMessage, listError.isEmpty() ? QString::fromUtf8("No active macOS network services were found.") : listError);
         return false;
     }
 
     const auto hostMatches = [](const QString& host) {
-        return host == QStringLiteral("127.0.0.1") || host == QStringLiteral("localhost");
+        return host == QString::fromUtf8("127.0.0.1") || host == QString::fromUtf8("localhost");
     };
 
     for (const QString& service : services) {
@@ -308,15 +308,15 @@ bool SystemProxyManager::areAllServicesConfiguredForLocalProxy(quint16 socksPort
         ProxyInfo secureInfo;
         ProxyInfo socksInfo;
         QString queryError;
-        if (!readServiceProxyInfo(service, QStringLiteral("-getwebproxy"), &webInfo, &queryError)) {
+        if (!readServiceProxyInfo(service, QString::fromUtf8("-getwebproxy"), &webInfo, &queryError)) {
             setError(errorMessage, queryError);
             return false;
         }
-        if (!readServiceProxyInfo(service, QStringLiteral("-getsecurewebproxy"), &secureInfo, &queryError)) {
+        if (!readServiceProxyInfo(service, QString::fromUtf8("-getsecurewebproxy"), &secureInfo, &queryError)) {
             setError(errorMessage, queryError);
             return false;
         }
-        if (!readServiceProxyInfo(service, QStringLiteral("-getsocksfirewallproxy"), &socksInfo, &queryError)) {
+        if (!readServiceProxyInfo(service, QString::fromUtf8("-getsocksfirewallproxy"), &socksInfo, &queryError)) {
             setError(errorMessage, queryError);
             return false;
         }
@@ -337,7 +337,7 @@ bool SystemProxyManager::areAllServicesProxyDisabled(QString *errorMessage)
     QString listError;
     const QStringList services = listActiveMacNetworkServices(&listError);
     if (services.isEmpty()) {
-        setError(errorMessage, listError.isEmpty() ? QStringLiteral("No active macOS network services were found.") : listError);
+        setError(errorMessage, listError.isEmpty() ? QString::fromUtf8("No active macOS network services were found.") : listError);
         return false;
     }
 
@@ -346,15 +346,15 @@ bool SystemProxyManager::areAllServicesProxyDisabled(QString *errorMessage)
         ProxyInfo secureInfo;
         ProxyInfo socksInfo;
         QString queryError;
-        if (!readServiceProxyInfo(service, QStringLiteral("-getwebproxy"), &webInfo, &queryError)) {
+        if (!readServiceProxyInfo(service, QString::fromUtf8("-getwebproxy"), &webInfo, &queryError)) {
             setError(errorMessage, queryError);
             return false;
         }
-        if (!readServiceProxyInfo(service, QStringLiteral("-getsecurewebproxy"), &secureInfo, &queryError)) {
+        if (!readServiceProxyInfo(service, QString::fromUtf8("-getsecurewebproxy"), &secureInfo, &queryError)) {
             setError(errorMessage, queryError);
             return false;
         }
-        if (!readServiceProxyInfo(service, QStringLiteral("-getsocksfirewallproxy"), &socksInfo, &queryError)) {
+        if (!readServiceProxyInfo(service, QString::fromUtf8("-getsocksfirewallproxy"), &socksInfo, &queryError)) {
             setError(errorMessage, queryError);
             return false;
         }
@@ -370,17 +370,17 @@ bool SystemProxyManager::areAllServicesProxyDisabled(QString *errorMessage)
 QStringList SystemProxyManager::listActiveMacNetworkServices(QString *errorMessage)
 {
     QProcess process;
-    process.start(QStringLiteral("/usr/sbin/networksetup"), {QStringLiteral("-listallnetworkservices")});
+    process.start(QString::fromUtf8("/usr/sbin/networksetup"), {QString::fromUtf8("-listallnetworkservices")});
 
     if (!process.waitForStarted(5000)) {
-        setError(errorMessage, QStringLiteral("Failed to query macOS network services."));
+        setError(errorMessage, QString::fromUtf8("Failed to query macOS network services."));
         return {};
     }
 
     if (!process.waitForFinished(10000)) {
         process.kill();
         process.waitForFinished(2000);
-        setError(errorMessage, QStringLiteral("Listing network services timed out."));
+        setError(errorMessage, QString::fromUtf8("Listing network services timed out."));
         return {};
     }
 
@@ -390,7 +390,7 @@ QStringList SystemProxyManager::listActiveMacNetworkServices(QString *errorMessa
             detail = QString::fromUtf8(process.readAllStandardOutput()).trimmed();
         }
 
-        setError(errorMessage, detail.isEmpty() ? QStringLiteral("Failed to list network services.") : detail);
+        setError(errorMessage, detail.isEmpty() ? QString::fromUtf8("Failed to list network services.") : detail);
         return {};
     }
 
@@ -400,7 +400,7 @@ QStringList SystemProxyManager::listActiveMacNetworkServices(QString *errorMessa
     QStringList services;
     for (const QString& rawLine : lines) {
         const QString line = rawLine.trimmed();
-        if (line.isEmpty() || line.startsWith(QStringLiteral("An asterisk"))) {
+        if (line.isEmpty() || line.startsWith(QString::fromUtf8("An asterisk"))) {
             continue;
         }
 

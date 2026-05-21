@@ -38,9 +38,10 @@ public:
         quint16 socksPort = 10808;              //!< Local mixed/socks inbound port.
         quint16 httpPort = 10809;               //!< Local http inbound port.
         quint16 apiPort = 10085;                //!< Xray API inbound port.
-        QString logLevel = QStringLiteral("warning"); //!< Runtime log level.
+        QString logLevel = QString::fromUtf8("warning"); //!< Runtime log level.
         bool enableMux = false;                 //!< Enable outbound mux.
         bool enableStatsApi = true;             //!< Enable stats API and policy.
+        bool enableFakeDnsSniffing = true;      //!< Include FakeDNS in sniffing dest overrides.
         bool enableTun = false;                 //!< Enable system-level TUN inbound.
         bool tunAutoRoute = true;               //!< Auto-manage host routes for TUN.
         bool tunStrictRoute = true;             //!< Prevent route bypass leaks when possible.

@@ -18,10 +18,10 @@ T.Switch {
         implicitWidth: 42
         implicitHeight: 22
         x: control.leftPadding
-        radius: Colors.radius
+        radius: 11
         anchors.verticalCenter: parent.verticalCenter
-        color: control.checked ? Colors.secondry : Colors.backgroundActivated
-        border.color: control.checked ? Colors.secondry : Colors.lineBorderActivated
+        color: control.checked ? Colors.dsPrimarySolid : Colors.dsSurface
+        border.color: control.checked ? Colors.dsPrimarySolid : Colors.dsBorder
 
         Rectangle {
             id: rectTwo
@@ -30,7 +30,7 @@ T.Switch {
             height: 13
             radius: width
             anchors.verticalCenter: parent.verticalCenter
-            color: control.checked ? Colors.backgroundActivated : Colors.primary
+            color: control.checked ? Colors.dsPrimaryText : Colors.dsTextMuted
 
             Behavior on x {
                 enabled: true
@@ -50,7 +50,7 @@ T.Switch {
         font: control.font
         fontSizeMode: Text.Fit
         opacity: enabled ? 1.0 : 0.3
-        color: Colors.primary
+        color: Colors.dsText
         leftPadding: control.indicator.width + control.spacing
         topPadding: 5
         wrapMode: Text.WordWrap
