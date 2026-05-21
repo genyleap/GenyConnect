@@ -450,64 +450,66 @@ jobs:
           test -f "${ANDROID_QT_ROOT}/lib/cmake/Qt6Core/Qt6CoreConfig.cmake"
           test -f "${QT_HOST_ROOT}/lib/cmake/Qt6/Qt6Config.cmake"
 
-      - name: Configure Android
-        shell: bash
-        env:
-          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-        run: |
-          set -euo pipefail
+          - name: Configure Android
+            shell: bash
+            env:
+              ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+              ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+              ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+            run: |
+              set -euo pipefail
 
-          SIGN_ARGS=()
+              SIGN_ARGS=()
 
-          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
-            if [[ -z "${ANDROID_RELEASE_KEYSTORE:-}" ]]; then
-              echo "ANDROID_RELEASE_KEYSTORE is not available."
-              exit 1
-            fi
+              if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+                if [[ -z "${ANDROID_RELEASE_KEYSTORE:-}" ]]; then
+                  echo "ANDROID_RELEASE_KEYSTORE is not available."
+                  exit 1
+                fi
 
-            if [[ -z "${ANDROID_KEYSTORE_PASSWORD}" || -z "${ANDROID_KEY_ALIAS}" || -z "${ANDROID_KEY_PASSWORD}" ]]; then
-              echo "Android signing secrets are incomplete."
-              exit 1
-            fi
+                if [[ -z "${ANDROID_KEYSTORE_PASSWORD}" || -z "${ANDROID_KEY_ALIAS}" || -z "${ANDROID_KEY_PASSWORD}" ]]; then
+                  echo "Android signing secrets are incomplete."
+                  exit 1
+                fi
 
-            SIGN_ARGS+=(
-              -DQT_ANDROID_SIGN_APK=ON
-              -DQT_ANDROID_SIGN_AAB=ON
-              -DQT_ANDROID_KEYSTORE_PATH="${ANDROID_RELEASE_KEYSTORE}"
-              -DQT_ANDROID_KEYSTORE_STORE_PASS="${ANDROID_KEYSTORE_PASSWORD}"
-              -DQT_ANDROID_KEYSTORE_KEY_ALIAS="${ANDROID_KEY_ALIAS}"
-              -DQT_ANDROID_KEYSTORE_KEY_PASS="${ANDROID_KEY_PASSWORD}"
-            )
-          else
-            SIGN_ARGS+=(
-              -DQT_ANDROID_SIGN_APK=OFF
-              -DQT_ANDROID_SIGN_AAB=OFF
-            )
-          fi
+                SIGN_ARGS+=(
+                  -DQT_ANDROID_SIGN_APK=ON
+                  -DQT_ANDROID_SIGN_AAB=ON
+                  -DQT_ANDROID_KEYSTORE_PATH="${ANDROID_RELEASE_KEYSTORE}"
+                  -DQT_ANDROID_KEYSTORE_STORE_PASS="${ANDROID_KEYSTORE_PASSWORD}"
+                  -DQT_ANDROID_KEYSTORE_KEY_ALIAS="${ANDROID_KEY_ALIAS}"
+                  -DQT_ANDROID_KEYSTORE_KEY_PASS="${ANDROID_KEY_PASSWORD}"
+                )
+              else
+                SIGN_ARGS+=(
+                  -DQT_ANDROID_SIGN_APK=OFF
+                  -DQT_ANDROID_SIGN_AAB=OFF
+                )
+              fi
 
-          cmake -S . -B build -G Ninja \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_PREFIX_PATH="${ANDROID_QT_ROOT}" \
-            -DQt6_DIR="${ANDROID_QT_ROOT}/lib/cmake/Qt6" \
-            -DQT_HOST_PATH="${QT_HOST_ROOT}" \
-            -DCMAKE_TOOLCHAIN_FILE="${ANDROID_NDK_ROOT}/build/cmake/android.toolchain.cmake" \
-            -DANDROID_ABI="${{ matrix.android_abi }}" \
-            -DANDROID_PLATFORM="android-${{ matrix.android_api }}" \
-            -DANDROID_SDK_ROOT="${ANDROID_SDK_ROOT}" \
-            -DANDROID_NDK_ROOT="${ANDROID_NDK_ROOT}" \
-            -DQT_ANDROID_ABIS="${{ matrix.android_abis }}" \
-            -DGENYCONNECT_BUILD_DESKTOP=OFF \
-            -DGENYCONNECT_BUILD_ANDROID=ON \
-            -DGENYCONNECT_ENABLE_MOBILE_VPN=ON \
-            -DGENYCONNECT_AUTO_DOWNLOAD_XRAY=ON \
-            -DGENYCONNECT_USE_MODULES=OFF \
-            -DGENYCONNECT_TARGET_OS=android \
-            -DGENYCONNECT_TARGET_ARCH="${{ matrix.target_arch }}" \
-            -DGENYCONNECT_TARGET_BUILD_ARCH="${{ matrix.target_arch }}" \
-            -DGENYCONNECT_ANDROID_OPENSSL_ROOT="${ANDROID_SDK_ROOT}/android_openssl/ssl_3" \
-            "${SIGN_ARGS[@]}"
+              cmake -S . -B build -G Ninja \
+                -DCMAKE_BUILD_TYPE=Release \
+                -DCMAKE_PREFIX_PATH="${ANDROID_QT_ROOT}" \
+                -DQt6_DIR="${ANDROID_QT_ROOT}/lib/cmake/Qt6" \
+                -DQT_HOST_PATH="${QT_HOST_ROOT}" \
+                -DQT_HOST_PATH_CMAKE_DIR="${QT_HOST_ROOT}/lib/cmake" \
+                -DQT_DEBUG_FIND_PACKAGE=ON \
+                -DCMAKE_TOOLCHAIN_FILE="${ANDROID_NDK_ROOT}/build/cmake/android.toolchain.cmake" \
+                -DANDROID_ABI="${{ matrix.android_abi }}" \
+                -DANDROID_PLATFORM="android-${{ matrix.android_api }}" \
+                -DANDROID_SDK_ROOT="${ANDROID_SDK_ROOT}" \
+                -DANDROID_NDK_ROOT="${ANDROID_NDK_ROOT}" \
+                -DQT_ANDROID_ABIS="${{ matrix.android_abis }}" \
+                -DGENYCONNECT_BUILD_DESKTOP=OFF \
+                -DGENYCONNECT_BUILD_ANDROID=ON \
+                -DGENYCONNECT_ENABLE_MOBILE_VPN=ON \
+                -DGENYCONNECT_AUTO_DOWNLOAD_XRAY=ON \
+                -DGENYCONNECT_USE_MODULES=OFF \
+                -DGENYCONNECT_TARGET_OS=android \
+                -DGENYCONNECT_TARGET_ARCH="${{ matrix.target_arch }}" \
+                -DGENYCONNECT_TARGET_BUILD_ARCH="${{ matrix.target_arch }}" \
+                -DGENYCONNECT_ANDROID_OPENSSL_ROOT="${ANDROID_SDK_ROOT}/android_openssl/ssl_3" \
+                "${SIGN_ARGS[@]}"
 
       - name: Build Android APK Release
         shell: bash
