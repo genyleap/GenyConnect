@@ -789,18 +789,11 @@ if(GENYCONNECT_AUTO_DOWNLOAD_XRAY AND NOT GENYCONNECT_BUNDLED_XRAY_PATH)
       set(_geny_xray_platform "android")
       if(GENY_ARCH MATCHES "^(arm64|aarch64|arm64-v8a)$")
         set(_geny_xray_arch "arm64-v8a")
-      elseif(GENY_ARCH MATCHES "^(armv7|armv7a|armeabi-v7a|arm)$")
-        set(_geny_xray_arch "arm32-v7a")
       elseif(GENY_ARCH MATCHES "^(x86_64|amd64|x64)$")
-        set(_geny_xray_arch "x64")
-      elseif(GENY_ARCH STREQUAL "universal")
-        # The universal Android package should not use a single Xray binary.
-        # It must bundle one executable per ABI from separate downloaded assets.
-        message(WARNING
-          "GENY_ARCH=universal selected. Automatic single Xray download is not enough. "
-          "Prefer per-ABI Android builds or add multi-ABI Xray bundling logic."
-        )
-        set(_geny_xray_arch "arm64-v8a")
+        set(_geny_xray_arch "amd64")
+      elseif(GENY_ARCH MATCHES "^(armv7|armv7a|armeabi-v7a|arm)$")
+        message(WARNING "Xray-core v26.2.6 has no Android arm32-v7a asset. Disabling bundled Xray for armeabi-v7a.")
+        set(_geny_do_xray_download FALSE)
       else()
         message(FATAL_ERROR "Unsupported Android architecture for automatic Xray download: ${GENY_ARCH}")
       endif()
