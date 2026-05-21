@@ -38,14 +38,14 @@ jobs:
 
           - name: windows-x64
             os: windows-latest
-            qt_version: "6.11.0"
+            qt_version: "6.10.3"
             qt_arch: win64_msvc2022_64
             cmake_arch: x64
             target_arch: x86_64
 
           - name: windows-arm64
             os: windows-11-arm
-            qt_version: "6.11.0"
+            qt_version: "6.10.3"
             qt_arch: win64_msvc2022_arm64
             cmake_arch: ARM64
             target_arch: arm64
