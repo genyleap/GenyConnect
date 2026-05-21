@@ -176,6 +176,8 @@ else()
   set(GENY_ARCH_RAW "x86_64")
 endif()
 
+string(TOLOWER "${GENY_ARCH_RAW}" GENY_ARCH)
+
 if(GENY_ARCH MATCHES "^(arm64|aarch64|arm64-v8a)$")
   set(GENY_ARCH "arm64")
 elseif(GENY_ARCH MATCHES "^(armeabi-v7a|armv7|armv7a|arm)$")
