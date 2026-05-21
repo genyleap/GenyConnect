@@ -275,7 +275,12 @@ set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
 
-set(CMAKE_CXX_SCAN_FOR_MODULES OFF)
+if(GENYCONNECT_USE_MODULES)
+  set(CMAKE_CXX_SCAN_FOR_MODULES ON)
+else()
+  set(CMAKE_CXX_SCAN_FOR_MODULES OFF)
+endif()
+
 if(NOT "cppm" IN_LIST CMAKE_AUTOMOC_EXTENSIONS)
   list(APPEND CMAKE_AUTOMOC_EXTENSIONS "cppm")
 endif()
@@ -466,6 +471,18 @@ else()
     src/main.cpp
     ${GENYCONNECT_IMPL_SOURCES}
   )
+endif()
+
+if(GENYCONNECT_USE_MODULES)
+  target_sources(${PROJECT_NAME}
+    PRIVATE
+      FILE_SET genyconnect_cxx_modules
+      TYPE CXX_MODULES
+      BASE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/src
+      FILES ${GENYCONNECT_MODULE_IFS}
+  )
+
+  set_property(TARGET ${PROJECT_NAME} PROPERTY CXX_SCAN_FOR_MODULES ON)
 endif()
 
 set_target_properties(${PROJECT_NAME} PROPERTIES OUTPUT_NAME "${GENY_OUTPUT_NAME}"
@@ -703,13 +720,6 @@ qt_add_qml_module(${PROJECT_NAME}
     ui/Controls/qmldir
     ui/Layout/qmldir
     ui/Dashboard/qmldir
-)
-
-target_sources(${PROJECT_NAME}
-  PUBLIC
-    FILE_SET CXX_MODULES TYPE CXX_MODULES
-    BASE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/src
-    FILES ${GENYCONNECT_MODULE_IFS}
 )
 
 # -------------------------
