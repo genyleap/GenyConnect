@@ -111,7 +111,7 @@ public final class GenyConnectVpnService extends VpnService {
 
     @Override
     public void onDestroy() {
-        if (!sRunning) {
+        if (!sRunning && !isRuntimeProcessAlive()) {
             stopRuntime(false);
         }
         super.onDestroy();
@@ -119,7 +119,11 @@ public final class GenyConnectVpnService extends VpnService {
 
     @Override
     public void onTaskRemoved(Intent rootIntent) {
-        if (sRunning) {
+        if (sRunning || isRuntimeProcessAlive()) {
+            try {
+                startForegroundInternal();
+            } catch (Exception ignored) {
+            }
             return;
         }
         super.onTaskRemoved(rootIntent);

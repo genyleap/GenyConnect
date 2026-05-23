@@ -643,8 +643,8 @@ ApplicationWindow {
 
     onClosing: function(closeEvent) {
         if (mobilePlatform) {
-            closeEvent.accepted = false
-            root.handleMobileBackPressed()
+            const handled = root.handleMobileBackPressed()
+            closeEvent.accepted = !handled
             return
         }
         if (allowCloseExit) {
@@ -674,20 +674,12 @@ ApplicationWindow {
             settingsFlick.contentY = 0
     }
 
-    Shortcut {
-        enabled: root.mobilePlatform
-        context: Qt.ApplicationShortcut
-        sequences: [StandardKey.Back, "Back", "Escape"]
-        onActivated: {
-            if (root.handleMobileBackPressed())
-                return
-            Qt.quit()
-        }
-    }
-
     function handleMobileBackPressed() {
         if (!mobilePlatform)
             return false
+
+        if (root.closeTopOverlaySurface())
+            return true
 
         const popupStack = [
             walletPickerPopup,
@@ -713,10 +705,32 @@ ApplicationWindow {
             }
         }
 
-        // Keep Home screen alive on Android: do not let back terminate the app.
-        if (compactDashboard.visible)
-            return true
+        // On mobile home screen, consume native Back to keep the app alive in background.
+        return true
+    }
 
+    function closeTopOverlaySurface() {
+        const overlay = Overlay.overlay
+        if (!overlay || !overlay.children)
+            return false
+
+        const children = overlay.children
+        for (let i = children.length - 1; i >= 0; --i) {
+            const item = children[i]
+            if (!item)
+                continue
+
+            const canClose = typeof item.close === "function"
+            if (!canClose)
+                continue
+
+            const isOpen = (item.opened === true) || (item.visible === true)
+            if (!isOpen)
+                continue
+
+            item.close()
+            return true
+        }
         return false
     }
 
@@ -2758,7 +2772,7 @@ ApplicationWindow {
         height: donationSuggestContent.implicitHeight + 28 + (root.mobilePlatform ? Math.max(20, root.safeBottomInset + 20) : 0)
         x: (root.width - width) * 0.5
         y: root.compact
-           ? root.height - height - (root.mobilePlatform ? 12 : 0)
+           ? root.height - height
            : root.drawerY(height)
         z: 210
 
@@ -8891,6 +8905,7 @@ ApplicationWindow {
                 if (success) {
                     root.importDraft = ""
                     importTextArea.text = ""
+                    importPopup.close()
                 }
             }
         }
@@ -9576,6 +9591,7 @@ ApplicationWindow {
                             root.importStatusText = "Imported " + imported + " profile(s)."
                             root.importDraft = ""
                             importTextArea.text = ""
+                            importPopup.close()
                         } else {
                             root.importStatusKind = "error"
                             root.importStatusText = vpnController.lastError || "No profiles were imported."
