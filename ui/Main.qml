@@ -18,15 +18,27 @@ ApplicationWindow {
 
     readonly property bool compact: mobilePlatform || root.width < 620
 
-    readonly property real safeTopInset: mobilePlatform ? (Qt.platform.os === "ios" ? 14 : 0) : 0
-    readonly property real safeBottomInset: mobilePlatform ? (Qt.platform.os === "ios" ? 22 : 10) : 0
+    readonly property real reportedSafeTopInset: Number((SafeArea.margins && SafeArea.margins.top) || 0)
+    readonly property real reportedSafeBottomInset: Number((SafeArea.margins && SafeArea.margins.bottom) || 0)
+    readonly property real androidDensityScale: Math.max(1.0, (Screen.pixelDensity * 25.4) / 160.0)
+    readonly property real androidFallbackSafeTopInset: 0
+    readonly property real androidFallbackSafeBottomInset: (mobilePlatform && Qt.platform.os === "android" && reportedSafeBottomInset <= 0.5)
+        ? Math.round(40 * androidDensityScale)
+        : 0
+    readonly property real safeTopInset: mobilePlatform
+        ? Math.max((Qt.platform.os === "ios" ? 14 : androidFallbackSafeTopInset), reportedSafeTopInset)
+        : 0
+    readonly property real safeBottomInset: mobilePlatform
+        ? Math.max((Qt.platform.os === "ios" ? 22 : androidFallbackSafeBottomInset), reportedSafeBottomInset)
+        : 0
 
     readonly property real compactBottomNavVisualHeight: mobilePlatform
         ? (mobileLandscape ? 44 : 48)
         : 60
-    readonly property real compactBottomNavHeight: compactBottomNavVisualHeight + safeBottomInset
+    readonly property real compactBottomNavInset: safeBottomInset
+    readonly property real compactBottomNavHeight: compactBottomNavVisualHeight + compactBottomNavInset
     readonly property real compactBottomNavSafeFillHeight: mobilePlatform
-        ? Math.max(mobileLandscape ? 4 : 8, safeBottomInset + (mobileLandscape ? 2 : 4))
+        ? Math.max(mobileLandscape ? 4 : 8, compactBottomNavInset + (mobileLandscape ? 2 : 4))
         : Math.max(34, safeBottomInset + 18)
     readonly property real compactBottomNavTopMargin: mobilePlatform ? (mobileLandscape ? 0 : 2) : 0
 
@@ -133,6 +145,10 @@ ApplicationWindow {
 
     color: Colors.dsWindow
     font.family: FontSystem.contentFontFamily
+    topPadding: 0
+    bottomPadding: 0
+    leftPadding: 0
+    rightPadding: 0
 
     readonly property string faSolid: FontSystem.getAwesomeSolid.name
 
@@ -196,6 +212,7 @@ ApplicationWindow {
     property bool allowCloseExit: false
     property var profilePopupAnchor: null
     property int sessionSeconds: 0
+    property double sessionClockLastMs: 0
     property string settingsSection: "main"
     property string pendingSettingsSection: ""
     property var appRuleSuggestions: []
@@ -215,6 +232,10 @@ ApplicationWindow {
     property var donationPendingPayload: ({})
     property var donationWalletTargets: []
     property bool donationSuggestionShown: false
+    property var donationTokenPricesUsd: ({ "GENY": 0.000834818748987003, "USDC": 1.0 })
+    property bool donationPriceLoading: false
+    property string donationPriceError: ""
+    property int donationPriceRequestNonce: 0
     property string settingsFeedbackText: ""
     property real settingsPageShift: 0
     property real settingsPageOpacity: 1
@@ -621,6 +642,11 @@ ApplicationWindow {
     }
 
     onClosing: function(closeEvent) {
+        if (mobilePlatform) {
+            closeEvent.accepted = false
+            root.handleMobileBackPressed()
+            return
+        }
         if (allowCloseExit) {
             return
         }
@@ -630,6 +656,11 @@ ApplicationWindow {
 
     onVisibleChanged: {
         if (visible)
+            androidSystemBarsSyncTimer.restart()
+    }
+
+    onActiveChanged: {
+        if (active)
             syncAndroidSystemBars()
     }
 
@@ -643,6 +674,52 @@ ApplicationWindow {
             settingsFlick.contentY = 0
     }
 
+    Shortcut {
+        enabled: root.mobilePlatform
+        context: Qt.ApplicationShortcut
+        sequences: [StandardKey.Back, "Back", "Escape"]
+        onActivated: {
+            if (root.handleMobileBackPressed())
+                return
+            Qt.quit()
+        }
+    }
+
+    function handleMobileBackPressed() {
+        if (!mobilePlatform)
+            return false
+
+        const popupStack = [
+            walletPickerPopup,
+            speedTestPopup,
+            logsPopup,
+            dataUsagePopup,
+            aboutPopup,
+            importPopup,
+            editProfilePopup,
+            settingsPopup,
+            clearProfilesPopup,
+            profilePopup,
+            tunConflictPopup,
+            donationSuggestPopup,
+            updateNoticePopup
+        ]
+
+        for (let i = 0; i < popupStack.length; ++i) {
+            const popup = popupStack[i]
+            if (popup && popup.opened) {
+                popup.close()
+                return true
+            }
+        }
+
+        // Keep Home screen alive on Android: do not let back terminate the app.
+        if (compactDashboard.visible)
+            return true
+
+        return false
+    }
+
     function themeColor(lightColor, darkColor) {
         return Colors.lightMode ? lightColor : darkColor
     }
@@ -651,8 +728,8 @@ ApplicationWindow {
         if (mode === "Save")
             return "\uf06c"
         if (mode === "High Performance")
-            return "\uf0e7"
-        return "\uf3fd"
+            return "\uf06d"
+        return "\uf0e7"
     }
 
     function powerModeAccent(mode) {
@@ -669,6 +746,10 @@ ApplicationWindow {
         if (mode === "High Performance")
             return "Faster refresh and richer feedback for latency-focused use."
         return "Balanced defaults close to the current GenyConnect behavior."
+    }
+
+    function homeConnectGlyph() {
+        return powerModeGlyph(vpnController.powerMode || "Normal")
     }
 
     function powerMsText(value) {
@@ -736,6 +817,7 @@ ApplicationWindow {
             donationCustomAmount = ""
         if (donationSelectedAmountPreset !== "Custom" && donationSelectedAmountPreset.trim().length === 0)
             donationSelectedAmountPreset = donationDefaultPresetForToken(donationSelectedToken)
+        refreshDonationTokenPrice(donationSelectedToken)
     }
 
     function donationTokenBySymbol(symbol) {
@@ -771,6 +853,94 @@ ApplicationWindow {
         donationSelectedAmountPreset = donationDefaultPresetForToken(donationSelectedToken)
         donationCustomAmount = ""
         donationValidationError = ""
+        refreshDonationTokenPrice(donationSelectedToken)
+    }
+
+    function refreshDonationTokenPrice(symbol) {
+        const key = (symbol || "").trim().toUpperCase()
+        const token = donationTokenBySymbol(key)
+        if (!token)
+            return
+        const requestNonce = ++donationPriceRequestNonce
+        if (key === "USDC") {
+            donationPriceTimeoutTimer.stop()
+            setDonationTokenPrice(key, 1.0)
+            donationPriceLoading = false
+            donationPriceError = ""
+            return
+        }
+
+        const priceUrl = (token.priceUrl || "").trim()
+        const contractKey = (token.contract || "").trim().toLowerCase()
+        if (priceUrl.length === 0 || contractKey.length === 0) {
+            donationPriceTimeoutTimer.stop()
+            donationPriceLoading = false
+            return
+        }
+
+        donationPriceLoading = true
+        donationPriceError = ""
+        donationPriceTimeoutTimer.restart()
+        const request = new XMLHttpRequest()
+        request.onreadystatechange = function() {
+            if (request.readyState !== XMLHttpRequest.DONE)
+                return
+            if (requestNonce !== donationPriceRequestNonce)
+                return
+            donationPriceTimeoutTimer.stop()
+            donationPriceLoading = false
+            if (request.status < 200 || request.status >= 300) {
+                donationPriceError = "Price unavailable"
+                return
+            }
+            try {
+                const response = JSON.parse(request.responseText || "{}")
+                const prices = (((response || {}).data || {}).attributes || {}).token_prices || {}
+                const rawPrice = prices[contractKey]
+                const parsedPrice = Number(rawPrice)
+                if (!isFinite(parsedPrice) || parsedPrice <= 0) {
+                    donationPriceError = "Price unavailable"
+                    return
+                }
+                setDonationTokenPrice(key, parsedPrice)
+                donationPriceError = ""
+            } catch (error) {
+                donationPriceError = "Price unavailable"
+            }
+        }
+        request.open("GET", priceUrl)
+        request.send()
+    }
+
+    function setDonationTokenPrice(symbol, price) {
+        const nextPrices = {}
+        const currentPrices = donationTokenPricesUsd || {}
+        for (const key in currentPrices)
+            nextPrices[key] = currentPrices[key]
+        nextPrices[(symbol || "").trim().toUpperCase()] = price
+        donationTokenPricesUsd = nextPrices
+    }
+
+    function donationEstimatedUsd() {
+        const amount = Number(donationEffectiveAmountText())
+        if (!isFinite(amount) || amount <= 0)
+            return -1
+        const key = (donationSelectedToken || "").trim().toUpperCase()
+        const price = Number((donationTokenPricesUsd || {})[key])
+        if (!isFinite(price) || price <= 0)
+            return -1
+        return amount * price
+    }
+
+    function donationEstimatedUsdText() {
+        const value = donationEstimatedUsd()
+        if (value < 0)
+            return donationPriceLoading ? "Loading" : "≈ $ --"
+        if (value >= 1000)
+            return "≈ $" + value.toLocaleString(Qt.locale(), "f", 2)
+        if (value >= 1)
+            return "≈ $" + value.toFixed(2)
+        return "≈ $" + value.toFixed(4)
     }
 
     function donationTargetVisible(target) {
@@ -2252,7 +2422,7 @@ ApplicationWindow {
         AppGlobals.appWindow = root
         AppGlobals.mainRect = root.contentItem
         Theme.mode = darkThemeEnabled ? Theme.Dark : Theme.Light
-        syncAndroidSystemBars()
+        androidSystemBarsSyncTimer.restart()
         syncSelectedProfileFromController()
         refreshCurrentProfilePing()
         reloadDonationData()
@@ -2260,7 +2430,22 @@ ApplicationWindow {
 
     onDarkThemeEnabledChanged: {
         Theme.mode = darkThemeEnabled ? Theme.Dark : Theme.Light
-        syncAndroidSystemBars()
+        androidSystemBarsSyncTimer.restart()
+    }
+
+    Timer {
+        id: androidSystemBarsSyncTimer
+        interval: 140
+        repeat: false
+        onTriggered: root.syncAndroidSystemBars()
+    }
+
+    Connections {
+        target: Qt.application
+        function onStateChanged() {
+            if (Qt.application.state === Qt.ApplicationActive)
+                androidSystemBarsSyncTimer.restart()
+        }
     }
 
     Timer {
@@ -2268,6 +2453,25 @@ ApplicationWindow {
         interval: 2200
         repeat: false
         onTriggered: root.donationFeedbackText = ""
+    }
+
+    Timer {
+        id: donationPriceRefreshTimer
+        interval: 600000
+        repeat: true
+        running: true
+        triggeredOnStart: false
+        onTriggered: root.refreshDonationTokenPrice(root.donationSelectedToken)
+    }
+
+    Timer {
+        id: donationPriceTimeoutTimer
+        interval: 6500
+        repeat: false
+        onTriggered: {
+            root.donationPriceLoading = false
+            root.donationPriceError = "Price unavailable"
+        }
     }
 
     Timer {
@@ -2291,17 +2495,34 @@ ApplicationWindow {
     }
 
     Timer {
+        id: sessionClockTimer
+        interval: 1000
+        repeat: true
+        running: true
+        onTriggered: {
+            const nowMs = Date.now()
+            if (vpnController.connected || vpnController.busy) {
+                if (root.sessionClockLastMs <= 0)
+                    root.sessionClockLastMs = nowMs
+                const elapsedMs = Math.max(0, nowMs - root.sessionClockLastMs)
+                const deltaSeconds = Math.floor(elapsedMs / 1000.0)
+                if (deltaSeconds > 0) {
+                    root.sessionSeconds += deltaSeconds
+                    root.sessionClockLastMs += deltaSeconds * 1000.0
+                }
+            } else if (root.sessionSeconds !== 0 || root.sessionClockLastMs !== 0) {
+                root.sessionSeconds = 0
+                root.sessionClockLastMs = 0
+            }
+        }
+    }
+
+    Timer {
         id: trafficRateTimer
         interval: root.powerUiStatsIntervalMs
         repeat: true
         running: !root.powerPauseBackgroundUi
         onTriggered: {
-            if (vpnController.connected || vpnController.busy) {
-                root.sessionSeconds += Math.max(1, Math.round(interval / 1000))
-            } else {
-                root.sessionSeconds = 0
-            }
-
             const rx = vpnController.rxBytes
             const tx = vpnController.txBytes
             if (!rateSampleInitialized) {
@@ -2357,6 +2578,9 @@ ApplicationWindow {
                 downRateBytesPerSec = 0
                 upRateBytesPerSec = 0
                 root.sessionSeconds = 0
+                root.sessionClockLastMs = 0
+            } else if (root.sessionClockLastMs <= 0) {
+                root.sessionClockLastMs = Date.now()
             }
             root.rateSampleInitialized = false
 
@@ -2823,7 +3047,10 @@ ApplicationWindow {
 
             ColumnLayout {
                 anchors.fill: parent
-                anchors.margins: root.compact ? 24 : 10
+                anchors.leftMargin: root.compact ? 24 : 10
+                anchors.rightMargin: root.compact ? 24 : 10
+                anchors.topMargin: root.compact ? (12 + root.safeTopInset) : 10
+                anchors.bottomMargin: root.compact ? 24 : 10
                 spacing: root.compact ? 16 : 8
 
                 Rectangle {
@@ -4452,7 +4679,10 @@ ApplicationWindow {
 
             ColumnLayout {
                 anchors.fill: parent
-                anchors.margins: root.compact ? 12 : 16
+                anchors.leftMargin: root.compact ? 12 : 16
+                anchors.rightMargin: root.compact ? 12 : 16
+                anchors.topMargin: root.compact ? (12 + root.safeTopInset) : 16
+                anchors.bottomMargin: root.compact ? 12 : 16
                 spacing: root.compact ? 16 : 10
 
                 Rectangle {
@@ -5336,6 +5566,7 @@ ApplicationWindow {
                                             Layout.fillWidth: true
                                             amountText: root.donationEffectiveAmountText()
                                             tokenSymbol: root.donationSelectedToken
+                                            estimatedValueText: root.donationEstimatedUsdText()
                                         }
 
                                         Controls.PrimaryButton {
@@ -5397,7 +5628,7 @@ ApplicationWindow {
                                     rowSpacing: 10
 
                                     Controls.UsefulLinkCard {
-                                        title: "Copy Receiver"
+                                        title: "Copy Creator Address"
                                         glyph: "\uf0c5"
                                         iconBackground: Colors.dsLinkIconBgPurple
                                         iconColor: Colors.dsLinkIconPurple
@@ -5410,7 +5641,7 @@ ApplicationWindow {
                                     }
 
                                     Controls.UsefulLinkCard {
-                                        title: "Copy GENY Token"
+                                        title: "Copy GENY Token CA"
                                         glyph: "\uf0c5"
                                         iconBackground: Colors.dsLinkIconBgPurple
                                         iconColor: Colors.dsLinkIconPurple
@@ -5424,7 +5655,7 @@ ApplicationWindow {
                                     }
 
                                     Controls.UsefulLinkCard {
-                                        title: "Receiver Scan"
+                                        title: "Creator BaseScan"
                                         glyph: "\uf029"
                                         iconBackground: Colors.dsLinkIconBgBlue
                                         iconColor: Colors.dsLinkIconBlue
@@ -5433,7 +5664,7 @@ ApplicationWindow {
                                     }
 
                                     Controls.UsefulLinkCard {
-                                        title: "Token Scan"
+                                        title: "Token BaseScan"
                                         glyph: "\uf029"
                                         iconBackground: Colors.dsLinkIconBgBlue
                                         iconColor: Colors.dsLinkIconBlue
@@ -5446,7 +5677,7 @@ ApplicationWindow {
 
                                     Controls.UsefulLinkCard {
                                         title: "Swap on Uniswap"
-                                        glyph: "\uf3d1"
+                                        glyph: "\uf0ec"
                                         glyphFontFamily: FontSystem.getAwesomeBrand.name
                                         iconBackground: Colors.dsLinkIconBgPurple
                                         iconColor: Colors.dsLinkIconPurple
@@ -7454,8 +7685,9 @@ ApplicationWindow {
             clip: true
             contentWidth: width
             readonly property int panelPadding: root.compact ? 12 : 14
+            readonly property int topInsetPadding: root.compact ? (root.safeTopInset + panelPadding) : panelPadding
             readonly property int bottomPadding: root.compact ? (root.safeBottomInset + 26) : panelPadding
-            contentHeight: usagePopupContent.implicitHeight + panelPadding + bottomPadding
+            contentHeight: usagePopupContent.implicitHeight + topInsetPadding + bottomPadding
             boundsBehavior: Flickable.StopAtBounds
 
             WheelHandler {
@@ -7468,7 +7700,7 @@ ApplicationWindow {
             ColumnLayout {
                 id: usagePopupContent
                 x: usagePopupFlick.panelPadding
-                y: usagePopupFlick.panelPadding
+                y: usagePopupFlick.topInsetPadding
                 width: usagePopupFlick.width - (usagePopupFlick.panelPadding * 2)
                 spacing: 10
 
@@ -8064,14 +8296,15 @@ ApplicationWindow {
             clip: true
             contentWidth: width
             readonly property int panelPadding: root.compact ? 10 : 14
+            readonly property int topInsetPadding: root.compact ? (root.safeTopInset + panelPadding) : panelPadding
             readonly property int bottomInsetPadding: root.compact ? (root.safeBottomInset + 12) : panelPadding
-            contentHeight: speedTestPopupContent.implicitHeight + panelPadding + bottomInsetPadding
+            contentHeight: speedTestPopupContent.implicitHeight + topInsetPadding + bottomInsetPadding
             boundsBehavior: Flickable.StopAtBounds
 
             ColumnLayout {
                 id: speedTestPopupContent
                 x: speedTestPopupFlick.panelPadding
-                y: speedTestPopupFlick.panelPadding
+                y: speedTestPopupFlick.topInsetPadding
                 width: speedTestPopupFlick.width - (speedTestPopupFlick.panelPadding * 2)
                 spacing: 8
 
@@ -8666,7 +8899,7 @@ ApplicationWindow {
             anchors.fill: parent
             anchors.leftMargin: root.compact ? 12 : 16
             anchors.rightMargin: root.compact ? 12 : 16
-            anchors.topMargin: root.compact ? 12 : 16
+            anchors.topMargin: root.compact ? (12 + root.safeTopInset) : 16
             anchors.bottomMargin: root.compact ? (20 + root.safeBottomInset) : 16
             spacing: 10
 
@@ -10063,37 +10296,6 @@ ApplicationWindow {
                     Layout.preferredHeight: root.mobileHomeHeaderHeight
                     spacing: 10
 
-                    Item {
-                        Layout.preferredWidth: 36
-                        Layout.preferredHeight: 36
-
-                        Controls.CircleIconButton {
-                            anchors.fill: parent
-                            diameter: 36
-                            elevated: false
-                            backgroundColor: vpnController.loggingEnabled
-                                             ? root.themeColorToken("mainHex_ecfaf3", "mainHex_102b1f")
-                                             : root.themeColorToken("mainHex_edf7ff", "mainHex_151c32")
-                            iconText: root.iconUsage
-                            iconFontFamily: root.faSolid
-                            iconColor: root.themeColor(root.brandBlue, Colors.mainHex_84b2ff)
-                            iconPixelSize: 15
-                            onClicked: dataUsagePopup.open()
-                        }
-
-                        Rectangle {
-                            anchors.right: parent.right
-                            anchors.top: parent.top
-                            anchors.rightMargin: 1
-                            anchors.topMargin: 1
-                            width: 9
-                            height: 9
-                            radius: 4.5
-                            visible: false
-                            color: Colors.mainHex_22b26a
-                        }
-                    }
-
                     Text {
                         text: "<strong>GENY</strong>CONNECT"
                         color: root.themeColor(root.brandInk, Colors.mainHex_e5edf9)
@@ -10129,6 +10331,37 @@ ApplicationWindow {
                             anchors.fill: parent
                             cursorShape: Qt.PointingHandCursor
                             onClicked: speedTestPopup.open()
+                        }
+                    }
+
+                    Item {
+                        Layout.preferredWidth: 36
+                        Layout.preferredHeight: 36
+
+                        Controls.CircleIconButton {
+                            anchors.fill: parent
+                            diameter: 36
+                            elevated: false
+                            backgroundColor: vpnController.loggingEnabled
+                                             ? root.themeColorToken("mainHex_ecfaf3", "mainHex_102b1f")
+                                             : root.themeColorToken("mainHex_edf7ff", "mainHex_151c32")
+                            iconText: root.iconUsage
+                            iconFontFamily: root.faSolid
+                            iconColor: root.themeColor(root.brandBlue, Colors.mainHex_84b2ff)
+                            iconPixelSize: 15
+                            onClicked: dataUsagePopup.open()
+                        }
+
+                        Rectangle {
+                            anchors.right: parent.right
+                            anchors.top: parent.top
+                            anchors.rightMargin: 1
+                            anchors.topMargin: 1
+                            width: 9
+                            height: 9
+                            radius: 4.5
+                            visible: false
+                            color: Colors.mainHex_22b26a
                         }
                     }
                 }
@@ -10240,7 +10473,7 @@ ApplicationWindow {
 
                         Text {
                             anchors.centerIn: parent
-                            text: "\uf0e7"
+                            text: root.homeConnectGlyph()
                             color: Colors.mainHex_ffffff
                             font.family: root.faSolid
                             font.pixelSize: 50

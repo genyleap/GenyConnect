@@ -206,34 +206,15 @@ bool AndroidVpnRuntime::connectRuntime(
         return false;
     }
 
-    QElapsedTimer waitTimer;
-    waitTimer.start();
-    while (waitTimer.elapsed() < 5000) {
-        if (bridgeIsRunning()) {
-            m_running = true;
-            m_lastError.clear();
-            if (errorMessage) {
-                errorMessage->clear();
-            }
-            emit logLine(QString::fromUtf8("[Android] VPN service started."));
-            emit started();
-            emit trafficChanged();
-            return true;
-        }
-        QThread::msleep(80);
-    }
-
-    m_running = false;
-    m_lastError = bridgeLastError();
-    if (m_lastError.isEmpty()) {
-        m_lastError = QString::fromUtf8("Android VPN service failed to enter running state.");
-    }
+    m_running = true;
+    m_lastError.clear();
     if (errorMessage) {
-        *errorMessage = m_lastError;
+        errorMessage->clear();
     }
-    emit logLine(QString::fromUtf8("[Android] %1").arg(m_lastError));
-    emit errorOccurred(m_lastError);
-    return false;
+    emit logLine(QString::fromUtf8("[Android] VPN service start requested."));
+    emit started();
+    emit trafficChanged();
+    return true;
 #endif
 }
 

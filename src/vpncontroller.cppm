@@ -977,6 +977,7 @@ private:
      */
     void appendSystemLog(const QString& message);
     void completeRuntimeConnectedStartup();
+    void syncMobileRuntimeState(const QString& reason);
     void gateRuntimeStartupUntilProxyReady(quint64 connectAttempt);
 
     /**

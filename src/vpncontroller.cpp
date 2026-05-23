@@ -1437,7 +1437,29 @@ VpnController::VpnController(QObject *parent)
     }
     const auto startupProfile = m_profileModel->profileAt(m_currentProfileIndex);
     m_currentProfileId = startupProfile.has_value() ? startupProfile->id.trimmed() : QString();
+    m_activeProfileAddress = startupProfile.has_value() ? startupProfile->address.trimmed() : QString();
     recomputeProfileStats();
+
+    if (m_runtimeIsMobile) {
+        if (auto *guiApp = qobject_cast<QGuiApplication *>(QCoreApplication::instance())) {
+            connect(guiApp, &QGuiApplication::applicationStateChanged, this, [this](Qt::ApplicationState state) {
+                if (state == Qt::ApplicationActive) {
+                    const QPointer<VpnController> guard(this);
+                    QTimer::singleShot(250, this, [guard]() {
+                        if (guard) {
+                            guard->syncMobileRuntimeState(QString::fromUtf8("resume"));
+                        }
+                    });
+                }
+            });
+        }
+        const QPointer<VpnController> guard(this);
+        QTimer::singleShot(350, this, [guard]() {
+            if (guard) {
+                guard->syncMobileRuntimeState(QString::fromUtf8("startup"));
+            }
+        });
+    }
 
     if (m_runtimeSupportsAutoUpdate) {
         QTimer::singleShot(1500, this, [this]() {
@@ -1451,6 +1473,7 @@ VpnController::VpnController(QObject *parent)
     });
 
     connect(qApp, &QCoreApplication::aboutToQuit, this, [this]() {
+        const bool keepRuntimeAlive = m_runtimeIsMobile;
         m_shutdownInProgress.store(true);
         m_disconnectRequested.store(true);
         m_publicIpRetryTimer.stop();
@@ -1470,14 +1493,16 @@ VpnController::VpnController(QObject *parent)
             }
             m_privilegedTunManaged = false;
         }
-        if (m_runtimeBackend && m_runtimeBackend->isRunning()) {
+        if (!keepRuntimeAlive && m_runtimeBackend && m_runtimeBackend->isRunning()) {
             m_stoppingProcess = true;
             QString runtimeStopError;
             Q_UNUSED(m_runtimeBackend->disconnectRuntime(&runtimeStopError, 2200));
             m_stoppingProcess = false;
         }
-        clearManagedRuntimeRecord();
-        cleanupDetachedHelpers();
+        if (!keepRuntimeAlive) {
+            clearManagedRuntimeRecord();
+            cleanupDetachedHelpers();
+        }
     });
 }
 
@@ -1500,13 +1525,17 @@ VpnController::~VpnController()
         Q_UNUSED(stopPrivilegedTunProcess(&stopError));
         m_privilegedTunManaged = false;
     }
-    stopPrivilegedTunRuntimeByPidPath();
-    shutdownPrivilegedTunHelper();
-    if (m_runtimeBackend && m_runtimeBackend->isRunning()) {
+    if (!m_runtimeIsMobile) {
+        stopPrivilegedTunRuntimeByPidPath();
+        shutdownPrivilegedTunHelper();
+    }
+    if (!m_runtimeIsMobile && m_runtimeBackend && m_runtimeBackend->isRunning()) {
         QString runtimeStopError;
         Q_UNUSED(m_runtimeBackend->disconnectRuntime(&runtimeStopError, 0));
     }
-    clearManagedRuntimeRecord();
+    if (!m_runtimeIsMobile) {
+        clearManagedRuntimeRecord();
+    }
     if (m_systemProxyApplied || m_killSwitchEnabled || (m_useSystemProxy && m_autoDisableSystemProxyOnDisconnect)) {
         QString ignored;
         Q_UNUSED(m_systemProxyManager->disable(&ignored, true));
@@ -1515,7 +1544,9 @@ VpnController::~VpnController()
     delete m_systemProxyManager;
     m_systemProxyManager = nullptr;
     saveProfileUsage();
-    cleanupDetachedHelpers();
+    if (!m_runtimeIsMobile) {
+        cleanupDetachedHelpers();
+    }
 }
 
 ConnectionState VpnController::connectionState() const
@@ -4615,6 +4646,9 @@ QVariantList VpnController::donationTokenOptions() const
                    QString::fromUtf8("%1/token/%2")
                        .arg(QString::fromUtf8(kDonationBaseScanBaseUrl), QString::fromUtf8(token.contract)));
         row.insert(QString::fromUtf8("uniswapUrl"), donationUniswapUrl(token));
+        row.insert(QString::fromUtf8("priceUrl"),
+                   QString::fromUtf8("https://api.geckoterminal.com/api/v2/simple/networks/base/token_price/%1")
+                       .arg(QString::fromUtf8(token.contract)));
         rows.append(row);
     }
     return rows;
@@ -4695,7 +4729,9 @@ void VpnController::completeRuntimeConnectedStartup()
         m_powerModeManager->recordReconnectSuccess();
     }
     resetPerProfileUsageSamples();
-    writeManagedRuntimeRecord(m_runtimeBackend ? m_runtimeBackend->processId() : -1, QString::fromUtf8("proxy"));
+    if (!m_runtimeIsMobile) {
+        writeManagedRuntimeRecord(m_runtimeBackend ? m_runtimeBackend->processId() : -1, QString::fromUtf8("proxy"));
+    }
     beginProfileUsageSession(m_activeProfileUsageId);
     setConnectionState(ConnectionState::Connected);
     if (m_effectiveTunMode) {
@@ -4723,6 +4759,63 @@ void VpnController::completeRuntimeConnectedStartup()
     QTimer::singleShot(startupSelfCheckDelayMs(), this, [this]() {
         runProxySelfCheck();
     });
+}
+
+void VpnController::syncMobileRuntimeState(const QString& reason)
+{
+    if (!m_runtimeIsMobile || !m_runtimeBackend) {
+        return;
+    }
+
+    const bool runtimeRunning = m_runtimeBackend->isRunning();
+    if (runtimeRunning) {
+        if (connected() || busy()) {
+            return;
+        }
+
+        const auto profile = m_profileModel->profileAt(m_currentProfileIndex);
+        if (profile.has_value()) {
+            m_activeProfileUsageId = profile->id.trimmed();
+            m_activeProfileAddress = profile->address.trimmed();
+        } else {
+            m_activeProfileUsageId = m_currentProfileId.trimmed();
+        }
+        m_effectiveTunMode = m_tunMode;
+        if (m_effectiveTunMode && m_selectedTunInterfaceName.isEmpty()) {
+            m_selectedTunInterfaceName = selectTunInterfaceName();
+        }
+        m_disconnectRequested.store(false);
+        m_stoppingProcess = false;
+        setLastError(QString());
+        appendSystemLog(
+            QString::fromUtf8("[System] Mobile runtime already active; restoring tunnel state (%1).")
+                .arg(reason.trimmed().isEmpty() ? QString::fromUtf8("resume") : reason.trimmed()));
+        completeRuntimeConnectedStartup();
+        return;
+    }
+
+    if (!connected()) {
+        return;
+    }
+
+    appendSystemLog(QString::fromUtf8("[System] Mobile runtime inactive on foreground resume; syncing to disconnected state."));
+    m_statsPollTimer.stop();
+    m_publicIpRetryTimer.stop();
+    if (m_publicIpReply) {
+        QObject::disconnect(m_publicIpReply, nullptr, this, nullptr);
+        m_publicIpReply->abort();
+        m_publicIpReply->deleteLater();
+        m_publicIpReply = nullptr;
+        m_publicIpRefreshing = false;
+        emit publicIpAddressChanged();
+    }
+    cancelSpeedTest();
+    endProfileUsageSession(m_activeProfileUsageId);
+    resetPerProfileUsageSamples();
+    m_stoppingProcess = false;
+    m_disconnectRequested.store(false);
+    setConnectionState(ConnectionState::Disconnected);
+    setLastError(QString());
 }
 
 void VpnController::gateRuntimeStartupUntilProxyReady(quint64 connectAttempt)
@@ -6771,6 +6864,11 @@ bool VpnController::cleanupManagedRuntimeFromRecord(const QJsonObject& record, c
 
 void VpnController::cleanupManagedRuntimeOnStartup()
 {
+    if (m_runtimeIsMobile) {
+        clearManagedRuntimeRecord();
+        return;
+    }
+
     QJsonObject record;
     if (!tryLoadManagedRuntimeRecord(&record)) {
         stopPrivilegedTunRuntimeByPidPath();

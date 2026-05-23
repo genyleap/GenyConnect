@@ -3,12 +3,15 @@ package com.genyleap.genyconnect;
 import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
-import android.content.pm.ApplicationInfo;
+import android.content.Context;
 import android.content.Intent;
+import android.content.pm.ApplicationInfo;
 import android.net.TrafficStats;
 import android.net.VpnService;
 import android.os.Build;
+import android.os.Handler;
 import android.os.IBinder;
+import android.os.Looper;
 import android.os.ParcelFileDescriptor;
 import android.system.Os;
 import android.system.OsConstants;
@@ -22,10 +25,16 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.BufferedReader;
 import java.io.FileReader;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 public final class GenyConnectVpnService extends VpnService {
-    public static final String ACTION_START = "com.genyleap.genyconnect.action.START";
-    public static final String ACTION_STOP = "com.genyleap.genyconnect.action.STOP";
+    public static final String ACTION_CONNECT = "com.genyleap.genyconnect.action.CONNECT";
+    public static final String ACTION_DISCONNECT = "com.genyleap.genyconnect.action.DISCONNECT";
+    public static final String ACTION_QUERY_STATE = "com.genyleap.genyconnect.action.QUERY_STATE";
+    public static final String ACTION_START = ACTION_CONNECT;
+    public static final String ACTION_STOP = ACTION_DISCONNECT;
     public static final String EXTRA_EXECUTABLE_PATH = "executable_path";
     public static final String EXTRA_CONFIG_PATH = "config_path";
     public static final String EXTRA_WORKING_DIRECTORY = "working_directory";
@@ -36,34 +45,93 @@ public final class GenyConnectVpnService extends VpnService {
     private static final String XRAY_ASSET_NAME = "xray-core";
     private static final String XRAY_RUNTIME_FILE = "xray-core";
     private static final String XRAY_NATIVE_LIB_NAME = "libxraycore.so";
+    private static final String PREFS_NAME = "genyconnect_vpn_runtime";
+    private static final String PREF_LAST_EXECUTABLE_PATH = "last_executable_path";
+    private static final String PREF_LAST_CONFIG_PATH = "last_config_path";
+    private static final String PREF_LAST_WORKING_DIRECTORY = "last_working_directory";
+    private static final String PREF_RUNNING = "runtime_running";
+    private static final String PREF_LAST_ERROR = "runtime_last_error";
+    private static final String PREF_BASE_UID_RX_BYTES = "base_uid_rx_bytes";
+    private static final String PREF_BASE_UID_TX_BYTES = "base_uid_tx_bytes";
 
     private static volatile boolean sRunning = false;
     private static volatile String sLastError = "";
     private static volatile Process sXrayProcess = null;
     private static volatile ParcelFileDescriptor sTunnelInterface = null;
+    private static volatile Context sAppContext = null;
     private static volatile long sBaseUidRxBytes = 0L;
     private static volatile long sBaseUidTxBytes = 0L;
+    private static final ExecutorService sRuntimeExecutor = Executors.newSingleThreadExecutor();
+    private static final AtomicBoolean sStartQueued = new AtomicBoolean(false);
+
+    @Override
+    public void onCreate() {
+        super.onCreate();
+        sAppContext = getApplicationContext();
+    }
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
-        final String action = intent != null ? intent.getAction() : ACTION_START;
-        if (ACTION_STOP.equals(action)) {
-            stopRuntime();
+        final String action = intent != null ? safeString(intent.getAction()) : "";
+        if (ACTION_DISCONNECT.equals(action) || ACTION_STOP.equals(action)) {
+            stopRuntime(true);
             stopSelf();
             return START_NOT_STICKY;
         }
+        final boolean runtimeAlive = isRuntimeProcessAlive();
+        if (ACTION_QUERY_STATE.equals(action)) {
+            if (runtimeAlive) {
+                persistRuntimeSnapshot(true, "");
+                return START_STICKY;
+            }
+            sRunning = false;
+            persistRuntimeSnapshot(false, sLastError);
+            return START_NOT_STICKY;
+        }
+        if (runtimeAlive) {
+            persistRuntimeSnapshot(true, "");
+            return START_STICKY;
+        }
 
-        final String executablePath = intent != null ? intent.getStringExtra(EXTRA_EXECUTABLE_PATH) : "";
-        final String configPath = intent != null ? intent.getStringExtra(EXTRA_CONFIG_PATH) : "";
-        final String workingDirectory = intent != null ? intent.getStringExtra(EXTRA_WORKING_DIRECTORY) : "";
-        startRuntime(executablePath, configPath, workingDirectory);
+        String executablePath = intent != null ? safeString(intent.getStringExtra(EXTRA_EXECUTABLE_PATH)) : "";
+        String configPath = intent != null ? safeString(intent.getStringExtra(EXTRA_CONFIG_PATH)) : "";
+        String workingDirectory = intent != null ? safeString(intent.getStringExtra(EXTRA_WORKING_DIRECTORY)) : "";
+        if (configPath.isEmpty()) {
+            executablePath = safeString(readPreference(PREF_LAST_EXECUTABLE_PATH));
+            configPath = safeString(readPreference(PREF_LAST_CONFIG_PATH));
+            workingDirectory = safeString(readPreference(PREF_LAST_WORKING_DIRECTORY));
+        }
+        if (!configPath.isEmpty()) {
+            saveRuntimeLaunchConfig(executablePath, configPath, workingDirectory);
+        }
+        startForegroundInternal();
+        enqueueStartRuntime(executablePath, configPath, workingDirectory);
         return START_STICKY;
     }
 
     @Override
     public void onDestroy() {
-        stopRuntime();
+        if (!sRunning) {
+            stopRuntime(false);
+        }
         super.onDestroy();
+    }
+
+    @Override
+    public void onTaskRemoved(Intent rootIntent) {
+        if (sRunning) {
+            return;
+        }
+        super.onTaskRemoved(rootIntent);
+    }
+
+    @Override
+    public void onRevoke() {
+        sLastError = "Android VPN permission was revoked by the system.";
+        persistRuntimeSnapshot(false, sLastError);
+        stopRuntime(false);
+        stopSelf();
+        super.onRevoke();
     }
 
     @Override
@@ -72,11 +140,17 @@ public final class GenyConnectVpnService extends VpnService {
     }
 
     public static boolean isRunning() {
-        return sRunning;
+        if (isRuntimeProcessAlive()) {
+            return true;
+        }
+        return readBooleanPreference(PREF_RUNNING, false);
     }
 
     public static String lastError() {
-        return sLastError == null ? "" : sLastError;
+        if (sLastError != null && !sLastError.trim().isEmpty()) {
+            return sLastError;
+        }
+        return safeString(readPreference(PREF_LAST_ERROR));
     }
 
     public static long rxBytes() {
@@ -84,8 +158,10 @@ public final class GenyConnectVpnService extends VpnService {
         if (current < 0L) {
             return 0L;
         }
-        final long base = sBaseUidRxBytes;
-        if (!sRunning || base <= 0L) {
+        final long base = sBaseUidRxBytes > 0L
+            ? sBaseUidRxBytes
+            : readLongPreference(PREF_BASE_UID_RX_BYTES, 0L);
+        if (!isRunning() || base <= 0L) {
             return 0L;
         }
         return Math.max(0L, current - base);
@@ -96,15 +172,26 @@ public final class GenyConnectVpnService extends VpnService {
         if (current < 0L) {
             return 0L;
         }
-        final long base = sBaseUidTxBytes;
-        if (!sRunning || base <= 0L) {
+        final long base = sBaseUidTxBytes > 0L
+            ? sBaseUidTxBytes
+            : readLongPreference(PREF_BASE_UID_TX_BYTES, 0L);
+        if (!isRunning() || base <= 0L) {
             return 0L;
         }
         return Math.max(0L, current - base);
     }
 
     private synchronized void startRuntime(String executablePath, String configPath, String workingDirectory) {
+        if (isRuntimeProcessAlive()) {
+            persistRuntimeSnapshot(true, "");
+            return;
+        }
         if (sRunning) {
+            stopRuntime(false);
+        }
+
+        if (safeString(configPath).isEmpty()) {
+            fail("Generated runtime config path is empty.");
             return;
         }
 
@@ -114,11 +201,6 @@ public final class GenyConnectVpnService extends VpnService {
         final String normalizedConfigPath = safeString(configPath);
         final String requestedExecutablePath = safeString(executablePath);
         final String normalizedWorkingDirectory = safeString(workingDirectory);
-
-        if (normalizedConfigPath.isEmpty()) {
-            fail("Generated runtime config path is empty.");
-            return;
-        }
 
         final File configFile = new File(normalizedConfigPath);
         if (!configFile.exists()) {
@@ -234,10 +316,30 @@ public final class GenyConnectVpnService extends VpnService {
 
         sBaseUidRxBytes = uidRxBytes();
         sBaseUidTxBytes = uidTxBytes();
+        writeLongPreference(PREF_BASE_UID_RX_BYTES, Math.max(0L, sBaseUidRxBytes));
+        writeLongPreference(PREF_BASE_UID_TX_BYTES, Math.max(0L, sBaseUidTxBytes));
         sRunning = true;
+        persistRuntimeSnapshot(true, "");
     }
 
-    private synchronized void stopRuntime() {
+    private void enqueueStartRuntime(String executablePath, String configPath, String workingDirectory) {
+        if (!sStartQueued.compareAndSet(false, true)) {
+            return;
+        }
+
+        final String queuedExecutablePath = safeString(executablePath);
+        final String queuedConfigPath = safeString(configPath);
+        final String queuedWorkingDirectory = safeString(workingDirectory);
+        sRuntimeExecutor.execute(() -> {
+            try {
+                startRuntime(queuedExecutablePath, queuedConfigPath, queuedWorkingDirectory);
+            } finally {
+                sStartQueued.set(false);
+            }
+        });
+    }
+
+    private synchronized void stopRuntime(boolean userRequested) {
         sRunning = false;
 
         if (sXrayProcess != null) {
@@ -262,15 +364,26 @@ public final class GenyConnectVpnService extends VpnService {
 
         sBaseUidRxBytes = 0L;
         sBaseUidTxBytes = 0L;
+        writeLongPreference(PREF_BASE_UID_RX_BYTES, 0L);
+        writeLongPreference(PREF_BASE_UID_TX_BYTES, 0L);
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
             stopForeground(STOP_FOREGROUND_REMOVE);
         } else {
             stopForeground(true);
         }
+        if (userRequested) {
+            sLastError = "";
+        }
+        persistRuntimeSnapshot(false, sLastError);
     }
 
     private void startForegroundInternal() {
+        if (Looper.myLooper() != Looper.getMainLooper()) {
+            new Handler(Looper.getMainLooper()).post(this::startForegroundInternal);
+            return;
+        }
+
         final NotificationManager notificationManager =
             (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
         if (notificationManager == null) {
@@ -291,18 +404,102 @@ public final class GenyConnectVpnService extends VpnService {
             ? new Notification.Builder(this, NOTIFICATION_CHANNEL_ID)
             : new Notification.Builder(this);
 
-        final Notification notification = builder
+        builder
             .setContentTitle("GenyConnect")
             .setContentText("VPN runtime is active")
             .setSmallIcon(android.R.drawable.stat_sys_warning)
             .setOngoing(true)
-            .build();
+            .setAutoCancel(false)
+            .setOnlyAlertOnce(true);
+
+        final Notification notification = builder.build();
 
         startForeground(NOTIFICATION_ID, notification);
     }
 
     private static String safeString(String value) {
         return value == null ? "" : value.trim();
+    }
+
+    private static android.content.SharedPreferences prefs() {
+        Context appContext = sAppContext;
+        if (appContext == null) {
+            appContext = AndroidRuntimeBridge.appContext();
+        }
+        if (appContext == null) {
+            return null;
+        }
+        return appContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE | Context.MODE_MULTI_PROCESS);
+    }
+
+    private static String readPreference(String key) {
+        final android.content.SharedPreferences sharedPreferences = prefs();
+        if (sharedPreferences == null) {
+            return "";
+        }
+        return safeString(sharedPreferences.getString(key, ""));
+    }
+
+    private static boolean readBooleanPreference(String key, boolean fallback) {
+        final android.content.SharedPreferences sharedPreferences = prefs();
+        if (sharedPreferences == null) {
+            return fallback;
+        }
+        return sharedPreferences.getBoolean(key, fallback);
+    }
+
+    private static long readLongPreference(String key, long fallback) {
+        final android.content.SharedPreferences sharedPreferences = prefs();
+        if (sharedPreferences == null) {
+            return fallback;
+        }
+        return sharedPreferences.getLong(key, fallback);
+    }
+
+    private static boolean isRuntimeProcessAlive() {
+        if (!sRunning || sXrayProcess == null) {
+            return false;
+        }
+        try {
+            return sXrayProcess.isAlive();
+        } catch (Exception ignored) {
+            return false;
+        }
+    }
+
+    private static void writePreference(String key, String value) {
+        final android.content.SharedPreferences sharedPreferences = prefs();
+        if (sharedPreferences == null) {
+            return;
+        }
+        sharedPreferences.edit().putString(key, safeString(value)).commit();
+    }
+
+    private static void writeBooleanPreference(String key, boolean value) {
+        final android.content.SharedPreferences sharedPreferences = prefs();
+        if (sharedPreferences == null) {
+            return;
+        }
+        sharedPreferences.edit().putBoolean(key, value).commit();
+    }
+
+    private static void writeLongPreference(String key, long value) {
+        final android.content.SharedPreferences sharedPreferences = prefs();
+        if (sharedPreferences == null) {
+            return;
+        }
+        sharedPreferences.edit().putLong(key, value).commit();
+    }
+
+    private static void saveRuntimeLaunchConfig(String executablePath, String configPath, String workingDirectory) {
+        writePreference(PREF_LAST_EXECUTABLE_PATH, executablePath);
+        writePreference(PREF_LAST_CONFIG_PATH, configPath);
+        writePreference(PREF_LAST_WORKING_DIRECTORY, workingDirectory);
+    }
+
+    private static void persistRuntimeSnapshot(boolean running, String errorText) {
+        writeBooleanPreference(PREF_RUNNING, running);
+        writePreference(PREF_LAST_ERROR, errorText);
     }
 
     private static boolean configRequestsTun(String configPath) {
@@ -435,7 +632,8 @@ public final class GenyConnectVpnService extends VpnService {
                     sLastError = "xray-core exited unexpectedly with code " + exitCode + ": " + lastLine;
                 }
                 Log.e(TAG, sLastError);
-                stopRuntime();
+                stopRuntime(false);
+                stopSelf();
             }
         }, "genyconnect-xray-monitor");
         monitor.setDaemon(true);
@@ -449,7 +647,8 @@ public final class GenyConnectVpnService extends VpnService {
     private void fail(String message) {
         sLastError = message == null ? "Unknown Android runtime failure." : message.trim();
         Log.e(TAG, sLastError);
-        stopRuntime();
+        stopRuntime(false);
+        stopSelf();
     }
 
     private static long uidRxBytes() {

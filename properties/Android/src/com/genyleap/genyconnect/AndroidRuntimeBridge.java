@@ -19,7 +19,9 @@ import android.provider.Settings;
 import android.content.SharedPreferences;
 import android.view.View;
 import android.view.Window;
+import android.view.WindowInsets;
 import android.view.WindowInsetsController;
+import android.view.WindowManager;
 import androidx.core.content.FileProvider;
 
 import java.io.BufferedReader;
@@ -58,6 +60,10 @@ public final class AndroidRuntimeBridge {
         return null;
     }
 
+    static Context appContext() {
+        return context();
+    }
+
     private static Activity activity() {
         try {
             final Class<?> qtNativeClass = Class.forName("org.qtproject.qt.android.QtNative");
@@ -75,6 +81,40 @@ public final class AndroidRuntimeBridge {
             return (Activity) context;
         }
         return null;
+    }
+
+    private static void ensureStandardSystemUi(Activity currentActivity) {
+        if (currentActivity == null) {
+            return;
+        }
+
+        currentActivity.runOnUiThread(() -> {
+            try {
+                final Window window = currentActivity.getWindow();
+                if (window == null) {
+                    return;
+                }
+                window.clearFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                    window.setDecorFitsSystemWindows(true);
+                    final WindowInsetsController controller = window.getInsetsController();
+                    if (controller != null) {
+                        controller.show(WindowInsets.Type.statusBars() | WindowInsets.Type.navigationBars());
+                    }
+                } else {
+                    final View decorView = window.getDecorView();
+                    if (decorView != null) {
+                        int visibility = decorView.getSystemUiVisibility();
+                        visibility &= ~View.SYSTEM_UI_FLAG_FULLSCREEN;
+                        visibility &= ~View.SYSTEM_UI_FLAG_HIDE_NAVIGATION;
+                        visibility &= ~View.SYSTEM_UI_FLAG_IMMERSIVE;
+                        visibility &= ~View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY;
+                        decorView.setSystemUiVisibility(visibility);
+                    }
+                }
+            } catch (Exception ignored) {
+            }
+        });
     }
 
     private static String launchVpnPermissionUi(Intent permissionIntent) {
@@ -216,7 +256,7 @@ public final class AndroidRuntimeBridge {
 
         final Context serviceContext = appContext != null ? appContext : permissionContext;
         final Intent startIntent = new Intent(serviceContext, GenyConnectVpnService.class);
-        startIntent.setAction(GenyConnectVpnService.ACTION_START);
+        startIntent.setAction(GenyConnectVpnService.ACTION_CONNECT);
         startIntent.putExtra(GenyConnectVpnService.EXTRA_EXECUTABLE_PATH, safeString(executablePath));
         startIntent.putExtra(GenyConnectVpnService.EXTRA_CONFIG_PATH, safeString(configPath));
         startIntent.putExtra(GenyConnectVpnService.EXTRA_WORKING_DIRECTORY, safeString(workingDirectory));
@@ -241,7 +281,7 @@ public final class AndroidRuntimeBridge {
         }
 
         final Intent stopIntent = new Intent(context, GenyConnectVpnService.class);
-        stopIntent.setAction(GenyConnectVpnService.ACTION_STOP);
+        stopIntent.setAction(GenyConnectVpnService.ACTION_DISCONNECT);
         try {
             context.startService(stopIntent);
         } catch (Exception exception) {
@@ -252,6 +292,20 @@ public final class AndroidRuntimeBridge {
     }
 
     public static boolean isRunning() {
+        return GenyConnectVpnService.isRunning();
+    }
+
+    public static boolean queryState() {
+        final Context context = context();
+        if (context == null) {
+            return GenyConnectVpnService.isRunning();
+        }
+        final Intent queryIntent = new Intent(context, GenyConnectVpnService.class);
+        queryIntent.setAction(GenyConnectVpnService.ACTION_QUERY_STATE);
+        try {
+            context.startService(queryIntent);
+        } catch (Exception ignored) {
+        }
         return GenyConnectVpnService.isRunning();
     }
 
@@ -421,6 +475,7 @@ public final class AndroidRuntimeBridge {
         if (launchContext == null) {
             return false;
         }
+        ensureStandardSystemUi(currentActivity);
 
         final Intent viewIntent = new Intent(Intent.ACTION_VIEW, targetUri);
         viewIntent.addCategory(Intent.CATEGORY_BROWSABLE);
@@ -460,6 +515,7 @@ public final class AndroidRuntimeBridge {
         if (launchContext == null) {
             return false;
         }
+        ensureStandardSystemUi(currentActivity);
 
         final Intent shareIntent = new Intent(Intent.ACTION_SEND);
         shareIntent.setType("text/plain");
@@ -509,6 +565,7 @@ public final class AndroidRuntimeBridge {
         if (launchContext == null) {
             return false;
         }
+        ensureStandardSystemUi(currentActivity);
 
         final Intent intent = new Intent(Intent.ACTION_VIEW, targetUri);
         intent.addCategory(Intent.CATEGORY_BROWSABLE);
@@ -690,7 +747,13 @@ public final class AndroidRuntimeBridge {
                     return;
                 }
 
-                final int barColor = darkThemeEnabled ? 0xFF061730 : 0xFFDDE3EA;
+                // Keep Android in standard non-immersive app chrome mode after choosers/intents.
+                window.clearFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                    window.setDecorFitsSystemWindows(true);
+                }
+
+                final int barColor = darkThemeEnabled ? 0xFF091A33 : 0xFFFFFFFF;
                 final boolean lightBarIcons = !darkThemeEnabled;
 
                 window.setStatusBarColor(barColor);
@@ -704,6 +767,7 @@ public final class AndroidRuntimeBridge {
                                 | WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS;
                         final int appearance = lightBarIcons ? appearanceMask : 0;
                         controller.setSystemBarsAppearance(appearance, appearanceMask);
+                        controller.show(WindowInsets.Type.statusBars() | WindowInsets.Type.navigationBars());
                     }
                     return;
                 }
@@ -713,6 +777,10 @@ public final class AndroidRuntimeBridge {
                     return;
                 }
                 int visibility = decorView.getSystemUiVisibility();
+                visibility &= ~View.SYSTEM_UI_FLAG_FULLSCREEN;
+                visibility &= ~View.SYSTEM_UI_FLAG_HIDE_NAVIGATION;
+                visibility &= ~View.SYSTEM_UI_FLAG_IMMERSIVE;
+                visibility &= ~View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY;
                 if (lightBarIcons) {
                     visibility |= View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR;
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -742,6 +810,7 @@ public final class AndroidRuntimeBridge {
         if (launchContext == null) {
             return "Android runtime context is unavailable.";
         }
+        ensureStandardSystemUi(currentActivity);
 
         final File apkFile = new File(path);
         if (!apkFile.exists()) {

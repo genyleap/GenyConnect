@@ -31,10 +31,15 @@ auto main(int argc, char *argv[]) -> int
 {
 #if !defined(Q_OS_ANDROID) && !defined(Q_OS_IOS)
     QApplication app(argc, argv);
+    app.setQuitOnLastWindowClosed(false);
 #else
     QGuiApplication app(argc, argv);
-#endif
+#if defined(Q_OS_ANDROID)
+    app.setQuitOnLastWindowClosed(true);
+#else
     app.setQuitOnLastWindowClosed(false);
+#endif
+#endif
 
     QCoreApplication::setOrganizationName(QString::fromUtf8("GenyConnect"));
     QCoreApplication::setOrganizationDomain(QString::fromUtf8("genyconnect.local"));
@@ -56,6 +61,7 @@ auto main(int argc, char *argv[]) -> int
         app.setWindowIcon(appIcon);
     }
 
+#if !defined(Q_OS_ANDROID) && !defined(Q_OS_IOS)
     QString lockDir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
     if (lockDir.trimmed().isEmpty()) {
         lockDir = QStandardPaths::writableLocation(QStandardPaths::TempLocation);
@@ -80,6 +86,7 @@ auto main(int argc, char *argv[]) -> int
         }
         return 0;
     }
+#endif
 
     qmlRegisterUncreatableMetaObject(
 #if defined(Q_OS_ANDROID) || defined(Q_OS_IOS)
@@ -161,6 +168,7 @@ auto main(int argc, char *argv[]) -> int
 #endif
     };
 
+#if !defined(Q_OS_ANDROID) && !defined(Q_OS_IOS)
     QLocalServer instanceServer;
     QLocalServer::removeServer(instanceServerName);
 
@@ -176,6 +184,7 @@ auto main(int argc, char *argv[]) -> int
             mainWindow->requestActivate();
         });
     }
+#endif
 
     #if !defined(Q_OS_ANDROID) && !defined(Q_OS_IOS)
     if (!QSystemTrayIcon::isSystemTrayAvailable()) {
