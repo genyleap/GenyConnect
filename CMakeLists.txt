@@ -1385,6 +1385,42 @@ if(WIN32 AND GENYCONNECT_BUNDLED_WINTUN_PATH)
 endif()
 
 # -----------------------------------------------------------------------------
+# Linux desktop integration assets (.desktop launcher + icon)
+# -----------------------------------------------------------------------------
+option(GENYCONNECT_LINUX_INSTALL_DESKTOP_ASSETS "Install Linux desktop entry and icon assets" ON)
+
+if(UNIX AND NOT APPLE AND GENYCONNECT_BUILD_DESKTOP AND GENYCONNECT_LINUX_INSTALL_DESKTOP_ASSETS)
+  set(_geny_linux_desktop_in
+    "${CMAKE_CURRENT_SOURCE_DIR}/properties/Linux/genyconnect.desktop.in")
+  set(_geny_linux_desktop_out
+    "${CMAKE_CURRENT_BINARY_DIR}/genyconnect.desktop")
+
+  if(EXISTS "${_geny_linux_desktop_in}")
+    configure_file("${_geny_linux_desktop_in}" "${_geny_linux_desktop_out}" @ONLY)
+    install(FILES "${_geny_linux_desktop_out}"
+      DESTINATION "${CMAKE_INSTALL_DATAROOTDIR}/applications")
+  else()
+    message(WARNING
+      "Linux desktop entry template not found: ${_geny_linux_desktop_in}")
+  endif()
+
+  set(_geny_linux_icon_source
+    "${CMAKE_CURRENT_SOURCE_DIR}/ui/Resources/image/GenyConnect.png")
+
+  if(EXISTS "${_geny_linux_icon_source}")
+    install(FILES "${_geny_linux_icon_source}"
+      DESTINATION "${CMAKE_INSTALL_DATAROOTDIR}/icons/hicolor/512x512/apps"
+      RENAME "genyconnect.png")
+    install(FILES "${_geny_linux_icon_source}"
+      DESTINATION "${CMAKE_INSTALL_DATAROOTDIR}/pixmaps"
+      RENAME "genyconnect.png")
+  else()
+    message(WARNING
+      "Linux application icon not found: ${_geny_linux_icon_source}")
+  endif()
+endif()
+
+# -----------------------------------------------------------------------------
 # Linux deploy: collect Qt/QML runtime dependencies into the install tree
 # -----------------------------------------------------------------------------
 option(GENYCONNECT_LINUX_INSTALL_DEPLOY "Run Qt Linux deployment during install() so CPack TGZ includes Qt/QML dependencies" ON)

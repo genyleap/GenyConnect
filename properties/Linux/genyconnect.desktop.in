@@ -1,0 +1,13 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=@PROJECT_NAME@
+Comment=GenyConnect VPN Client
+Exec=@GENY_OUTPUT_NAME@
+TryExec=@GENY_OUTPUT_NAME@
+Icon=genyconnect
+Terminal=false
+StartupNotify=true
+Categories=Network;Security;
+Keywords=vpn;proxy;network;security;
+StartupWMClass=@PROJECT_NAME@

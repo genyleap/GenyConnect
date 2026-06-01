@@ -53,8 +53,6 @@ jobs:
 
           - artifact_name: GenyConnect-linux-x86_64
             os: ubuntu-24.04
-            qt_version: "6.10.3"
-            qt_arch: gcc_64
             target_arch: x86_64
 
     steps:
@@ -62,6 +60,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Install Qt
+        if: runner.os != 'Linux'
         uses: jurplel/install-qt-action@v4
         with:
           version: ${{ matrix.qt_version }}
@@ -93,16 +92,49 @@ jobs:
           set -euo pipefail
           sudo apt-get update
           sudo apt-get install -y \
-            ninja-build build-essential llvm clang \
-            libgl1-mesa-dev libxkbcommon-x11-dev \
-            libxcb-cursor0 libxcb-cursor-dev \
-            libxcb-xinerama0 libxcb-xinerama0-dev \
-            libxcb-randr0-dev libxcb-shape0-dev libxcb-xfixes0-dev \
-            libxcb-sync-dev libxcb-render-util0-dev \
-            libxcb-keysyms1-dev libxcb-icccm4-dev libxcb-image0-dev \
-            libxcb-util-dev libxcb1-dev libx11-xcb-dev \
-            libfontconfig1-dev libfreetype-dev libdbus-1-dev libssl-dev \
-            curl file tar gzip
+            ninja-build \
+            build-essential \
+            llvm \
+            clang \
+            qt6-base-dev \
+            qt6-declarative-dev \
+            qt6-tools-dev \
+            qt6-tools-dev-tools \
+            qt6-l10n-tools \
+            qml6-module-qtqml \
+            qml6-module-qtqml-workerscript \
+            qml6-module-qtquick \
+            qml6-module-qtquick-controls \
+            qml6-module-qtquick-dialogs \
+            qml6-module-qtquick-layouts \
+            qml6-module-qtquick-window \
+            qml6-module-qtquick-templates \
+            qml6-module-qt5compat-graphicaleffects \
+            libgl1-mesa-dev \
+            libxkbcommon-x11-dev \
+            libxcb-cursor0 \
+            libxcb-cursor-dev \
+            libxcb-xinerama0 \
+            libxcb-xinerama0-dev \
+            libxcb-randr0-dev \
+            libxcb-shape0-dev \
+            libxcb-xfixes0-dev \
+            libxcb-sync-dev \
+            libxcb-render-util0-dev \
+            libxcb-keysyms1-dev \
+            libxcb-icccm4-dev \
+            libxcb-image0-dev \
+            libxcb-util-dev \
+            libxcb1-dev \
+            libx11-xcb-dev \
+            libfontconfig1-dev \
+            libfreetype-dev \
+            libdbus-1-dev \
+            libssl-dev \
+            curl \
+            file \
+            tar \
+            gzip
 
       - name: Configure LLVM on macOS
         if: runner.os == 'macOS'
@@ -188,8 +220,6 @@ jobs:
             -B build
             -G Ninja
             -DCMAKE_BUILD_TYPE=Release
-            -DCMAKE_PREFIX_PATH="${QT_ROOT_DIR}"
-            -DQt6_DIR="${QT_ROOT_DIR}/lib/cmake/Qt6"
             -DCMAKE_C_COMPILER="${CC}"
             -DCMAKE_CXX_COMPILER="${CXX}"
             -DCMAKE_CXX_SCAN_FOR_MODULES=ON
