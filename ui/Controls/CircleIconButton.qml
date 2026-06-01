@@ -12,7 +12,6 @@ Item {
     property color iconColor: Colors.gcIconButtonIcon
     property real iconPixelSize: Math.round(diameter * 0.46)
     property bool elevated: true
-    property bool enabled: true
 
     signal clicked()
 

@@ -5,7 +5,6 @@ Item {
     id: root
 
     property string text: "Connect"
-    property bool enabled: true
     property bool busy: false
 
     signal clicked()

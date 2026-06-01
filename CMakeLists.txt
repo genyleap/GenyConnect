@@ -639,6 +639,11 @@ target_link_libraries(${PROJECT_NAME}
     Qt6::QuickControls2
 )
 
+if(WIN32 AND MSVC)
+  # Qt QML cache-generated translation units can exceed MSVC COFF section limits.
+  target_compile_options(${PROJECT_NAME} PRIVATE /bigobj)
+endif()
+
 if(GENYCONNECT_BUILD_DESKTOP)
   target_link_libraries(${PROJECT_NAME} PRIVATE Qt6::Widgets)
 endif()
@@ -712,8 +717,12 @@ set(qml_controls
   ui/Controls/UsefulLinkCard.qml
 )
 
+set(qml_sections
+  ui/Sections/MainSurface.qml
+)
+
 set(qml_main ui/Main.qml)
-set(qml_files ${qml_main} ${qml_core} ${qml_controls})
+set(qml_files ${qml_main} ${qml_core} ${qml_controls} ${qml_sections})
 
 set(qml_singletons
   ui/Core/AppGlobals.qml
@@ -776,6 +785,7 @@ qt_add_qml_module(${PROJECT_NAME}
     ui/Controls/qmldir
     ui/Layout/qmldir
     ui/Dashboard/qmldir
+    ui/Sections/qmldir
 )
 
 # -------------------------
