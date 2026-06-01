@@ -10,6 +10,7 @@ permissions:
   contents: write
 
 env:
+  QT_VERSION: "6.11.1"
   CMAKE_VERSION: "4.2.3"
   ANDROID_BUILD_TOOLS_VERSION: "35.0.0"
 
@@ -24,31 +25,32 @@ jobs:
         include:
           - artifact_name: GenyConnect-macos-arm64
             os: macos-14
-            qt_version: "6.11.0"
             qt_arch: clang_64
             target_arch: arm64
             macos_deployment_target: "14.0"
 
           - artifact_name: GenyConnect-macos-x86_64
             os: macos-15-intel
-            qt_version: "6.11.0"
             qt_arch: clang_64
             target_arch: x86_64
             macos_deployment_target: "14.0"
 
           - artifact_name: GenyConnect-windows-x64
             os: windows-latest
-            qt_version: "6.10.3"
             qt_arch: win64_msvc2022_64
             cmake_arch: x64
             target_arch: x86_64
 
           - artifact_name: GenyConnect-windows-arm64
             os: windows-11-arm
-            qt_version: "6.10.3"
             qt_arch: win64_msvc2022_arm64
             cmake_arch: ARM64
             target_arch: arm64
+
+          - artifact_name: GenyConnect-linux-x86_64
+            os: ubuntu-24.04
+            qt_arch: gcc_64
+            target_arch: x86_64
 
     steps:
       - name: Checkout
@@ -57,7 +59,7 @@ jobs:
       - name: Install Qt
         uses: jurplel/install-qt-action@v4
         with:
-          version: ${{ matrix.qt_version }}
+          version: ${{ env.QT_VERSION }}
           arch: ${{ matrix.qt_arch }}
           cache: true
 
@@ -79,6 +81,24 @@ jobs:
         run: |
           choco install -y ninja nsis 7zip
 
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y \
+            ninja-build build-essential llvm clang \
+            libgl1-mesa-dev libxkbcommon-x11-dev \
+            libxcb-cursor0 libxcb-cursor-dev \
+            libxcb-xinerama0 libxcb-xinerama0-dev \
+            libxcb-randr0-dev libxcb-shape0-dev libxcb-xfixes0-dev \
+            libxcb-sync-dev libxcb-render-util0-dev \
+            libxcb-keysyms1-dev libxcb-icccm4-dev libxcb-image0-dev \
+            libxcb-util-dev libxcb1-dev libx11-xcb-dev \
+            libfontconfig1-dev libfreetype-dev libdbus-1-dev libssl-dev \
+            curl file tar gzip
+
       - name: Configure LLVM on macOS
         if: runner.os == 'macOS'
         shell: bash
@@ -94,6 +114,20 @@ jobs:
 
           SDKROOT="$(xcrun --sdk macosx --show-sdk-path)"
           echo "SDKROOT=${SDKROOT}" >> "$GITHUB_ENV"
+
+      - name: Configure LLVM on Linux
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          echo "CC=clang" >> "$GITHUB_ENV"
+          echo "CXX=clang++" >> "$GITHUB_ENV"
+
+          SCAN_DEPS="$(command -v clang-scan-deps || true)"
+          if [[ -n "${SCAN_DEPS}" ]]; then
+            echo "CLANG_SCAN_DEPS=${SCAN_DEPS}" >> "$GITHUB_ENV"
+          fi
 
       - name: Configure MSVC
         if: runner.os == 'Windows'
@@ -137,6 +171,34 @@ jobs:
             -DGENYCONNECT_USE_MODULES=ON `
             -DGENYCONNECT_TARGET_ARCH="${{ matrix.target_arch }}" `
             -DGENYCONNECT_TARGET_BUILD_ARCH="${{ matrix.target_arch }}"
+
+      - name: Configure Linux
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          CMAKE_ARGS=(
+            -S .
+            -B build
+            -G Ninja
+            -DCMAKE_BUILD_TYPE=Release
+            -DCMAKE_PREFIX_PATH="${QT_ROOT_DIR}"
+            -DQt6_DIR="${QT_ROOT_DIR}/lib/cmake/Qt6"
+            -DCMAKE_C_COMPILER="${CC}"
+            -DCMAKE_CXX_COMPILER="${CXX}"
+            -DCMAKE_CXX_SCAN_FOR_MODULES=ON
+            -DGENYCONNECT_USE_MODULES=ON
+            -DGENYCONNECT_TARGET_OS=linux
+            -DGENYCONNECT_TARGET_ARCH="${{ matrix.target_arch }}"
+            -DGENYCONNECT_TARGET_BUILD_ARCH="${{ matrix.target_arch }}"
+          )
+
+          if [[ -n "${CLANG_SCAN_DEPS:-}" ]]; then
+            CMAKE_ARGS+=(-DCMAKE_CXX_COMPILER_CLANG_SCAN_DEPS="${CLANG_SCAN_DEPS}")
+          fi
+
+          cmake "${CMAKE_ARGS[@]}"
 
       - name: Build
         run: cmake --build build --config Release --parallel
@@ -243,6 +305,83 @@ jobs:
         run: |
           cpack --config build/CPackConfig.cmake -C Release
 
+      - name: Package Linux
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          cpack --config build/CPackConfig.cmake
+
+      - name: Create desktop self-update assets
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          mkdir -p build/selfupdate
+
+          ARCH="${{ matrix.target_arch }}"
+          if [[ "${ARCH}" == "x86_64" ]]; then
+            ARCH="x64"
+          fi
+
+          case "${{ runner.os }}" in
+            macOS)
+              PLATFORM="macos"
+              EXT="dmg"
+              SRC="$(find build/final -type f -name "*.dmg" | head -n 1)"
+              ;;
+
+            Windows)
+              PLATFORM="windows"
+              EXT="exe"
+
+              SRC="$(find build -type f -name "GenyConnect.exe" | grep -E "Release|bin" | head -n 1 || true)"
+
+              if [[ -z "${SRC}" ]]; then
+                SRC="$(find build/final -type f -name "*.exe" | grep -Evi 'setup|installer|install|nsis|inno' | head -n 1 || true)"
+              fi
+              ;;
+
+            Linux)
+              PLATFORM="linux"
+
+              SRC="$(find build/final -type f -name "*.AppImage" | head -n 1 || true)"
+              if [[ -n "${SRC}" ]]; then
+                EXT="AppImage"
+              else
+                SRC="$(find build/final -type f -name "*.tar.gz" | head -n 1 || true)"
+                EXT="tar.gz"
+              fi
+
+              if [[ -z "${SRC}" ]]; then
+                SRC="$(find build/final -type f -name "*.tgz" | head -n 1 || true)"
+                EXT="tgz"
+              fi
+
+              if [[ -z "${SRC}" ]]; then
+                SRC="$(find build/final -type f -name "*.deb" | head -n 1 || true)"
+                EXT="deb"
+              fi
+              ;;
+          esac
+
+          if [[ -z "${SRC:-}" || ! -f "${SRC}" ]]; then
+            echo "No self-update source asset found."
+            find build -maxdepth 8 -type f | sort | tail -300
+            exit 1
+          fi
+
+          OUT="build/selfupdate/GenyConnect-selfupdate-${PLATFORM}-${ARCH}.${EXT}"
+          cp "${SRC}" "${OUT}"
+
+          if command -v sha256sum >/dev/null 2>&1; then
+            sha256sum "${OUT}" > "${OUT}.sha256"
+          else
+            shasum -a 256 "${OUT}" > "${OUT}.sha256"
+          fi
+
+          ls -lah build/selfupdate
+
       - name: Collect desktop packages
         shell: bash
         run: |
@@ -255,6 +394,11 @@ jobs:
           find build/final -type f -name "*.exe" -exec cp {} artifacts/ \; || true
           find build/final -type f -name "*.tar.gz" -exec cp {} artifacts/ \; || true
           find build/final -type f -name "*.tgz" -exec cp {} artifacts/ \; || true
+          find build/final -type f -name "*.AppImage" -exec cp {} artifacts/ \; || true
+          find build/final -type f -name "*.deb" -exec cp {} artifacts/ \; || true
+
+          find build/selfupdate -type f -name "GenyConnect-selfupdate-*" -exec cp {} artifacts/ \; || true
+          find build/selfupdate -type f -name "GenyConnect-selfupdate-*.sha256" -exec cp {} artifacts/ \; || true
 
           if [ -z "$(find artifacts -type f -print -quit)" ]; then
             echo "No desktop artifacts found."
@@ -276,7 +420,6 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
-      QT_VERSION: "6.11.0"
       QT_ARCH: android_arm64_v8a
       ANDROID_ABI: arm64-v8a
       ANDROID_OUTPUT_ARCH: arm64-v8a
@@ -396,7 +539,6 @@ jobs:
             -DQT_ANDROID_BUILD_TYPE=Release \
             -DQT_ANDROID_DEPLOY_RELEASE=ON \
             -DQT_ANDROID_SIGN_APK=ON \
-            -DQT_ANDROID_SIGN_AAB=ON \
             -DQT_ANDROID_KEYSTORE_PATH="${QT_ANDROID_KEYSTORE_PATH}" \
             -DQT_ANDROID_KEYSTORE_ALIAS="${QT_ANDROID_KEYSTORE_ALIAS}" \
             -DQT_ANDROID_KEYSTORE_STORE_PASS="${QT_ANDROID_KEYSTORE_STORE_PASS}" \
@@ -424,12 +566,6 @@ jobs:
           set -euo pipefail
           cmake --build build --config Release --target apk --parallel
 
-      - name: Build Android AAB
-        shell: bash
-        run: |
-          set -euo pipefail
-          cmake --build build --config Release --target aab --parallel
-
       - name: Normalize Android artifact names
         shell: bash
         run: |
@@ -445,10 +581,12 @@ jobs:
           fi
 
           APK="$(find build -type f \( -name "*release*.apk" -o -name "*.apk" \) | grep -vi debug | sort | head -n 1)"
-          AAB="$(find build -type f \( -name "*release*.aab" -o -name "*.aab" \) | grep -vi debug | sort | head -n 1)"
 
           cp "${APK}" "${OUT_DIR}/GenyConnect-${VERSION}-android-${ANDROID_OUTPUT_ARCH}.apk"
-          cp "${AAB}" "${OUT_DIR}/GenyConnect-${VERSION}-android-${ANDROID_OUTPUT_ARCH}.aab"
+          cp "${APK}" "${OUT_DIR}/GenyConnect-selfupdate-android-arm64.apk"
+
+          sha256sum "${OUT_DIR}/GenyConnect-selfupdate-android-arm64.apk" \
+            > "${OUT_DIR}/GenyConnect-selfupdate-android-arm64.apk.sha256"
 
           ls -lah "${OUT_DIR}"
 
@@ -460,7 +598,7 @@ jobs:
           mkdir -p artifacts
 
           find build/final -type f -name "*.apk" -exec cp {} artifacts/ \;
-          find build/final -type f -name "*.aab" -exec cp {} artifacts/ \;
+          find build/final -type f -name "*.apk.sha256" -exec cp {} artifacts/ \;
 
           if [ -z "$(find artifacts -type f -print -quit)" ]; then
             echo "No Android artifacts found."
