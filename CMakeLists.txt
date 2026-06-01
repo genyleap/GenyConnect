@@ -311,11 +311,7 @@ set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
 
-if(GENYCONNECT_USE_MODULES)
-  set(CMAKE_CXX_SCAN_FOR_MODULES ON)
-else()
-  set(CMAKE_CXX_SCAN_FOR_MODULES OFF)
-endif()
+set(CMAKE_CXX_SCAN_FOR_MODULES OFF)
 
 if(NOT "cppm" IN_LIST CMAKE_AUTOMOC_EXTENSIONS)
   list(APPEND CMAKE_AUTOMOC_EXTENSIONS "cppm")
@@ -518,11 +514,11 @@ endif()
 
 if(GENYCONNECT_USE_MODULES)
   target_sources(${PROJECT_NAME}
-    PRIVATE
-      FILE_SET genyconnect_cxx_modules
-      TYPE CXX_MODULES
-      BASE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/src
-      FILES ${GENYCONNECT_MODULE_IFS}
+          PRIVATE
+          FILE_SET genyconnect_cxx_modules
+          TYPE CXX_MODULES
+          BASE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/src
+          FILES ${GENYCONNECT_MODULE_IFS}
   )
 
   set_property(TARGET ${PROJECT_NAME} PROPERTY CXX_SCAN_FOR_MODULES ON)
@@ -621,10 +617,6 @@ if(APPLE AND TARGET GenyConnectUpdater AND TARGET GenyConnectTunHelper)
     COMMENT "Copy helper binaries into app bundle"
     VERBATIM
   )
-endif()
-
-if(GENYCONNECT_USE_MODULES)
-  set_property(TARGET ${PROJECT_NAME} PROPERTY CXX_SCAN_FOR_MODULES ON)
 endif()
 
 target_include_directories(${PROJECT_NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
