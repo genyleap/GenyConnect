@@ -113,6 +113,8 @@ jobs:
             -DQt6_DIR="${QT_ROOT_DIR}/lib/cmake/Qt6" \
             -DCMAKE_C_COMPILER="${CC}" \
             -DCMAKE_CXX_COMPILER="${CXX}" \
+            -DCMAKE_CXX_STANDARD=23 \
+            -DCMAKE_CXX_STANDARD_REQUIRED=ON \
             -DCMAKE_CXX_SCAN_FOR_MODULES=ON \
             -DCMAKE_CXX_COMPILER_CLANG_SCAN_DEPS="${CLANG_SCAN_DEPS}" \
             -DCMAKE_OSX_DEPLOYMENT_TARGET="${{ matrix.macos_deployment_target }}" \
@@ -133,6 +135,8 @@ jobs:
             -DCMAKE_CONFIGURATION_TYPES="Release" `
             -DCMAKE_PREFIX_PATH="${env:QT_ROOT_DIR}" `
             -DQt6_DIR="${env:QT_ROOT_DIR}/lib/cmake/Qt6" `
+            -DCMAKE_CXX_STANDARD=23 `
+            -DCMAKE_CXX_STANDARD_REQUIRED=ON `
             -DCMAKE_CXX_SCAN_FOR_MODULES=ON `
             -DGENYCONNECT_USE_MODULES=ON `
             -DGENYCONNECT_TARGET_ARCH="${{ matrix.target_arch }}" `
@@ -333,39 +337,31 @@ jobs:
           set -euo pipefail
 
           apt-get update
+          apt-get install -y wget gnupg lsb-release software-properties-common ca-certificates
+
+          wget -O /tmp/llvm.sh https://apt.llvm.org/llvm.sh
+          chmod +x /tmp/llvm.sh
+          /tmp/llvm.sh 18
+
           apt-get install -y \
-            clang \
-            clang-tools \
-            llvm \
-            lld \
+            clang-18 \
+            clang-tools-18 \
+            lld-18 \
+            llvm-18 \
             ninja-build \
             file \
             tar \
             gzip
 
-          CLANG_BIN="$(command -v clang)"
-          CLANGXX_BIN="$(command -v clang++)"
-          SCAN_DEPS="$(command -v clang-scan-deps || true)"
-
-          if [[ -z "${SCAN_DEPS}" ]]; then
-            SCAN_DEPS="$(find /usr -name clang-scan-deps -type f 2>/dev/null | head -n 1 || true)"
-          fi
-
-          if [[ -z "${SCAN_DEPS}" || ! -x "${SCAN_DEPS}" ]]; then
-            echo "clang-scan-deps not found."
-            find /usr -name '*scan-deps*' -type f 2>/dev/null || true
-            exit 1
-          fi
-
-          echo "CC=${CLANG_BIN}" >> "$GITHUB_ENV"
-          echo "CXX=${CLANGXX_BIN}" >> "$GITHUB_ENV"
-          echo "CLANG_SCAN_DEPS=${SCAN_DEPS}" >> "$GITHUB_ENV"
+          echo "CC=/usr/bin/clang-18" >> "$GITHUB_ENV"
+          echo "CXX=/usr/bin/clang++-18" >> "$GITHUB_ENV"
+          echo "CLANG_SCAN_DEPS=/usr/bin/clang-scan-deps-18" >> "$GITHUB_ENV"
 
           cmake --version
           ninja --version
-          "${CLANG_BIN}" --version
-          "${CLANGXX_BIN}" --version
-          "${SCAN_DEPS}" --version || true
+          /usr/bin/clang-18 --version
+          /usr/bin/clang++-18 --version
+          /usr/bin/clang-scan-deps-18 --version || true
 
       - name: Configure Linux
         shell: bash
@@ -376,6 +372,8 @@ jobs:
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_C_COMPILER="${CC}" \
             -DCMAKE_CXX_COMPILER="${CXX}" \
+            -DCMAKE_CXX_STANDARD=23 \
+            -DCMAKE_CXX_STANDARD_REQUIRED=ON \
             -DCMAKE_CXX_SCAN_FOR_MODULES=ON \
             -DCMAKE_CXX_COMPILER_CLANG_SCAN_DEPS="${CLANG_SCAN_DEPS}" \
             -DGENYCONNECT_USE_MODULES=ON \
@@ -591,6 +589,8 @@ jobs:
             -DQT_ANDROID_KEYSTORE_STORE_PASS="${QT_ANDROID_KEYSTORE_STORE_PASS}" \
             -DQT_ANDROID_KEYSTORE_KEY_PASS="${QT_ANDROID_KEYSTORE_KEY_PASS}" \
             -DCMAKE_TOOLCHAIN_FILE="${ANDROID_QT_ROOT}/lib/cmake/Qt6/qt.toolchain.cmake" \
+            -DCMAKE_CXX_STANDARD=23 \
+            -DCMAKE_CXX_STANDARD_REQUIRED=ON \
             -DCMAKE_CXX_SCAN_FOR_MODULES=ON \
             -DCMAKE_CXX_COMPILER_CLANG_SCAN_DEPS="${CLANG_SCAN_DEPS}" \
             -DANDROID_ABI="${ANDROID_ABI}" \
