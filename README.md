@@ -252,3 +252,13 @@ They do not represent:
 - securities
 - financial products
 - promises of financial return
+
+📢 Follow development updates, announcements, and future releases on Telegram and Farcaster:
+
+• Telegram: https://t.me/compezeth
+• Telegram: https://t.me/genyleap
+• X/Twitter: https://x.com/genyleap
+• Farcaster: https://farcaster.xyz/compez.eth
+• Farcaster: https://farcaster.xyz/genyleap
+
+Your feedback and support help shape the future of GenyConnect and the broader Genyleap ecosystem. 🚀
