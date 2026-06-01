@@ -10,6 +10,7 @@ module;
 #include <QEventLoop>
 #include <QFile>
 #include <QFileInfo>
+#include <QFutureWatcher>
 #include <QGuiApplication>
 #include <QHostAddress>
 #include <QHostInfo>
@@ -150,6 +151,46 @@ constexpr const char kUint256MaxDec[] =
     "115792089237316195423570985008687907853269984665640564039457584007913129639935";
 #if defined(Q_OS_ANDROID)
 constexpr const char kAndroidRuntimeBridgeClass[] = "com/genyleap/genyconnect/AndroidRuntimeBridge";
+
+QVariantMap fetchSubscriptionTextOnAndroid(const QString& rawUrl, int timeoutMs)
+{
+    QVariantMap result;
+    result.insert(QString::fromUtf8("ok"), false);
+    result.insert(QString::fromUtf8("payload"), QString());
+
+    if (!QJniObject::isClassAvailable(kAndroidRuntimeBridgeClass)) {
+        result.insert(QString::fromUtf8("error"), QString::fromUtf8("Android runtime bridge is unavailable."));
+        return result;
+    }
+
+    const QJniObject urlObject = QJniObject::fromString(rawUrl.trimmed());
+    const jint safeTimeoutMs = static_cast<jint>(qMin(45000, qMax(2000, timeoutMs)));
+    const QJniObject jsonObject = QJniObject::callStaticObjectMethod(
+        kAndroidRuntimeBridgeClass,
+        "fetchSubscriptionText",
+        "(Ljava/lang/String;I)Ljava/lang/String;",
+        urlObject.object<jstring>(),
+        safeTimeoutMs);
+    const QString jsonText = jsonObject.toString().trimmed();
+    if (jsonText.isEmpty()) {
+        result.insert(QString::fromUtf8("error"), QString::fromUtf8("Android bridge returned an empty response."));
+        return result;
+    }
+
+    const QJsonDocument document = QJsonDocument::fromJson(jsonText.toUtf8());
+    if (!document.isObject()) {
+        result.insert(QString::fromUtf8("error"), QString::fromUtf8("Android bridge returned an invalid response."));
+        return result;
+    }
+
+    const QVariantMap parsed = document.object().toVariantMap();
+    if (!parsed.contains(QString::fromUtf8("ok"))) {
+        result.insert(QString::fromUtf8("error"), QString::fromUtf8("Android bridge returned an incomplete response."));
+        return result;
+    }
+
+    return parsed;
+}
 #endif
 
 struct ProxyApplyResult {
@@ -3492,31 +3533,18 @@ void VpnController::startSubscriptionFetch(const SubscriptionEntry& entry, bool 
 
     QNetworkRequest request(parsedUrl);
     request.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::NoLessSafeRedirectPolicy);
+    request.setAttribute(QNetworkRequest::CacheLoadControlAttribute, QNetworkRequest::AlwaysNetwork);
+    request.setAttribute(QNetworkRequest::Http2AllowedAttribute, false);
     request.setTransferTimeout(kSubscriptionFetchTimeoutMs);
     request.setRawHeader("User-Agent", "GenyConnect-Subscription/1.0");
+    request.setRawHeader("Accept", "*/*");
+    request.setRawHeader("Cache-Control", "no-cache");
+    request.setRawHeader("Pragma", "no-cache");
 
-    QNetworkReply* reply = m_subscriptionNetworkManager.get(request);
-    auto* watchdog = new QTimer(reply);
-    watchdog->setSingleShot(true);
-    watchdog->setInterval(kSubscriptionFetchTimeoutMs + 2000);
-    connect(watchdog, &QTimer::timeout, reply, [reply]() {
-        if (reply->isFinished()) {
-            return;
-        }
-        reply->setProperty("_geny_timeout", true);
-        reply->abort();
-    });
-    watchdog->start();
-    connect(reply, &QNetworkReply::finished, this, [this, reply, entry, url, fromRefresh]() {
-        const bool hadError = (reply->error() != QNetworkReply::NoError);
-        QByteArray payload;
-        if (reply->isOpen()) {
-            payload = reply->readAll();
-        }
-        const bool timedOut = reply->property("_geny_timeout").toBool();
-        const QString netError = reply->errorString().trimmed();
-        reply->deleteLater();
-
+    auto finalizeFetch = [this, entry, fromRefresh](const QByteArray& payload,
+                                                    bool hadError,
+                                                    bool timedOut,
+                                                    const QString& netError) {
         int importedCount = 0;
         if (!hadError) {
             const QStringList links = extractSubscriptionLinks(payload);
@@ -3574,6 +3602,56 @@ void VpnController::startSubscriptionFetch(const SubscriptionEntry& entry, bool 
                             .arg(entry.name, entry.group, message));
         setLastError(message);
         endSubscriptionOperation(message);
+    };
+
+#if defined(Q_OS_ANDROID)
+    const QString scheme = parsedUrl.scheme().toLower();
+    if ((scheme == QString::fromUtf8("http") || scheme == QString::fromUtf8("https"))
+        && QJniObject::isClassAvailable(kAndroidRuntimeBridgeClass)) {
+        auto* watcher = new QFutureWatcher<QVariantMap>(this);
+        connect(watcher, &QFutureWatcher<QVariantMap>::finished, this, [watcher, finalizeFetch]() {
+            const QVariantMap result = watcher->result();
+            watcher->deleteLater();
+
+            const bool ok = result.value(QString::fromUtf8("ok")).toBool();
+            const QByteArray payload = result.value(QString::fromUtf8("payload")).toString().toUtf8();
+            const QString error = result.value(QString::fromUtf8("error")).toString().trimmed();
+            const bool timedOut = error.contains(QString::fromUtf8("timed out"), Qt::CaseInsensitive);
+            finalizeFetch(payload,
+                          !ok,
+                          timedOut,
+                          error.isEmpty() ? QString::fromUtf8("Failed to fetch subscription URL.") : error);
+        });
+        const QString encodedUrl = parsedUrl.toString(QUrl::FullyEncoded);
+        watcher->setFuture(QtConcurrent::run([encodedUrl]() {
+            return fetchSubscriptionTextOnAndroid(encodedUrl, kSubscriptionFetchTimeoutMs);
+        }));
+        return;
+    }
+#endif
+
+    QNetworkReply* reply = m_subscriptionNetworkManager.get(request);
+    auto* watchdog = new QTimer(reply);
+    watchdog->setSingleShot(true);
+    watchdog->setInterval(kSubscriptionFetchTimeoutMs + 2000);
+    connect(watchdog, &QTimer::timeout, reply, [reply]() {
+        if (reply->isFinished()) {
+            return;
+        }
+        reply->setProperty("_geny_timeout", true);
+        reply->abort();
+    });
+    watchdog->start();
+    connect(reply, &QNetworkReply::finished, this, [reply, finalizeFetch]() {
+        const bool hadError = (reply->error() != QNetworkReply::NoError);
+        QByteArray payload;
+        if (reply->isOpen()) {
+            payload = reply->readAll();
+        }
+        const bool timedOut = reply->property("_geny_timeout").toBool();
+        const QString netError = reply->errorString().trimmed();
+        reply->deleteLater();
+        finalizeFetch(payload, hadError, timedOut, netError);
     });
 }
 

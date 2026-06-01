@@ -28,7 +28,13 @@ import androidx.core.content.FileProvider;
 
 import java.io.BufferedReader;
 import java.io.File;
+import java.io.FileOutputStream;
 import java.io.FileReader;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.nio.charset.StandardCharsets;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -889,6 +895,144 @@ public final class AndroidRuntimeBridge {
         return targets.toString();
     }
 
+    public static String fetchSubscriptionText(String rawUrl, int timeoutMs) {
+        final String targetUrl = safeString(rawUrl);
+        if (targetUrl.isEmpty()) {
+            return subscriptionFetchResult(false, "", "Subscription URL is empty.", -1);
+        }
+
+        final int safeTimeoutMs = Math.max(2000, Math.min(45000, timeoutMs));
+        HttpURLConnection connection = null;
+        try {
+            final URL url = new URL(targetUrl);
+            final java.net.URLConnection rawConnection = url.openConnection();
+            if (!(rawConnection instanceof HttpURLConnection)) {
+                return subscriptionFetchResult(false, "", "Unsupported subscription protocol.", -1);
+            }
+            connection = (HttpURLConnection) rawConnection;
+            connection.setRequestMethod("GET");
+            connection.setConnectTimeout(safeTimeoutMs);
+            connection.setReadTimeout(safeTimeoutMs);
+            connection.setInstanceFollowRedirects(true);
+            connection.setUseCaches(false);
+            connection.setRequestProperty("User-Agent", "GenyConnect-Subscription/1.0");
+            connection.setRequestProperty("Accept", "*/*");
+            connection.setRequestProperty("Cache-Control", "no-cache");
+            connection.setRequestProperty("Pragma", "no-cache");
+
+            final int statusCode = connection.getResponseCode();
+            final boolean success = statusCode >= 200 && statusCode < 300;
+            final InputStream stream = success ? connection.getInputStream() : connection.getErrorStream();
+            final String payload = readStreamText(stream);
+            if (success) {
+                return subscriptionFetchResult(true, payload, "", statusCode);
+            }
+
+            String message = "HTTP " + statusCode;
+            final String responseMessage = safeString(connection.getResponseMessage());
+            if (!responseMessage.isEmpty()) {
+                message = message + " " + responseMessage;
+            }
+            return subscriptionFetchResult(false, "", message, statusCode);
+        } catch (java.net.SocketTimeoutException exception) {
+            return subscriptionFetchResult(false, "", "Request timed out.", -1);
+        } catch (Exception exception) {
+            final String message = safeString(exception.getMessage());
+            return subscriptionFetchResult(false, "", message.isEmpty() ? "Connection failed." : message, -1);
+        } finally {
+            if (connection != null) {
+                try {
+                    connection.disconnect();
+                } catch (Exception ignored) {
+                }
+            }
+        }
+    }
+
+    public static String downloadFileToPath(String rawUrl, String rawPath, int timeoutMs) {
+        final String targetUrl = safeString(rawUrl);
+        final String targetPath = safeString(rawPath);
+        if (targetUrl.isEmpty() || targetPath.isEmpty()) {
+            return subscriptionFetchResult(false, "", "Download URL or output path is empty.", -1);
+        }
+
+        final int safeTimeoutMs = Math.max(5000, Math.min(90000, timeoutMs));
+        HttpURLConnection connection = null;
+        File targetFile = null;
+        try {
+            final URL url = new URL(targetUrl);
+            final java.net.URLConnection rawConnection = url.openConnection();
+            if (!(rawConnection instanceof HttpURLConnection)) {
+                return subscriptionFetchResult(false, "", "Unsupported download protocol.", -1);
+            }
+            connection = (HttpURLConnection) rawConnection;
+            connection.setRequestMethod("GET");
+            connection.setConnectTimeout(safeTimeoutMs);
+            connection.setReadTimeout(safeTimeoutMs);
+            connection.setInstanceFollowRedirects(true);
+            connection.setUseCaches(false);
+            connection.setRequestProperty("User-Agent", "GenyConnect-Updater/1.0");
+            connection.setRequestProperty("Accept", "*/*");
+            connection.setRequestProperty("Cache-Control", "no-cache");
+            connection.setRequestProperty("Pragma", "no-cache");
+
+            final int statusCode = connection.getResponseCode();
+            if (statusCode < 200 || statusCode >= 300) {
+                String message = "HTTP " + statusCode;
+                final String responseMessage = safeString(connection.getResponseMessage());
+                if (!responseMessage.isEmpty()) {
+                    message = message + " " + responseMessage;
+                }
+                return subscriptionFetchResult(false, "", message, statusCode);
+            }
+
+            targetFile = new File(targetPath);
+            final File parent = targetFile.getParentFile();
+            if (parent != null && !parent.exists() && !parent.mkdirs()) {
+                return subscriptionFetchResult(false, "", "Could not prepare output directory.", -1);
+            }
+
+            try (InputStream inputStream = connection.getInputStream();
+                 FileOutputStream outputStream = new FileOutputStream(targetFile, false)) {
+                final byte[] buffer = new byte[8192];
+                int read;
+                while ((read = inputStream.read(buffer)) != -1) {
+                    if (read <= 0) {
+                        continue;
+                    }
+                    outputStream.write(buffer, 0, read);
+                }
+                outputStream.flush();
+            }
+
+            return subscriptionFetchResult(true, "", "", statusCode);
+        } catch (java.net.SocketTimeoutException exception) {
+            if (targetFile != null) {
+                try {
+                    targetFile.delete();
+                } catch (Exception ignored) {
+                }
+            }
+            return subscriptionFetchResult(false, "", "Request timed out.", -1);
+        } catch (Exception exception) {
+            if (targetFile != null) {
+                try {
+                    targetFile.delete();
+                } catch (Exception ignored) {
+                }
+            }
+            final String message = safeString(exception.getMessage());
+            return subscriptionFetchResult(false, "", message.isEmpty() ? "Download failed." : message, -1);
+        } finally {
+            if (connection != null) {
+                try {
+                    connection.disconnect();
+                } catch (Exception ignored) {
+                }
+            }
+        }
+    }
+
     private static List<ResolveInfo> queryIntentHandlers(PackageManager pm, Intent intent) {
         if (pm == null || intent == null) {
             return new ArrayList<>();
@@ -918,6 +1062,39 @@ public final class AndroidRuntimeBridge {
         } catch (Exception ignored) {
             return false;
         }
+    }
+
+    private static String subscriptionFetchResult(boolean ok, String payload, String error, int statusCode) {
+        final JSONObject result = new JSONObject();
+        try {
+            result.put("ok", ok);
+            result.put("payload", safeString(payload));
+            result.put("error", safeString(error));
+            if (statusCode >= 0) {
+                result.put("statusCode", statusCode);
+            }
+        } catch (Exception ignored) {
+        }
+        return result.toString();
+    }
+
+    private static String readStreamText(InputStream stream) {
+        if (stream == null) {
+            return "";
+        }
+        final StringBuilder content = new StringBuilder(8192);
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(stream, StandardCharsets.UTF_8))) {
+            final char[] buffer = new char[2048];
+            int read;
+            while ((read = reader.read(buffer)) != -1) {
+                content.append(buffer, 0, read);
+                if (content.length() > (4 * 1024 * 1024)) {
+                    break;
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        return content.toString();
     }
 
     private static void maybeAppendKnownWallet(JSONArray targets,

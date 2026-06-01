@@ -8,6 +8,7 @@ module;
 #include <QFileInfo>
 #include <QFileDevice>
 #include <QCryptographicHash>
+#include <QFutureWatcher>
 #include <QJsonDocument>
 #include <QJsonArray>
 #include <QJsonObject>
@@ -22,6 +23,8 @@ module;
 #include <QTimer>
 #include <QUrl>
 #include <QVector>
+#include <QVariantMap>
+#include <QtConcurrent/QtConcurrentRun>
 
 #include <limits>
 
@@ -49,6 +52,90 @@ const QUrl kReleaseApiUrl(QString::fromUtf8("https://api.github.com/repos/genyle
 const QString kReleasesPageUrl = QString::fromUtf8("https://github.com/genyleap/GenyConnect/releases");
 #if defined(Q_OS_ANDROID)
 constexpr const char kAndroidRuntimeBridgeClass[] = "com/genyleap/genyconnect/AndroidRuntimeBridge";
+
+QVariantMap parseAndroidBridgeResult(const QJniObject& jsonObject, const QString& emptyError)
+{
+    QVariantMap result;
+    result.insert(QString::fromUtf8("ok"), false);
+    result.insert(QString::fromUtf8("payload"), QString());
+    result.insert(QString::fromUtf8("error"), emptyError);
+
+    const QString jsonText = jsonObject.toString().trimmed();
+    if (jsonText.isEmpty()) {
+        return result;
+    }
+
+    const QJsonDocument document = QJsonDocument::fromJson(jsonText.toUtf8());
+    if (!document.isObject()) {
+        result.insert(QString::fromUtf8("error"), QString::fromUtf8("Android bridge returned an invalid response."));
+        return result;
+    }
+
+    const QVariantMap parsed = document.object().toVariantMap();
+    if (!parsed.contains(QString::fromUtf8("ok"))) {
+        result.insert(QString::fromUtf8("error"), QString::fromUtf8("Android bridge returned an incomplete response."));
+        return result;
+    }
+    return parsed;
+}
+
+QVariantMap fetchTextViaAndroidBridge(const QUrl& url, int timeoutMs)
+{
+    QVariantMap result;
+    result.insert(QString::fromUtf8("ok"), false);
+    result.insert(QString::fromUtf8("payload"), QString());
+
+    if (!url.isValid() || url.isEmpty()) {
+        result.insert(QString::fromUtf8("error"), QString::fromUtf8("Invalid URL."));
+        return result;
+    }
+    if (!QJniObject::isClassAvailable(kAndroidRuntimeBridgeClass)) {
+        result.insert(QString::fromUtf8("error"), QString::fromUtf8("Android runtime bridge is unavailable."));
+        return result;
+    }
+
+    const QJniObject urlObject = QJniObject::fromString(url.toString(QUrl::FullyEncoded));
+    const jint safeTimeoutMs = static_cast<jint>(qMin(45000, qMax(2000, timeoutMs)));
+    const QJniObject jsonObject = QJniObject::callStaticObjectMethod(
+        kAndroidRuntimeBridgeClass,
+        "fetchSubscriptionText",
+        "(Ljava/lang/String;I)Ljava/lang/String;",
+        urlObject.object<jstring>(),
+        safeTimeoutMs);
+    return parseAndroidBridgeResult(
+        jsonObject,
+        QString::fromUtf8("Android bridge returned an empty response."));
+}
+
+QVariantMap downloadFileViaAndroidBridge(const QUrl& url, const QString& outputPath, int timeoutMs)
+{
+    QVariantMap result;
+    result.insert(QString::fromUtf8("ok"), false);
+    result.insert(QString::fromUtf8("error"), QString::fromUtf8("Download failed."));
+
+    if (!url.isValid() || url.isEmpty() || outputPath.trimmed().isEmpty()) {
+        result.insert(QString::fromUtf8("error"), QString::fromUtf8("Invalid download request."));
+        return result;
+    }
+    if (!QJniObject::isClassAvailable(kAndroidRuntimeBridgeClass)) {
+        result.insert(QString::fromUtf8("error"), QString::fromUtf8("Android runtime bridge is unavailable."));
+        return result;
+    }
+
+    const QJniObject urlObject = QJniObject::fromString(url.toString(QUrl::FullyEncoded));
+    const QJniObject pathObject = QJniObject::fromString(outputPath);
+    const jint safeTimeoutMs = static_cast<jint>(qMin(90000, qMax(5000, timeoutMs)));
+    const QJniObject jsonObject = QJniObject::callStaticObjectMethod(
+        kAndroidRuntimeBridgeClass,
+        "downloadFileToPath",
+        "(Ljava/lang/String;Ljava/lang/String;I)Ljava/lang/String;",
+        urlObject.object<jstring>(),
+        pathObject.object<jstring>(),
+        safeTimeoutMs);
+    return parseAndroidBridgeResult(
+        jsonObject,
+        QString::fromUtf8("Android bridge returned an empty download response."));
+}
 #endif
 
 QString normalizeVersionToken(const QString& version)
@@ -453,6 +540,121 @@ void Updater::checkForUpdates(bool userInitiated)
     m_status = QString::fromUtf8("Checking for updates...");
     emit changed();
 
+#if defined(Q_OS_ANDROID)
+    if (QJniObject::isClassAvailable(kAndroidRuntimeBridgeClass)) {
+        auto* watcher = new QFutureWatcher<QVariantMap>(this);
+        connect(watcher, &QFutureWatcher<QVariantMap>::finished, this, [this, watcher]() {
+            const QVariantMap result = watcher->result();
+            watcher->deleteLater();
+            m_checking = false;
+
+            const bool ok = result.value(QString::fromUtf8("ok")).toBool();
+            const QString errorText = result.value(QString::fromUtf8("error")).toString().trimmed();
+            const int statusCode = result.value(QString::fromUtf8("statusCode")).toInt();
+            const QByteArray payload = result.value(QString::fromUtf8("payload")).toString().toUtf8();
+
+            if (!ok) {
+                if (statusCode == 404) {
+                    m_updateAvailable = false;
+                    m_latestVersion.clear();
+                    m_assetUrl.clear();
+                    m_assetName.clear();
+                    m_assetExpectedSha256.clear();
+                    m_assetChecksumUrl.clear();
+                    m_downloadedFilePath.clear();
+                    m_downloadReceived = 0;
+                    m_downloadTotal = 0;
+                    m_error.clear();
+                    m_status = QString::fromUtf8("No published release yet. Current version %1.").arg(m_appVersion);
+                    if (m_userInitiatedCheck) {
+                        emit systemLog(QString::fromUtf8("[Updater] %1").arg(m_status));
+                    }
+                    m_userInitiatedCheck = false;
+                    emit changed();
+                    return;
+                }
+
+                m_updateAvailable = false;
+                m_assetExpectedSha256.clear();
+                m_assetChecksumUrl.clear();
+                m_error = errorText.isEmpty()
+                    ? QString::fromUtf8("Failed to check updates.")
+                    : errorText;
+                m_status = QString::fromUtf8("Update check failed.");
+                if (m_userInitiatedCheck) {
+                    emit systemLog(QString::fromUtf8("[Updater] %1").arg(m_error));
+                }
+                m_userInitiatedCheck = false;
+                emit changed();
+                return;
+            }
+
+            QJsonParseError parseError;
+            const QJsonDocument doc = QJsonDocument::fromJson(payload, &parseError);
+            if (parseError.error != QJsonParseError::NoError || !doc.isObject()) {
+                m_updateAvailable = false;
+                m_assetExpectedSha256.clear();
+                m_assetChecksumUrl.clear();
+                m_error = QString::fromUtf8("Release metadata parse failed.");
+                m_status = QString::fromUtf8("Update check failed.");
+                m_userInitiatedCheck = false;
+                emit changed();
+                return;
+            }
+
+            const QJsonObject root = doc.object();
+            const QString latestRaw = root.value(QString::fromUtf8("tag_name")).toString().trimmed();
+            const QString latest = normalizeVersionToken(latestRaw);
+            m_releaseUrl = root.value(QString::fromUtf8("html_url")).toString().trimmed();
+            m_latestVersion = latest;
+            m_error.clear();
+            m_assetUrl.clear();
+            m_assetName.clear();
+            m_assetExpectedSha256.clear();
+            m_assetChecksumUrl.clear();
+            m_downloadedFilePath.clear();
+            m_downloadReceived = 0;
+            m_downloadTotal = 0;
+
+            const QJsonArray assets = root.value(QString::fromUtf8("assets")).toArray();
+            selectBestReleaseAsset(assets, &m_assetUrl, &m_assetName, &m_assetExpectedSha256, &m_assetChecksumUrl);
+            if (!m_assetName.isEmpty()) {
+                emit systemLog(QString::fromUtf8("[Updater] Selected asset: %1").arg(m_assetName));
+                if (!m_assetExpectedSha256.isEmpty()) {
+                    emit systemLog(QString::fromUtf8("[Updater] Found release digest for selected asset."));
+                } else if (!m_assetChecksumUrl.isEmpty()) {
+                    emit systemLog(QString::fromUtf8("[Updater] Using checksum manifest for selected asset."));
+                } else {
+                    emit systemLog(QString::fromUtf8(
+                        "[Updater] No checksum metadata for selected asset. Install will require a published SHA-256."));
+                }
+            }
+
+            if (latest.isEmpty()) {
+                m_updateAvailable = false;
+                m_status = QString::fromUtf8("No version info in release feed.");
+            } else if (isVersionNewer(m_appVersion, latest)) {
+                m_updateAvailable = true;
+                m_status = QString::fromUtf8("Update available: %1").arg(latest);
+                emit systemLog(QString::fromUtf8("[Updater] %1").arg(m_status));
+            } else {
+                m_updateAvailable = false;
+                m_status = QString::fromUtf8("You are up to date (%1).").arg(m_appVersion);
+                if (m_userInitiatedCheck) {
+                    emit systemLog(QString::fromUtf8("[Updater] %1").arg(m_status));
+                }
+            }
+
+            m_userInitiatedCheck = false;
+            emit changed();
+        });
+        watcher->setFuture(QtConcurrent::run([]() {
+            return fetchTextViaAndroidBridge(kReleaseApiUrl, 12000);
+        }));
+        return;
+    }
+#endif
+
     QNetworkRequest request(kReleaseApiUrl);
     request.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::NoLessSafeRedirectPolicy);
     request.setRawHeader("User-Agent", "GenyConnect-Updater/1.0");
@@ -559,22 +761,99 @@ bool Updater::downloadUpdate()
         m_downloadFile = nullptr;
     }
 
-    m_downloadFile = new QFile(m_downloadedFilePath, this);
-    if (!m_downloadFile->open(QIODevice::WriteOnly | QIODevice::Truncate)) {
-        m_error = QString::fromUtf8("Failed to create update file: %1").arg(m_downloadedFilePath);
-        m_status = QString::fromUtf8("Download failed.");
-        m_downloadFile->deleteLater();
-        m_downloadFile = nullptr;
-        emit changed();
-        return false;
-    }
-
     m_downloadReceived = 0;
     m_downloadTotal = 0;
     m_checking = true;
     m_error.clear();
     m_status = QString::fromUtf8("Downloading update...");
     emit changed();
+
+#if defined(Q_OS_ANDROID)
+    if (QJniObject::isClassAvailable(kAndroidRuntimeBridgeClass)) {
+        emit systemLog(QString::fromUtf8("[Updater] Downloading %1").arg(fileName));
+
+        const QString assetUrl = m_assetUrl;
+        const QString outputPath = m_downloadedFilePath;
+        auto* watcher = new QFutureWatcher<QVariantMap>(this);
+        connect(watcher, &QFutureWatcher<QVariantMap>::finished, this, [this, watcher, outputPath]() {
+            const QVariantMap result = watcher->result();
+            watcher->deleteLater();
+            m_checking = false;
+
+            const bool ok = result.value(QString::fromUtf8("ok")).toBool();
+            const QString errorText = result.value(QString::fromUtf8("error")).toString().trimmed();
+            if (!ok || !QFileInfo::exists(outputPath)) {
+                QFile::remove(outputPath);
+                m_error = errorText.isEmpty()
+                    ? QString::fromUtf8("Update download failed.")
+                    : errorText;
+                m_status = QString::fromUtf8("Download failed.");
+                emit systemLog(QString::fromUtf8("[Updater] %1").arg(m_error));
+                emit changed();
+                return;
+            }
+
+            if (m_assetExpectedSha256.isEmpty() && !m_assetChecksumUrl.trimmed().isEmpty() && !m_assetName.trimmed().isEmpty()) {
+                const QVariantMap checksumResult = fetchTextViaAndroidBridge(QUrl(m_assetChecksumUrl), 12000);
+                if (checksumResult.value(QString::fromUtf8("ok")).toBool()) {
+                    const QString extracted = extractSha256FromManifest(
+                        checksumResult.value(QString::fromUtf8("payload")).toString().toUtf8(),
+                        m_assetName);
+                    if (!extracted.isEmpty()) {
+                        m_assetExpectedSha256 = extracted;
+                        emit systemLog(QString::fromUtf8("[Updater] Checksum resolved from manifest for %1.").arg(m_assetName));
+                    } else {
+                        emit systemLog(QString::fromUtf8("[Updater] Checksum manifest did not include %1.").arg(m_assetName));
+                    }
+                } else {
+                    const QString checksumError = checksumResult.value(QString::fromUtf8("error")).toString().trimmed();
+                    if (!checksumError.isEmpty()) {
+                        emit systemLog(QString::fromUtf8("[Updater] Checksum fetch failed: %1").arg(checksumError));
+                    }
+                }
+            }
+
+            if (!m_assetExpectedSha256.isEmpty()) {
+                const QString downloadedHash = fileSha256Hex(outputPath).toLower();
+                if (downloadedHash.isEmpty() || downloadedHash != m_assetExpectedSha256) {
+                    QFile::remove(outputPath);
+                    m_error = QString::fromUtf8("Downloaded update hash verification failed.");
+                    m_status = QString::fromUtf8("Download failed.");
+                    emit systemLog(QString::fromUtf8("[Updater] %1").arg(m_error));
+                    emit changed();
+                    return;
+                }
+                emit systemLog(QString::fromUtf8("[Updater] Downloaded file hash verified."));
+            }
+
+            m_error.clear();
+            if (m_assetExpectedSha256.isEmpty()) {
+                m_status = QString::fromUtf8("Update downloaded, but release checksum is missing.");
+            } else {
+                m_status = QString::fromUtf8("Update downloaded. Open installer to continue.");
+            }
+            m_downloadReceived = 1;
+            m_downloadTotal = 1;
+            emit systemLog(QString::fromUtf8("[Updater] %1").arg(m_status));
+            emit changed();
+        });
+        watcher->setFuture(QtConcurrent::run([assetUrl, outputPath]() {
+            return downloadFileViaAndroidBridge(QUrl(assetUrl), outputPath, 60000);
+        }));
+        return true;
+    }
+#endif
+
+    m_downloadFile = new QFile(m_downloadedFilePath, this);
+    if (!m_downloadFile->open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+        m_error = QString::fromUtf8("Failed to create update file: %1").arg(m_downloadedFilePath);
+        m_status = QString::fromUtf8("Download failed.");
+        m_downloadFile->deleteLater();
+        m_downloadFile = nullptr;
+        m_checking = false;
+        emit changed();
+        return false;
+    }
 
     QNetworkRequest request {QUrl(m_assetUrl)};
     request.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::NoLessSafeRedirectPolicy);

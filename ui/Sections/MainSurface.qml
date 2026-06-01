@@ -7510,14 +7510,16 @@ Item {
                     }
 
                     Text {
+                        Layout.fillWidth: true
+                        Layout.alignment: Qt.AlignVCenter
                         text: "Data Usage — " + root.selectedUsageProfileLabel()
                         color: root.themeColorToken("mainHex_1f2530", "mainHex_d8e1f0")
                         font.family: FontSystem.getContentFontBold.name
                         font.weight: Font.Bold
                         font.pixelSize: 21
+                        elide: Text.ElideRight
+                        maximumLineCount: 1
                     }
-
-                    Item { Layout.fillWidth: true }
 
                     Controls.CircleIconButton {
                         visible: !root.compact
@@ -7603,12 +7605,15 @@ Item {
                     }
                 }
 
-                RowLayout {
+                GridLayout {
                     Layout.fillWidth: true
-                    spacing: 8
+                    columns: root.compact ? 2 : 3
+                    rowSpacing: root.compact ? 4 : 0
+                    columnSpacing: 8
 
                     Text {
                         Layout.fillWidth: true
+                        Layout.columnSpan: 1
                         text: "Download: " + ((vpnController.usageSummaryForProfile(vpnController.selectedUsageProfileId || "").totalRxText) || "0 B")
                         color: root.themeColorToken("mainHex_64748b", "mainHex_a4b6cd")
                         font.family: FontSystem.contentFontFamily
@@ -7618,6 +7623,7 @@ Item {
 
                     Text {
                         Layout.fillWidth: true
+                        Layout.columnSpan: 1
                         text: "Upload: " + ((vpnController.usageSummaryForProfile(vpnController.selectedUsageProfileId || "").totalTxText) || "0 B")
                         color: root.themeColorToken("mainHex_64748b", "mainHex_a4b6cd")
                         font.family: FontSystem.contentFontFamily
@@ -7628,11 +7634,12 @@ Item {
 
                     Text {
                         Layout.fillWidth: true
+                        Layout.columnSpan: root.compact ? 2 : 1
                         text: "Total: " + ((vpnController.usageSummaryForProfile(vpnController.selectedUsageProfileId || "").totalText) || "0 B")
                         color: root.themeColorToken("mainHex_334155", "mainHex_d2def0")
                         font.family: FontSystem.getContentFontBold.name
                         font.pixelSize: 11
-                        horizontalAlignment: Text.AlignRight
+                        horizontalAlignment: root.compact ? Text.AlignLeft : Text.AlignRight
                         elide: Text.ElideRight
                     }
                 }
@@ -7733,11 +7740,14 @@ Item {
                                         }
 
                                         Text {
+                                            Layout.fillWidth: true
                                             text: modelData.totalText || "0 B"
                                             color: root.themeColor(root.brandBlue, Colors.mainHex_7fb0ff)
                                             font.family: FontSystem.getContentFontBold.name
                                             font.pixelSize: 12
                                             font.bold: true
+                                            elide: Text.ElideRight
+                                            horizontalAlignment: Text.AlignRight
                                         }
                                     }
 
@@ -7825,11 +7835,14 @@ Item {
                                         elide: Text.ElideRight
                                     }
                                     Text {
+                                        Layout.fillWidth: true
                                         text: modelData.totalText || "0 B"
                                         color: root.themeColor(root.brandBlue, Colors.mainHex_7fb0ff)
                                         font.family: FontSystem.getContentFontBold.name
                                         font.pixelSize: 12
                                         font.bold: true
+                                        elide: Text.ElideRight
+                                        horizontalAlignment: Text.AlignRight
                                     }
                                 }
                             }
