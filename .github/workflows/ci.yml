@@ -10,7 +10,6 @@ permissions:
   contents: write
 
 env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
   CMAKE_VERSION: "4.2.3"
   ANDROID_BUILD_TOOLS_VERSION: "35.0.0"
 
@@ -322,6 +321,7 @@ jobs:
     runs-on: ubuntu-latest
     container:
       image: a12e/docker-qt:6.8-linux
+      options: --user 0
 
     steps:
       - name: Checkout
