@@ -6594,8 +6594,8 @@ void VpnController::runProxySelfCheckAttempt(int attempt)
                                                   ? QString::fromUtf8("probe endpoint rejected or timed out")
                                                   : connectivityError.trimmed();
                 guard->appendSystemLog(
-                    QString::fromUtf8("[System] Proxy self-test fallback: mixed port 127.0.0.1:%1 is reachable; keeping session active (%2).")
-                        .arg(socksPort, warningDetail));
+                QString::fromUtf8("[System] Proxy self-test fallback: mixed port 127.0.0.1:%1 is reachable; keeping session active (%2).")
+                        .arg(QString::number(socksPort), warningDetail));
                 if (!guard->connected()) {
                     guard->beginProfileUsageSession(guard->m_activeProfileUsageId);
                     guard->setConnectionState(ConnectionState::Connected);
