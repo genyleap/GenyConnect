@@ -337,7 +337,7 @@ jobs:
           set -euo pipefail
 
           apt-get update
-          apt-get install -y wget gnupg lsb-release software-properties-common ca-certificates
+          apt-get install -y wget gnupg lsb-release software-properties-common ca-certificates unzip
 
           wget -O /tmp/llvm.sh https://apt.llvm.org/llvm.sh
           chmod +x /tmp/llvm.sh
@@ -349,16 +349,23 @@ jobs:
             lld-18 \
             llvm-18 \
             ninja-build \
+            unzip \
             file \
             tar \
             gzip
 
+          NINJA_VERSION="1.13.1"
+          wget -O /tmp/ninja-linux.zip "https://github.com/ninja-build/ninja/releases/download/v${NINJA_VERSION}/ninja-linux.zip"
+          unzip -o /tmp/ninja-linux.zip -d /usr/local/bin
+          chmod +x /usr/local/bin/ninja
+
+          echo "/usr/local/bin" >> "$GITHUB_PATH"
           echo "CC=/usr/bin/clang-18" >> "$GITHUB_ENV"
           echo "CXX=/usr/bin/clang++-18" >> "$GITHUB_ENV"
           echo "CLANG_SCAN_DEPS=/usr/bin/clang-scan-deps-18" >> "$GITHUB_ENV"
 
           cmake --version
-          ninja --version
+          /usr/local/bin/ninja --version
           /usr/bin/clang-18 --version
           /usr/bin/clang++-18 --version
           /usr/bin/clang-scan-deps-18 --version || true
