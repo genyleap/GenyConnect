@@ -37,6 +37,14 @@ bool bridgeIsRunning()
     return QJniObject::callStaticMethod<jboolean>(kAndroidRuntimeBridgeClass, "isRunning", "()Z");
 }
 
+bool bridgeIsStartupPending()
+{
+    if (!bridgeAvailable()) {
+        return false;
+    }
+    return QJniObject::callStaticMethod<jboolean>(kAndroidRuntimeBridgeClass, "isStartupPending", "()Z");
+}
+
 qint64 bridgeRxBytes()
 {
     if (!bridgeAvailable()) {
@@ -191,6 +199,18 @@ bool AndroidVpnRuntime::connectRuntime(
         return true;
     }
 
+    if (bridgeIsStartupPending()) {
+        m_running = true;
+        m_lastError.clear();
+        if (errorMessage) {
+            errorMessage->clear();
+        }
+        emit logLine(QString::fromUtf8("[Android] VPN runtime start is already in progress."));
+        emit started();
+        emit trafficChanged();
+        return true;
+    }
+
     const QString startError = bridgeConnect(normalizedExecutablePath, normalizedConfigPath, workingDirectory.trimmed());
     if (!startError.isEmpty()) {
         m_lastError = startError.trimmed();
@@ -235,7 +255,7 @@ bool AndroidVpnRuntime::disconnectRuntime(QString *errorMessage, int timeoutMs)
     if (errorMessage) {
         errorMessage->clear();
     }
-    emit stopped(0, QProcess::NormalExit);
+    emit stopped(0, VpnRuntimeBackend::ExitStatus::NormalExit);
     emit trafficChanged();
     return true;
 #else
@@ -258,7 +278,7 @@ bool AndroidVpnRuntime::disconnectRuntime(QString *errorMessage, int timeoutMs)
             if (errorMessage) {
                 errorMessage->clear();
             }
-            emit stopped(0, QProcess::NormalExit);
+            emit stopped(0, VpnRuntimeBackend::ExitStatus::NormalExit);
             emit trafficChanged();
             return true;
         }
@@ -309,5 +329,11 @@ qint64 AndroidVpnRuntime::txBytes() const
 
 QString AndroidVpnRuntime::lastError() const
 {
+#if defined(Q_OS_ANDROID)
+    const QString bridgeError = bridgeLastError();
+    if (!bridgeError.isEmpty()) {
+        return bridgeError;
+    }
+#endif
     return m_lastError;
 }

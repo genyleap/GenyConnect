@@ -32,7 +32,7 @@ if(APPLE AND NOT IOS)
   set(CMAKE_OSX_DEPLOYMENT_TARGET "${GENYCONNECT_MACOS_DEPLOYMENT_TARGET}" CACHE STRING "Minimum macOS version" FORCE)
 endif()
 
-project(${PROJECT_NAME} VERSION 1.3.800 LANGUAGES CXX)
+project(${PROJECT_NAME} VERSION 1.4.200 LANGUAGES CXX)
 
 # -------------------------
 # Detect Windows generator architecture
@@ -95,6 +95,9 @@ if(ANDROID)
   set(GENYCONNECT_BUILD_IOS OFF CACHE BOOL "Build iOS mobile runtime layer" FORCE)
   set(GENYCONNECT_AUTO_DOWNLOAD_XRAY ON CACHE BOOL "Automatically download and bundle xray-core" FORCE)
 elseif(IOS)
+  set(GENYCONNECT_IOS_DEVELOPMENT_TEAM "7E5LUPJBMQ" CACHE STRING "Apple Development Team ID")
+  set(GENYCONNECT_IOS_BUNDLE_IDENTIFIER "com.genyleap.genyconnect" CACHE STRING "iOS bundle identifier")
+  set(GENYCONNECT_IOS_CODE_SIGN_STYLE "Automatic" CACHE STRING "iOS code signing style")
   set(GENYCONNECT_BUILD_DESKTOP OFF CACHE BOOL "Build desktop runtime and packaging flow" FORCE)
   set(GENYCONNECT_BUILD_ANDROID OFF CACHE BOOL "Build Android mobile runtime layer" FORCE)
   set(GENYCONNECT_BUILD_IOS ON CACHE BOOL "Build iOS mobile runtime layer" FORCE)
@@ -135,7 +138,7 @@ option(GENYCONNECT_BUNDLE_DOCS "Install README and LICENSE at package root + NSI
 option(GENYCONNECT_MACDEPLOYQT_ALWAYS_OVERWRITE "Pass -always-overwrite to macdeployqt" OFF)
 option(GENYCONNECT_MACDEPLOYQT_NO_STRIP         "Pass -no-strip to macdeployqt" OFF)
 
-set(GENYCONNECT_XRAY_VERSION      "v26.2.6" CACHE STRING   "Xray-core release tag (e.g. v26.2.6)")
+set(GENYCONNECT_XRAY_VERSION      "v26.3.27" CACHE STRING   "Xray-core release tag (e.g. v26.3.27)")
 set(GENYCONNECT_XRAY_ASSET_NAME   ""        CACHE STRING   "Optional explicit Xray release asset name override")
 set(GENYCONNECT_BUNDLED_XRAY_PATH ""        CACHE FILEPATH "Path to prebuilt xray-core binary to bundle with app")
 set(GENYCONNECT_BUNDLED_WINTUN_PATH ""      CACHE FILEPATH "Path to wintun.dll to bundle with Windows xray-core")
@@ -233,8 +236,35 @@ if(GENYCONNECT_LLVM_AUTO_SCAN)
   endif()
 endif()
 
-find_program(GENYCONNECT_CLANGXX         NAMES clang++ clang-cl HINTS ${GENYCONNECT_LLVM_HINTS})
-find_program(GENYCONNECT_CLANG_SCAN_DEPS NAMES clang-scan-deps HINTS ${GENYCONNECT_LLVM_HINTS})
+find_program(GENYCONNECT_CLANG
+  NAMES clang
+  HINTS ${GENYCONNECT_LLVM_HINTS}
+  NO_DEFAULT_PATH
+)
+
+find_program(GENYCONNECT_CLANGXX
+  NAMES clang++
+  HINTS ${GENYCONNECT_LLVM_HINTS}
+  NO_DEFAULT_PATH
+)
+
+find_program(GENYCONNECT_CLANG_SCAN_DEPS
+  NAMES clang-scan-deps
+  HINTS ${GENYCONNECT_LLVM_HINTS}
+  NO_DEFAULT_PATH
+)
+
+if(NOT GENYCONNECT_CLANG)
+  find_program(GENYCONNECT_CLANG NAMES clang)
+endif()
+
+if(NOT GENYCONNECT_CLANGXX)
+  find_program(GENYCONNECT_CLANGXX NAMES clang++ clang-cl)
+endif()
+
+if(NOT GENYCONNECT_CLANG_SCAN_DEPS)
+  find_program(GENYCONNECT_CLANG_SCAN_DEPS NAMES clang-scan-deps)
+endif()
 
 if(NOT GENYCONNECT_CLANG_SCAN_DEPS AND CMAKE_CXX_COMPILER)
   get_filename_component(GENYCONNECT_CXX_DIR "${CMAKE_CXX_COMPILER}" DIRECTORY)
@@ -247,6 +277,12 @@ set(GENYCONNECT_CLANGXX_IS_APPLE_PATH FALSE)
 if(GENYCONNECT_CLANGXX MATCHES "^/usr/bin/clang\\+\\+$" OR
    GENYCONNECT_CLANGXX MATCHES "XcodeDefault\\.xctoolchain")
   set(GENYCONNECT_CLANGXX_IS_APPLE_PATH TRUE)
+endif()
+
+set(GENYCONNECT_ACTIVE_CXX_IS_APPLE_PATH FALSE)
+if(CMAKE_CXX_COMPILER MATCHES "^/usr/bin/clang\\+\\+$" OR
+   CMAKE_CXX_COMPILER MATCHES "XcodeDefault\\.xctoolchain")
+  set(GENYCONNECT_ACTIVE_CXX_IS_APPLE_PATH TRUE)
 endif()
 
 if(GENYCONNECT_CLANG_SCAN_DEPS AND NOT DEFINED CMAKE_CXX_COMPILER_CLANG_SCAN_DEPS)
@@ -286,23 +322,29 @@ if(NOT "cppm" IN_LIST CMAKE_AUTOMOC_EXTENSIONS)
 endif()
 
 if(GENYCONNECT_USE_MODULES)
-  if(CMAKE_CXX_COMPILER_ID STREQUAL "AppleClang")
-    if(GENYCONNECT_CLANGXX AND GENYCONNECT_CLANG_SCAN_DEPS AND NOT GENYCONNECT_CLANGXX_IS_APPLE_PATH)
+  if(APPLE AND CMAKE_CXX_COMPILER_ID STREQUAL "AppleClang")
+    if(GENYCONNECT_CLANG AND GENYCONNECT_CLANGXX AND GENYCONNECT_CLANG_SCAN_DEPS AND NOT GENYCONNECT_CLANGXX_IS_APPLE_PATH)
       message(FATAL_ERROR
-        "AppleClang is active in this build dir. Delete build dir and reconfigure with LLVM clang:\n"
-        "  -DCMAKE_CXX_COMPILER=${GENYCONNECT_CLANGXX}\n"
-        "  -DCMAKE_CXX_COMPILER_CLANG_SCAN_DEPS=${GENYCONNECT_CLANG_SCAN_DEPS}\n"
-        "or set -DGENYCONNECT_USE_MODULES=OFF."
+        "C++ modules are enabled, but this kit is using AppleClang.\n"
+        "Qt Creator must use Homebrew LLVM for this kit:\n"
+        "  CMAKE_C_COMPILER=${GENYCONNECT_CLANG}\n"
+        "  CMAKE_CXX_COMPILER=${GENYCONNECT_CLANGXX}\n"
+        "  CMAKE_CXX_COMPILER_CLANG_SCAN_DEPS=${GENYCONNECT_CLANG_SCAN_DEPS}\n"
+        "Then delete the build directory and configure again."
       )
     else()
       message(FATAL_ERROR
-        "AppleClang does not provide stable module scanning here. Install LLVM clang or set -DGENYCONNECT_USE_MODULES=OFF."
+        "C++ modules are enabled, but this kit is using AppleClang and Homebrew LLVM was not found.\n"
+        "Run: brew install llvm"
       )
     endif()
-  elseif(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
-    message(FATAL_ERROR "GCC is not supported for C++ modules here. Use Clang/MSVC or disable modules.")
-  elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang" AND NOT CMAKE_CXX_COMPILER_CLANG_SCAN_DEPS)
-    message(FATAL_ERROR "C++ modules require clang-scan-deps. Install LLVM or set CMAKE_CXX_COMPILER_CLANG_SCAN_DEPS.")
+  endif()
+
+  if(CMAKE_CXX_COMPILER_ID MATCHES "Clang" AND NOT CMAKE_CXX_COMPILER_CLANG_SCAN_DEPS)
+    message(FATAL_ERROR
+      "C++ modules require clang-scan-deps.\n"
+      "Set CMAKE_CXX_COMPILER_CLANG_SCAN_DEPS=${GENYCONNECT_CLANG_SCAN_DEPS}"
+    )
   endif()
 endif()
 
@@ -427,6 +469,7 @@ set(GENYCONNECT_IMPL_SOURCES
   src/serverprofilemodel.cpp
   src/linkparser.cpp
   src/powermodemanager.cpp
+  src/thirdparty/qrcodegen/qrcodegen.cpp
   src/updater.cpp
   src/xrayconfigbuilder.cpp
   src/vpncontroller.cpp
@@ -492,6 +535,20 @@ set_target_properties(${PROJECT_NAME} PROPERTIES
   LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib"
   ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib"
 )
+
+if(IOS)
+  set_target_properties(${PROJECT_NAME} PROPERTIES
+    MACOSX_BUNDLE TRUE
+    XCODE_ATTRIBUTE_PRODUCT_BUNDLE_IDENTIFIER "${GENYCONNECT_IOS_BUNDLE_IDENTIFIER}"
+    XCODE_ATTRIBUTE_DEVELOPMENT_TEAM "${GENYCONNECT_IOS_DEVELOPMENT_TEAM}"
+    XCODE_ATTRIBUTE_CODE_SIGN_STYLE "${GENYCONNECT_IOS_CODE_SIGN_STYLE}"
+    XCODE_ATTRIBUTE_CODE_SIGN_IDENTITY "Apple Development"
+    XCODE_ATTRIBUTE_ENABLE_USER_SCRIPT_SANDBOXING "NO"
+    XCODE_ATTRIBUTE_TARGETED_DEVICE_FAMILY "1"
+    XCODE_ATTRIBUTE_SUPPORTED_PLATFORMS "iphoneos"
+    XCODE_ATTRIBUTE_IPHONEOS_DEPLOYMENT_TARGET "14.0"
+  )
+endif()
 
 if(ANDROID)
   math(EXPR GENY_ANDROID_VERSION_CODE
@@ -671,7 +728,6 @@ set_source_files_properties(${qml_singletons} PROPERTIES QT_QML_SINGLETON_TYPE T
 
 set(genyconnect_image_assets
   ui/Resources/image/avatar.svg
-  ui/Resources/image/favicon.png
 )
 
 if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/ui/Resources/image/GenyConnect.ico")
@@ -802,7 +858,7 @@ if(GENYCONNECT_AUTO_DOWNLOAD_XRAY AND NOT GENYCONNECT_BUNDLED_XRAY_PATH)
       elseif(GENY_ARCH MATCHES "^(x86_64|amd64|x64)$")
         set(_geny_xray_arch "amd64")
       elseif(GENY_ARCH MATCHES "^(armv7|armv7a|armeabi-v7a|arm)$")
-        message(WARNING "Xray-core v26.2.6 has no Android arm32-v7a asset. Disabling bundled Xray for armeabi-v7a.")
+        message(WARNING "Xray-core v26.3.27 has no Android arm32-v7a asset. Disabling bundled Xray for armeabi-v7a.")
         set(_geny_do_xray_download FALSE)
       else()
         message(FATAL_ERROR "Unsupported Android architecture for automatic Xray download: ${GENY_ARCH}")
@@ -934,6 +990,7 @@ endif()
 
 if(ANDROID AND DEFINED GENY_ANDROID_PACKAGE_BUILD_DIR AND NOT GENY_ANDROID_PACKAGE_BUILD_DIR STREQUAL "")
   set(_geny_android_abis "")
+
   if(DEFINED QT_ANDROID_ABIS AND NOT QT_ANDROID_ABIS STREQUAL "")
     set(_geny_android_abis ${QT_ANDROID_ABIS})
   elseif(DEFINED CMAKE_ANDROID_ARCH_ABI AND NOT CMAKE_ANDROID_ARCH_ABI STREQUAL "")
@@ -941,29 +998,29 @@ if(ANDROID AND DEFINED GENY_ANDROID_PACKAGE_BUILD_DIR AND NOT GENY_ANDROID_PACKA
   endif()
 
   if(NOT _geny_android_abis)
-    message(WARNING "No Android ABI detected; skipping Android xray bundle.")
+    message(WARNING "No Android ABI detected; skipping Android xray asset bundle.")
   endif()
 
-  foreach(_geny_android_abi IN LISTS _geny_android_abis)
-    set(_geny_android_xray_asset_name "")
+  if(GENYCONNECT_BUNDLED_XRAY_PATH AND EXISTS "${GENYCONNECT_BUNDLED_XRAY_PATH}")
+    foreach(_geny_android_abi IN LISTS _geny_android_abis)
+      if(NOT _geny_android_abi STREQUAL "${CMAKE_ANDROID_ARCH_ABI}")
+        message(WARNING
+          "Skipping Xray asset for ABI '${_geny_android_abi}' because this configure only has '${CMAKE_ANDROID_ARCH_ABI}'."
+        )
+        continue()
+      endif()
 
-    if(_geny_android_abi STREQUAL "arm64-v8a")
-      set(_geny_android_xray_asset_name "Xray-${GENYCONNECT_XRAY_VERSION}-android-arm64-v8a.zip")
-    elseif(_geny_android_abi STREQUAL "armeabi-v7a")
-      set(_geny_android_xray_asset_name "Xray-${GENYCONNECT_XRAY_VERSION}-android-arm32-v7a.zip")
-    elseif(_geny_android_abi STREQUAL "x86_64")
-      set(_geny_android_xray_asset_name "Xray-${GENYCONNECT_XRAY_VERSION}-android-x64.zip")
-    else()
-      message(WARNING "Unsupported Android ABI for xray bundling: ${_geny_android_abi}")
-      continue()
-    endif()
+      set(_geny_android_xray_assets_dir
+        "${GENY_ANDROID_PACKAGE_BUILD_DIR}/assets/xray/${_geny_android_abi}"
+      )
 
-    # Reuse the already downloaded binary for the primary ABI.
-    # For universal builds, the CI should run separate per-ABI builds OR this block
-    # should be extended to download each ABI archive into _deps/xray.
-    if(_geny_android_abi STREQUAL "${CMAKE_ANDROID_ARCH_ABI}" AND
-       GENYCONNECT_BUNDLED_XRAY_PATH AND
-       EXISTS "${GENYCONNECT_BUNDLED_XRAY_PATH}")
+      file(MAKE_DIRECTORY "${_geny_android_xray_assets_dir}")
+
+      file(COPY_FILE
+        "${GENYCONNECT_BUNDLED_XRAY_PATH}"
+        "${_geny_android_xray_assets_dir}/xray"
+        ONLY_IF_DIFFERENT
+      )
 
       set(_geny_android_libs_dir "${GENY_ANDROID_PACKAGE_BUILD_DIR}/libs/${_geny_android_abi}")
       file(MAKE_DIRECTORY "${_geny_android_libs_dir}")
@@ -973,26 +1030,25 @@ if(ANDROID AND DEFINED GENY_ANDROID_PACKAGE_BUILD_DIR AND NOT GENY_ANDROID_PACKA
         ONLY_IF_DIFFERENT
       )
 
-      message(STATUS "Bundled Android xray executable lib for ${_geny_android_abi}: ${_geny_android_libs_dir}/libxraycore.so")
-    else()
-      message(WARNING
-        "Xray binary for Android ABI '${_geny_android_abi}' is not bundled by current single-ABI configure. "
-        "For a real universal APK/AAB, add per-ABI Xray download/copy logic."
+      message(STATUS
+        "Bundled Android Xray executable asset for ${_geny_android_abi}: "
+        "${_geny_android_xray_assets_dir}/xray"
       )
-    endif()
-  endforeach()
-
-  if(GENYCONNECT_BUNDLED_XRAY_PATH AND EXISTS "${GENYCONNECT_BUNDLED_XRAY_PATH}")
-    set(_geny_android_assets_dir "${GENY_ANDROID_PACKAGE_BUILD_DIR}/assets")
-    file(MAKE_DIRECTORY "${_geny_android_assets_dir}")
-    file(COPY_FILE "${GENYCONNECT_BUNDLED_XRAY_PATH}" "${_geny_android_assets_dir}/xray-core" ONLY_IF_DIFFERENT)
-    message(STATUS "Bundled Android primary xray asset: ${_geny_android_assets_dir}/xray-core")
+      message(STATUS
+        "Bundled Android Xray native exec shim for ${_geny_android_abi}: "
+        "${_geny_android_libs_dir}/libxraycore.so"
+      )
+    endforeach()
+  else()
+    message(WARNING "GENYCONNECT_BUNDLED_XRAY_PATH is empty or missing; Android Xray asset not bundled.")
   endif()
 
   foreach(_geny_android_abi IN LISTS _geny_android_abis)
     set(_geny_android_ssl_root "${GENYCONNECT_ANDROID_OPENSSL_ROOT}")
+
     if(_geny_android_ssl_root STREQUAL "")
       set(_geny_android_sdk_root "")
+
       if(DEFINED CMAKE_ANDROID_NDK AND NOT CMAKE_ANDROID_NDK STREQUAL "")
         get_filename_component(_geny_android_ndk_parent "${CMAKE_ANDROID_NDK}" DIRECTORY)
         get_filename_component(_geny_android_sdk_root "${_geny_android_ndk_parent}" DIRECTORY)
@@ -1001,6 +1057,7 @@ if(ANDROID AND DEFINED GENY_ANDROID_PACKAGE_BUILD_DIR AND NOT GENY_ANDROID_PACKA
       elseif(DEFINED ENV{ANDROID_HOME} AND NOT "$ENV{ANDROID_HOME}" STREQUAL "")
         set(_geny_android_sdk_root "$ENV{ANDROID_HOME}")
       endif()
+
       if(NOT _geny_android_sdk_root STREQUAL "")
         set(_geny_android_ssl_root "${_geny_android_sdk_root}/android_openssl/ssl_3")
       endif()
@@ -1010,20 +1067,35 @@ if(ANDROID AND DEFINED GENY_ANDROID_PACKAGE_BUILD_DIR AND NOT GENY_ANDROID_PACKA
       set(_geny_android_ssl_abi_dir "${_geny_android_ssl_root}/${_geny_android_abi}")
       set(_geny_android_ssl_lib "${_geny_android_ssl_abi_dir}/libssl_3.so")
       set(_geny_android_crypto_lib "${_geny_android_ssl_abi_dir}/libcrypto_3.so")
+
       if(EXISTS "${_geny_android_ssl_lib}" AND EXISTS "${_geny_android_crypto_lib}")
         set(_geny_android_libs_dir "${GENY_ANDROID_PACKAGE_BUILD_DIR}/libs/${_geny_android_abi}")
+
         file(MAKE_DIRECTORY "${_geny_android_libs_dir}")
-        file(COPY_FILE "${_geny_android_ssl_lib}" "${_geny_android_libs_dir}/libssl_3.so" ONLY_IF_DIFFERENT)
-        file(COPY_FILE "${_geny_android_crypto_lib}" "${_geny_android_libs_dir}/libcrypto_3.so" ONLY_IF_DIFFERENT)
+
+        file(COPY_FILE
+          "${_geny_android_ssl_lib}"
+          "${_geny_android_libs_dir}/libssl_3.so"
+          ONLY_IF_DIFFERENT
+        )
+
+        file(COPY_FILE
+          "${_geny_android_crypto_lib}"
+          "${_geny_android_libs_dir}/libcrypto_3.so"
+          ONLY_IF_DIFFERENT
+        )
+
         message(STATUS "Bundled Android OpenSSL libs for ${_geny_android_abi} from: ${_geny_android_ssl_abi_dir}")
       else()
         message(WARNING
           "Android OpenSSL libs not found for ABI '${_geny_android_abi}' under '${_geny_android_ssl_abi_dir}'. "
-          "Qt TLS backend may fail to load.")
+          "Qt TLS backend may fail to load."
+        )
       endif()
     endif()
   endforeach()
 endif()
+
 
 if(WIN32 AND GENYCONNECT_AUTO_DOWNLOAD_WINTUN AND NOT GENYCONNECT_BUNDLED_WINTUN_PATH)
   if(GENY_ARCH STREQUAL "arm64")

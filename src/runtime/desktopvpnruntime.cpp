@@ -19,7 +19,11 @@ DesktopVpnRuntime::DesktopVpnRuntime(QObject *parent)
     connect(&m_process, &QProcess::finished, this, [this](int exitCode, QProcess::ExitStatus exitStatus) {
         parseAndEmitLines(m_stdoutBuffer, QByteArray("\n"));
         parseAndEmitLines(m_stderrBuffer, QByteArray("\n"));
-        emit stopped(exitCode, exitStatus);
+        const auto backendExitStatus =
+            (exitStatus == QProcess::CrashExit)
+                ? VpnRuntimeBackend::ExitStatus::CrashExit
+                : VpnRuntimeBackend::ExitStatus::NormalExit;
+        emit stopped(exitCode, backendExitStatus);
     });
     connect(&m_process, &QProcess::errorOccurred, this, [this](QProcess::ProcessError) {
         m_lastError = m_process.errorString().trimmed();

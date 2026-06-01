@@ -9,3 +9,7 @@ assets are not covered by the GPL license and remain
 All Rights Reserved unless explicitly stated otherwise.
 
 Commercial licensing is available from Genyleap Labs.
+
+This project bundles the QR Code generator library by Project Nayuki (MIT License).
+Source and license notice are included in:
+src/thirdparty/qrcodegen/qrcodegen.h

@@ -1,8 +1,10 @@
 module;
+#include <QJsonArray>
 #include <QJsonObject>
 #include <QJsonValue>
 #include <QString>
 #include <QUuid>
+#include <QtGlobal>
 
 #include <optional>
 
@@ -34,10 +36,57 @@ std::optional<quint16> parseJsonPort(const QJsonValue& value)
 
     return static_cast<quint16>(parsed);
 }
+
+QStringList parseStringListValue(const QJsonValue& value)
+{
+    QStringList out;
+    if (value.isArray()) {
+        const QJsonArray array = value.toArray();
+        out.reserve(array.size());
+        for (const QJsonValue& item : array) {
+            const QString token = item.toString().trimmed();
+            if (!token.isEmpty()) {
+                out.append(token);
+            }
+        }
+        return out;
+    }
+
+    const QString asString = value.toString().trimmed();
+    if (asString.isEmpty()) {
+        return out;
+    }
+    const QStringList parts = asString.split(',', Qt::SkipEmptyParts);
+    for (const QString& part : parts) {
+        const QString token = part.trimmed();
+        if (!token.isEmpty()) {
+            out.append(token);
+        }
+    }
+    return out;
+}
+
+QJsonArray toJsonArray(const QStringList& values)
+{
+    QJsonArray out;
+    for (const QString& value : values) {
+        const QString token = value.trimmed();
+        if (!token.isEmpty()) {
+            out.append(token);
+        }
+    }
+    return out;
+}
 }
 
 bool ServerProfile::isValid() const
 {
+    if (protocol.trimmed().compare(QString::fromUtf8("wireguard"), Qt::CaseInsensitive) == 0) {
+        return !address.trimmed().isEmpty()
+               && port > 0
+               && !wgSecretKey.trimmed().isEmpty()
+               && !wgPublicKey.trimmed().isEmpty();
+    }
     return !protocol.trimmed().isEmpty()
        && !address.trimmed().isEmpty()
        && port > 0
@@ -82,6 +131,15 @@ QJsonObject ServerProfile::toJson() const
     json[QString::fromUtf8("headerType")] = headerType;
     json[QString::fromUtf8("xhttpMode")] = xhttpMode;
     json[QString::fromUtf8("xhttpExtra")] = xhttpExtra;
+    json[QString::fromUtf8("wgSecretKey")] = wgSecretKey;
+    json[QString::fromUtf8("wgAddress")] = toJsonArray(wgAddress);
+    json[QString::fromUtf8("wgPublicKey")] = wgPublicKey;
+    json[QString::fromUtf8("wgPresharedKey")] = wgPresharedKey;
+    json[QString::fromUtf8("wgAllowedIPs")] = toJsonArray(wgAllowedIPs);
+    json[QString::fromUtf8("wgMtu")] = wgMtu;
+    json[QString::fromUtf8("wgPersistentKeepalive")] = wgPersistentKeepalive;
+    json[QString::fromUtf8("wgReserved")] = toJsonArray(wgReserved);
+    json[QString::fromUtf8("wgDns")] = toJsonArray(wgDns);
 
     json[QString::fromUtf8("allowInsecure")] = allowInsecure;
     json[QString::fromUtf8("originalLink")] = originalLink;
@@ -125,6 +183,15 @@ std::optional<ServerProfile> ServerProfile::fromJson(const QJsonObject& json)
     profile.headerType = json.value(QString::fromUtf8("headerType")).toString().trimmed().toLower();
     profile.xhttpMode = json.value(QString::fromUtf8("xhttpMode")).toString().trimmed().toLower();
     profile.xhttpExtra = json.value(QString::fromUtf8("xhttpExtra")).toObject();
+    profile.wgSecretKey = json.value(QString::fromUtf8("wgSecretKey")).toString().trimmed();
+    profile.wgAddress = parseStringListValue(json.value(QString::fromUtf8("wgAddress")));
+    profile.wgPublicKey = json.value(QString::fromUtf8("wgPublicKey")).toString().trimmed();
+    profile.wgPresharedKey = json.value(QString::fromUtf8("wgPresharedKey")).toString().trimmed();
+    profile.wgAllowedIPs = parseStringListValue(json.value(QString::fromUtf8("wgAllowedIPs")));
+    profile.wgMtu = qMax(0, json.value(QString::fromUtf8("wgMtu")).toVariant().toInt());
+    profile.wgPersistentKeepalive = qMax(0, json.value(QString::fromUtf8("wgPersistentKeepalive")).toVariant().toInt());
+    profile.wgReserved = parseStringListValue(json.value(QString::fromUtf8("wgReserved")));
+    profile.wgDns = parseStringListValue(json.value(QString::fromUtf8("wgDns")));
 
     profile.allowInsecure = json.value(QString::fromUtf8("allowInsecure")).toBool(false);
     profile.originalLink = json.value(QString::fromUtf8("originalLink")).toString().trimmed();

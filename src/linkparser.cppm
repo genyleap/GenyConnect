@@ -3,7 +3,7 @@
  * @brief       Parser interface for profile share links.
  *
  * @details
- * Declares parsing APIs for converting raw VLESS/VMess link strings into
+ * Declares parsing APIs for converting raw V2Ray/Xray/WireGuard profile inputs into
  * normalized `ServerProfile` objects. The module includes decoding helpers
  * and consistent error reporting entry points for import workflows.
  *
@@ -29,7 +29,7 @@ import genyconnect.backend.serverprofile;
  * @brief Parses share links into normalized server profiles.
  *
  * @details
- * Supports recognized VPN link formats and provides validation/error
+ * Supports recognized VPN link/config formats and provides validation/error
  * messages for import workflows.
  */
 export class LinkParser
@@ -59,6 +59,38 @@ private:
      * @return Parsed profile or empty optional.
      */
     static std::optional<ServerProfile> parseVless(const QString& rawLink, QString *errorMessage);
+
+    /**
+     * @brief Parse a Trojan link payload.
+     * @param rawLink Input Trojan link.
+     * @param errorMessage Optional output message on failure.
+     * @return Parsed profile or empty optional.
+     */
+    static std::optional<ServerProfile> parseTrojan(const QString& rawLink, QString *errorMessage);
+
+    /**
+     * @brief Parse a Shadowsocks link payload.
+     * @param rawLink Input Shadowsocks link.
+     * @param errorMessage Optional output message on failure.
+     * @return Parsed profile or empty optional.
+     */
+    static std::optional<ServerProfile> parseShadowsocks(const QString& rawLink, QString *errorMessage);
+
+    /**
+     * @brief Parse a WireGuard share URI.
+     * @param rawLink Input WireGuard URI.
+     * @param errorMessage Optional output message on failure.
+     * @return Parsed profile or empty optional.
+     */
+    static std::optional<ServerProfile> parseWireguard(const QString& rawLink, QString *errorMessage);
+
+    /**
+     * @brief Parse a classic WireGuard INI config.
+     * @param rawConfig Input config text containing [Interface]/[Peer] sections.
+     * @param errorMessage Optional output message on failure.
+     * @return Parsed profile or empty optional.
+     */
+    static std::optional<ServerProfile> parseWireguardConfig(const QString& rawConfig, QString *errorMessage);
 
     /**
      * @brief Decode URL-safe or standard base64 text.

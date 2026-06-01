@@ -2,6 +2,7 @@ module;
 #include <QHostAddress>
 #include <QJsonArray>
 #include <QStringList>
+#include <QSet>
 #include <QUrl>
 #include <QtGlobal>
 
@@ -25,6 +26,20 @@ QJsonArray toStringArray(const QStringList& values)
         if (!trimmed.isEmpty()) {
             out.append(trimmed);
         }
+    }
+    return out;
+}
+
+QJsonArray toIntArray(const QStringList& values)
+{
+    QJsonArray out;
+    for (const QString& value : values) {
+        bool ok = false;
+        const int parsed = value.trimmed().toInt(&ok);
+        if (!ok) {
+            continue;
+        }
+        out.append(parsed);
     }
     return out;
 }
@@ -60,7 +75,11 @@ int defaultTunMtu()
 #endif
 }
 
-QJsonObject buildMixedInbound(quint16 port, bool enableFakeDnsSniffing)
+QJsonObject buildMixedInbound(
+    quint16 port,
+    bool enableFakeDnsSniffing,
+    const QString& listenAddress,
+    const QString& tag)
 {
     QJsonArray destOverride {
         QString::fromUtf8("http"),
@@ -78,8 +97,8 @@ QJsonObject buildMixedInbound(quint16 port, bool enableFakeDnsSniffing)
     };
 
     QJsonObject inbound {
-        {QString::fromUtf8("tag"), QString::fromUtf8("mixed-in")},
-        {QString::fromUtf8("listen"), QString::fromUtf8("127.0.0.1")},
+        {QString::fromUtf8("tag"), tag.trimmed().isEmpty() ? QString::fromUtf8("mixed-in") : tag.trimmed()},
+        {QString::fromUtf8("listen"), listenAddress.trimmed().isEmpty() ? QString::fromUtf8("127.0.0.1") : listenAddress.trimmed()},
         {QString::fromUtf8("port"), static_cast<int>(port)},
         {QString::fromUtf8("protocol"), QString::fromUtf8("mixed")},
         {QString::fromUtf8("sniffing"), sniffing},
@@ -91,6 +110,37 @@ QJsonObject buildMixedInbound(quint16 port, bool enableFakeDnsSniffing)
     };
 
     return inbound;
+}
+
+QString normalizedLanMixedListenAddress(const XrayConfigBuilder::BuildOptions& options)
+{
+    if (!options.lanSharingEnabled) {
+        return QString();
+    }
+
+    const QString requested = options.lanSharingBindAddress.trimmed();
+    if (requested.isEmpty()) {
+        return QString();
+    }
+
+    QHostAddress parsed;
+    if (!parsed.setAddress(requested)) {
+        return QString();
+    }
+
+    if (parsed.protocol() != QAbstractSocket::IPv4Protocol) {
+        return QString();
+    }
+
+    if (parsed.isLoopback()) {
+        return QString();
+    }
+
+    if (requested == QString::fromUtf8("0.0.0.0") && !options.lanSharingAllowAnyBind) {
+        return QString();
+    }
+
+    return parsed.toString();
 }
 
 QJsonObject buildTunInbound(const XrayConfigBuilder::BuildOptions& options)
@@ -112,6 +162,12 @@ QString tunStack = QString::fromUtf8("system");
         {QString::fromUtf8("sniff"), true}
     };
 
+#if defined(Q_OS_WIN) || defined(Q_OS_MACOS) || defined(Q_OS_LINUX)
+    // Keep direct/block outbounds on the physical NIC instead of re-entering
+    // TUN. This avoids outbound traffic loops in full-tunnel mode.
+    settings.insert(QString::fromUtf8("autoOutboundsInterface"), QString::fromUtf8("auto"));
+#endif
+
 #if defined(Q_OS_MACOS)
     // Xray on macOS requires explicit utunN naming.
     const QString tunName = options.tunInterfaceName.trimmed().isEmpty()
@@ -132,13 +188,28 @@ QString tunStack = QString::fromUtf8("system");
         QString::fromUtf8("fd00:1234:5678::1/126")
     });
     settings.insert(QString::fromUtf8("dns"), toStringArray(tunDnsServers(options.dnsServers)));
-    settings.insert(QString::fromUtf8("autoOutboundsInterface"), QString::fromUtf8("auto"));
 #endif
+
+    QJsonArray destOverride {
+        QString::fromUtf8("http"),
+        QString::fromUtf8("tls"),
+        QString::fromUtf8("quic")
+    };
+    if (options.enableFakeDnsSniffing) {
+        destOverride.append(QString::fromUtf8("fakedns"));
+    }
+
+    QJsonObject sniffing {
+        {QString::fromUtf8("enabled"), true},
+        {QString::fromUtf8("destOverride"), destOverride},
+        {QString::fromUtf8("routeOnly"), false}
+    };
 
     return QJsonObject {
         {QString::fromUtf8("tag"), QString::fromUtf8("tun-in")},
         {QString::fromUtf8("protocol"), QString::fromUtf8("tun")},
-        {QString::fromUtf8("settings"), settings}
+        {QString::fromUtf8("settings"), settings},
+        {QString::fromUtf8("sniffing"), sniffing}
     };
 }
 
@@ -166,35 +237,76 @@ QJsonObject buildDnsOutbound()
 
 QJsonObject buildDnsConfig(const XrayConfigBuilder::BuildOptions& options)
 {
-    const QStringList servers = options.dnsServers.isEmpty()
+    QStringList servers = options.dnsServers.isEmpty()
         ? defaultDnsServers()
         : options.dnsServers;
+    if (options.enableTun && options.enableFakeDnsSniffing) {
+        QSet<QString> seen;
+        QStringList normalized;
+        normalized.reserve(servers.size() + 1);
+        normalized.append(QString::fromUtf8("fakedns"));
+        seen.insert(QString::fromUtf8("fakedns"));
+        for (const QString& rawServer : std::as_const(servers)) {
+            const QString server = rawServer.trimmed();
+            if (server.isEmpty()) {
+                continue;
+            }
+            const QString key = server.toLower();
+            if (seen.contains(key)) {
+                continue;
+            }
+            seen.insert(key);
+            normalized.append(server);
+        }
+        servers = normalized;
+    }
     return QJsonObject {
         {QString::fromUtf8("servers"), toStringArray(servers)},
         {QString::fromUtf8("queryStrategy"), QString::fromUtf8("UseIP")}
     };
 }
 
-QString normalizeDomainRuleEntry(const QString& value)
+QStringList normalizeDomainRuleEntries(const QString& value)
 {
     const QString trimmed = value.trimmed();
     if (trimmed.isEmpty()) {
         return {};
     }
 
-    if (trimmed.contains(':')) {
-        return trimmed;
+    const QString lowered = trimmed.toLower();
+    if (lowered.startsWith(QString::fromUtf8("domain:"))) {
+        const QString suffix = trimmed.mid(7).trimmed();
+        if (suffix.isEmpty()) {
+            return {};
+        }
+        return {
+            QString::fromUtf8("full:%1").arg(suffix),
+            QString::fromUtf8("domain:%1").arg(suffix)
+        };
     }
 
-    return QString::fromUtf8("domain:%1").arg(trimmed);
+    if (trimmed.contains(':')) {
+        return {trimmed};
+    }
+
+    return {
+        QString::fromUtf8("full:%1").arg(trimmed),
+        QString::fromUtf8("domain:%1").arg(trimmed)
+    };
 }
 
 QJsonArray toDomainArray(const QStringList& values)
 {
     QJsonArray out;
+    QSet<QString> seen;
     for (const QString& value : values) {
-        const QString normalized = normalizeDomainRuleEntry(value);
-        if (!normalized.isEmpty()) {
+        const QStringList normalizedValues = normalizeDomainRuleEntries(value);
+        for (const QString& normalized : normalizedValues) {
+            const QString key = normalized.toLower();
+            if (normalized.isEmpty() || seen.contains(key)) {
+                continue;
+            }
+            seen.insert(key);
             out.append(normalized);
         }
     }
@@ -274,9 +386,13 @@ QJsonObject buildRouting(const XrayConfigBuilder::BuildOptions& options)
         {QString::fromUtf8("ip"), privateCidrs}
     };
     if (options.enableTun) {
+        QJsonArray tunPrivateInboundTags {QString::fromUtf8("mixed-in")};
+        if (options.lanSharingEnabled) {
+            tunPrivateInboundTags.append(QString::fromUtf8("mixed-lan-in"));
+        }
         // In TUN mode, keep RFC1918/link-local direct bypass only for local mixed
         // inbound traffic. Applying this rule to tun-in can create direct loops.
-        privateDirectRule.insert(QString::fromUtf8("inboundTag"), QJsonArray {QString::fromUtf8("mixed-in")});
+        privateDirectRule.insert(QString::fromUtf8("inboundTag"), tunPrivateInboundTags);
     }
     rules.append(privateDirectRule);
 
@@ -290,7 +406,11 @@ QJsonObject buildRouting(const XrayConfigBuilder::BuildOptions& options)
         }}
     };
     if (options.enableTun) {
-        localhostDirectRule.insert(QString::fromUtf8("inboundTag"), QJsonArray {QString::fromUtf8("mixed-in")});
+        QJsonArray tunLocalhostInboundTags {QString::fromUtf8("mixed-in")};
+        if (options.lanSharingEnabled) {
+            tunLocalhostInboundTags.append(QString::fromUtf8("mixed-lan-in"));
+        }
+        localhostDirectRule.insert(QString::fromUtf8("inboundTag"), tunLocalhostInboundTags);
     }
     rules.append(localhostDirectRule);
 
@@ -343,7 +463,12 @@ QJsonObject buildRouting(const XrayConfigBuilder::BuildOptions& options)
     });
 
     return QJsonObject {
-        {QString::fromUtf8("domainStrategy"), QString::fromUtf8("AsIs")},
+        // Resolve destination IP only when domain match did not hit. This keeps
+        // domain rules authoritative while improving fallback behavior.
+        {QString::fromUtf8("domainStrategy"), QString::fromUtf8("IPIfNonMatch")},
+        // Prefer deterministic linear matching to avoid MPH/hybrid edge cases
+        // with small dynamic rule sets generated at runtime.
+        {QString::fromUtf8("domainMatcher"), QString::fromUtf8("linear")},
         {QString::fromUtf8("rules"), rules}
     };
 }
@@ -416,17 +541,118 @@ QString normalizeTransportPath(const QString& path)
     return QString::fromUtf8("/") + normalized;
 }
 
+QString endpointHostWithPort(const QString& host, quint16 port)
+{
+    const QString trimmed = host.trimmed();
+    if (trimmed.contains(':') && !trimmed.startsWith('[') && !trimmed.endsWith(']')) {
+        return QString::fromUtf8("[%1]:%2").arg(trimmed, QString::number(port));
+    }
+    return QString::fromUtf8("%1:%2").arg(trimmed, QString::number(port));
+}
+
+bool alpnTokenExists(const QStringList& tokens, const QString& needle)
+{
+    for (const QString& token : tokens) {
+        if (token.compare(needle, Qt::CaseInsensitive) == 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
+QString normalizeXhttpMode(const QString& rawMode)
+{
+    const QString mode = rawMode.trimmed().toLower();
+    if (mode.isEmpty()) {
+        return QString();
+    }
+
+    if (mode == QString::fromUtf8("auto")
+        || mode == QString::fromUtf8("stream-one")
+        || mode == QString::fromUtf8("stream-up")
+        || mode == QString::fromUtf8("packet-up")) {
+        return mode;
+    }
+
+    if (mode == QString::fromUtf8("streamone")) {
+        return QString::fromUtf8("stream-one");
+    }
+    if (mode == QString::fromUtf8("streamup")) {
+        return QString::fromUtf8("stream-up");
+    }
+    if (mode == QString::fromUtf8("packetup")) {
+        return QString::fromUtf8("packet-up");
+    }
+
+    return QString();
+}
+
+QString effectiveXhttpMode(const ServerProfile& profile)
+{
+    QString mode = normalizeXhttpMode(profile.xhttpMode);
+    if (mode.isEmpty()) {
+        mode = QString::fromUtf8("auto");
+    }
+
+    if (mode == QString::fromUtf8("auto")
+        && profile.security.compare(QString::fromUtf8("tls"), Qt::CaseInsensitive) == 0) {
+        const QStringList alpnParts = profile.alpn.split(',', Qt::SkipEmptyParts);
+        if (alpnTokenExists(alpnParts, QString::fromUtf8("h3"))
+            && profile.xhttpExtra.isEmpty()) {
+            // Several CDN-backed links advertising "h3,h2" become unstable in
+            // packet-up/stream-up auto selection (observed uplink-only traffic).
+            // We force stream-one even for h3-only links to keep bidirectional
+            // transport compatibility.
+            // Prefer stream-one for safer bidirectional behavior.
+            mode = QString::fromUtf8("stream-one");
+        }
+    }
+
+    return mode;
+}
+
 QJsonObject buildTlsPeerSettings(const ServerProfile& profile)
 {
     QJsonObject tlsSettings;
-    if (!profile.sni.isEmpty()) {
-        tlsSettings[QString::fromUtf8("serverName")] = profile.sni;
+    QString tlsServerName = profile.sni.trimmed();
+    if (tlsServerName.isEmpty()) {
+        const QString hostHeader = profile.hostHeader.trimmed();
+        if (!hostHeader.isEmpty()) {
+            const int commaIndex = hostHeader.indexOf(',');
+            tlsServerName = (commaIndex > 0 ? hostHeader.left(commaIndex) : hostHeader).trimmed();
+        }
+    }
+    if (!tlsServerName.isEmpty()) {
+        tlsSettings[QString::fromUtf8("serverName")] = tlsServerName;
     }
     if (!profile.alpn.isEmpty()) {
         const QStringList alpnParts = profile.alpn.split(',', Qt::SkipEmptyParts);
-        QJsonArray alpnValues;
+        QStringList normalizedAlpn;
+        normalizedAlpn.reserve(alpnParts.size());
         for (const QString& part : alpnParts) {
-            alpnValues.append(part.trimmed());
+            QString token = part.trimmed();
+            if (!token.isEmpty()) {
+                if (token.compare(QString::fromUtf8("h2"), Qt::CaseInsensitive) == 0) {
+                    token = QString::fromUtf8("h2");
+                } else if (token.compare(QString::fromUtf8("h3"), Qt::CaseInsensitive) == 0) {
+                    token = QString::fromUtf8("h3");
+                } else if (token.compare(QString::fromUtf8("http/1.1"), Qt::CaseInsensitive) == 0) {
+                    token = QString::fromUtf8("http/1.1");
+                }
+                normalizedAlpn.append(token);
+            }
+        }
+
+        if (profile.network == QString::fromUtf8("xhttp")
+            && effectiveXhttpMode(profile) == QString::fromUtf8("stream-one")) {
+            // stream-one works best with H2/H1.1; drop explicit H3 to avoid
+            // uplink-only behavior on some links.
+            normalizedAlpn.removeAll(QString::fromUtf8("h3"));
+        }
+
+        QJsonArray alpnValues;
+        for (const QString& token : normalizedAlpn) {
+            alpnValues.append(token);
         }
         if (!alpnValues.isEmpty()) {
             tlsSettings[QString::fromUtf8("alpn")] = alpnValues;
@@ -443,7 +669,19 @@ QJsonObject buildTlsPeerSettings(const ServerProfile& profile)
 QJsonObject XrayConfigBuilder::build(const ServerProfile& profile, const BuildOptions& options)
 {
     QJsonArray inbounds;
-    inbounds.append(buildMixedInbound(options.socksPort, options.enableFakeDnsSniffing));
+    inbounds.append(buildMixedInbound(
+        options.socksPort,
+        options.enableFakeDnsSniffing,
+        QString::fromUtf8("127.0.0.1"),
+        QString::fromUtf8("mixed-in")));
+    const QString lanListen = normalizedLanMixedListenAddress(options);
+    if (!lanListen.isEmpty()) {
+        inbounds.append(buildMixedInbound(
+            options.socksPort,
+            options.enableFakeDnsSniffing,
+            lanListen,
+            QString::fromUtf8("mixed-lan-in")));
+    }
     if (options.enableTun) {
         inbounds.append(buildTunInbound(options));
     }
@@ -485,6 +723,14 @@ QJsonObject XrayConfigBuilder::build(const ServerProfile& profile, const BuildOp
     }
     if (options.enableTun) {
         config[QString::fromUtf8("dns")] = buildDnsConfig(options);
+        if (options.enableFakeDnsSniffing) {
+            config[QString::fromUtf8("fakedns")] = QJsonArray {
+                QJsonObject {
+                    {QString::fromUtf8("ipPool"), QString::fromUtf8("198.18.0.0/15")},
+                    {QString::fromUtf8("poolSize"), 65535}
+                }
+            };
+        }
     }
 
     return config;
@@ -495,6 +741,112 @@ QJsonObject XrayConfigBuilder::buildMainOutbound(
     bool enableMux,
     bool enableRealityFragDialer)
 {
+    if (profile.protocol == QString::fromUtf8("wireguard")) {
+        const QStringList allowedIps = profile.wgAllowedIPs.isEmpty()
+            ? QStringList {QString::fromUtf8("0.0.0.0/0"), QString::fromUtf8("::/0")}
+            : profile.wgAllowedIPs;
+        QJsonObject peer {
+            {QString::fromUtf8("endpoint"), endpointHostWithPort(profile.address, profile.port)},
+            {QString::fromUtf8("publicKey"), profile.wgPublicKey},
+            {QString::fromUtf8("allowedIPs"), toStringArray(allowedIps)}
+        };
+        if (!profile.wgPresharedKey.trimmed().isEmpty()) {
+            peer.insert(QString::fromUtf8("preSharedKey"), profile.wgPresharedKey.trimmed());
+        }
+        if (profile.wgPersistentKeepalive > 0) {
+            peer.insert(QString::fromUtf8("keepAlive"), profile.wgPersistentKeepalive);
+        }
+
+        QJsonObject settings {
+            {QString::fromUtf8("secretKey"), profile.wgSecretKey},
+            {QString::fromUtf8("peers"), QJsonArray {peer}},
+            {QString::fromUtf8("noKernelTun"), true},
+            {QString::fromUtf8("domainStrategy"), QString::fromUtf8("ForceIP")}
+        };
+
+        if (!profile.wgAddress.isEmpty()) {
+            settings.insert(QString::fromUtf8("address"), toStringArray(profile.wgAddress));
+        }
+        if (profile.wgMtu > 0) {
+            settings.insert(QString::fromUtf8("mtu"), profile.wgMtu);
+        }
+        const QJsonArray reserved = toIntArray(profile.wgReserved);
+        if (!reserved.isEmpty()) {
+            settings.insert(QString::fromUtf8("reserved"), reserved);
+        }
+
+        return QJsonObject {
+            {QString::fromUtf8("tag"), QString::fromUtf8("proxy")},
+            {QString::fromUtf8("protocol"), QString::fromUtf8("wireguard")},
+            {QString::fromUtf8("settings"), settings}
+        };
+    }
+
+    if (profile.protocol == QString::fromUtf8("trojan")) {
+        QJsonObject server {
+            {QString::fromUtf8("address"), profile.address},
+            {QString::fromUtf8("port"), static_cast<int>(profile.port)},
+            {QString::fromUtf8("password"), profile.userId}
+        };
+        if (!profile.flow.trimmed().isEmpty()) {
+            server.insert(QString::fromUtf8("flow"), profile.flow.trimmed());
+        }
+
+        QJsonObject outbound {
+            {QString::fromUtf8("tag"), QString::fromUtf8("proxy")},
+            {QString::fromUtf8("protocol"), QString::fromUtf8("trojan")},
+            {QString::fromUtf8("settings"), QJsonObject {
+                {QString::fromUtf8("servers"), QJsonArray {server}}
+            }},
+            {QString::fromUtf8("streamSettings"), buildStreamSettings(profile)}
+        };
+
+        if (enableMux) {
+            outbound[QString::fromUtf8("mux")] = QJsonObject {
+                {QString::fromUtf8("enabled"), true},
+                {QString::fromUtf8("concurrency"), 8}
+            };
+        }
+
+        return outbound;
+    }
+
+    if (profile.protocol == QString::fromUtf8("shadowsocks")) {
+        QJsonObject server {
+            {QString::fromUtf8("address"), profile.address},
+            {QString::fromUtf8("port"), static_cast<int>(profile.port)},
+            {QString::fromUtf8("method"), profile.encryption.trimmed().isEmpty()
+                                              ? QString::fromUtf8("aes-128-gcm")
+                                              : profile.encryption.trimmed()},
+            {QString::fromUtf8("password"), profile.userId},
+            {QString::fromUtf8("uot"), true}
+        };
+
+        QJsonObject outbound {
+            {QString::fromUtf8("tag"), QString::fromUtf8("proxy")},
+            {QString::fromUtf8("protocol"), QString::fromUtf8("shadowsocks")},
+            {QString::fromUtf8("settings"), QJsonObject {
+                {QString::fromUtf8("servers"), QJsonArray {server}}
+            }}
+        };
+
+        if (profile.network != QString::fromUtf8("tcp")
+            || profile.security != QString::fromUtf8("none")
+            || !profile.hostHeader.trimmed().isEmpty()
+            || !profile.path.trimmed().isEmpty()) {
+            outbound.insert(QString::fromUtf8("streamSettings"), buildStreamSettings(profile));
+        }
+
+        if (enableMux) {
+            outbound[QString::fromUtf8("mux")] = QJsonObject {
+                {QString::fromUtf8("enabled"), true},
+                {QString::fromUtf8("concurrency"), 8}
+            };
+        }
+
+        return outbound;
+    }
+
     QJsonObject user {
         {QString::fromUtf8("id"), profile.userId},
     };
@@ -580,14 +932,19 @@ QJsonObject XrayConfigBuilder::buildStreamSettings(const ServerProfile& profile)
         if (!profile.hostHeader.isEmpty()) {
             xhttpSettings[QString::fromUtf8("host")] = profile.hostHeader;
         }
-        xhttpSettings[QString::fromUtf8("mode")] = profile.xhttpMode.isEmpty()
-            ? QString::fromUtf8("auto")
-            : profile.xhttpMode;
+        const QString normalizedMode = effectiveXhttpMode(profile);
+        if (!normalizedMode.isEmpty()) {
+            // Preserve imported mode hints exactly (including "auto").
+            xhttpSettings[QString::fromUtf8("mode")] = normalizedMode;
+        }
         if (!profile.xhttpExtra.isEmpty()) {
             xhttpSettings[QString::fromUtf8("extra")] = profile.xhttpExtra;
         }
 
         stream[QString::fromUtf8("xhttpSettings")] = xhttpSettings;
+        // Some cores still consume split-http key names. Keep both for
+        // cross-version compatibility.
+        stream[QString::fromUtf8("splithttpSettings")] = xhttpSettings;
     }
 
     if (profile.network == QString::fromUtf8("tcp")) {

@@ -9,12 +9,14 @@
 #include <QQuickWindow>
 #include <QStandardPaths>
 #include <QTimer>
+#include <initializer_list>
 #include <QtCore/qglobal.h>
 
 #if !defined(Q_OS_ANDROID) && !defined(Q_OS_IOS)
 #include <QAction>
 #include <QApplication>
 #include <QMenu>
+#include <QStyle>
 #include <QSystemTrayIcon>
 #endif
 
@@ -22,9 +24,6 @@
 #include "platform/macosappbridge.hpp"
 #endif
 
-#if !defined(Q_OS_ANDROID) && !defined(Q_OS_IOS)
-import genyconnect.backend.connectionstate;
-#endif
 import genyconnect.backend.vpncontroller;
 
 auto main(int argc, char *argv[]) -> int
@@ -51,11 +50,21 @@ auto main(int argc, char *argv[]) -> int
     QCoreApplication::setApplicationVersion(QString::fromUtf8("0.0.0"));
 #endif
 
-#if defined(Q_OS_WIN)
-    const QIcon appIcon(QString::fromUtf8(":/ui/Resources/image/GenyConnect.ico"));
-#else
-    const QIcon appIcon(QString::fromUtf8(":/ui/Resources/image/favicon.png"));
-#endif
+    const auto loadFirstAvailableIcon = [](std::initializer_list<const char *> candidates) {
+        for (const char *candidate : candidates) {
+            const QIcon icon(QString::fromUtf8(candidate));
+            if (!icon.isNull()) {
+                return icon;
+            }
+        }
+        return QIcon();
+    };
+
+    const QIcon appIcon = loadFirstAvailableIcon({
+        ":/ui/Resources/image/GenyConnect.ico",
+        ":/ui/Resources/image/token-white.png",
+        ":/ui/Resources/image/token-dark.png"
+    });
 
     if (!appIcon.isNull()) {
         app.setWindowIcon(appIcon);
@@ -89,11 +98,7 @@ auto main(int argc, char *argv[]) -> int
 #endif
 
     qmlRegisterUncreatableMetaObject(
-#if defined(Q_OS_ANDROID) || defined(Q_OS_IOS)
         vpnControllerConnectionStateMetaObject(),
-#else
-        connectionStateMetaObject(),
-#endif
         "GenyConnect",
         1,
         0,
@@ -192,10 +197,20 @@ auto main(int argc, char *argv[]) -> int
         return app.exec();
     }
 
-    const QIcon trayBaseIcon(QString::fromUtf8(":/ui/Resources/image/favicon.png"));
+    const QIcon trayBaseIcon = loadFirstAvailableIcon({
+        ":/ui/Resources/image/GenyConnect.ico",
+        ":/ui/Resources/image/token-white.png",
+        ":/ui/Resources/image/token-dark.png"
+    });
 
     QSystemTrayIcon trayIcon;
-    trayIcon.setIcon(trayBaseIcon.isNull() ? app.windowIcon() : trayBaseIcon);
+    QIcon trayResolvedIcon = trayBaseIcon.isNull() ? app.windowIcon() : trayBaseIcon;
+    if (trayResolvedIcon.isNull()) {
+        trayResolvedIcon = QApplication::style()->standardIcon(QStyle::SP_ComputerIcon);
+    }
+    if (!trayResolvedIcon.isNull()) {
+        trayIcon.setIcon(trayResolvedIcon);
+    }
 
     QMenu trayMenu;
     QAction openAction(QString::fromUtf8("Open"), &trayMenu);
@@ -212,34 +227,30 @@ auto main(int argc, char *argv[]) -> int
     bool disconnectThenQuit = false;
 
     const auto updateTrayState = [&vpnController, &toggleAction]() {
-        const ConnectionState state = vpnController.connectionState();
-
-        switch (state) {
-        case ConnectionState::Connected:
+        if (vpnController.connected()) {
             toggleAction.setText(QString::fromUtf8("🟢 Connected — Disconnect"));
             toggleAction.setIcon(QIcon());
             toggleAction.setEnabled(true);
-            break;
+            return;
+        }
 
-        case ConnectionState::Connecting:
+        if (vpnController.busy()) {
             toggleAction.setText(QString::fromUtf8("⚪ Connecting..."));
             toggleAction.setIcon(QIcon());
             toggleAction.setEnabled(true);
-            break;
+            return;
+        }
 
-        case ConnectionState::Error:
+        if (!vpnController.lastError().trimmed().isEmpty()) {
             toggleAction.setText(QString::fromUtf8("🔴 Failed — Connect"));
             toggleAction.setIcon(QIcon());
             toggleAction.setEnabled(true);
-            break;
-
-        case ConnectionState::Disconnected:
-        default:
-            toggleAction.setText(QString::fromUtf8("🔴 Disconnected — Connect"));
-            toggleAction.setIcon(QIcon());
-            toggleAction.setEnabled(vpnController.currentProfileIndex() >= 0);
-            break;
+            return;
         }
+
+        toggleAction.setText(QString::fromUtf8("🔴 Disconnected — Connect"));
+        toggleAction.setIcon(QIcon());
+        toggleAction.setEnabled(vpnController.currentProfileIndex() >= 0);
     };
 
     QObject::connect(&vpnController, &VpnController::connectionStateChanged, &app, [&]() {
@@ -292,7 +303,11 @@ auto main(int argc, char *argv[]) -> int
     });
 
     updateTrayState();
-    trayIcon.show();
+    if (!trayIcon.icon().isNull()) {
+        trayIcon.show();
+    } else {
+        mainWindow->setProperty("allowCloseExit", true);
+    }
     #endif
 
     return app.exec();

@@ -21,6 +21,7 @@
 
 module;
 #include <QByteArray>
+#include <QJsonArray>
 #include <QJsonObject>
 #include <QObject>
 #include <QElapsedTimer>
@@ -28,7 +29,6 @@ module;
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
 #include <QNetworkProxy>
-#include <QProcess>
 #include <QStringList>
 #include <QTimer>
 #include <QUrl>
@@ -37,6 +37,9 @@ module;
 #include <QVariantMap>
 #include <atomic>
 #include "runtime/vpnruntimebackend.hpp"
+#if !defined(Q_OS_IOS)
+#include <QProcess>
+#endif
 
 class ServerProfileModel;
 class SystemProxyManager;
@@ -49,7 +52,6 @@ import genyconnect.backend.serverprofile;
 import genyconnect.backend.xrayconfigbuilder;
 #endif
 
-#if defined(Q_OS_ANDROID) || defined(Q_OS_IOS)
 namespace App {
 Q_NAMESPACE
 enum class ConnectionState
@@ -62,18 +64,12 @@ enum class ConnectionState
 Q_ENUM_NS(ConnectionState)
 }
 using ConnectionState = App::ConnectionState;
-#else
-import genyconnect.backend.connectionstate;
-#endif
 
 #ifndef Q_MOC_RUN
 export const QMetaObject& vpnControllerConnectionStateMetaObject();
 #endif
 
 #ifdef Q_MOC_RUN
-namespace App {
-enum class ConnectionState;
-}
 struct ServerProfile;
 class VpnRuntimeBackend;
 class XrayConfigBuilder {
@@ -165,13 +161,22 @@ public:
     Q_PROPERTY(QString directDomainRules READ directDomainRules WRITE setDirectDomainRules NOTIFY routingRulesChanged)
     Q_PROPERTY(QString blockDomainRules READ blockDomainRules WRITE setBlockDomainRules NOTIFY routingRulesChanged)
     Q_PROPERTY(QString customDnsServers READ customDnsServers WRITE setCustomDnsServers NOTIFY customDnsServersChanged)
+    Q_PROPERTY(QString lanSharingMode READ lanSharingMode WRITE setLanSharingMode NOTIFY lanSharingSettingsChanged)
+    Q_PROPERTY(bool lanSharingEnabled READ lanSharingEnabled WRITE setLanSharingEnabled NOTIFY lanSharingSettingsChanged)
+    Q_PROPERTY(QString lanSharingBindAddress READ lanSharingBindAddress WRITE setLanSharingBindAddress NOTIFY lanSharingSettingsChanged)
+    Q_PROPERTY(bool lanSharingAllowAnyBind READ lanSharingAllowAnyBind WRITE setLanSharingAllowAnyBind NOTIFY lanSharingSettingsChanged)
+    Q_PROPERTY(QString lanSharingInterface READ lanSharingInterface WRITE setLanSharingInterface NOTIFY lanSharingSettingsChanged)
+    Q_PROPERTY(bool lanGatewayExperimentalEnabled READ lanGatewayExperimentalEnabled WRITE setLanGatewayExperimentalEnabled NOTIFY lanSharingSettingsChanged)
     Q_PROPERTY(QString proxyAppRules READ proxyAppRules WRITE setProxyAppRules NOTIFY appRulesChanged)
     Q_PROPERTY(QString directAppRules READ directAppRules WRITE setDirectAppRules NOTIFY appRulesChanged)
     Q_PROPERTY(QString blockAppRules READ blockAppRules WRITE setBlockAppRules NOTIFY appRulesChanged)
+    Q_PROPERTY(QVariantList routingRuleItems READ routingRuleItems NOTIFY routingRulesChanged)
     Q_PROPERTY(QString currentProfileUsageHour READ currentProfileUsageHour NOTIFY profileUsageChanged)
     Q_PROPERTY(QString currentProfileUsageDay READ currentProfileUsageDay NOTIFY profileUsageChanged)
     Q_PROPERTY(QString currentProfileUsageWeek READ currentProfileUsageWeek NOTIFY profileUsageChanged)
     Q_PROPERTY(QString currentProfileUsageMonth READ currentProfileUsageMonth NOTIFY profileUsageChanged)
+    Q_PROPERTY(QString selectedUsageProfileId READ selectedUsageProfileId WRITE setSelectedUsageProfileId NOTIFY selectedUsageProfileIdChanged)
+    Q_PROPERTY(QVariantList usageProfileOptions READ usageProfileOptions NOTIFY profileUsageChanged)
     Q_PROPERTY(bool processRoutingSupported READ processRoutingSupported NOTIFY processRoutingSupportChanged)
     Q_PROPERTY(quint16 socksPort READ socksPort CONSTANT)
     Q_PROPERTY(quint16 httpPort READ httpPort CONSTANT)
@@ -180,6 +185,7 @@ public:
     Q_PROPERTY(bool supportsSystemProxy READ supportsSystemProxy NOTIFY runtimeCapabilitiesChanged)
     Q_PROPERTY(bool supportsTun READ supportsTun NOTIFY runtimeCapabilitiesChanged)
     Q_PROPERTY(bool supportsPerAppRouting READ supportsPerAppRouting NOTIFY runtimeCapabilitiesChanged)
+    Q_PROPERTY(bool lanSharingSupported READ lanSharingSupported NOTIFY runtimeCapabilitiesChanged)
     Q_PROPERTY(bool supportsAutoUpdate READ supportsAutoUpdate NOTIFY runtimeCapabilitiesChanged)
     Q_PROPERTY(bool requiresVpnPermission READ requiresVpnPermission NOTIFY runtimeCapabilitiesChanged)
     Q_PROPERTY(bool requiresForegroundService READ requiresForegroundService NOTIFY runtimeCapabilitiesChanged)
@@ -438,6 +444,7 @@ public:
     Q_INVOKABLE void setProfileGroupExclusive(const QString& groupName, bool exclusive);
     Q_INVOKABLE void setProfileGroupBadge(const QString& groupName, const QString& badge);
     Q_INVOKABLE bool ensureProfileGroup(const QString& groupName);
+    Q_INVOKABLE bool renameProfileGroup(const QString& oldName, const QString& newName);
     Q_INVOKABLE bool removeProfileGroup(const QString& groupName);
     Q_INVOKABLE int removeAllProfileGroups();
 
@@ -541,6 +548,12 @@ public:
      * @return Comma/newline-separated DNS servers.
      */
     QString customDnsServers() const;
+    QString lanSharingMode() const;
+    bool lanSharingEnabled() const;
+    QString lanSharingBindAddress() const;
+    bool lanSharingAllowAnyBind() const;
+    QString lanSharingInterface() const;
+    bool lanGatewayExperimentalEnabled() const;
 
     /**
      * @brief Set blocked domain rules.
@@ -553,6 +566,12 @@ public:
      * @param value Comma/newline-separated DNS servers.
      */
     void setCustomDnsServers(const QString& value);
+    void setLanSharingMode(const QString& mode);
+    void setLanSharingEnabled(bool enabled);
+    void setLanSharingBindAddress(const QString& address);
+    void setLanSharingAllowAnyBind(bool enabled);
+    void setLanSharingInterface(const QString& interfaceName);
+    void setLanGatewayExperimentalEnabled(bool enabled);
 
     /**
      * @brief Process names forced through proxy.
@@ -613,6 +632,10 @@ public:
      * @return Human-readable traffic text.
      */
     QString currentProfileUsageMonth() const;
+    QString selectedUsageProfileId() const;
+    void setSelectedUsageProfileId(const QString& profileId);
+    QVariantList usageProfileOptions() const;
+    QVariantList routingRuleItems() const;
 
     /**
      * @brief Whether process-based routing is supported by runtime.
@@ -636,6 +659,7 @@ public:
     bool supportsSystemProxy() const;
     bool supportsTun() const;
     bool supportsPerAppRouting() const;
+    bool lanSharingSupported() const;
     bool supportsAutoUpdate() const;
     bool requiresVpnPermission() const;
     bool requiresForegroundService() const;
@@ -784,7 +808,9 @@ public:
     Q_INVOKABLE void copyLogsToClipboard() const;
     Q_INVOKABLE void copyTextToClipboard(const QString& text) const;
     Q_INVOKABLE bool shareText(const QString& subject, const QString& text) const;
+    Q_INVOKABLE QVariantMap qrCodeMatrix(const QString& text) const;
     Q_INVOKABLE QString licenseText() const;
+    Q_INVOKABLE bool openSystemProxySettings() const;
     Q_INVOKABLE bool openUrlWithChooser(const QString& url, const QString& chooserTitle) const;
     Q_INVOKABLE bool openUrlInAndroidPackage(const QString& url, const QString& packageName) const;
     Q_INVOKABLE bool isAndroidPackageInstalled(const QString& packageName) const;
@@ -803,6 +829,8 @@ public:
      * @return Map containing total/day/week/month/hour usage.
      */
     Q_INVOKABLE QVariantMap currentProfileUsageSummary() const;
+    Q_INVOKABLE QVariantMap usageSummaryForProfile(const QString& profileId) const;
+    Q_INVOKABLE QVariantMap globalUsageSummary() const;
 
     /**
      * @brief Usage history buckets for selected profile.
@@ -811,12 +839,42 @@ public:
      * @return List of usage rows.
      */
     Q_INVOKABLE QVariantList currentProfileUsageHistory(const QString& period, int limit = 20) const;
+    Q_INVOKABLE QVariantList usageHistoryForProfile(const QString& profileId, const QString& period, int limit = 20) const;
     Q_INVOKABLE QVariantList currentProfileUsageSessions(int limit = 20) const;
+    Q_INVOKABLE QVariantList usageSessionsForProfile(const QString& profileId, int limit = 20) const;
     Q_INVOKABLE void clearCurrentProfileUsage();
     Q_INVOKABLE void clearAllProfileUsage();
+    Q_INVOKABLE QVariantMap validateRoutingRule(const QString& targetType, const QString& targetValue, const QString& action) const;
+    Q_INVOKABLE QString createRoutingRule(
+        const QString& targetType,
+        const QString& targetValue,
+        const QString& action,
+        const QString& profileId = QString(),
+        bool enabled = true
+    );
+    Q_INVOKABLE bool updateRoutingRule(
+        const QString& id,
+        const QString& targetType,
+        const QString& targetValue,
+        const QString& action,
+        const QString& profileId,
+        bool enabled
+    );
+    Q_INVOKABLE bool removeRoutingRule(const QString& id);
+    Q_INVOKABLE bool duplicateRoutingRule(const QString& id);
+    Q_INVOKABLE bool moveRoutingRule(const QString& id, int newIndex);
+    Q_INVOKABLE bool setRoutingRuleEnabled(const QString& id, bool enabled);
+    Q_INVOKABLE bool clearRoutingRules();
+    Q_INVOKABLE QString exportProfile(int row) const;
+    Q_INVOKABLE QString exportProfiles(const QVariantList& rows) const;
     Q_INVOKABLE QVariantList availableAppRuleItems() const;
+    Q_INVOKABLE void requestAvailableAppRuleItems();
     Q_INVOKABLE void appendAppRule(const QString& target, const QString& process);
+    Q_INVOKABLE QVariantList availableLanHostAddresses() const;
+    Q_INVOKABLE QString effectiveLanSharingHost() const;
+    Q_INVOKABLE bool applyLanSharingPreset(const QString& mode);
     Q_INVOKABLE void syncSystemBars(bool darkThemeEnabled);
+    Q_INVOKABLE bool minimizeToBackground() const;
     Q_INVOKABLE QString currentProfileTransportPowerClass() const;
     Q_INVOKABLE QString classifyTransportPower(const QString& network, const QString& security, const QString& alpn = QString()) const;
     Q_INVOKABLE QString transportPowerDescription(const QString& powerClass) const;
@@ -866,10 +924,15 @@ signals:
     void customDnsServersChanged();
     //! Emitted when app/process rules are updated.
     void appRulesChanged();
+    //! Emitted when LAN sharing settings or selected device-mode preset changes.
+    void lanSharingSettingsChanged();
     //! Emitted when per-profile traffic usage snapshots change.
     void profileUsageChanged();
     //! Emitted when process-routing capability is re-evaluated.
     void processRoutingSupportChanged();
+    //! Emitted when asynchronous app-rule discovery finishes.
+    void availableAppRuleItemsReady(const QVariantList& items);
+    void selectedUsageProfileIdChanged();
     void runtimeCapabilitiesChanged();
     void publicIpAddressChanged();
     void killSwitchEnabledChanged();
@@ -881,7 +944,7 @@ private slots:
     //! Handle process started signal from process manager.
     void onProcessStarted();
     //! Handle process stopped signal from process manager.
-    void onProcessStopped(int exitCode, QProcess::ExitStatus exitStatus);
+    void onProcessStopped(int exitCode, VpnRuntimeBackend::ExitStatus exitStatus);
     //! Handle process/runtime error callback.
     void onProcessError(const QString& error);
     //! Handle incoming runtime log line.
@@ -916,6 +979,15 @@ private:
         bool enabled = true;
         bool exclusive = false;
         QString badge;
+    };
+
+    struct RoutingRule {
+        QString id;
+        QString targetType;
+        QString targetValue;
+        QString action;
+        QString profileId;
+        bool enabled = true;
     };
 
     /**
@@ -976,7 +1048,7 @@ private:
      * @param message Log text.
      */
     void appendSystemLog(const QString& message);
-    void completeRuntimeConnectedStartup();
+    void completeRuntimeConnectedStartup(bool restoredExistingMobileRuntime = false);
     void syncMobileRuntimeState(const QString& reason);
     void gateRuntimeStartupUntilProxyReady(quint64 connectAttempt);
 
@@ -1004,6 +1076,26 @@ private:
      * @return True if supported by current runtime.
      */
     bool detectProcessRoutingSupport();
+    void syncLegacyRoutingFieldsFromRules();
+    bool parseRoutingRuleFromVariantMap(const QVariantMap& map, RoutingRule *rule, QString *errorMessage = nullptr) const;
+    QVariantMap routingRuleToVariantMap(const RoutingRule& rule) const;
+    QVariantMap validateRoutingRuleData(
+        const QString& targetType,
+        const QString& targetValue,
+        const QString& action,
+        const QString& profileId,
+        bool enforceProfileExists) const;
+    bool setRoutingRules(const QList<RoutingRule>& rules, bool persist, bool syncLegacyFields, bool emitChangeSignal);
+    void loadRoutingRulesFromSettings(const QString& rawRulesJson);
+    QString routingRulesJson() const;
+    bool appendRoutingRuleToConfig(QJsonArray *rules,
+                                   const RoutingRule& rule,
+                                   const QString& activeProfileId,
+                                   bool processRoutingAllowed,
+                                   QString *errorMessage = nullptr) const;
+    void reconnectActiveProfileForRoutingChange(const QString& reason);
+    QVariantList collectAvailableAppRuleItems() const;
+    QString usageScopeProfileId() const;
 
     /**
      * @brief Parse newline/comma-separated rules.
@@ -1011,8 +1103,13 @@ private:
      * @return Normalized rule list.
      */
     static QStringList parseRules(const QString& value);
+    static QString normalizeLanSharingMode(const QString& rawMode);
     static QStringList parseDnsServers(const QString& value);
     static QString normalizeDnsServer(const QString& value);
+    QString defaultLanBindAddress() const;
+    QString sanitizedLanBindAddress(const QString& requestedAddress, bool allowAny) const;
+    void applyLanSharingDefaultsForMode(const QString& normalizedMode, bool forceDefaults);
+    void maybeReconnectForLanSharingChange(const QString& reason);
     void updateMemoryUsage();
     void clearLogsInternal();
     void maybeReconnectToPendingProfile();
@@ -1032,6 +1129,8 @@ private:
     void cleanupDetachedHelpers();
     void stopPrivilegedTunRuntimeByPidPath();
     void killProcessByPid(qint64 pid) const;
+    QList<qint64> managedRuntimePidsByConfig() const;
+    void cleanupOrphanManagedRuntimeProcesses(qint64 keepPid = -1);
     void writeManagedRuntimeRecord(qint64 pid, const QString& mode);
     void clearManagedRuntimeRecord();
     bool tryLoadManagedRuntimeRecord(QJsonObject *record) const;
@@ -1214,11 +1313,21 @@ private:
     QString m_directDomainRules;
     QString m_blockDomainRules;
     QString m_customDnsServers;
+    QString m_lanSharingMode = QString::fromUtf8("console");
+    bool m_lanSharingEnabled = false;
+    QString m_lanSharingBindAddress;
+    bool m_lanSharingAllowAnyBind = false;
+    QString m_lanSharingInterface;
+    bool m_lanGatewayExperimentalEnabled = false;
     QString m_proxyAppRules;
     QString m_directAppRules;
     QString m_blockAppRules;
+    QList<RoutingRule> m_routingRules;
     bool m_processRoutingSupported = false;
     bool m_processRoutingSupportChecked = false;
+    QVariantList m_cachedAppRuleItems;
+    std::atomic_bool m_appRuleScanInFlight {false};
+    std::atomic<quint64> m_appRuleScanRequestId {0};
 
     QString m_dataDirectory;
     QString m_profilesPath;
@@ -1229,6 +1338,7 @@ private:
     qint64 m_profileUsageLastRxSample = -1;
     qint64 m_profileUsageLastTxSample = -1;
     QString m_activeProfileUsageId;
+    QString m_selectedUsageProfileId;
     QString m_usageSessionProfileId;
     qint64 m_usageSessionRxBytes = 0;
     qint64 m_usageSessionTxBytes = 0;
@@ -1259,6 +1369,7 @@ private:
     QNetworkReply *m_publicIpReply = nullptr;
     QTimer m_publicIpRetryTimer;
     bool m_statsPolling = false;
+    quint64 m_statsPollGeneration = 0;
     int m_statsQueryFailureCount = 0;
     bool m_stoppingProcess = false;
     int m_pendingReconnectProfileIndex = -1;

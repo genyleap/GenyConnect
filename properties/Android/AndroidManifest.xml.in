@@ -84,6 +84,12 @@
         </service>
 
         <provider
+            android:name="com.genyleap.genyconnect.GenyConnectVpnStateProvider"
+            android:authorities="${applicationId}.vpnstate"
+            android:exported="false"
+            android:process=":vpn" />
+
+        <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.qtprovider"
             android:exported="false"

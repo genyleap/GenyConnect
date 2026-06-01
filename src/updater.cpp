@@ -15,7 +15,6 @@ module;
 #include <QJsonValue>
 #include <QNetworkReply>
 #include <QNetworkRequest>
-#include <QProcess>
 #include <QRegularExpression>
 #include <QStandardPaths>
 #include <QSysInfo>
@@ -35,6 +34,10 @@ module;
 #define NOMINMAX
 #endif
 #include <windows.h>
+#endif
+
+#if !defined(Q_OS_IOS)
+#include <QProcess>
 #endif
 
 module genyconnect.backend.updater;
@@ -208,7 +211,9 @@ QVector<int> parseVersionParts(const QString& version)
 
 QString appUpdaterHelperPath()
 {
-#if defined(Q_OS_WIN)
+#if defined(Q_OS_IOS)
+    return {};
+#elif defined(Q_OS_WIN)
     return QDir(QCoreApplication::applicationDirPath()).filePath(QString::fromUtf8("GenyConnectUpdater.exe"));
 #else
     return QDir(QCoreApplication::applicationDirPath()).filePath(QString::fromUtf8("GenyConnectUpdater"));
@@ -249,7 +254,16 @@ bool looksLikeManualInstaller(const QString& path)
 
 bool startUpdaterHelperDetached(const QString& helperPath, const QString& jobPath, QString *errorOut)
 {
-#if defined(Q_OS_WIN)
+#if defined(Q_OS_IOS)
+    Q_UNUSED(helperPath)
+    Q_UNUSED(jobPath)
+
+    if (errorOut != nullptr) {
+        *errorOut = QString::fromUtf8("Self-update helper is not supported on iOS.");
+    }
+    return false;
+
+#elif defined(Q_OS_WIN)
     const QString nativeHelper = QDir::toNativeSeparators(helperPath);
     const QString nativeJob = QDir::toNativeSeparators(jobPath);
     const bool launchedDirect = QProcess::startDetached(helperPath, {QString::fromUtf8("--job"), jobPath});
@@ -266,17 +280,19 @@ bool startUpdaterHelperDetached(const QString& helperPath, const QString& jobPat
             reinterpret_cast<LPCWSTR>(args.utf16()),
             nullptr,
             SW_SHOWNORMAL
-        )
-    ));
+            )
+        ));
+
     if (rc <= 32) {
         if (errorOut != nullptr) {
             *errorOut = (rc == 1223)
-                ? QString::fromUtf8("Administrator permission was denied.")
-                : QString::fromUtf8("Failed to launch updater helper (code %1).").arg(rc);
+            ? QString::fromUtf8("Administrator permission was denied.")
+            : QString::fromUtf8("Failed to launch updater helper (code %1).").arg(rc);
         }
         return false;
     }
     return true;
+
 #else
     const bool launched = QProcess::startDetached(helperPath, {QString::fromUtf8("--job"), jobPath});
     if (!launched && errorOut != nullptr) {
@@ -412,12 +428,14 @@ QString Updater::downloadedFilePath() const
 
 bool Updater::canInstallDownloadedUpdate() const
 {
-#if defined(Q_OS_ANDROID)
+#if defined(Q_OS_IOS)
+    return false;
+#elif defined(Q_OS_ANDROID)
     const QString path = m_downloadedFilePath.trimmed();
     return QFileInfo::exists(path) && path.toLower().endsWith(QString::fromUtf8(".apk"));
 #else
     return isSelfInstallSupportedAsset(m_downloadedFilePath)
-        && !normalizeSha256Digest(m_assetExpectedSha256).isEmpty();
+           && !normalizeSha256Digest(m_assetExpectedSha256).isEmpty();
 #endif
 }
 

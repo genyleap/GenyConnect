@@ -1,7 +1,6 @@
 #pragma once
 
 #include <QObject>
-#include <QProcess>
 #include <QString>
 
 struct VpnRuntimeCapabilities
@@ -22,6 +21,12 @@ class VpnRuntimeBackend : public QObject
     Q_OBJECT
 
 public:
+    enum class ExitStatus : int {
+        NormalExit = 0,
+        CrashExit = 1
+    };
+    Q_ENUM(ExitStatus)
+
     explicit VpnRuntimeBackend(QObject *parent = nullptr);
     ~VpnRuntimeBackend() override;
 
@@ -44,9 +49,8 @@ public:
 
 signals:
     void started();
-    void stopped(int exitCode, QProcess::ExitStatus exitStatus);
+    void stopped(int exitCode, VpnRuntimeBackend::ExitStatus exitStatus);
     void errorOccurred(const QString& error);
     void logLine(const QString& line);
     void trafficChanged();
 };
-

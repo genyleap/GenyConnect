@@ -16,6 +16,7 @@
 module;
 #include <QJsonObject>
 #include <QString>
+#include <QStringList>
 #include <QtTypes>
 
 #include <optional>
@@ -56,6 +57,16 @@ export struct ServerProfile {
     QString headerType;       //!< Header type override.
     QString xhttpMode;        //!< XHTTP upload/download mode hint.
     QJsonObject xhttpExtra;   //!< XHTTP advanced transport settings.
+
+    QString wgSecretKey;      //!< WireGuard client private key.
+    QStringList wgAddress;    //!< WireGuard local interface addresses (CIDR list).
+    QString wgPublicKey;      //!< WireGuard peer public key.
+    QString wgPresharedKey;   //!< WireGuard optional pre-shared key.
+    QStringList wgAllowedIPs; //!< WireGuard peer allowed IPs.
+    int wgMtu = 0;            //!< WireGuard MTU (0 means default).
+    int wgPersistentKeepalive = 0; //!< WireGuard keepalive seconds (0 means disabled/default).
+    QStringList wgReserved;   //!< WireGuard reserved bytes list (usually 3 integers).
+    QStringList wgDns;        //!< Per-profile DNS hints (imported only).
 
     bool allowInsecure = false; //!< Allow insecure certificate mode.
 

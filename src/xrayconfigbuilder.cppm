@@ -55,6 +55,9 @@ public:
         QStringList proxyProcesses;             //!< Process names to tunnel.
         QStringList directProcesses;            //!< Process names to bypass.
         QStringList blockProcesses;             //!< Process names to block.
+        bool lanSharingEnabled = false;         //!< Expose mixed inbound on LAN.
+        bool lanSharingAllowAnyBind = false;    //!< Allow 0.0.0.0 LAN bind.
+        QString lanSharingBindAddress;          //!< Requested LAN bind address.
     };
 
     /**

@@ -5,6 +5,7 @@ module;
 #include <QDateTime>
 #include <QDesktopServices>
 #include <QDir>
+#include <QDirIterator>
 #include <QElapsedTimer>
 #include <QEventLoop>
 #include <QFile>
@@ -15,19 +16,22 @@ module;
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QMap>
 #include <QMetaObject>
 #include <QNetworkReply>
+#include <QNetworkInterface>
 #include <QNetworkRequest>
 #include <QNetworkProxy>
 #include <QPointer>
-#include <QProcess>
 #include <QRandomGenerator>
 #include <QRegularExpression>
 #include <QSaveFile>
 #include <QSettings>
 #include <QSet>
+#if QT_CONFIG(ssl)
 #include <QSslError>
 #include <QSslSocket>
+#endif
 #include <QStandardPaths>
 #include <QThread>
 #include <QTimer>
@@ -37,6 +41,7 @@ module;
 #include <QUuid>
 #include <QUrlQuery>
 #include <QVector>
+#include <QVariantList>
 #include <QVariantMap>
 #include <QtConcurrent/QtConcurrentRun>
 
@@ -45,12 +50,14 @@ module;
 #include <cmath>
 #include <cerrno>
 #include <cstring>
+#include <exception>
 #include <optional>
 #include <string>
 
 #include "runtime/runtimefactory.hpp"
 #include "runtime/vpnruntimebackend.hpp"
 #include "powermodemanager.hpp"
+#include "thirdparty/qrcodegen/qrcodegen.h"
 
 #if defined(Q_OS_ANDROID)
 #include <QJniObject>
@@ -77,6 +84,10 @@ extern "C" {
 #include <signal.h>
 #endif
 
+#if !defined(Q_OS_IOS)
+#include <QProcess>
+#endif
+
 module genyconnect.backend.vpncontroller;
 
 import genyconnect.backend.linkparser;
@@ -88,11 +99,7 @@ void VpnController::__geny_vtable_anchor() {}
 
 const QMetaObject& vpnControllerConnectionStateMetaObject()
 {
-#if defined(Q_OS_ANDROID) || defined(Q_OS_IOS)
     return App::staticMetaObject;
-#else
-    return connectionStateMetaObject();
-#endif
 }
 
 namespace {
@@ -129,7 +136,7 @@ constexpr const char kPublicIpEndpoint[] = "https://api.ipify.org?format=text";
 constexpr const char kManagedRuntimeRecordFile[] = "managed-runtime.json";
 constexpr int kDonationBaseChainId = 8453;
 constexpr const char kDonationBaseChainName[] = "Base Mainnet";
-constexpr const char kDonationReceiverWallet[] = "0x24f02198f7f737552f87f889a415645a5f248917";
+constexpr const char kDonationReceiverWallet[] = "0x9b9E187C1B10A88C04F21A5F9DE0Ff1CA46AA589";
 constexpr const char kDonationGenyContract[] = "0x2a3d6f8c1fc4AcDcf3A75d19b445bae02F03676B";
 // Base USDC (Circle) contract.
 constexpr const char kDonationUsdcContract[] = "0x833589fCD6EDB6E08f4c7C32D4f71b54bdA02913";
@@ -336,6 +343,78 @@ QString usageMonthBucketKey(const QDateTime& timestamp)
     return timestamp.date().toString(QString::fromUtf8("yyyy-MM"));
 }
 
+bool isPrivateLanIpv4Address(const QHostAddress& address)
+{
+    if (address.protocol() != QAbstractSocket::IPv4Protocol) {
+        return false;
+    }
+
+    const quint32 ip = address.toIPv4Address();
+    // 10.0.0.0/8
+    if ((ip & 0xFF000000u) == 0x0A000000u) {
+        return true;
+    }
+    // 172.16.0.0/12
+    if ((ip & 0xFFF00000u) == 0xAC100000u) {
+        return true;
+    }
+    // 192.168.0.0/16
+    if ((ip & 0xFFFF0000u) == 0xC0A80000u) {
+        return true;
+    }
+    return false;
+}
+
+QVariantList collectLanHostCandidates()
+{
+    QVariantList out;
+    QSet<QString> seenAddresses;
+    const QList<QNetworkInterface> interfaces = QNetworkInterface::allInterfaces();
+    for (const QNetworkInterface& iface : interfaces) {
+        const auto flags = iface.flags();
+        if (!(flags & QNetworkInterface::IsUp)
+            || !(flags & QNetworkInterface::IsRunning)
+            || (flags & QNetworkInterface::IsLoopBack)) {
+            continue;
+        }
+
+        const QString interfaceName = iface.name().trimmed();
+        const QString interfaceLabel = iface.humanReadableName().trimmed().isEmpty()
+                                           ? interfaceName
+                                           : iface.humanReadableName().trimmed();
+        for (const QNetworkAddressEntry& entry : iface.addressEntries()) {
+            const QHostAddress ip = entry.ip();
+            if (!isPrivateLanIpv4Address(ip)) {
+                continue;
+            }
+
+            const QString address = ip.toString();
+            if (address.isEmpty() || seenAddresses.contains(address)) {
+                continue;
+            }
+            seenAddresses.insert(address);
+
+            QVariantMap item;
+            item.insert(QString::fromUtf8("id"), QString::fromUtf8("%1|%2").arg(interfaceName, address));
+            item.insert(QString::fromUtf8("label"), QString::fromUtf8("%1 (%2)").arg(address, interfaceLabel));
+            item.insert(QString::fromUtf8("name"), QString::fromUtf8("%1 (%2)").arg(address, interfaceLabel));
+            item.insert(QString::fromUtf8("address"), address);
+            item.insert(QString::fromUtf8("interface"), interfaceName);
+            item.insert(QString::fromUtf8("interfaceLabel"), interfaceLabel);
+            out.append(item);
+        }
+    }
+
+    std::sort(out.begin(), out.end(), [](const QVariant& left, const QVariant& right) {
+        const QVariantMap leftMap = left.toMap();
+        const QVariantMap rightMap = right.toMap();
+        return leftMap.value(QString::fromUtf8("label")).toString().toLower()
+               < rightMap.value(QString::fromUtf8("label")).toString().toLower();
+    });
+
+    return out;
+}
+
 void addUsageToBucket(QJsonObject *profileUsageObject,
                       const QString& bucketName,
                       const QString& bucketKey,
@@ -374,24 +453,52 @@ QByteArray decodeFlexibleBase64(const QByteArray& rawInput)
     return QByteArray::fromBase64(rawInput.trimmed(), QByteArray::AbortOnBase64DecodingErrors);
 }
 
+std::optional<QJsonDocument> parseJsonDocumentBytes(const QByteArray& bytes)
+{
+    QJsonParseError parseError;
+    const QJsonDocument doc = QJsonDocument::fromJson(bytes, &parseError);
+    if (parseError.error != QJsonParseError::NoError || doc.isNull()) {
+        return std::nullopt;
+    }
+    if (!doc.isObject() && !doc.isArray()) {
+        return std::nullopt;
+    }
+    return doc;
+}
+
+std::optional<QJsonDocument> parseJsonOrBase64Json(const QString& text)
+{
+    const QString trimmed = text.trimmed();
+    if (trimmed.isEmpty()) {
+        return std::nullopt;
+    }
+
+    if (const auto direct = parseJsonDocumentBytes(trimmed.toUtf8()); direct.has_value()) {
+        return direct;
+    }
+
+    const QByteArray decoded = decodeFlexibleBase64(trimmed.toUtf8());
+    if (decoded.isEmpty()) {
+        return std::nullopt;
+    }
+    return parseJsonDocumentBytes(decoded);
+}
+
 QStringList extractShareLinks(const QString& text)
 {
     QStringList links;
-    const QString normalized = text;
-    const QStringList lines = normalized.split(QRegularExpression(QString::fromUtf8("[\\r\\n]+")), Qt::SkipEmptyParts);
-    for (QString line : lines) {
-        line = line.trimmed();
-        if (line.isEmpty()) {
-            continue;
+    // Do not split by comma because many valid links contain comma-delimited
+    // parameters (for example, ALPN lists like `h2,h3`).
+    const QRegularExpression tokenPattern(
+        QString::fromUtf8("(?i)(vmess://\\S+|vless://\\S+|trojan://\\S+|ss://\\S+|wireguard://\\S+|wg://\\S+)"));
+    QRegularExpressionMatchIterator it = tokenPattern.globalMatch(text);
+    while (it.hasNext()) {
+        QString candidate = it.next().captured(1).trimmed();
+        while (!candidate.isEmpty() && QString::fromUtf8(".,;)]}\"'").contains(candidate.back())) {
+            candidate.chop(1);
         }
-
-        const QStringList tokens = line.split(QRegularExpression(QString::fromUtf8("[\\s,]+")), Qt::SkipEmptyParts);
-        for (const QString& token : tokens) {
-            const QString candidate = token.trimmed();
-            if (candidate.startsWith(QString::fromUtf8("vmess://"), Qt::CaseInsensitive)
-                || candidate.startsWith(QString::fromUtf8("vless://"), Qt::CaseInsensitive)) {
-                links.append(candidate);
-            }
+        if (!candidate.isEmpty()) {
+            links.append(candidate);
         }
     }
     links.removeDuplicates();
@@ -484,6 +591,12 @@ bool isNoisyTrafficLine(const QString& line)
            || line.contains(QString::fromUtf8("mixed-in ->"));
 }
 
+bool isTunProxyAcceptedLine(const QString& line)
+{
+    return line.contains(QString::fromUtf8(" accepted "))
+           && line.contains(QString::fromUtf8("[tun-in -> proxy]"));
+}
+
 bool ruleHasInboundTag(const QJsonObject& rule, const QString& inboundTag)
 {
     const QJsonArray tags = rule.value(QString::fromUtf8("inboundTag")).toArray();
@@ -504,6 +617,47 @@ bool ruleHasIp(const QJsonObject& rule, const QString& ipCidr)
         }
     }
     return false;
+}
+
+QStringList normalizeRoutingDomainMatchers(const QString& rawValue)
+{
+    const QString trimmed = rawValue.trimmed();
+    if (trimmed.isEmpty()) {
+        return {};
+    }
+
+    const QString lowered = trimmed.toLower();
+    const QStringList passthroughPrefixes {
+        QString::fromUtf8("domain:"),
+        QString::fromUtf8("regexp:"),
+        QString::fromUtf8("keyword:"),
+        QString::fromUtf8("geosite:"),
+        QString::fromUtf8("ext:")
+    };
+    for (const QString& prefix : passthroughPrefixes) {
+        if (lowered.startsWith(prefix)) {
+            if (prefix == QString::fromUtf8("domain:")) {
+                const QString suffix = trimmed.mid(7).trimmed().toLower();
+                if (suffix.isEmpty()) {
+                    return {};
+                }
+                return {
+                    QString::fromUtf8("full:%1").arg(suffix),
+                    QString::fromUtf8("domain:%1").arg(suffix)
+                };
+            }
+            return {trimmed};
+        }
+    }
+
+    if (lowered.startsWith(QString::fromUtf8("full:"))) {
+        return {trimmed};
+    }
+
+    return {
+        QString::fromUtf8("full:%1").arg(lowered),
+        QString::fromUtf8("domain:%1").arg(lowered)
+    };
 }
 
 void ensureTunNoiseBlockRules(QJsonObject* config)
@@ -650,19 +804,56 @@ void ensureTunDnsSupport(QJsonObject* config, const QStringList& dnsServers)
     }
 
     QJsonObject dns = config->value(QString::fromUtf8("dns")).toObject();
+    const QJsonArray existingServers = dns.value(QString::fromUtf8("servers")).toArray();
+    bool keepFakeDnsServer = false;
+    for (const QJsonValue& value : existingServers) {
+        if (value.toString().compare(QString::fromUtf8("fakedns"), Qt::CaseInsensitive) == 0) {
+            keepFakeDnsServer = true;
+            break;
+        }
+    }
+
     QJsonArray serverArray;
+    if (keepFakeDnsServer) {
+        serverArray.append(QString::fromUtf8("fakedns"));
+    }
+    QSet<QString> seenDns;
+    if (keepFakeDnsServer) {
+        seenDns.insert(QString::fromUtf8("fakedns"));
+    }
     for (const QString& server : dnsServers) {
         const QString trimmed = server.trimmed();
         if (!trimmed.isEmpty()) {
+            const QString key = trimmed.toLower();
+            if (seenDns.contains(key)) {
+                continue;
+            }
+            seenDns.insert(key);
             serverArray.append(trimmed);
         }
     }
-    if (serverArray.isEmpty()) {
-        serverArray = QJsonArray {
+
+    bool hasRealResolver = false;
+    for (const QJsonValue& value : serverArray) {
+        if (value.toString().compare(QString::fromUtf8("fakedns"), Qt::CaseInsensitive) != 0) {
+            hasRealResolver = true;
+            break;
+        }
+    }
+    if (!hasRealResolver) {
+        const QStringList fallbackResolvers {
             QString::fromUtf8("1.1.1.1"),
             QString::fromUtf8("8.8.8.8"),
             QString::fromUtf8("9.9.9.9")
         };
+        for (const QString& resolver : fallbackResolvers) {
+            const QString key = resolver.toLower();
+            if (seenDns.contains(key)) {
+                continue;
+            }
+            seenDns.insert(key);
+            serverArray.append(resolver);
+        }
     }
     dns.insert(QString::fromUtf8("servers"), serverArray);
     const QString queryStrategy = dns.value(QString::fromUtf8("queryStrategy")).toString().trimmed();
@@ -759,61 +950,114 @@ double mbpsFromBytes(qint64 bytes, qint64 elapsedMs)
 
 bool checkLocalProxyConnectivitySync(quint16 socksPort, QString *errorMessage)
 {
+    auto runHttpProxyProbe = [socksPort](const QString& url, const QString& hostHeader, QString *probeError) -> bool {
+        QTcpSocket socket;
+        socket.connectToHost(QHostAddress::LocalHost, socksPort);
+        if (!socket.waitForConnected(2500)) {
+            if (probeError) {
+                *probeError = QString::fromUtf8("Local mixed proxy port is not reachable.");
+            }
+            return false;
+        }
+
+        const QByteArray request = QString::fromUtf8(
+                                       "GET %1 HTTP/1.1\r\n"
+                                       "Host: %2\r\n"
+                                       "Connection: close\r\n"
+                                       "User-Agent: GenyConnect/1.0\r\n"
+                                       "Accept: */*\r\n\r\n")
+                                       .arg(url, hostHeader)
+                                       .toUtf8();
+        if (socket.write(request) <= 0 || !socket.waitForBytesWritten(1500)) {
+            if (probeError) {
+                *probeError = QString::fromUtf8("Failed to write proxy HTTP probe request.");
+            }
+            return false;
+        }
+
+        QByteArray response;
+        QElapsedTimer timer;
+        timer.start();
+        while (!response.contains("\r\n\r\n") && timer.elapsed() < 6000) {
+            const int remaining = static_cast<int>(6000 - timer.elapsed());
+            if (remaining <= 0 || !socket.waitForReadyRead(remaining)) {
+                break;
+            }
+            response.append(socket.readAll());
+            if (response.size() > 8192) {
+                break;
+            }
+        }
+
+        const int lineEnd = response.indexOf("\r\n");
+        const QString firstLine = lineEnd > 0
+                                      ? QString::fromUtf8(response.left(lineEnd)).trimmed()
+                                      : QString::fromUtf8(response).trimmed();
+        const QRegularExpression statusPattern(QString::fromUtf8("^HTTP/\\d\\.\\d\\s+(\\d{3})\\b"));
+        const auto statusMatch = statusPattern.match(firstLine);
+        if (!statusMatch.hasMatch()) {
+            if (probeError) {
+                *probeError = firstLine.isEmpty()
+                                  ? QString::fromUtf8("No proxy response for HTTP probe.")
+                                  : QString::fromUtf8("Unexpected proxy HTTP probe response: %1").arg(firstLine);
+            }
+            return false;
+        }
+
+        bool codeOk = false;
+        const int statusCode = statusMatch.captured(1).toInt(&codeOk);
+        if (!codeOk || statusCode < 100 || statusCode > 599) {
+            if (probeError) {
+                *probeError = QString::fromUtf8("Invalid proxy HTTP probe status line: %1").arg(firstLine);
+            }
+            return false;
+        }
+
+        Q_UNUSED(statusCode);
+        return true;
+    };
+
+    QString probeError;
+    if (runHttpProxyProbe(QString::fromUtf8("http://1.1.1.1/cdn-cgi/trace"),
+                          QString::fromUtf8("1.1.1.1"),
+                          &probeError)) {
+        return true;
+    }
+    if (runHttpProxyProbe(QString::fromUtf8("http://connectivitycheck.gstatic.com/generate_204"),
+                          QString::fromUtf8("connectivitycheck.gstatic.com"),
+                          &probeError)) {
+        return true;
+    }
+    if (runHttpProxyProbe(QString::fromUtf8("http://cp.cloudflare.com/generate_204"),
+                          QString::fromUtf8("cp.cloudflare.com"),
+                          &probeError)) {
+        return true;
+    }
+    if (runHttpProxyProbe(QString::fromUtf8("http://www.gstatic.com/generate_204"),
+                          QString::fromUtf8("www.gstatic.com"),
+                          &probeError)) {
+        return true;
+    }
+    if (errorMessage) {
+        *errorMessage = !probeError.trimmed().isEmpty()
+                            ? probeError
+                            : QString::fromUtf8("Proxy HTTP reachability probes failed.");
+    }
+    return false;
+}
+
+bool checkLocalProxyPortConnectivitySync(quint16 socksPort, QString *errorMessage)
+{
     QTcpSocket socket;
     socket.connectToHost(QHostAddress::LocalHost, socksPort);
-    if (!socket.waitForConnected(2500)) {
+    if (!socket.waitForConnected(1800)) {
         if (errorMessage) {
             *errorMessage = QString::fromUtf8("Local mixed proxy port is not reachable.");
         }
         return false;
     }
-
-    static const QByteArray connectRequest(
-        "CONNECT 1.1.1.1:443 HTTP/1.1\r\n"
-        "Host: 1.1.1.1:443\r\n"
-        "Proxy-Connection: Keep-Alive\r\n\r\n"
-        );
-
-    if (socket.write(connectRequest) <= 0 || !socket.waitForBytesWritten(1500)) {
-        if (errorMessage) {
-            *errorMessage = QString::fromUtf8("Failed to write proxy CONNECT request.");
-        }
-        return false;
-    }
-
-    QByteArray response;
-    QElapsedTimer timer;
-    timer.start();
-
-    while (!response.contains("\r\n\r\n") && timer.elapsed() < 5000) {
-        const int remaining = static_cast<int>(5000 - timer.elapsed());
-        if (remaining <= 0 || !socket.waitForReadyRead(remaining)) {
-            break;
-        }
-        response.append(socket.readAll());
-        if (response.size() > 4096) {
-            break;
-        }
-    }
-
-    const int lineEnd = response.indexOf("\r\n");
-    QString firstLine;
-    if (lineEnd > 0) {
-        firstLine = QString::fromUtf8(response.left(lineEnd)).trimmed();
-    } else {
-        firstLine = QString::fromUtf8(response).trimmed();
-    }
-
-    const bool ok = firstLine.startsWith(QString::fromUtf8("HTTP/1.1 200"))
-                    || firstLine.startsWith(QString::fromUtf8("HTTP/1.0 200"));
-
-    if (!ok && errorMessage) {
-        *errorMessage = firstLine.isEmpty()
-        ? QString::fromUtf8("No proxy response for CONNECT test.")
-        : QString::fromUtf8("CONNECT response: %1").arg(firstLine);
-    }
-
-    return ok;
+    socket.disconnectFromHost();
+    return true;
 }
 
 QString quoteForShell(const QString& value)
@@ -858,21 +1102,27 @@ QString escapeForAppleScriptString(const QString& value)
     return out;
 }
 
+#if !defined(Q_OS_IOS)
 bool waitForProcessFinishedResponsive(QProcess& process, int timeoutMs)
 {
     QElapsedTimer timer;
     timer.start();
+
     while (process.state() != QProcess::NotRunning) {
         if (process.waitForFinished(40)) {
             return true;
         }
+
         QCoreApplication::processEvents(QEventLoop::AllEvents, 10);
+
         if (timer.elapsed() >= timeoutMs) {
             return false;
         }
     }
+
     return true;
 }
+#endif
 
 bool ensureExecutableFile(const QString& path, QString* errorMessage)
 {
@@ -1014,7 +1264,6 @@ bool ensureWindowsTunRuntimeReady(const QString& xrayExecutablePath,
     return true;
 #endif
 }
-
 bool queryTrafficStatsFromApiSync(
     const QString& executablePath,
     quint16 apiPort,
@@ -1026,6 +1275,19 @@ bool queryTrafficStatsFromApiSync(
         return false;
     }
 
+    *uplinkBytes = 0;
+    *downlinkBytes = 0;
+
+#if defined(Q_OS_IOS)
+    Q_UNUSED(executablePath)
+    Q_UNUSED(apiPort)
+
+    if (errorMessage != nullptr) {
+        *errorMessage = QString::fromUtf8("Xray stats query process is not available on iOS.");
+    }
+
+    return false;
+#else
     if (executablePath.trimmed().isEmpty()) {
         return false;
     }
@@ -1039,11 +1301,10 @@ bool queryTrafficStatsFromApiSync(
             QString::fromUtf8("--server=127.0.0.1:%1").arg(apiPort),
             QString::fromUtf8("-pattern"),
             QString::fromUtf8("outbound>>>")
-        }
-        );
+        });
 
     if (!process.waitForStarted(1500)) {
-        if (errorMessage) {
+        if (errorMessage != nullptr) {
             *errorMessage = QString::fromUtf8("Failed to start xray api statsquery process.");
         }
         return false;
@@ -1052,7 +1313,8 @@ bool queryTrafficStatsFromApiSync(
     if (!process.waitForFinished(4500)) {
         process.kill();
         process.waitForFinished(500);
-        if (errorMessage) {
+
+        if (errorMessage != nullptr) {
             *errorMessage = QString::fromUtf8("xray api statsquery timed out.");
         }
         return false;
@@ -1062,11 +1324,11 @@ bool queryTrafficStatsFromApiSync(
     const QByteArray stderrBytes = process.readAllStandardError();
 
     if (process.exitStatus() != QProcess::NormalExit || process.exitCode() != 0) {
-        if (errorMessage) {
+        if (errorMessage != nullptr) {
             const QString stderrText = QString::fromUtf8(stderrBytes).trimmed();
             *errorMessage = stderrText.isEmpty()
-                                ? QString::fromUtf8("xray api statsquery failed.")
-                                : stderrText;
+                ? QString::fromUtf8("xray api statsquery failed.")
+                : stderrText;
         }
         return false;
     }
@@ -1076,14 +1338,16 @@ bool queryTrafficStatsFromApiSync(
 
     QJsonParseError parseError;
     const QJsonDocument doc = QJsonDocument::fromJson(stdoutBytes, &parseError);
+
     if (parseError.error == QJsonParseError::NoError && doc.isObject()) {
         const QJsonObject root = doc.object();
         const QJsonValue statValue = root.value(QString::fromUtf8("stat"));
         bool foundAnyCounter = false;
 
-        auto consumeStatObject = [&up, &down, &foundAnyCounter](const QJsonObject &statObj) {
+        auto consumeStatObject = [&up, &down, &foundAnyCounter](const QJsonObject& statObj) {
             const QString name = statObj.value(QString::fromUtf8("name")).toString();
             const qint64 value = statObj.value(QString::fromUtf8("value")).toVariant().toLongLong();
+
             if (!name.startsWith(QString::fromUtf8("outbound>>>"))) {
                 return;
             }
@@ -1095,6 +1359,7 @@ bool queryTrafficStatsFromApiSync(
 
             const QString outboundTag = parts.at(1);
             const QString direction = parts.at(3);
+
             if (outboundTag == QString::fromUtf8("api")) {
                 return;
             }
@@ -1112,7 +1377,7 @@ bool queryTrafficStatsFromApiSync(
             consumeStatObject(statValue.toObject());
         } else if (statValue.isArray()) {
             const QJsonArray statsArray = statValue.toArray();
-            for (const QJsonValue &entry : statsArray) {
+            for (const QJsonValue& entry : statsArray) {
                 if (entry.isObject()) {
                     consumeStatObject(entry.toObject());
                 }
@@ -1126,17 +1391,15 @@ bool queryTrafficStatsFromApiSync(
         }
     }
 
-    // Fallback parser for native xray statsquery text output:
-    // stat: { name: "outbound>>>proxy>>>traffic>>>uplink" value: 12345 }
     const QString plain = QString::fromUtf8(stdoutBytes + '\n' + stderrBytes);
+
     static const QRegularExpression upRegex(
         QString::fromUtf8("outbound>>>([^>]+)>>>traffic>>>uplink[^0-9]*([0-9]+)"),
-        QRegularExpression::CaseInsensitiveOption
-        );
+        QRegularExpression::CaseInsensitiveOption);
+
     static const QRegularExpression downRegex(
         QString::fromUtf8("outbound>>>([^>]+)>>>traffic>>>downlink[^0-9]*([0-9]+)"),
-        QRegularExpression::CaseInsensitiveOption
-        );
+        QRegularExpression::CaseInsensitiveOption);
 
     bool foundAnyCounter = false;
 
@@ -1144,9 +1407,11 @@ bool queryTrafficStatsFromApiSync(
     while (upIt.hasNext()) {
         const QRegularExpressionMatch match = upIt.next();
         const QString tag = match.captured(1).toLower();
+
         if (tag == QString::fromUtf8("api")) {
             continue;
         }
+
         up += match.captured(2).toLongLong();
         foundAnyCounter = true;
     }
@@ -1155,9 +1420,11 @@ bool queryTrafficStatsFromApiSync(
     while (downIt.hasNext()) {
         const QRegularExpressionMatch match = downIt.next();
         const QString tag = match.captured(1).toLower();
+
         if (tag == QString::fromUtf8("api")) {
             continue;
         }
+
         down += match.captured(2).toLongLong();
         foundAnyCounter = true;
     }
@@ -1168,16 +1435,20 @@ bool queryTrafficStatsFromApiSync(
         return true;
     }
 
-    if (errorMessage) {
+    if (errorMessage != nullptr) {
         QString snippet = plain.trimmed();
+
         if (snippet.size() > 200) {
             snippet = snippet.left(200) + QString::fromUtf8("...");
         }
+
         *errorMessage = snippet.isEmpty()
-                            ? QString::fromUtf8("xray api statsquery returned no traffic stats.")
-                            : QString::fromUtf8("xray api statsquery parse failed: %1").arg(snippet);
+            ? QString::fromUtf8("xray api statsquery returned no traffic stats.")
+            : QString::fromUtf8("xray api statsquery parse failed: %1").arg(snippet);
     }
+
     return false;
+#endif
 }
 
 qint64 currentProcessMemoryBytes()
@@ -2089,6 +2360,101 @@ bool VpnController::ensureProfileGroup(const QString& groupName)
     return true;
 }
 
+bool VpnController::renameProfileGroup(const QString& oldName, const QString& newName)
+{
+    const QString from = normalizeGroupName(oldName);
+    const QString to = normalizeGroupName(newName);
+
+    if (from.compare(QString::fromUtf8("All"), Qt::CaseInsensitive) == 0
+        || from.compare(QString::fromUtf8("General"), Qt::CaseInsensitive) == 0
+        || to.compare(QString::fromUtf8("All"), Qt::CaseInsensitive) == 0
+        || to.isEmpty()) {
+        return false;
+    }
+
+    if (from.compare(to, Qt::CaseInsensitive) == 0) {
+        return true;
+    }
+
+    bool changed = false;
+    for (SubscriptionEntry& entry : m_subscriptionEntries) {
+        if (normalizeGroupName(entry.group).compare(from, Qt::CaseInsensitive) == 0) {
+            entry.group = to;
+            changed = true;
+        }
+    }
+
+    auto profiles = m_profileModel->profiles();
+    bool profilesChanged = false;
+    for (ServerProfile& profile : profiles) {
+        if (normalizeGroupName(profile.groupName).compare(from, Qt::CaseInsensitive) == 0) {
+            profile.groupName = to;
+            profilesChanged = true;
+            changed = true;
+        }
+    }
+
+    const QString fromKey = normalizeGroupKey(from);
+    const QString toKey = normalizeGroupKey(to);
+    int fromIndex = -1;
+    int toIndex = -1;
+    for (int i = 0; i < m_profileGroupOptions.size(); ++i) {
+        const QString key = m_profileGroupOptions.at(i).key;
+        if (key == fromKey) {
+            fromIndex = i;
+        } else if (key == toKey) {
+            toIndex = i;
+        }
+    }
+
+    if (fromIndex >= 0) {
+        ProfileGroupOptions moved = m_profileGroupOptions.at(fromIndex);
+        moved.name = to;
+        moved.key = toKey;
+        if (toIndex >= 0) {
+            ProfileGroupOptions merged = m_profileGroupOptions.at(toIndex);
+            merged.enabled = merged.enabled || moved.enabled;
+            merged.exclusive = merged.exclusive || moved.exclusive;
+            if (merged.badge.trimmed().isEmpty()) {
+                merged.badge = moved.badge;
+            }
+            m_profileGroupOptions[toIndex] = merged;
+            if (fromIndex > toIndex) {
+                m_profileGroupOptions.removeAt(fromIndex);
+            } else {
+                m_profileGroupOptions.removeAt(fromIndex);
+                --toIndex;
+            }
+        } else {
+            m_profileGroupOptions[fromIndex] = moved;
+        }
+        changed = true;
+    } else {
+        ensureProfileGroup(to);
+    }
+
+    if (!changed) {
+        return false;
+    }
+
+    if (m_currentProfileGroup.compare(from, Qt::CaseInsensitive) == 0) {
+        m_currentProfileGroup = to;
+        emit currentProfileGroupChanged();
+    }
+
+    if (profilesChanged) {
+        m_profileModel->setProfiles(profiles);
+        saveProfiles();
+    }
+    saveSubscriptions();
+    emit subscriptionsChanged();
+    refreshProfileGroups();
+    recomputeProfileStats();
+    saveSettings();
+    appendSystemLog(QString::fromUtf8("[Group] Renamed group '%1' to '%2'.").arg(from, to));
+    return true;
+}
+
 bool VpnController::removeProfileGroup(const QString& groupName)
 {
     const QString normalized = normalizeGroupName(groupName);
@@ -2385,6 +2751,7 @@ void VpnController::setWhitelistMode(bool enabled)
     m_whitelistMode = enabled;
     emit whitelistModeChanged();
     saveSettings();
+    reconnectActiveProfileForRoutingChange(QString::fromUtf8("Whitelist mode changed."));
 }
 
 QString VpnController::proxyDomainRules() const
@@ -2429,6 +2796,36 @@ QString VpnController::customDnsServers() const
     return m_customDnsServers;
 }
 
+QString VpnController::lanSharingMode() const
+{
+    return m_lanSharingMode;
+}
+
+bool VpnController::lanSharingEnabled() const
+{
+    return m_lanSharingEnabled;
+}
+
+QString VpnController::lanSharingBindAddress() const
+{
+    return m_lanSharingBindAddress;
+}
+
+bool VpnController::lanSharingAllowAnyBind() const
+{
+    return m_lanSharingAllowAnyBind;
+}
+
+QString VpnController::lanSharingInterface() const
+{
+    return m_lanSharingInterface;
+}
+
+bool VpnController::lanGatewayExperimentalEnabled() const
+{
+    return m_lanGatewayExperimentalEnabled;
+}
+
 void VpnController::setBlockDomainRules(const QString& value)
 {
     if (m_blockDomainRules == value) {
@@ -2449,6 +2846,99 @@ void VpnController::setCustomDnsServers(const QString& value)
 
     m_customDnsServers = normalized;
     emit customDnsServersChanged();
+    saveSettings();
+}
+
+void VpnController::setLanSharingMode(const QString& mode)
+{
+    const QString normalized = normalizeLanSharingMode(mode);
+    if (m_lanSharingMode == normalized) {
+        return;
+    }
+
+    const bool oldEnabled = m_lanSharingEnabled;
+    const QString oldBind = m_lanSharingBindAddress;
+    const bool oldAnyBind = m_lanSharingAllowAnyBind;
+
+    m_lanSharingMode = normalized;
+    applyLanSharingDefaultsForMode(normalized, normalized != QString::fromUtf8("advanced"));
+    emit lanSharingSettingsChanged();
+    saveSettings();
+    if (oldEnabled != m_lanSharingEnabled
+        || oldBind != m_lanSharingBindAddress
+        || oldAnyBind != m_lanSharingAllowAnyBind) {
+        maybeReconnectForLanSharingChange(QString::fromUtf8("LAN sharing mode changed."));
+    }
+}
+
+void VpnController::setLanSharingEnabled(bool enabled)
+{
+    if (enabled && !lanSharingSupported()) {
+        appendSystemLog(QString::fromUtf8("[LAN] Proxy sharing is unavailable on this platform runtime."));
+        setLastError(QString::fromUtf8("LAN sharing is not supported on this platform runtime."));
+        return;
+    }
+
+    if (m_lanSharingEnabled == enabled) {
+        return;
+    }
+
+    m_lanSharingEnabled = enabled;
+    if (m_lanSharingEnabled && m_lanSharingBindAddress.trimmed().isEmpty()) {
+        m_lanSharingBindAddress = defaultLanBindAddress();
+    }
+    if (m_lanSharingEnabled && !m_lanSharingAllowAnyBind) {
+        m_lanSharingBindAddress = sanitizedLanBindAddress(m_lanSharingBindAddress, false);
+    }
+    emit lanSharingSettingsChanged();
+    saveSettings();
+    maybeReconnectForLanSharingChange(QString::fromUtf8("LAN proxy sharing enabled state changed."));
+}
+
+void VpnController::setLanSharingBindAddress(const QString& address)
+{
+    const QString sanitized = sanitizedLanBindAddress(address, m_lanSharingAllowAnyBind);
+    if (m_lanSharingBindAddress == sanitized) {
+        return;
+    }
+
+    m_lanSharingBindAddress = sanitized;
+    emit lanSharingSettingsChanged();
+    saveSettings();
+    maybeReconnectForLanSharingChange(QString::fromUtf8("LAN proxy bind address changed."));
+}
+
+void VpnController::setLanSharingAllowAnyBind(bool enabled)
+{
+    if (m_lanSharingAllowAnyBind == enabled) {
+        return;
+    }
+
+    m_lanSharingAllowAnyBind = enabled;
+    m_lanSharingBindAddress = sanitizedLanBindAddress(m_lanSharingBindAddress, m_lanSharingAllowAnyBind);
+    emit lanSharingSettingsChanged();
+    saveSettings();
+    maybeReconnectForLanSharingChange(QString::fromUtf8("LAN proxy any-bind setting changed."));
+}
+
+void VpnController::setLanSharingInterface(const QString& interfaceName)
+{
+    const QString normalized = interfaceName.trimmed();
+    if (m_lanSharingInterface == normalized) {
+        return;
+    }
+    m_lanSharingInterface = normalized;
+    emit lanSharingSettingsChanged();
+    saveSettings();
+}
+
+void VpnController::setLanGatewayExperimentalEnabled(bool enabled)
+{
+    if (m_lanGatewayExperimentalEnabled == enabled) {
+        return;
+    }
+    m_lanGatewayExperimentalEnabled = enabled;
+    emit lanSharingSettingsChanged();
     saveSettings();
 }
 
@@ -2520,6 +3010,58 @@ QString VpnController::currentProfileUsageMonth() const
     return currentProfileUsageText(QString::fromUtf8("month"));
 }
 
+QString VpnController::selectedUsageProfileId() const
+{
+    return m_selectedUsageProfileId;
+}
+
+void VpnController::setSelectedUsageProfileId(const QString& profileId)
+{
+    QString normalized = profileId.trimmed();
+    if (!normalized.isEmpty() && m_profileModel->indexOfId(normalized) < 0) {
+        normalized.clear();
+    }
+
+    if (m_selectedUsageProfileId == normalized) {
+        return;
+    }
+
+    m_selectedUsageProfileId = normalized;
+    emit selectedUsageProfileIdChanged();
+    emit profileUsageChanged();
+    saveSettings();
+}
+
+QVariantList VpnController::usageProfileOptions() const
+{
+    QVariantList options;
+
+    QVariantMap allItem;
+    allItem.insert(QString::fromUtf8("id"), QString());
+    allItem.insert(QString::fromUtf8("name"), QString::fromUtf8("All Profiles"));
+    options.append(allItem);
+
+    for (const ServerProfile& profile : m_profileModel->profiles()) {
+        QVariantMap item;
+        item.insert(QString::fromUtf8("id"), profile.id.trimmed());
+        item.insert(QString::fromUtf8("name"), profile.displayLabel());
+        item.insert(QString::fromUtf8("group"), normalizeGroupName(profile.groupName));
+        options.append(item);
+    }
+
+    return options;
+}
+
+QVariantList VpnController::routingRuleItems() const
+{
+    QVariantList items;
+    items.reserve(m_routingRules.size());
+    for (const RoutingRule& rule : m_routingRules) {
+        items.append(routingRuleToVariantMap(rule));
+    }
+    return items;
+}
+
 bool VpnController::processRoutingSupported() const
 {
     return m_processRoutingSupported;
@@ -2558,6 +3100,15 @@ bool VpnController::supportsTun() const
 bool VpnController::supportsPerAppRouting() const
 {
     return m_runtimeSupportsPerAppRouting;
+}
+
+bool VpnController::lanSharingSupported() const
+{
+#if defined(Q_OS_IOS)
+    return false;
+#else
+    return true;
+#endif
 }
 
 bool VpnController::supportsAutoUpdate() const
@@ -2623,9 +3174,121 @@ bool VpnController::importProfileLink(const QString& link)
 
 int VpnController::importProfileBatch(const QString& text)
 {
+    const QString trimmedInput = text.trimmed();
+    auto finalizeImport = [this](int importCount, int lastImportedIndex, bool pingAll) -> int {
+        if (importCount <= 0) {
+            return 0;
+        }
+
+        saveProfiles();
+        if (m_currentProfileIndex < 0 && lastImportedIndex >= 0) {
+            setCurrentProfileIndex(lastImportedIndex);
+        } else if (importCount == 1 && lastImportedIndex >= 0) {
+            setCurrentProfileIndex(lastImportedIndex);
+        }
+        if (m_autoPingProfiles) {
+            if (pingAll) {
+                pingAllProfiles();
+            } else if (lastImportedIndex >= 0) {
+                pingProfile(lastImportedIndex);
+            }
+        }
+        appendSystemLog(QString::fromUtf8("[Import] Imported %1 profile(s).").arg(importCount));
+        if (!m_lastError.isEmpty()) {
+            setLastError(QString());
+        }
+        if (m_connectionState == ConnectionState::Error) {
+            setConnectionState(ConnectionState::Disconnected);
+        }
+        return importCount;
+    };
+
+    if (!trimmedInput.isEmpty()) {
+        QStringList importCandidates;
+        importCandidates.append(trimmedInput);
+        const QString percentDecoded = QUrl::fromPercentEncoding(trimmedInput.toUtf8()).trimmed();
+        if (!percentDecoded.isEmpty() && percentDecoded != trimmedInput) {
+            importCandidates.append(percentDecoded);
+        }
+
+        const QString normalizedGroup = normalizeGroupName(m_currentProfileGroup);
+        for (const QString& candidateInput : importCandidates) {
+            QString singleParseError;
+            auto parsedSingle = LinkParser::parse(candidateInput, &singleParseError);
+            if (parsedSingle.has_value()) {
+                auto profile = parsedSingle.value();
+                if (profile.name.trimmed().isEmpty()) {
+                    profile.name = QString::fromUtf8("%1 %2")
+                                       .arg(profile.protocol.toUpper(), profile.address);
+                }
+                profile.groupName = normalizedGroup;
+                profile.sourceName = QString::fromUtf8("Manual import");
+                profile.sourceId = QString::fromUtf8("manual");
+
+                if (!m_profileModel->addProfile(profile)) {
+                    setLastError(QString::fromUtf8("Failed to add imported profile."));
+                    return 0;
+                }
+
+                const int importedIndex = m_profileModel->indexOfId(profile.id);
+                return finalizeImport(1, importedIndex, false);
+            }
+
+            const auto jsonDoc = parseJsonOrBase64Json(candidateInput);
+            if (jsonDoc.has_value()) {
+                int importedCount = 0;
+                int lastImportedIndex = -1;
+
+                auto importJsonProfile = [this, &normalizedGroup, &importedCount, &lastImportedIndex](const QJsonObject& jsonObject) {
+                    auto parsedProfile = ServerProfile::fromJson(jsonObject);
+                    if (!parsedProfile.has_value()) {
+                        return;
+                    }
+
+                    auto profile = parsedProfile.value();
+                    if (profile.name.trimmed().isEmpty()) {
+                        profile.name = QString::fromUtf8("%1 %2")
+                                           .arg(profile.protocol.toUpper(), profile.address);
+                    }
+                    profile.groupName = normalizedGroup;
+                    profile.sourceName = QString::fromUtf8("Manual import");
+                    profile.sourceId = QString::fromUtf8("manual");
+                    if (m_profileModel->addProfile(profile)) {
+                        ++importedCount;
+                        lastImportedIndex = m_profileModel->indexOfId(profile.id);
+                    }
+                };
+
+                if (jsonDoc->isObject()) {
+                    const QJsonObject rootObject = jsonDoc->object();
+                    const QJsonValue profilesValue = rootObject.value(QString::fromUtf8("profiles"));
+                    if (profilesValue.isArray()) {
+                        for (const QJsonValue& value : profilesValue.toArray()) {
+                            if (value.isObject()) {
+                                importJsonProfile(value.toObject());
+                            }
+                        }
+                    } else {
+                        importJsonProfile(rootObject);
+                    }
+                } else if (jsonDoc->isArray()) {
+                    for (const QJsonValue& value : jsonDoc->array()) {
+                        if (value.isObject()) {
+                            importJsonProfile(value.toObject());
+                        }
+                    }
+                }
+
+                if (importedCount > 0) {
+                    return finalizeImport(importedCount, lastImportedIndex, importedCount > 1);
+                }
+            }
+        }
+    }
+
     const QStringList links = extractSubscriptionLinks(text.toUtf8());
     if (links.isEmpty()) {
-        setLastError(QString::fromUtf8("No supported VMESS/VLESS links found in input."));
+        setLastError(QString::fromUtf8("No supported profile links/config found in input."));
         return 0;
     }
 
@@ -2644,22 +3307,7 @@ int VpnController::importProfileBatch(const QString& text)
         return 0;
     }
 
-    saveProfiles();
-    if (m_currentProfileIndex < 0 && lastImportedIndex >= 0) {
-        setCurrentProfileIndex(lastImportedIndex);
-    }
-    if (m_autoPingProfiles) {
-        pingAllProfiles();
-    }
-
-    appendSystemLog(QString::fromUtf8("[Import] Imported %1 profile(s).").arg(importCount));
-    if (!m_lastError.isEmpty()) {
-        setLastError(QString());
-    }
-    if (m_connectionState == ConnectionState::Error) {
-        setConnectionState(ConnectionState::Disconnected);
-    }
-    return importCount;
+    return finalizeImport(importCount, lastImportedIndex, importCount > 1);
 }
 
 bool VpnController::addSubscription(const QString& url, const QString& name, const QString& group)
@@ -2921,7 +3569,7 @@ void VpnController::startSubscriptionFetch(const SubscriptionEntry& entry, bool 
                                            : (netError.isEmpty()
                                                   ? QString::fromUtf8("Failed to fetch subscription URL.")
                                                   : QString::fromUtf8("Subscription fetch failed: %1").arg(netError)))
-                                    : QString::fromUtf8("Subscription payload has no supported VMESS/VLESS links.");
+                                    : QString::fromUtf8("Subscription payload has no supported profile links.");
         appendSystemLog(QString::fromUtf8("[Subscription] %1 (%2): %3")
                             .arg(entry.name, entry.group, message));
         setLastError(message);
@@ -3208,6 +3856,12 @@ void VpnController::recomputeProfileStats()
 
 bool VpnController::removeProfile(int row)
 {
+    QString removedProfileId;
+    const auto removedProfile = m_profileModel->profileAt(row);
+    if (removedProfile.has_value()) {
+        removedProfileId = removedProfile->id.trimmed();
+    }
+
     const int previousIndex = m_currentProfileIndex;
     if (!m_profileModel->removeAt(row)) {
         return false;
@@ -3224,7 +3878,15 @@ bool VpnController::removeProfile(int row)
         setCurrentProfileIndex(rowCount - 1);
     }
 
+    if (!removedProfileId.isEmpty()
+        && m_selectedUsageProfileId.compare(removedProfileId, Qt::CaseInsensitive) == 0) {
+        m_selectedUsageProfileId.clear();
+        emit selectedUsageProfileIdChanged();
+        emit profileUsageChanged();
+    }
+
     saveProfiles();
+    saveSettings();
     return true;
 }
 
@@ -3270,6 +3932,23 @@ bool VpnController::updateProfile(
         replacement.sourceId = profile.sourceId;
         replacement.lastPingMs = profile.lastPingMs;
         replacement.pingInProgress = false;
+        // Preserve advanced fields when an edit flow updates only basic
+        // endpoint/transport values and omits hidden parameters.
+        if (replacement.fingerprint.trimmed().isEmpty() && !profile.fingerprint.trimmed().isEmpty()) {
+            replacement.fingerprint = profile.fingerprint;
+        }
+        if (replacement.alpn.trimmed().isEmpty() && !profile.alpn.trimmed().isEmpty()) {
+            replacement.alpn = profile.alpn;
+        }
+        if (replacement.publicKey.trimmed().isEmpty() && !profile.publicKey.trimmed().isEmpty()) {
+            replacement.publicKey = profile.publicKey;
+        }
+        if (replacement.shortId.trimmed().isEmpty() && !profile.shortId.trimmed().isEmpty()) {
+            replacement.shortId = profile.shortId;
+        }
+        if (replacement.spiderX.trimmed().isEmpty() && !profile.spiderX.trimmed().isEmpty()) {
+            replacement.spiderX = profile.spiderX;
+        }
         profile = replacement;
         changed = true;
     } else if (configProvided && cleanLink.isEmpty() && !profile.originalLink.trimmed().isEmpty()) {
@@ -3351,6 +4030,13 @@ int VpnController::removeAllProfiles()
     if (!m_currentProfileId.trimmed().isEmpty()
         && m_profileModel->indexOfId(m_currentProfileId.trimmed()) < 0) {
         m_currentProfileId = keptProfiles.isEmpty() ? QString() : keptProfiles.first().id.trimmed();
+    }
+
+    if (!m_selectedUsageProfileId.trimmed().isEmpty()
+        && m_profileModel->indexOfId(m_selectedUsageProfileId.trimmed()) < 0) {
+        m_selectedUsageProfileId.clear();
+        emit selectedUsageProfileIdChanged();
+        emit profileUsageChanged();
     }
 
     saveProfiles();
@@ -3535,10 +4221,19 @@ void VpnController::connectToProfile(int row)
         return;
     }
 
+    if (m_runtimeIsDesktop) {
+        // Defensive cleanup for orphan xray instances that survived previous
+        // crashes/forced stops and still reference the same runtime config.
+        cleanupOrphanManagedRuntimeProcesses();
+    }
+
     setCurrentProfileIndex(row);
     const quint64 connectAttempt = m_connectAttemptCounter.fetch_add(1) + 1;
     m_disconnectRequested.store(false);
     m_activeProfileUsageId = profile->id.trimmed();
+    ++m_statsPollGeneration;
+    m_statsPolling = false;
+    m_statsQueryFailureCount = 0;
     resetPerProfileUsageSamples();
     m_activeProfileAddress = profile->address.trimmed();
 
@@ -3607,19 +4302,10 @@ void VpnController::connectToProfile(int row)
                     guard->m_privilegedTunLogBuffer.clear();
                     guard->m_privilegedTunLogTimer.start();
                     guard->writeManagedRuntimeRecord(guard->m_privilegedTunRuntimePid, QString::fromUtf8("tun"));
-                    guard->beginProfileUsageSession(guard->m_activeProfileUsageId);
-                    guard->setConnectionState(ConnectionState::Connected);
                     guard->setLastError(QString());
-                    guard->appendSystemLog(QString::fromUtf8("[System] TUN mode active: system traffic should route through Xray TUN."));
-                    guard->appendSystemLog(QString::fromUtf8("[System] Xray started (privileged TUN). Local proxy (mixed): 127.0.0.1:%1.")
-                                               .arg(guard->m_buildOptions.socksPort));
-                    guard->m_statsPollTimer.start();
-                    guard->pollTrafficStats();
-                    QTimer::singleShot(guard->startupSelfCheckDelayMs(), guard.data(), [guard]() {
-                        if (guard) {
-                            guard->runProxySelfCheck();
-                        }
-                    });
+                    // Privileged TUN path already waits for startup readiness
+                    // inside startPrivilegedTunProcess(). Avoid re-gating here.
+                    guard->completeRuntimeConnectedStartup();
                     return;
                 }
 
@@ -3679,6 +4365,9 @@ void VpnController::disconnect()
 {
     m_disconnectRequested.store(true);
     m_connectAttemptCounter.fetch_add(1);
+    ++m_statsPollGeneration;
+    m_statsPolling = false;
+    m_statsQueryFailureCount = 0;
     m_statsPollTimer.stop();
     m_publicIpRetryTimer.stop();
     if (m_publicIpReply) {
@@ -3774,7 +4463,7 @@ void VpnController::refreshPublicIp()
         return;
     }
 
-#if defined(Q_OS_ANDROID)
+#if defined(Q_OS_ANDROID) && QT_CONFIG(ssl)
     if (!QSslSocket::supportsSsl()) {
         m_publicIpRetryTimer.stop();
         if (m_publicIpReply) {
@@ -3790,6 +4479,20 @@ void VpnController::refreshPublicIp()
         appendSystemLog(QString::fromUtf8("[System] VPN IP lookup skipped: TLS backend is unavailable in this Android build."));
         return;
     }
+#elif defined(Q_OS_ANDROID)
+    m_publicIpRetryTimer.stop();
+    if (m_publicIpReply) {
+        QObject::disconnect(m_publicIpReply, nullptr, this, nullptr);
+        m_publicIpReply->abort();
+        m_publicIpReply->deleteLater();
+        m_publicIpReply = nullptr;
+    }
+    if (m_publicIpRefreshing) {
+        m_publicIpRefreshing = false;
+        emit publicIpAddressChanged();
+    }
+    appendSystemLog(QString::fromUtf8("[System] VPN IP lookup skipped: Qt build has no SSL support."));
+    return;
 #endif
 
     if (m_publicIpReply) {
@@ -3813,12 +4516,14 @@ void VpnController::refreshPublicIp()
     emit publicIpAddressChanged();
 
     m_publicIpReply = m_publicIpNetworkManager.get(request);
+#if QT_CONFIG(ssl)
     connect(m_publicIpReply, &QNetworkReply::sslErrors, this, [this](const QList<QSslError>& errors) {
         Q_UNUSED(errors)
         if (m_publicIpReply != nullptr) {
             m_publicIpReply->abort();
         }
     });
+#endif
     connect(m_publicIpReply, &QNetworkReply::finished, this, &VpnController::onPublicIpFinished);
 }
 
@@ -3857,12 +4562,14 @@ void VpnController::startSpeedTestRequest(const QUrl& url, bool upload, const QB
     m_speedTestReply->setProperty("gc_ready_bytes", static_cast<qlonglong>(0));
     connect(m_speedTestReply, &QNetworkReply::downloadProgress, this, &VpnController::onSpeedTestDownloadProgress);
     connect(m_speedTestReply, &QNetworkReply::uploadProgress, this, &VpnController::onSpeedTestUploadProgress);
+#if QT_CONFIG(ssl)
     connect(m_speedTestReply, &QNetworkReply::sslErrors, this, [this](const QList<QSslError>& errors) {
         Q_UNUSED(errors)
         if (m_speedTestReply != nullptr) {
             m_speedTestReply->abort();
         }
     });
+#endif
     m_speedTestRequestTimer.restart();
     m_speedTestSampleWindowStartMs = -1;
     m_speedTestSampleWindowStartBytes = m_speedTestBytesReceived;
@@ -4483,10 +5190,64 @@ bool VpnController::shareText(const QString& subject, const QString& text) const
     return false;
 }
 
+QVariantMap VpnController::qrCodeMatrix(const QString& text) const
+{
+    QVariantMap payload;
+    payload.insert(QString::fromUtf8("ok"), false);
+
+    const QString normalized = text.trimmed();
+    if (normalized.isEmpty()) {
+        payload.insert(QString::fromUtf8("error"), QString::fromUtf8("QR payload is empty."));
+        return payload;
+    }
+
+    try {
+        const QByteArray utf8 = normalized.toUtf8();
+        const qrcodegen::QrCode qr = qrcodegen::QrCode::encodeText(
+            utf8.constData(),
+            qrcodegen::QrCode::Ecc::LOW);
+
+        const int size = qr.getSize();
+        QVariantList rows;
+        rows.reserve(size);
+        for (int y = 0; y < size; ++y) {
+            QString row;
+            row.reserve(size);
+            for (int x = 0; x < size; ++x) {
+                row.append(qr.getModule(x, y) ? QLatin1Char('1') : QLatin1Char('0'));
+            }
+            rows.append(row);
+        }
+
+        payload.insert(QString::fromUtf8("ok"), true);
+        payload.insert(QString::fromUtf8("size"), size);
+        payload.insert(QString::fromUtf8("rows"), rows);
+        payload.insert(QString::fromUtf8("text"), normalized);
+        return payload;
+    } catch (const std::exception& ex) {
+        payload.insert(QString::fromUtf8("error"), QString::fromUtf8(ex.what()));
+        return payload;
+    }
+}
+
 QString VpnController::licenseText() const
 {
     static QString cachedLicenseText = resolveLicenseText();
     return cachedLicenseText;
+}
+
+bool VpnController::openSystemProxySettings() const
+{
+#if defined(Q_OS_ANDROID)
+    if (QJniObject::isClassAvailable(kAndroidRuntimeBridgeClass)) {
+        const jboolean opened = QJniObject::callStaticMethod<jboolean>(
+            kAndroidRuntimeBridgeClass,
+            "openSystemProxySettings",
+            "()Z");
+        return opened;
+    }
+#endif
+    return false;
 }
 
 bool VpnController::openUrlWithChooser(const QString& url, const QString& chooserTitle) const
@@ -4714,26 +5475,28 @@ void VpnController::onProcessStarted()
     m_stoppingProcess = false;
     const quint64 connectAttempt = m_connectAttemptCounter.load();
 
-    if (m_runtimeIsMobile) {
-        setConnectionState(ConnectionState::Connecting);
-        gateRuntimeStartupUntilProxyReady(connectAttempt);
-        return;
-    }
-
-    completeRuntimeConnectedStartup();
+    setConnectionState(ConnectionState::Connecting);
+    gateRuntimeStartupUntilProxyReady(connectAttempt);
 }
 
-void VpnController::completeRuntimeConnectedStartup()
+void VpnController::completeRuntimeConnectedStartup(bool restoredExistingMobileRuntime)
 {
     if (m_powerModeManager) {
         m_powerModeManager->recordReconnectSuccess();
     }
     resetPerProfileUsageSamples();
-    if (!m_runtimeIsMobile) {
+    if (!m_runtimeIsMobile && !m_privilegedTunManaged) {
         writeManagedRuntimeRecord(m_runtimeBackend ? m_runtimeBackend->processId() : -1, QString::fromUtf8("proxy"));
     }
-    beginProfileUsageSession(m_activeProfileUsageId);
-    setConnectionState(ConnectionState::Connected);
+    const bool requiresConnectivityValidation =
+        (m_effectiveTunMode || m_useSystemProxy || m_runtimeIsMobile)
+        && !(restoredExistingMobileRuntime && m_runtimeIsMobile);
+    if (requiresConnectivityValidation) {
+        setConnectionState(ConnectionState::Connecting);
+    } else {
+        beginProfileUsageSession(m_activeProfileUsageId);
+        setConnectionState(ConnectionState::Connected);
+    }
     if (m_effectiveTunMode) {
         appendSystemLog(QString::fromUtf8("[System] TUN mode active: system traffic should route through Xray TUN."));
     } else if (m_useSystemProxy || m_killSwitchEnabled) {
@@ -4753,12 +5516,17 @@ void VpnController::completeRuntimeConnectedStartup()
     appendSystemLog(QString::fromUtf8("[System] Xray started. Local proxy (mixed): 127.0.0.1:%1.")
                         .arg(m_buildOptions.socksPort));
 
+    ++m_statsPollGeneration;
+    m_statsPolling = false;
+    m_statsQueryFailureCount = 0;
     m_statsPollTimer.start();
     pollTrafficStats();
 
-    QTimer::singleShot(startupSelfCheckDelayMs(), this, [this]() {
-        runProxySelfCheck();
-    });
+    if (!restoredExistingMobileRuntime) {
+        QTimer::singleShot(startupSelfCheckDelayMs(), this, [this]() {
+            runProxySelfCheck();
+        });
+    }
 }
 
 void VpnController::syncMobileRuntimeState(const QString& reason)
@@ -4769,7 +5537,7 @@ void VpnController::syncMobileRuntimeState(const QString& reason)
 
     const bool runtimeRunning = m_runtimeBackend->isRunning();
     if (runtimeRunning) {
-        if (connected() || busy()) {
+        if (connected()) {
             return;
         }
 
@@ -4790,7 +5558,7 @@ void VpnController::syncMobileRuntimeState(const QString& reason)
         appendSystemLog(
             QString::fromUtf8("[System] Mobile runtime already active; restoring tunnel state (%1).")
                 .arg(reason.trimmed().isEmpty() ? QString::fromUtf8("resume") : reason.trimmed()));
-        completeRuntimeConnectedStartup();
+        completeRuntimeConnectedStartup(true);
         return;
     }
 
@@ -4799,6 +5567,9 @@ void VpnController::syncMobileRuntimeState(const QString& reason)
     }
 
     appendSystemLog(QString::fromUtf8("[System] Mobile runtime inactive on foreground resume; syncing to disconnected state."));
+    ++m_statsPollGeneration;
+    m_statsPolling = false;
+    m_statsQueryFailureCount = 0;
     m_statsPollTimer.stop();
     m_publicIpRetryTimer.stop();
     if (m_publicIpReply) {
@@ -4822,14 +5593,22 @@ void VpnController::gateRuntimeStartupUntilProxyReady(quint64 connectAttempt)
 {
     const quint16 socksPort = m_buildOptions.socksPort;
     const bool tunMode = m_effectiveTunMode;
+    const bool mobileRuntime = m_runtimeIsMobile;
     const QPointer<VpnController> guard(this);
+    appendSystemLog(QString::fromUtf8(
+        "[System] Waiting for local proxy listener readiness on 127.0.0.1:%1...")
+                        .arg(socksPort));
 
-    [[maybe_unused]] auto startupReadyFuture = QtConcurrent::run([guard, socksPort, connectAttempt, tunMode]() {
+    [[maybe_unused]] auto startupReadyFuture = QtConcurrent::run([guard, socksPort, connectAttempt, tunMode, mobileRuntime]() {
         QString lastCheckError;
+        QString runtimeStartupError;
         bool ready = false;
+        bool backendSeenRunning = false;
+        const qint64 timeoutMs = mobileRuntime ? 26000 : 12000;
+        int sleepMs = mobileRuntime ? 140 : 180;
         QElapsedTimer readyTimer;
         readyTimer.start();
-        while (readyTimer.elapsed() < 12000) {
+        while (readyTimer.elapsed() < timeoutMs) {
             if (!guard) {
                 return;
             }
@@ -4839,20 +5618,33 @@ void VpnController::gateRuntimeStartupUntilProxyReady(quint64 connectAttempt)
                 return;
             }
 
+            if (guard->m_runtimeBackend && guard->m_runtimeBackend->isRunning()) {
+                backendSeenRunning = true;
+            } else if (guard->m_runtimeBackend) {
+                const QString runtimeError = guard->m_runtimeBackend->lastError().trimmed();
+                if (!runtimeError.isEmpty()) {
+                    runtimeStartupError = runtimeError;
+                }
+            }
+
             QString checkError;
-            if (checkLocalProxyConnectivitySync(socksPort, &checkError)) {
+            const bool checkOk = checkLocalProxyPortConnectivitySync(socksPort, &checkError);
+            if (checkOk) {
                 ready = true;
                 break;
             }
             lastCheckError = checkError;
-            QThread::msleep(180);
+            QThread::msleep(static_cast<unsigned long>(qMax(80, sleepMs)));
+            if (mobileRuntime) {
+                sleepMs = qMin(420, sleepMs + 30);
+            }
         }
 
         if (!guard) {
             return;
         }
 
-        QMetaObject::invokeMethod(guard.data(), [guard, ready, lastCheckError, connectAttempt, tunMode, socksPort]() {
+        QMetaObject::invokeMethod(guard.data(), [guard, ready, lastCheckError, runtimeStartupError, backendSeenRunning, connectAttempt, tunMode, socksPort, mobileRuntime]() {
             if (!guard) {
                 return;
             }
@@ -4864,7 +5656,7 @@ void VpnController::gateRuntimeStartupUntilProxyReady(quint64 connectAttempt)
 
             if (ready) {
                 guard->appendSystemLog(
-                    QString::fromUtf8("[System] Local proxy became ready on 127.0.0.1:%1; marking connection as active.")
+                    QString::fromUtf8("[System] Proxy reachability probe passed on 127.0.0.1:%1; marking connection as active.")
                         .arg(socksPort));
                 guard->completeRuntimeConnectedStartup();
                 return;
@@ -4875,22 +5667,61 @@ void VpnController::gateRuntimeStartupUntilProxyReady(quint64 connectAttempt)
                 Q_UNUSED(guard->m_runtimeBackend->disconnectRuntime(&runtimeStopError, 0));
             }
             const QString modeLabel = tunMode ? QString::fromUtf8("TUN") : QString::fromUtf8("proxy");
+            const QString runtimeLabel = guard->m_runtimeIsMobile
+                                             ? QString::fromUtf8("Android")
+                                             : QString::fromUtf8("Desktop");
             QString detail = lastCheckError.trimmed();
+            if (!runtimeStartupError.trimmed().isEmpty()) {
+                detail = runtimeStartupError.trimmed();
+            } else if (guard->m_runtimeBackend && !guard->m_runtimeBackend->isRunning()) {
+                const QString runtimeError = guard->m_runtimeBackend->lastError().trimmed();
+                if (!runtimeError.isEmpty()) {
+                    detail = runtimeError;
+                }
+            }
             if (detail.isEmpty()) {
                 detail = QString::fromUtf8("Local mixed proxy port is not reachable.");
             }
+
+            QString diagnosis = QString::fromUtf8("readiness timeout");
+            const QString lowered = detail.toLower();
+            if (lowered.contains(QString::fromUtf8("permission"))
+                || lowered.contains(QString::fromUtf8("vpn"))) {
+                diagnosis = QString::fromUtf8("vpn permission missing");
+            } else if (lowered.contains(QString::fromUtf8("bind"))
+                       || lowered.contains(QString::fromUtf8("address already in use"))
+                       || lowered.contains(QString::fromUtf8("port"))) {
+                diagnosis = QString::fromUtf8("listener bind/port conflict");
+            } else if (lowered.contains(QString::fromUtf8("executable"))
+                       || lowered.contains(QString::fromUtf8("asset"))
+                       || lowered.contains(QString::fromUtf8("missing"))
+                       || lowered.contains(QString::fromUtf8("not executable"))) {
+                diagnosis = QString::fromUtf8("core startup failure");
+            } else if (mobileRuntime && !backendSeenRunning) {
+                diagnosis = QString::fromUtf8("core process did not stay running");
+            }
+
             guard->appendSystemLog(
-                QString::fromUtf8("[System] Android %1 startup failed readiness check: %2")
-                    .arg(modeLabel, detail));
-            guard->setLastError(QString::fromUtf8("Connection started but local proxy was not ready. Please retry."));
+                QString::fromUtf8("[System] %1 %2 startup failed readiness check (%3): %4")
+                    .arg(runtimeLabel, modeLabel, diagnosis, detail));
+            if (mobileRuntime) {
+                guard->appendSystemLog(QString::fromUtf8(
+                    "[System] Android diagnostics: verify core extraction/executable permission, local port conflicts, and ROM background restrictions."));
+            }
+            guard->setLastError(QString::fromUtf8(
+                                    "Connection could not complete: local proxy listener was not ready (%1).")
+                                    .arg(diagnosis));
             guard->setConnectionState(ConnectionState::Error);
         }, Qt::QueuedConnection);
     });
 }
 
-void VpnController::onProcessStopped(int exitCode, QProcess::ExitStatus exitStatus)
+void VpnController::onProcessStopped(int exitCode, VpnRuntimeBackend::ExitStatus exitStatus)
 {
     Q_UNUSED(exitCode)
+    ++m_statsPollGeneration;
+    m_statsPolling = false;
+    m_statsQueryFailureCount = 0;
     m_statsPollTimer.stop();
     cancelSpeedTest();
     endProfileUsageSession(m_activeProfileUsageId);
@@ -4912,7 +5743,7 @@ void VpnController::onProcessStopped(int exitCode, QProcess::ExitStatus exitStat
         return;
     }
 
-    if (exitStatus == QProcess::CrashExit) {
+    if (exitStatus == VpnRuntimeBackend::ExitStatus::CrashExit) {
         if (m_powerModeManager) {
             m_powerModeManager->recordRuntimeInstability(QString::fromUtf8("runtime crash"));
         }
@@ -4935,6 +5766,9 @@ void VpnController::onProcessError(const QString& error)
         return;
     }
 
+    ++m_statsPollGeneration;
+    m_statsPolling = false;
+    m_statsQueryFailureCount = 0;
     m_statsPollTimer.stop();
     cancelSpeedTest();
     endProfileUsageSession(m_activeProfileUsageId);
@@ -5073,11 +5907,12 @@ void VpnController::pollTrafficStats()
         return;
     }
     const quint16 apiPort = m_buildOptions.apiPort;
+    const quint64 pollGeneration = m_statsPollGeneration;
     const QPointer<VpnController> guard(this);
 
     m_statsPolling = true;
     [[maybe_unused]] auto statsFuture = QtConcurrent::run(
-        [guard, executablePath, apiPort]() {
+        [guard, executablePath, apiPort, pollGeneration]() {
             qint64 uplinkBytes = 0;
             qint64 downlinkBytes = 0;
             QString error;
@@ -5086,11 +5921,14 @@ void VpnController::pollTrafficStats()
             if (!guard) {
                 return;
             }
-            QMetaObject::invokeMethod(guard.data(), [guard, ok, uplinkBytes, downlinkBytes, error]() {
+            QMetaObject::invokeMethod(guard.data(), [guard, ok, uplinkBytes, downlinkBytes, error, pollGeneration]() {
                 if (!guard) {
                     return;
                 }
 
+                if (guard->m_statsPollGeneration != pollGeneration) {
+                    return;
+                }
                 guard->m_statsPolling = false;
                 if (!guard->connected()) {
                     return;
@@ -5577,6 +6415,19 @@ void VpnController::setConnectionState(ConnectionState state)
     if (state == ConnectionState::Connected) {
         m_disconnectRequested.store(false);
         m_publicIpRetryCount = 0;
+        if (m_pendingReconnectProfileIndex >= 0) {
+            const int requestedIndex = m_pendingReconnectProfileIndex;
+            appendSystemLog(QString::fromUtf8("[Routing] Applying queued reconnect request."));
+            QTimer::singleShot(0, this, [this, requestedIndex]() {
+                if (!connected()) {
+                    return;
+                }
+                if (m_pendingReconnectProfileIndex != requestedIndex) {
+                    return;
+                }
+                disconnect();
+            });
+        }
         QTimer::singleShot(900, this, [this]() {
             refreshPublicIp();
         });
@@ -5676,29 +6527,56 @@ void VpnController::runProxySelfCheck()
 
 void VpnController::runProxySelfCheckAttempt(int attempt)
 {
-    if (!connected()) {
+    const bool runtimeActive = (m_runtimeBackend && m_runtimeBackend->isRunning()) || m_privilegedTunManaged;
+    if (!connected() && !runtimeActive) {
         return;
     }
     const quint16 socksPort = m_buildOptions.socksPort;
     const bool useSystemProxyMode = m_useSystemProxy;
     const bool tunMode = m_effectiveTunMode;
+    const bool requiresConnectivityValidation = tunMode || useSystemProxyMode || m_runtimeIsMobile;
     const QPointer<VpnController> guard(this);
 
-    [[maybe_unused]] auto proxySelfCheckFuture = QtConcurrent::run([guard, socksPort, useSystemProxyMode, tunMode, attempt]() {
-        QString error;
-        const bool ok = checkLocalProxyConnectivitySync(socksPort, &error);
+    [[maybe_unused]] auto proxySelfCheckFuture = QtConcurrent::run([guard,
+                                                                     socksPort,
+                                                                     useSystemProxyMode,
+                                                                     tunMode,
+                                                                     requiresConnectivityValidation,
+                                                                     attempt]() {
+        QString portError;
+        const bool portReady = checkLocalProxyPortConnectivitySync(socksPort, &portError);
+        QString connectivityError;
+        const bool endToEndOk = portReady && checkLocalProxyConnectivitySync(socksPort, &connectivityError);
         if (!guard) {
             return;
         }
 
-        QMetaObject::invokeMethod(guard.data(), [guard, socksPort, useSystemProxyMode, tunMode, ok, error, attempt]() {
-            if (!guard || !guard->connected()) {
+        QMetaObject::invokeMethod(guard.data(), [guard,
+                                                 socksPort,
+                                                 useSystemProxyMode,
+                                                 tunMode,
+                                                 requiresConnectivityValidation,
+                                                 portReady,
+                                                 endToEndOk,
+                                                 portError,
+                                                 connectivityError,
+                                                 attempt]() {
+            if (!guard) {
+                return;
+            }
+            const bool runtimeStillActive =
+                (guard->m_runtimeBackend && guard->m_runtimeBackend->isRunning()) || guard->m_privilegedTunManaged;
+            if (!guard->connected() && !runtimeStillActive) {
                 return;
             }
 
-            if (ok) {
-                guard->appendSystemLog(QString::fromUtf8("[System] Proxy self-test passed (127.0.0.1:%1 is forwarding traffic).")
+            if (endToEndOk) {
+                guard->appendSystemLog(QString::fromUtf8("[System] Proxy self-test passed (127.0.0.1:%1 is forwarding end-to-end traffic).")
                                            .arg(socksPort));
+                if (!guard->connected()) {
+                    guard->beginProfileUsageSession(guard->m_activeProfileUsageId);
+                    guard->setConnectionState(ConnectionState::Connected);
+                }
                 if (!useSystemProxyMode && !tunMode) {
                     if (guard->m_runtimeIsMobile) {
                         guard->appendSystemLog(QString::fromUtf8(
@@ -5711,16 +6589,36 @@ void VpnController::runProxySelfCheckAttempt(int attempt)
                 return;
             }
 
+            if (portReady) {
+                const QString warningDetail = connectivityError.trimmed().isEmpty()
+                                                  ? QString::fromUtf8("probe endpoint rejected or timed out")
+                                                  : connectivityError.trimmed();
+                guard->appendSystemLog(
+                    QString::fromUtf8("[System] Proxy self-test fallback: mixed port 127.0.0.1:%1 is reachable; keeping session active (%2).")
+                        .arg(socksPort, warningDetail));
+                if (!guard->connected()) {
+                    guard->beginProfileUsageSession(guard->m_activeProfileUsageId);
+                    guard->setConnectionState(ConnectionState::Connected);
+                }
+                return;
+            }
+
             if (attempt + 1 < kProxySelfCheckMaxAttempts) {
                 QTimer::singleShot(kProxySelfCheckRetryDelayMs, guard.data(), [guard, attempt]() {
-                    if (guard && guard->connected()) {
+                    const bool runtimeStillActive =
+                        guard && ((guard->m_runtimeBackend && guard->m_runtimeBackend->isRunning())
+                                  || guard->m_privilegedTunManaged);
+                    if (guard && (guard->connected() || runtimeStillActive)) {
                         guard->runProxySelfCheckAttempt(attempt + 1);
                     }
                 });
                 return;
             }
 
-            guard->appendSystemLog(QString::fromUtf8("[System] Proxy self-test failed: %1").arg(error));
+            const QString failure = portError.trimmed().isEmpty()
+                                        ? QString::fromUtf8("Local mixed proxy port is not reachable.")
+                                        : portError.trimmed();
+            guard->appendSystemLog(QString::fromUtf8("[System] Proxy self-test failed: %1").arg(failure));
             if (useSystemProxyMode) {
                 guard->appendSystemLog(QString::fromUtf8("[System] Hint: verify system proxy state and retry with proper permissions."));
             } else {
@@ -5728,8 +6626,8 @@ void VpnController::runProxySelfCheckAttempt(int attempt)
                                            .arg(socksPort));
             }
 
-            if (guard->m_runtimeIsMobile) {
-                guard->setLastError(QString::fromUtf8("Local proxy port is not reachable."));
+            if (requiresConnectivityValidation) {
+                guard->setLastError(QString::fromUtf8("Proxy self-test failed: no end-to-end connectivity."));
                 guard->setConnectionState(ConnectionState::Error);
                 if (guard->m_runtimeBackend && guard->m_runtimeBackend->isRunning()) {
                     QString runtimeStopError;
@@ -5752,43 +6650,73 @@ bool VpnController::detectProcessRoutingSupport()
     }
 
     m_processRoutingSupportChecked = true;
+
     const bool previous = m_processRoutingSupported;
     m_processRoutingSupported = false;
+
     const QString previousVersion = m_xrayVersion;
     m_xrayVersion = QString::fromUtf8("Unknown");
 
+#if defined(Q_OS_IOS)
+    m_xrayVersion = QString::fromUtf8("Managed by iOS runtime");
+    m_processRoutingSupported = false;
+
+    if (previousVersion != m_xrayVersion) {
+        emit xrayVersionChanged();
+    }
+
+    if (previous != m_processRoutingSupported) {
+        emit processRoutingSupportChanged();
+    }
+
+    return false;
+#else
     if (!m_runtimeIsDesktop || !m_runtimeSupportsPerAppRouting) {
-        m_xrayVersion = QString::fromUtf8("Managed by mobile runtime");
+        if (!m_runtimeIsDesktop) {
+            m_xrayVersion = QString::fromUtf8("Managed by mobile runtime");
+        } else {
+            m_xrayVersion = QString::fromUtf8("Process routing unavailable on this desktop runtime");
+        }
+
         if (previousVersion != m_xrayVersion) {
             emit xrayVersionChanged();
         }
+
         if (previous != m_processRoutingSupported) {
             emit processRoutingSupportChanged();
         }
+
         return false;
     }
 
     if (m_xrayExecutablePath.trimmed().isEmpty()) {
         m_xrayVersion = QString::fromUtf8("Not detected");
+
         if (previousVersion != m_xrayVersion) {
             emit xrayVersionChanged();
         }
+
         if (previous != m_processRoutingSupported) {
             emit processRoutingSupportChanged();
         }
+
         return m_processRoutingSupported;
     }
 
     QProcess process;
     process.start(m_xrayExecutablePath, {QString::fromUtf8("version")});
+
     if (!process.waitForStarted(2000)) {
         m_xrayVersion = QString::fromUtf8("Unavailable");
+
         if (previousVersion != m_xrayVersion) {
             emit xrayVersionChanged();
         }
+
         if (previous != m_processRoutingSupported) {
             emit processRoutingSupportChanged();
         }
+
         return m_processRoutingSupported;
     }
 
@@ -5796,23 +6724,28 @@ bool VpnController::detectProcessRoutingSupport()
         process.kill();
         process.waitForFinished(500);
         m_xrayVersion = QString::fromUtf8("Unavailable");
+
         if (previousVersion != m_xrayVersion) {
             emit xrayVersionChanged();
         }
+
         if (previous != m_processRoutingSupported) {
             emit processRoutingSupportChanged();
         }
+
         return m_processRoutingSupported;
     }
 
     const QString output = QString::fromUtf8(process.readAllStandardOutput())
-                           + QString::fromUtf8(process.readAllStandardError());
+        + QString::fromUtf8(process.readAllStandardError());
 
     const QRegularExpression regex(QString::fromUtf8("Xray\\s+(\\d+)\\.(\\d+)\\.(\\d+)"));
     const QRegularExpressionMatch match = regex.match(output);
+
     if (match.hasMatch()) {
         m_xrayVersion = QString::fromUtf8("%1.%2.%3")
-        .arg(match.captured(1), match.captured(2), match.captured(3));
+            .arg(match.captured(1), match.captured(2), match.captured(3));
+
         const int major = match.captured(1).toInt();
         const int minor = match.captured(2).toInt();
         const int patch = match.captured(3).toInt();
@@ -5825,7 +6758,6 @@ bool VpnController::detectProcessRoutingSupport()
 #if defined(Q_OS_WIN) || defined(Q_OS_LINUX)
         m_processRoutingSupported = versionSupported;
 #else
-        // Xray process-name routing currently supports Windows/Linux only.
         m_processRoutingSupported = false;
 #endif
     } else if (process.exitCode() == 0) {
@@ -5843,6 +6775,586 @@ bool VpnController::detectProcessRoutingSupport()
     }
 
     return m_processRoutingSupported;
+#endif
+}
+
+void VpnController::syncLegacyRoutingFieldsFromRules()
+{
+    QStringList proxyDomains;
+    QStringList directDomains;
+    QStringList blockDomains;
+    QStringList proxyApps;
+    QStringList directApps;
+    QStringList blockApps;
+
+    for (const RoutingRule& rule : m_routingRules) {
+        if (!rule.enabled || !rule.profileId.trimmed().isEmpty()) {
+            continue;
+        }
+
+        const QString type = rule.targetType.trimmed().toLower();
+        const QString action = rule.action.trimmed().toLower();
+        const QString value = rule.targetValue.trimmed();
+        if (value.isEmpty()) {
+            continue;
+        }
+
+        QStringList *domainTarget = nullptr;
+        QStringList *appTarget = nullptr;
+        if (action == QString::fromUtf8("proxy")) {
+            domainTarget = &proxyDomains;
+            appTarget = &proxyApps;
+        } else if (action == QString::fromUtf8("direct")) {
+            domainTarget = &directDomains;
+            appTarget = &directApps;
+        } else if (action == QString::fromUtf8("block")) {
+            domainTarget = &blockDomains;
+            appTarget = &blockApps;
+        } else {
+            continue;
+        }
+
+        if (type == QString::fromUtf8("domain")) {
+            domainTarget->append(value);
+        } else if (type == QString::fromUtf8("process") || type == QString::fromUtf8("app")) {
+            appTarget->append(value);
+        }
+    }
+
+    m_proxyDomainRules = parseRules(proxyDomains.join('\n')).join('\n');
+    m_directDomainRules = parseRules(directDomains.join('\n')).join('\n');
+    m_blockDomainRules = parseRules(blockDomains.join('\n')).join('\n');
+    m_proxyAppRules = parseRules(proxyApps.join('\n')).join('\n');
+    m_directAppRules = parseRules(directApps.join('\n')).join('\n');
+    m_blockAppRules = parseRules(blockApps.join('\n')).join('\n');
+}
+
+QVariantMap VpnController::routingRuleToVariantMap(const RoutingRule& rule) const
+{
+    QVariantMap out;
+    out.insert(QString::fromUtf8("id"), rule.id);
+    out.insert(QString::fromUtf8("targetType"), rule.targetType);
+    out.insert(QString::fromUtf8("targetValue"), rule.targetValue);
+    out.insert(QString::fromUtf8("action"), rule.action);
+    out.insert(QString::fromUtf8("profileId"), rule.profileId);
+    out.insert(QString::fromUtf8("enabled"), rule.enabled);
+
+    QString profileName = QString::fromUtf8("All Profiles");
+    if (!rule.profileId.trimmed().isEmpty()) {
+        const int row = m_profileModel->indexOfId(rule.profileId.trimmed());
+        const auto profile = m_profileModel->profileAt(row);
+        if (profile.has_value()) {
+            profileName = profile->displayLabel();
+        } else {
+            profileName = QString::fromUtf8("Deleted Profile");
+        }
+    }
+    out.insert(QString::fromUtf8("profileName"), profileName);
+    return out;
+}
+
+QVariantMap VpnController::validateRoutingRuleData(
+    const QString& targetType,
+    const QString& targetValue,
+    const QString& action,
+    const QString& profileId,
+    bool enforceProfileExists) const
+{
+    QVariantMap result;
+    QString normalizedType = targetType.trimmed().toLower();
+    QString normalizedAction = action.trimmed().toLower();
+    QString normalizedValue = targetValue.trimmed();
+    QString normalizedProfileId = profileId.trimmed();
+
+    if (normalizedProfileId.compare(QString::fromUtf8("all"), Qt::CaseInsensitive) == 0
+        || normalizedProfileId.compare(QString::fromUtf8("all profiles"), Qt::CaseInsensitive) == 0) {
+        normalizedProfileId.clear();
+    }
+
+    if (normalizedAction == QString::fromUtf8("vpn")
+        || normalizedAction == QString::fromUtf8("proxy")
+        || normalizedAction == QString::fromUtf8("tunnel")) {
+        normalizedAction = QString::fromUtf8("proxy");
+    } else if (normalizedAction == QString::fromUtf8("direct")) {
+        normalizedAction = QString::fromUtf8("direct");
+    } else if (normalizedAction == QString::fromUtf8("block")) {
+        normalizedAction = QString::fromUtf8("block");
+    } else {
+        result.insert(QString::fromUtf8("ok"), false);
+        result.insert(QString::fromUtf8("error"), QString::fromUtf8("Action must be VPN, Direct, or Block."));
+        return result;
+    }
+
+    if (normalizedType == QString::fromUtf8("vpn")) {
+        normalizedType = QString::fromUtf8("process");
+    } else if (normalizedType == QString::fromUtf8("application")) {
+        normalizedType = QString::fromUtf8("app");
+    }
+
+    const QSet<QString> allowedTypes = {
+        QString::fromUtf8("domain"),
+        QString::fromUtf8("ip"),
+        QString::fromUtf8("app"),
+        QString::fromUtf8("process"),
+        QString::fromUtf8("protocol")
+    };
+    if (!allowedTypes.contains(normalizedType)) {
+        result.insert(QString::fromUtf8("ok"), false);
+        result.insert(QString::fromUtf8("error"), QString::fromUtf8("Target type must be Domain, IP, App, Process, or Protocol."));
+        return result;
+    }
+
+    if (normalizedValue.isEmpty()) {
+        result.insert(QString::fromUtf8("ok"), false);
+        result.insert(QString::fromUtf8("error"), QString::fromUtf8("Target value cannot be empty."));
+        return result;
+    }
+
+    if (!normalizedProfileId.isEmpty() && enforceProfileExists) {
+        if (m_profileModel->indexOfId(normalizedProfileId) < 0) {
+            result.insert(QString::fromUtf8("ok"), false);
+            result.insert(QString::fromUtf8("error"), QString::fromUtf8("Profile scope points to a missing profile."));
+            return result;
+        }
+    }
+
+    QString warning;
+    if (normalizedType == QString::fromUtf8("domain")) {
+        const QString value = normalizedValue;
+        const QString lowered = value.toLower();
+        const QStringList allowedPrefixes = {
+            QString::fromUtf8("full:"),
+            QString::fromUtf8("domain:"),
+            QString::fromUtf8("regexp:"),
+            QString::fromUtf8("keyword:"),
+            QString::fromUtf8("geosite:"),
+            QString::fromUtf8("ext:")
+        };
+        bool prefixMatched = false;
+        for (const QString& prefix : allowedPrefixes) {
+            if (lowered.startsWith(prefix)) {
+                prefixMatched = true;
+                break;
+            }
+        }
+
+        if (prefixMatched) {
+            const int sep = value.indexOf(':');
+            if (sep < 0 || value.mid(sep + 1).trimmed().isEmpty()) {
+                result.insert(QString::fromUtf8("ok"), false);
+                result.insert(QString::fromUtf8("error"), QString::fromUtf8("Domain rule has an empty matcher after prefix."));
+                return result;
+            }
+            if (lowered.startsWith(QString::fromUtf8("full:"))) {
+                warning = QString::fromUtf8(
+                    "full: only matches that exact hostname. Use domain:example.com to include subdomains.");
+            }
+        } else {
+            static const QRegularExpression domainPattern(
+                QString::fromUtf8("^(?=.{1,253}$)(?!-)(?:[A-Za-z0-9-]{1,63}\\.)+[A-Za-z]{2,63}$"));
+            if (!domainPattern.match(value).hasMatch()) {
+                result.insert(QString::fromUtf8("ok"), false);
+                result.insert(QString::fromUtf8("error"), QString::fromUtf8("Domain value is invalid."));
+                return result;
+            }
+            normalizedValue = value.toLower();
+        }
+    } else if (normalizedType == QString::fromUtf8("ip")) {
+        const QString value = normalizedValue;
+        const QString lowered = value.toLower();
+        if (lowered.startsWith(QString::fromUtf8("geoip:"))
+            || lowered.startsWith(QString::fromUtf8("ext:"))
+            || lowered.startsWith(QString::fromUtf8("ip:"))
+            || lowered.startsWith(QString::fromUtf8("!geoip:"))
+            || lowered.startsWith(QString::fromUtf8("!ip:"))) {
+            normalizedValue = value;
+        } else {
+            const int slash = value.indexOf('/');
+            QString ipPart = value;
+            int cidrBits = -1;
+            if (slash >= 0) {
+                ipPart = value.left(slash).trimmed();
+                bool ok = false;
+                cidrBits = value.mid(slash + 1).trimmed().toInt(&ok);
+                if (!ok) {
+                    result.insert(QString::fromUtf8("ok"), false);
+                    result.insert(QString::fromUtf8("error"), QString::fromUtf8("CIDR suffix must be a number."));
+                    return result;
+                }
+            }
+
+            QHostAddress ip;
+            if (!ip.setAddress(ipPart)) {
+                result.insert(QString::fromUtf8("ok"), false);
+                result.insert(QString::fromUtf8("error"), QString::fromUtf8("IP/CIDR value is invalid."));
+                return result;
+            }
+
+            if (cidrBits >= 0) {
+                const bool isV6 = ip.protocol() == QAbstractSocket::IPv6Protocol;
+                const int maxBits = isV6 ? 128 : 32;
+                if (cidrBits < 0 || cidrBits > maxBits) {
+                    result.insert(QString::fromUtf8("ok"), false);
+                    result.insert(QString::fromUtf8("error"), QString::fromUtf8("CIDR prefix length is out of range."));
+                    return result;
+                }
+                normalizedValue = QString::fromUtf8("%1/%2").arg(ip.toString(), QString::number(cidrBits));
+            } else {
+                normalizedValue = ip.toString();
+            }
+        }
+    } else if (normalizedType == QString::fromUtf8("app")
+               || normalizedType == QString::fromUtf8("process")) {
+        if (normalizedValue.endsWith('/')) {
+            warning = QString::fromUtf8("Folder-level process rules match all processes under that directory.");
+        }
+        const bool perAppCapableRuntime = m_runtimeSupportsPerAppRouting && m_runtimeIsDesktop;
+        const bool processSupportBlocked = m_processRoutingSupportChecked && !m_processRoutingSupported;
+        if (!perAppCapableRuntime || processSupportBlocked) {
+            result.insert(QString::fromUtf8("ok"), false);
+            result.insert(QString::fromUtf8("error"),
+                          QString::fromUtf8("App/process routing is unavailable on this platform/runtime."));
+            return result;
+        }
+#if defined(Q_OS_WIN)
+        normalizedValue.replace('\\', '/');
+#endif
+    } else if (normalizedType == QString::fromUtf8("protocol")) {
+        const QStringList tokens = normalizedValue.split(QRegularExpression(QString::fromUtf8("[,\\s]+")), Qt::SkipEmptyParts);
+        if (tokens.isEmpty()) {
+            result.insert(QString::fromUtf8("ok"), false);
+            result.insert(QString::fromUtf8("error"), QString::fromUtf8("Protocol value cannot be empty."));
+            return result;
+        }
+
+        const QSet<QString> allowedProtocols = {
+            QString::fromUtf8("tcp"),
+            QString::fromUtf8("udp"),
+            QString::fromUtf8("http"),
+            QString::fromUtf8("tls"),
+            QString::fromUtf8("quic"),
+            QString::fromUtf8("bittorrent")
+        };
+        QStringList normalizedTokens;
+        normalizedTokens.reserve(tokens.size());
+        for (const QString& tokenRaw : tokens) {
+            const QString token = tokenRaw.trimmed().toLower();
+            if (!allowedProtocols.contains(token)) {
+                result.insert(QString::fromUtf8("ok"), false);
+                result.insert(QString::fromUtf8("error"),
+                              QString::fromUtf8("Unsupported protocol token: %1").arg(tokenRaw.trimmed()));
+                return result;
+            }
+            if (!normalizedTokens.contains(token)) {
+                normalizedTokens.append(token);
+            }
+        }
+        normalizedValue = normalizedTokens.join(',');
+    }
+
+    result.insert(QString::fromUtf8("ok"), true);
+    result.insert(QString::fromUtf8("type"), normalizedType);
+    result.insert(QString::fromUtf8("action"), normalizedAction);
+    result.insert(QString::fromUtf8("value"), normalizedValue);
+    result.insert(QString::fromUtf8("profileId"), normalizedProfileId);
+    if (!warning.trimmed().isEmpty()) {
+        result.insert(QString::fromUtf8("warning"), warning.trimmed());
+    }
+    return result;
+}
+
+QVariantMap VpnController::validateRoutingRule(
+    const QString& targetType,
+    const QString& targetValue,
+    const QString& action) const
+{
+    return validateRoutingRuleData(targetType, targetValue, action, QString(), true);
+}
+
+bool VpnController::parseRoutingRuleFromVariantMap(
+    const QVariantMap& map,
+    RoutingRule *rule,
+    QString *errorMessage) const
+{
+    if (!rule) {
+        if (errorMessage) {
+            *errorMessage = QString::fromUtf8("Internal error: null routing rule pointer.");
+        }
+        return false;
+    }
+
+    const QVariantMap validation = validateRoutingRuleData(
+        map.value(QString::fromUtf8("targetType")).toString(),
+        map.value(QString::fromUtf8("targetValue")).toString(),
+        map.value(QString::fromUtf8("action")).toString(),
+        map.value(QString::fromUtf8("profileId")).toString(),
+        false);
+    if (!validation.value(QString::fromUtf8("ok")).toBool()) {
+        if (errorMessage) {
+            *errorMessage = validation.value(QString::fromUtf8("error")).toString();
+        }
+        return false;
+    }
+
+    rule->id = map.value(QString::fromUtf8("id")).toString().trimmed();
+    if (rule->id.isEmpty()) {
+        rule->id = QUuid::createUuid().toString(QUuid::WithoutBraces);
+    }
+    rule->targetType = validation.value(QString::fromUtf8("type")).toString();
+    rule->targetValue = validation.value(QString::fromUtf8("value")).toString();
+    rule->action = validation.value(QString::fromUtf8("action")).toString();
+    rule->profileId = validation.value(QString::fromUtf8("profileId")).toString();
+    rule->enabled = map.value(QString::fromUtf8("enabled"), true).toBool();
+    return true;
+}
+
+bool VpnController::setRoutingRules(
+    const QList<RoutingRule>& rules,
+    bool persist,
+    bool syncLegacyFields,
+    bool emitChangeSignal)
+{
+    m_routingRules = rules;
+    if (syncLegacyFields) {
+        syncLegacyRoutingFieldsFromRules();
+    }
+    if (emitChangeSignal) {
+        emit routingRulesChanged();
+        emit appRulesChanged();
+    }
+    if (persist) {
+        saveSettings();
+    }
+    if (persist && emitChangeSignal) {
+        reconnectActiveProfileForRoutingChange(QString::fromUtf8("Routing rules changed."));
+    }
+    return true;
+}
+
+void VpnController::reconnectActiveProfileForRoutingChange(const QString& reason)
+{
+    if (busy()) {
+        if (m_currentProfileIndex >= 0 && m_currentProfileIndex < m_profileModel->rowCount()) {
+            m_pendingReconnectProfileIndex = m_currentProfileIndex;
+            appendSystemLog(QString::fromUtf8(
+                                "[Routing] %1 Runtime is still connecting; queued reconnect to apply changes.")
+                                .arg(reason.trimmed().isEmpty()
+                                         ? QString::fromUtf8("Routing updated.")
+                                         : reason.trimmed()));
+        }
+        return;
+    }
+
+    const bool runtimeActive = connected()
+                               || (m_runtimeBackend && m_runtimeBackend->isRunning())
+                               || m_privilegedTunManaged;
+    if (!runtimeActive) {
+        return;
+    }
+
+    if (m_currentProfileIndex < 0 || m_currentProfileIndex >= m_profileModel->rowCount()) {
+        return;
+    }
+
+    m_pendingReconnectProfileIndex = m_currentProfileIndex;
+    appendSystemLog(QString::fromUtf8("[Routing] %1 Reconnecting active profile to apply changes.")
+                        .arg(reason.trimmed().isEmpty() ? QString::fromUtf8("Routing updated.") : reason.trimmed()));
+    disconnect();
+}
+
+void VpnController::loadRoutingRulesFromSettings(const QString& rawRulesJson)
+{
+    QList<RoutingRule> loaded;
+    const QString text = rawRulesJson.trimmed();
+    if (!text.isEmpty()) {
+        QJsonParseError parseError;
+        const QJsonDocument doc = QJsonDocument::fromJson(text.toUtf8(), &parseError);
+        if (parseError.error == QJsonParseError::NoError && doc.isArray()) {
+            const QJsonArray array = doc.array();
+            for (const QJsonValue& value : array) {
+                if (!value.isObject()) {
+                    continue;
+                }
+                RoutingRule rule;
+                QString error;
+                if (!parseRoutingRuleFromVariantMap(value.toObject().toVariantMap(), &rule, &error)) {
+                    continue;
+                }
+                loaded.append(rule);
+            }
+        }
+    }
+
+    if (loaded.isEmpty()) {
+        auto appendLegacy = [&loaded, this](const QStringList& values, const QString& action, const QString& type) {
+            for (const QString& value : values) {
+                RoutingRule rule;
+                rule.id = QUuid::createUuid().toString(QUuid::WithoutBraces);
+                rule.targetType = type;
+                rule.targetValue = value.trimmed();
+                rule.action = action;
+                rule.enabled = true;
+                if (!rule.targetValue.isEmpty()) {
+                    loaded.append(rule);
+                }
+            }
+        };
+
+        appendLegacy(parseRules(m_proxyDomainRules), QString::fromUtf8("proxy"), QString::fromUtf8("domain"));
+        appendLegacy(parseRules(m_directDomainRules), QString::fromUtf8("direct"), QString::fromUtf8("domain"));
+        appendLegacy(parseRules(m_blockDomainRules), QString::fromUtf8("block"), QString::fromUtf8("domain"));
+        appendLegacy(parseRules(m_proxyAppRules), QString::fromUtf8("proxy"), QString::fromUtf8("process"));
+        appendLegacy(parseRules(m_directAppRules), QString::fromUtf8("direct"), QString::fromUtf8("process"));
+        appendLegacy(parseRules(m_blockAppRules), QString::fromUtf8("block"), QString::fromUtf8("process"));
+    }
+
+    setRoutingRules(loaded, false, true, false);
+}
+
+QString VpnController::routingRulesJson() const
+{
+    QJsonArray array;
+    for (const RoutingRule& rule : m_routingRules) {
+        array.append(QJsonObject::fromVariantMap(routingRuleToVariantMap(rule)));
+    }
+    return QString::fromUtf8(QJsonDocument(array).toJson(QJsonDocument::Compact));
+}
+
+QString VpnController::usageScopeProfileId() const
+{
+    const QString scopeId = m_selectedUsageProfileId.trimmed();
+    if (!scopeId.isEmpty()) {
+        return scopeId;
+    }
+
+    QString currentId = m_currentProfileId.trimmed();
+    if (currentId.isEmpty()) {
+        const auto profile = m_profileModel->profileAt(m_currentProfileIndex);
+        if (profile.has_value()) {
+            currentId = profile->id.trimmed();
+        }
+    }
+    return currentId;
+}
+
+bool VpnController::appendRoutingRuleToConfig(
+    QJsonArray *rules,
+    const RoutingRule& rule,
+    const QString& activeProfileId,
+    bool processRoutingAllowed,
+    QString *errorMessage) const
+{
+    if (!rules || !rule.enabled) {
+        return false;
+    }
+    if (!rule.profileId.trimmed().isEmpty()
+        && rule.profileId.compare(activeProfileId.trimmed(), Qt::CaseInsensitive) != 0) {
+        return false;
+    }
+
+    QString outboundTag = QString::fromUtf8("proxy");
+    if (rule.action.compare(QString::fromUtf8("direct"), Qt::CaseInsensitive) == 0) {
+        outboundTag = QString::fromUtf8("direct");
+    } else if (rule.action.compare(QString::fromUtf8("block"), Qt::CaseInsensitive) == 0) {
+        outboundTag = QString::fromUtf8("block");
+    }
+
+    const QString type = rule.targetType.trimmed().toLower();
+    const QString value = rule.targetValue.trimmed();
+    QJsonObject jsonRule {
+        {QString::fromUtf8("type"), QString::fromUtf8("field")},
+        {QString::fromUtf8("outboundTag"), outboundTag},
+        {QString::fromUtf8("ruleTag"), QString::fromUtf8("user-rule:%1").arg(rule.id)}
+    };
+
+    if (type == QString::fromUtf8("domain")) {
+        const QStringList matchers = normalizeRoutingDomainMatchers(value);
+        if (matchers.isEmpty()) {
+            return false;
+        }
+        QJsonArray domains;
+        for (const QString& matcher : matchers) {
+            domains.append(matcher);
+        }
+        jsonRule.insert(QString::fromUtf8("domain"), domains);
+    } else if (type == QString::fromUtf8("ip")) {
+        jsonRule.insert(QString::fromUtf8("ip"), QJsonArray {value});
+    } else if (type == QString::fromUtf8("app") || type == QString::fromUtf8("process")) {
+        if (!processRoutingAllowed) {
+            if (errorMessage) {
+                *errorMessage = QString::fromUtf8("Process routing is unsupported by this runtime/core.");
+            }
+            return false;
+        }
+        QString processRule = value;
+#if defined(Q_OS_WIN)
+        processRule.replace('\\', '/');
+#endif
+
+        QJsonArray processRules;
+        QSet<QString> seenProcessRules;
+        auto appendProcessMatcher = [&processRules, &seenProcessRules](const QString& rawMatcher) {
+            const QString matcher = rawMatcher.trimmed();
+            if (matcher.isEmpty()) {
+                return;
+            }
+            const QString key = matcher.toLower();
+            if (seenProcessRules.contains(key)) {
+                return;
+            }
+            seenProcessRules.insert(key);
+            processRules.append(matcher);
+        };
+
+        appendProcessMatcher(processRule);
+
+        const QString shortName = QFileInfo(processRule).fileName().trimmed();
+        if (!shortName.isEmpty()) {
+            appendProcessMatcher(shortName);
+        }
+
+        if (shortName.endsWith(QString::fromUtf8(".exe"), Qt::CaseInsensitive)) {
+            appendProcessMatcher(shortName.left(shortName.size() - 4));
+        }
+
+        if (!processRule.contains('/') && processRule.contains('.')) {
+            appendProcessMatcher(processRule.section('.', -1));
+        }
+
+        jsonRule.insert(QString::fromUtf8("process"), processRules);
+    } else if (type == QString::fromUtf8("protocol")) {
+        QStringList tokens = value.split(QRegularExpression(QString::fromUtf8("[,\\s]+")), Qt::SkipEmptyParts);
+        for (QString& token : tokens) {
+            token = token.trimmed().toLower();
+        }
+        tokens.removeDuplicates();
+
+        QStringList networkTokens;
+        QJsonArray protocolTokens;
+        for (const QString& token : std::as_const(tokens)) {
+            if (token == QString::fromUtf8("tcp") || token == QString::fromUtf8("udp")) {
+                networkTokens.append(token);
+            } else {
+                protocolTokens.append(token);
+            }
+        }
+
+        if (!networkTokens.isEmpty()) {
+            networkTokens.removeDuplicates();
+            jsonRule.insert(QString::fromUtf8("network"), networkTokens.join(','));
+        }
+        if (!protocolTokens.isEmpty()) {
+            jsonRule.insert(QString::fromUtf8("protocol"), protocolTokens);
+        }
+        if (networkTokens.isEmpty() && protocolTokens.isEmpty()) {
+            return false;
+        }
+    } else {
+        return false;
+    }
+
+    rules->append(jsonRule);
+    return true;
 }
 
 QStringList VpnController::parseRules(const QString& value)
@@ -5868,6 +7380,129 @@ QStringList VpnController::parseRules(const QString& value)
     }
 
     return out;
+}
+
+QString VpnController::normalizeLanSharingMode(const QString& rawMode)
+{
+    const QString mode = rawMode.trimmed().toLower();
+    if (mode == QString::fromUtf8("console")
+        || mode == QString::fromUtf8("game")
+        || mode == QString::fromUtf8("game-console")
+        || mode == QString::fromUtf8("game_console")) {
+        return QString::fromUtf8("console");
+    }
+    if (mode == QString::fromUtf8("tv")
+        || mode == QString::fromUtf8("smart-tv")
+        || mode == QString::fromUtf8("smart_tv")) {
+        return QString::fromUtf8("tv");
+    }
+    if (mode == QString::fromUtf8("mobile")
+        || mode == QString::fromUtf8("phone")
+        || mode == QString::fromUtf8("tablet")) {
+        return QString::fromUtf8("mobile");
+    }
+    if (mode == QString::fromUtf8("laptop")
+        || mode == QString::fromUtf8("browser")
+        || mode == QString::fromUtf8("desktop")) {
+        return QString::fromUtf8("laptop");
+    }
+    if (mode == QString::fromUtf8("advanced")) {
+        return QString::fromUtf8("advanced");
+    }
+    return QString::fromUtf8("console");
+}
+
+QString VpnController::defaultLanBindAddress() const
+{
+    const QVariantList candidates = collectLanHostCandidates();
+    const QString wantedInterface = m_lanSharingInterface.trimmed();
+    for (const QVariant& candidate : candidates) {
+        const QVariantMap item = candidate.toMap();
+        const QString interfaceName = item.value(QString::fromUtf8("interface")).toString().trimmed();
+        const QString address = item.value(QString::fromUtf8("address")).toString().trimmed();
+        if (!wantedInterface.isEmpty()
+            && interfaceName.compare(wantedInterface, Qt::CaseInsensitive) == 0
+            && !address.isEmpty()) {
+            return address;
+        }
+    }
+    for (const QVariant& candidate : candidates) {
+        const QString address = candidate.toMap().value(QString::fromUtf8("address")).toString().trimmed();
+        if (!address.isEmpty()) {
+            return address;
+        }
+    }
+    return QString::fromUtf8("127.0.0.1");
+}
+
+QString VpnController::sanitizedLanBindAddress(const QString& requestedAddress, bool allowAny) const
+{
+    const QString raw = requestedAddress.trimmed();
+    if (allowAny && raw == QString::fromUtf8("0.0.0.0")) {
+        return raw;
+    }
+
+    QHostAddress parsed;
+    if (!parsed.setAddress(raw) || parsed.protocol() != QAbstractSocket::IPv4Protocol) {
+        return defaultLanBindAddress();
+    }
+
+    if (parsed.isLoopback()) {
+        return defaultLanBindAddress();
+    }
+
+    if (!isPrivateLanIpv4Address(parsed)) {
+        return defaultLanBindAddress();
+    }
+
+    return parsed.toString();
+}
+
+void VpnController::applyLanSharingDefaultsForMode(const QString& normalizedMode, bool forceDefaults)
+{
+    const QString mode = normalizeLanSharingMode(normalizedMode);
+    if (!lanSharingSupported()) {
+        m_lanSharingEnabled = false;
+        m_lanSharingAllowAnyBind = false;
+        m_lanSharingBindAddress = QString::fromUtf8("127.0.0.1");
+        return;
+    }
+
+    if (forceDefaults && mode != QString::fromUtf8("advanced")) {
+        m_lanSharingEnabled = true;
+        m_lanSharingAllowAnyBind = false;
+        m_lanSharingBindAddress = sanitizedLanBindAddress(m_lanSharingBindAddress, false);
+        if (m_lanSharingBindAddress.trimmed().isEmpty()
+            || m_lanSharingBindAddress == QString::fromUtf8("127.0.0.1")) {
+            m_lanSharingBindAddress = defaultLanBindAddress();
+        }
+    } else {
+        m_lanSharingBindAddress = sanitizedLanBindAddress(m_lanSharingBindAddress, m_lanSharingAllowAnyBind);
+    }
+
+    if (!m_lanSharingAllowAnyBind && m_lanSharingBindAddress == QString::fromUtf8("0.0.0.0")) {
+        m_lanSharingBindAddress = defaultLanBindAddress();
+    }
+
+    if (m_lanSharingInterface.trimmed().isEmpty()) {
+        const QVariantList candidates = collectLanHostCandidates();
+        for (const QVariant& candidate : candidates) {
+            const QVariantMap item = candidate.toMap();
+            const QString address = item.value(QString::fromUtf8("address")).toString().trimmed();
+            if (address == m_lanSharingBindAddress) {
+                m_lanSharingInterface = item.value(QString::fromUtf8("interface")).toString().trimmed();
+                break;
+            }
+        }
+    }
+}
+
+void VpnController::maybeReconnectForLanSharingChange(const QString& reason)
+{
+    if (m_connectionState != ConnectionState::Connected) {
+        return;
+    }
+    reconnectActiveProfileForRoutingChange(reason);
 }
 
 QString VpnController::normalizeDnsServer(const QString& value)
@@ -5987,6 +7622,22 @@ void VpnController::syncSystemBars(bool darkThemeEnabled)
         static_cast<jboolean>(darkThemeEnabled));
 #else
     Q_UNUSED(darkThemeEnabled);
+#endif
+}
+
+bool VpnController::minimizeToBackground() const
+{
+#if defined(Q_OS_ANDROID)
+    if (!QJniObject::isClassAvailable(kAndroidRuntimeBridgeClass)) {
+        return false;
+    }
+    const jboolean moved = QJniObject::callStaticMethod<jboolean>(
+        kAndroidRuntimeBridgeClass,
+        "moveTaskToBack",
+        "()Z");
+    return moved;
+#else
+    return false;
 #endif
 }
 
@@ -6161,7 +7812,10 @@ void VpnController::recordProfileUsageDelta(const QString& profileId, qint64 rxD
     profiles.insert(id, usage);
     m_profileUsageRoot.insert(QString::fromUtf8("profiles"), profiles);
     scheduleProfileUsageSave();
-    if (id.compare(m_currentProfileId.trimmed(), Qt::CaseInsensitive) == 0) {
+    const QString selectedUsageId = m_selectedUsageProfileId.trimmed();
+    if (selectedUsageId.isEmpty()
+        || id.compare(selectedUsageId, Qt::CaseInsensitive) == 0
+        || id.compare(m_currentProfileId.trimmed(), Qt::CaseInsensitive) == 0) {
         emit profileUsageChanged();
     }
 }
@@ -6227,7 +7881,10 @@ void VpnController::endProfileUsageSession(const QString& profileId)
     profiles.insert(activeId, usage);
     m_profileUsageRoot.insert(QString::fromUtf8("profiles"), profiles);
     scheduleProfileUsageSave();
-    if (activeId.compare(m_currentProfileId.trimmed(), Qt::CaseInsensitive) == 0) {
+    const QString selectedUsageId = m_selectedUsageProfileId.trimmed();
+    if (selectedUsageId.isEmpty()
+        || activeId.compare(selectedUsageId, Qt::CaseInsensitive) == 0
+        || activeId.compare(m_currentProfileId.trimmed(), Qt::CaseInsensitive) == 0) {
         emit profileUsageChanged();
     }
 
@@ -6270,6 +7927,8 @@ QVariantMap VpnController::profileUsageSummaryForId(const QString& profileId) co
     auto insertPeriod = [&out, this](const QString& name, qint64 rx, qint64 tx) {
         out.insert(name + QString::fromUtf8("RxBytes"), rx);
         out.insert(name + QString::fromUtf8("TxBytes"), tx);
+        out.insert(name + QString::fromUtf8("RxText"), formatBytes(rx));
+        out.insert(name + QString::fromUtf8("TxText"), formatBytes(tx));
         out.insert(name + QString::fromUtf8("TotalBytes"), rx + tx);
         out.insert(name + QString::fromUtf8("Text"), formatBytes(rx + tx));
     };
@@ -6280,6 +7939,8 @@ QVariantMap VpnController::profileUsageSummaryForId(const QString& profileId) co
     insertPeriod(QString::fromUtf8("month"), month.first, month.second);
     out.insert(QString::fromUtf8("totalRxBytes"), totalRx);
     out.insert(QString::fromUtf8("totalTxBytes"), totalTx);
+    out.insert(QString::fromUtf8("totalRxText"), formatBytes(totalRx));
+    out.insert(QString::fromUtf8("totalTxText"), formatBytes(totalTx));
     out.insert(QString::fromUtf8("totalBytes"), totalRx + totalTx);
     out.insert(QString::fromUtf8("totalText"), formatBytes(totalRx + totalTx));
     out.insert(QString::fromUtf8("updatedAt"),
@@ -6444,6 +8105,92 @@ QVariantMap VpnController::currentProfileUsageSummary() const
     return profileUsageSummaryForId(id);
 }
 
+QVariantMap VpnController::usageSummaryForProfile(const QString& profileId) const
+{
+    const QString id = profileId.trimmed();
+    if (!id.isEmpty()) {
+        return profileUsageSummaryForId(id);
+    }
+    return globalUsageSummary();
+}
+
+QVariantMap VpnController::globalUsageSummary() const
+{
+    QVariantMap out;
+    const QJsonObject profiles = m_profileUsageRoot.value(QString::fromUtf8("profiles")).toObject();
+    if (profiles.isEmpty()) {
+        return out;
+    }
+
+    const QDateTime now = QDateTime::currentDateTimeUtc();
+    const QString hourKey = usageHourBucketKey(now);
+    const QString dayKey = usageDayBucketKey(now);
+    const QString weekKey = usageWeekBucketKey(now);
+    const QString monthKey = usageMonthBucketKey(now);
+
+    auto bucketSum = [](const QJsonObject& usage, const QString& bucket, const QString& key) -> QPair<qint64, qint64> {
+        const QJsonObject entry = usage.value(bucket).toObject().value(key).toObject();
+        return {
+            entry.value(QString::fromUtf8("rx")).toVariant().toLongLong(),
+            entry.value(QString::fromUtf8("tx")).toVariant().toLongLong()
+        };
+    };
+
+    qint64 totalRx = 0;
+    qint64 totalTx = 0;
+    qint64 hourRx = 0;
+    qint64 hourTx = 0;
+    qint64 dayRx = 0;
+    qint64 dayTx = 0;
+    qint64 weekRx = 0;
+    qint64 weekTx = 0;
+    qint64 monthRx = 0;
+    qint64 monthTx = 0;
+    qint64 updatedAt = 0;
+
+    for (auto it = profiles.constBegin(); it != profiles.constEnd(); ++it) {
+        const QJsonObject usage = it.value().toObject();
+        totalRx += usage.value(QString::fromUtf8("totalRx")).toVariant().toLongLong();
+        totalTx += usage.value(QString::fromUtf8("totalTx")).toVariant().toLongLong();
+
+        const auto hour = bucketSum(usage, QString::fromUtf8("hour"), hourKey);
+        const auto day = bucketSum(usage, QString::fromUtf8("day"), dayKey);
+        const auto week = bucketSum(usage, QString::fromUtf8("week"), weekKey);
+        const auto month = bucketSum(usage, QString::fromUtf8("month"), monthKey);
+        hourRx += hour.first;
+        hourTx += hour.second;
+        dayRx += day.first;
+        dayTx += day.second;
+        weekRx += week.first;
+        weekTx += week.second;
+        monthRx += month.first;
+        monthTx += month.second;
+        updatedAt = qMax(updatedAt, usage.value(QString::fromUtf8("updatedAt")).toVariant().toLongLong());
+    }
+
+    auto insertPeriod = [&out, this](const QString& prefix, qint64 rx, qint64 tx) {
+        out.insert(prefix + QString::fromUtf8("RxBytes"), rx);
+        out.insert(prefix + QString::fromUtf8("TxBytes"), tx);
+        out.insert(prefix + QString::fromUtf8("RxText"), formatBytes(rx));
+        out.insert(prefix + QString::fromUtf8("TxText"), formatBytes(tx));
+        out.insert(prefix + QString::fromUtf8("TotalBytes"), rx + tx);
+        out.insert(prefix + QString::fromUtf8("Text"), formatBytes(rx + tx));
+    };
+
+    insertPeriod(QString::fromUtf8("hour"), hourRx, hourTx);
+    insertPeriod(QString::fromUtf8("day"), dayRx, dayTx);
+    insertPeriod(QString::fromUtf8("week"), weekRx, weekTx);
+    insertPeriod(QString::fromUtf8("month"), monthRx, monthTx);
+    out.insert(QString::fromUtf8("totalRxBytes"), totalRx);
+    out.insert(QString::fromUtf8("totalTxBytes"), totalTx);
+    out.insert(QString::fromUtf8("totalRxText"), formatBytes(totalRx));
+    out.insert(QString::fromUtf8("totalTxText"), formatBytes(totalTx));
+    out.insert(QString::fromUtf8("totalBytes"), totalRx + totalTx);
+    out.insert(QString::fromUtf8("totalText"), formatBytes(totalRx + totalTx));
+    out.insert(QString::fromUtf8("updatedAt"), updatedAt);
+    return out;
+}
+
 QVariantList VpnController::currentProfileUsageHistory(const QString& period, int limit) const
 {
     QString id = m_currentProfileId.trimmed();
@@ -6454,6 +8201,64 @@ QVariantList VpnController::currentProfileUsageHistory(const QString& period, in
         }
     }
     return profileUsageHistoryForId(id, period, limit);
+}
+
+QVariantList VpnController::usageHistoryForProfile(const QString& profileId, const QString& period, int limit) const
+{
+    const QString id = profileId.trimmed();
+    if (!id.isEmpty()) {
+        return profileUsageHistoryForId(id, period, limit);
+    }
+
+    QVariantList out;
+    const QString p = period.trimmed().toLower();
+    QString bucket = QString::fromUtf8("day");
+    if (p == QString::fromUtf8("hour")
+        || p == QString::fromUtf8("day")
+        || p == QString::fromUtf8("week")
+        || p == QString::fromUtf8("month")) {
+        bucket = p;
+    }
+
+    const QJsonObject profiles = m_profileUsageRoot.value(QString::fromUtf8("profiles")).toObject();
+    if (profiles.isEmpty()) {
+        return out;
+    }
+
+    QMap<QString, QPair<qint64, qint64>> merged;
+    for (auto it = profiles.constBegin(); it != profiles.constEnd(); ++it) {
+        const QJsonObject entries = it.value().toObject().value(bucket).toObject();
+        for (auto keyIt = entries.constBegin(); keyIt != entries.constEnd(); ++keyIt) {
+            const QJsonObject row = keyIt.value().toObject();
+            const qint64 rx = row.value(QString::fromUtf8("rx")).toVariant().toLongLong();
+            const qint64 tx = row.value(QString::fromUtf8("tx")).toVariant().toLongLong();
+            const auto previous = merged.value(keyIt.key());
+            merged.insert(keyIt.key(), {previous.first + rx, previous.second + tx});
+        }
+    }
+
+    QStringList keys = merged.keys();
+    std::sort(keys.begin(), keys.end(), std::greater<QString>());
+    const int safeLimit = qBound(1, limit, 500);
+    const int count = qMin(safeLimit, keys.size());
+    out.reserve(count);
+    for (int i = 0; i < count; ++i) {
+        const QString key = keys.at(i);
+        const auto value = merged.value(key);
+        const qint64 rx = value.first;
+        const qint64 tx = value.second;
+        QVariantMap row;
+        row.insert(QString::fromUtf8("bucket"), bucket);
+        row.insert(QString::fromUtf8("key"), key);
+        row.insert(QString::fromUtf8("rxBytes"), rx);
+        row.insert(QString::fromUtf8("txBytes"), tx);
+        row.insert(QString::fromUtf8("totalBytes"), rx + tx);
+        row.insert(QString::fromUtf8("rxText"), formatBytes(rx));
+        row.insert(QString::fromUtf8("txText"), formatBytes(tx));
+        row.insert(QString::fromUtf8("totalText"), formatBytes(rx + tx));
+        out.append(row);
+    }
+    return out;
 }
 
 QVariantList VpnController::currentProfileUsageSessions(int limit) const
@@ -6468,15 +8273,70 @@ QVariantList VpnController::currentProfileUsageSessions(int limit) const
     return profileUsageSessionsForId(id, limit);
 }
 
-void VpnController::clearCurrentProfileUsage()
+QVariantList VpnController::usageSessionsForProfile(const QString& profileId, int limit) const
 {
-    QString id = m_currentProfileId.trimmed();
-    if (id.isEmpty()) {
-        const auto profile = m_profileModel->profileAt(m_currentProfileIndex);
-        if (profile.has_value()) {
-            id = profile->id.trimmed();
+    const QString id = profileId.trimmed();
+    if (!id.isEmpty()) {
+        return profileUsageSessionsForId(id, limit);
+    }
+
+    QVariantList out;
+    const QJsonObject profiles = m_profileUsageRoot.value(QString::fromUtf8("profiles")).toObject();
+    if (profiles.isEmpty()) {
+        return out;
+    }
+
+    QList<QVariantMap> mergedRows;
+    for (auto it = profiles.constBegin(); it != profiles.constEnd(); ++it) {
+        const QJsonArray sessions = it.value().toObject().value(QString::fromUtf8("sessions")).toArray();
+        for (const QJsonValue& value : sessions) {
+            const QJsonObject rowObj = value.toObject();
+            const qint64 startedAt = rowObj.value(QString::fromUtf8("startedAt")).toVariant().toLongLong();
+            const qint64 endedAt = rowObj.value(QString::fromUtf8("endedAt")).toVariant().toLongLong();
+            const qint64 rx = rowObj.value(QString::fromUtf8("rx")).toVariant().toLongLong();
+            const qint64 tx = rowObj.value(QString::fromUtf8("tx")).toVariant().toLongLong();
+            const qint64 total = rowObj.value(QString::fromUtf8("total")).toVariant().toLongLong();
+
+            QVariantMap row;
+            row.insert(QString::fromUtf8("startedAtMs"), startedAt);
+            row.insert(QString::fromUtf8("endedAtMs"), endedAt);
+            row.insert(
+                QString::fromUtf8("startedAt"),
+                QDateTime::fromMSecsSinceEpoch(startedAt, QTimeZone::UTC)
+                    .toLocalTime()
+                    .toString(QString::fromUtf8("yyyy-MM-dd HH:mm")));
+            row.insert(
+                QString::fromUtf8("endedAt"),
+                QDateTime::fromMSecsSinceEpoch(endedAt, QTimeZone::UTC)
+                    .toLocalTime()
+                    .toString(QString::fromUtf8("yyyy-MM-dd HH:mm")));
+            row.insert(QString::fromUtf8("rxBytes"), rx);
+            row.insert(QString::fromUtf8("txBytes"), tx);
+            row.insert(QString::fromUtf8("totalBytes"), total);
+            row.insert(QString::fromUtf8("rxText"), formatBytes(rx));
+            row.insert(QString::fromUtf8("txText"), formatBytes(tx));
+            row.insert(QString::fromUtf8("totalText"), formatBytes(total));
+            mergedRows.append(row);
         }
     }
+
+    std::sort(mergedRows.begin(), mergedRows.end(), [](const QVariantMap& a, const QVariantMap& b) {
+        return a.value(QString::fromUtf8("endedAtMs")).toLongLong()
+               > b.value(QString::fromUtf8("endedAtMs")).toLongLong();
+    });
+
+    const int safeLimit = qBound(1, limit, 500);
+    const int count = qMin(safeLimit, mergedRows.size());
+    out.reserve(count);
+    for (int i = 0; i < count; ++i) {
+        out.append(mergedRows.at(i));
+    }
+    return out;
+}
+
+void VpnController::clearCurrentProfileUsage()
+{
+    const QString id = usageScopeProfileId();
     if (id.isEmpty()) {
         return;
     }
@@ -6507,54 +8367,387 @@ void VpnController::clearAllProfileUsage()
     emit profileUsageChanged();
 }
 
+QString VpnController::createRoutingRule(
+    const QString& targetType,
+    const QString& targetValue,
+    const QString& action,
+    const QString& profileId,
+    bool enabled)
+{
+    const QVariantMap validation = validateRoutingRuleData(targetType, targetValue, action, profileId, true);
+    if (!validation.value(QString::fromUtf8("ok")).toBool()) {
+        setLastError(validation.value(QString::fromUtf8("error")).toString());
+        return QString();
+    }
+
+    RoutingRule candidate;
+    candidate.id = QUuid::createUuid().toString(QUuid::WithoutBraces);
+    candidate.targetType = validation.value(QString::fromUtf8("type")).toString();
+    candidate.targetValue = validation.value(QString::fromUtf8("value")).toString();
+    candidate.action = validation.value(QString::fromUtf8("action")).toString();
+    candidate.profileId = validation.value(QString::fromUtf8("profileId")).toString();
+    candidate.enabled = enabled;
+
+    for (const RoutingRule& existing : m_routingRules) {
+        bool sameValue = false;
+        const QString type = candidate.targetType.trimmed().toLower();
+        if (type == QString::fromUtf8("domain")
+            || type == QString::fromUtf8("ip")
+            || type == QString::fromUtf8("protocol")) {
+            sameValue = existing.targetValue.compare(candidate.targetValue, Qt::CaseInsensitive) == 0;
+        } else {
+#if defined(Q_OS_WIN)
+            sameValue = existing.targetValue.compare(candidate.targetValue, Qt::CaseInsensitive) == 0;
+#else
+            sameValue = existing.targetValue == candidate.targetValue;
+#endif
+        }
+        if (existing.targetType == candidate.targetType
+            && sameValue
+            && existing.action == candidate.action
+            && existing.profileId.compare(candidate.profileId, Qt::CaseInsensitive) == 0) {
+            return existing.id;
+        }
+    }
+
+    QList<RoutingRule> nextRules = m_routingRules;
+    nextRules.append(candidate);
+    setRoutingRules(nextRules, true, true, true);
+    setLastError(QString());
+    return candidate.id;
+}
+
+bool VpnController::updateRoutingRule(
+    const QString& id,
+    const QString& targetType,
+    const QString& targetValue,
+    const QString& action,
+    const QString& profileId,
+    bool enabled)
+{
+    const QString ruleId = id.trimmed();
+    if (ruleId.isEmpty()) {
+        setLastError(QString::fromUtf8("Routing rule id is missing."));
+        return false;
+    }
+
+    int row = -1;
+    for (int i = 0; i < m_routingRules.size(); ++i) {
+        if (m_routingRules.at(i).id == ruleId) {
+            row = i;
+            break;
+        }
+    }
+    if (row < 0) {
+        setLastError(QString::fromUtf8("Routing rule no longer exists."));
+        return false;
+    }
+
+    const QVariantMap validation = validateRoutingRuleData(targetType, targetValue, action, profileId, true);
+    if (!validation.value(QString::fromUtf8("ok")).toBool()) {
+        setLastError(validation.value(QString::fromUtf8("error")).toString());
+        return false;
+    }
+
+    QList<RoutingRule> nextRules = m_routingRules;
+    RoutingRule& rule = nextRules[row];
+    rule.targetType = validation.value(QString::fromUtf8("type")).toString();
+    rule.targetValue = validation.value(QString::fromUtf8("value")).toString();
+    rule.action = validation.value(QString::fromUtf8("action")).toString();
+    rule.profileId = validation.value(QString::fromUtf8("profileId")).toString();
+    rule.enabled = enabled;
+    setRoutingRules(nextRules, true, true, true);
+    setLastError(QString());
+    return true;
+}
+
+bool VpnController::removeRoutingRule(const QString& id)
+{
+    const QString ruleId = id.trimmed();
+    if (ruleId.isEmpty()) {
+        return false;
+    }
+
+    QList<RoutingRule> nextRules;
+    nextRules.reserve(m_routingRules.size());
+    bool removed = false;
+    for (const RoutingRule& rule : m_routingRules) {
+        if (!removed && rule.id == ruleId) {
+            removed = true;
+            continue;
+        }
+        nextRules.append(rule);
+    }
+    if (!removed) {
+        return false;
+    }
+    setRoutingRules(nextRules, true, true, true);
+    return true;
+}
+
+bool VpnController::duplicateRoutingRule(const QString& id)
+{
+    const QString ruleId = id.trimmed();
+    if (ruleId.isEmpty()) {
+        return false;
+    }
+    int index = -1;
+    for (int i = 0; i < m_routingRules.size(); ++i) {
+        if (m_routingRules.at(i).id == ruleId) {
+            index = i;
+            break;
+        }
+    }
+    if (index < 0) {
+        return false;
+    }
+
+    RoutingRule cloned = m_routingRules.at(index);
+    cloned.id = QUuid::createUuid().toString(QUuid::WithoutBraces);
+
+    QList<RoutingRule> nextRules = m_routingRules;
+    nextRules.insert(index + 1, cloned);
+    setRoutingRules(nextRules, true, true, true);
+    return true;
+}
+
+bool VpnController::moveRoutingRule(const QString& id, int newIndex)
+{
+    const QString ruleId = id.trimmed();
+    if (ruleId.isEmpty() || m_routingRules.isEmpty()) {
+        return false;
+    }
+
+    int oldIndex = -1;
+    for (int i = 0; i < m_routingRules.size(); ++i) {
+        if (m_routingRules.at(i).id == ruleId) {
+            oldIndex = i;
+            break;
+        }
+    }
+    if (oldIndex < 0) {
+        return false;
+    }
+
+    const int boundedIndex = qBound(0, newIndex, m_routingRules.size() - 1);
+    if (boundedIndex == oldIndex) {
+        return true;
+    }
+
+    QList<RoutingRule> nextRules = m_routingRules;
+    const RoutingRule rule = nextRules.takeAt(oldIndex);
+    nextRules.insert(boundedIndex, rule);
+    setRoutingRules(nextRules, true, true, true);
+    return true;
+}
+
+bool VpnController::setRoutingRuleEnabled(const QString& id, bool enabled)
+{
+    const QString ruleId = id.trimmed();
+    if (ruleId.isEmpty()) {
+        return false;
+    }
+
+    QList<RoutingRule> nextRules = m_routingRules;
+    for (RoutingRule& rule : nextRules) {
+        if (rule.id == ruleId) {
+            if (rule.enabled == enabled) {
+                return true;
+            }
+            rule.enabled = enabled;
+            setRoutingRules(nextRules, true, true, true);
+            return true;
+        }
+    }
+    return false;
+}
+
+bool VpnController::clearRoutingRules()
+{
+    if (m_routingRules.isEmpty()) {
+        return false;
+    }
+    setRoutingRules({}, true, true, true);
+    return true;
+}
+
+QString VpnController::exportProfile(int row) const
+{
+    const auto profile = m_profileModel->profileAt(row);
+    if (!profile.has_value()) {
+        return QString();
+    }
+    return QString::fromUtf8(QJsonDocument(profile->toJson()).toJson(QJsonDocument::Indented));
+}
+
+QString VpnController::exportProfiles(const QVariantList& rows) const
+{
+    QSet<int> uniqueRows;
+    for (const QVariant& value : rows) {
+        bool ok = false;
+        const int row = value.toInt(&ok);
+        if (ok) {
+            uniqueRows.insert(row);
+        }
+    }
+
+    QJsonArray exported;
+    if (uniqueRows.isEmpty()) {
+        for (const ServerProfile& profile : m_profileModel->profiles()) {
+            exported.append(profile.toJson());
+        }
+    } else {
+        QList<int> sortedRows = uniqueRows.values();
+        std::sort(sortedRows.begin(), sortedRows.end());
+        for (int row : sortedRows) {
+            const auto profile = m_profileModel->profileAt(row);
+            if (profile.has_value()) {
+                exported.append(profile->toJson());
+            }
+        }
+    }
+
+    QJsonObject payload;
+    payload.insert(QString::fromUtf8("format"), QString::fromUtf8("genyconnect-profiles"));
+    payload.insert(QString::fromUtf8("version"), 1);
+    payload.insert(QString::fromUtf8("exportedAt"), QDateTime::currentDateTimeUtc().toMSecsSinceEpoch());
+    payload.insert(QString::fromUtf8("profiles"), exported);
+    return QString::fromUtf8(QJsonDocument(payload).toJson(QJsonDocument::Indented));
+}
+
 QVariantList VpnController::availableAppRuleItems() const
 {
-    QVariantList out;
-    QSet<QString> seen;
+    return m_cachedAppRuleItems;
+}
 
-    auto appendName = [&out, &seen](const QString& rawName, const QString& source) {
-        QString name = rawName.trimmed();
-        if (name.isEmpty()) {
+void VpnController::requestAvailableAppRuleItems()
+{
+    if (m_runtimeIsDesktop && m_runtimeSupportsPerAppRouting && !m_processRoutingSupportChecked) {
+        // Avoid synchronous version probes on every Routing screen open.
+        // We refresh support state at startup and when xray path changes.
+        detectProcessRoutingSupport();
+    }
+
+    if (!m_runtimeIsDesktop || !m_runtimeSupportsPerAppRouting) {
+        if (!m_cachedAppRuleItems.isEmpty()) {
+            m_cachedAppRuleItems.clear();
+        }
+        emit availableAppRuleItemsReady(QVariantList {});
+        return;
+    }
+
+    const quint64 requestId = m_appRuleScanRequestId.fetch_add(1) + 1;
+    if (m_appRuleScanInFlight.exchange(true)) {
+        return;
+    }
+
+    const QPointer<VpnController> guard(this);
+    [[maybe_unused]] auto appScanFuture = QtConcurrent::run([guard, requestId]() {
+        QVariantList discovered;
+        if (guard) {
+            discovered = guard->collectAvailableAppRuleItems();
+        }
+        if (!guard) {
             return;
         }
-        if (name.contains('/')) {
-            name = QFileInfo(name).fileName().trimmed();
-        }
-        if (name.endsWith(QString::fromUtf8(".app"), Qt::CaseInsensitive)) {
-            name.chop(4);
-        }
-        if (name.isEmpty()) {
+
+        QMetaObject::invokeMethod(guard.data(), [guard, requestId, discovered]() {
+            if (!guard) {
+                return;
+            }
+
+            guard->m_appRuleScanInFlight.store(false);
+            const quint64 latestRequestId = guard->m_appRuleScanRequestId.load();
+            if (requestId < latestRequestId) {
+                guard->requestAvailableAppRuleItems();
+                return;
+            }
+
+            guard->m_cachedAppRuleItems = discovered;
+            emit guard->availableAppRuleItemsReady(guard->m_cachedAppRuleItems);
+        }, Qt::QueuedConnection);
+    });
+}
+
+QVariantList VpnController::collectAvailableAppRuleItems() const
+{
+    QVariantList out;
+
+#if defined(Q_OS_IOS)
+    return out;
+#else
+    if (!m_runtimeIsDesktop || !m_runtimeSupportsPerAppRouting) {
+        return out;
+    }
+
+    QSet<QString> seen;
+    auto appendEntry = [&out, &seen](const QString& rawDisplayName,
+                                     const QString& rawRuleTarget,
+                                     const QString& source,
+                                     const QString& bundleId = QString()) {
+        QString displayName = rawDisplayName.trimmed();
+        QString ruleTarget = rawRuleTarget.trimmed();
+        if (displayName.isEmpty() && ruleTarget.isEmpty()) {
             return;
         }
-        const QString key = name.toLower();
+        if (displayName.isEmpty()) {
+            displayName = QFileInfo(ruleTarget).completeBaseName().trimmed();
+            if (displayName.isEmpty()) {
+                displayName = QFileInfo(ruleTarget).fileName().trimmed();
+            }
+        }
+        if (displayName.endsWith(QString::fromUtf8(".app"), Qt::CaseInsensitive)) {
+            displayName.chop(4);
+        }
+        if (displayName.isEmpty()) {
+            return;
+        }
+        if (ruleTarget.isEmpty()) {
+            ruleTarget = displayName;
+        }
+#if defined(Q_OS_WIN)
+        ruleTarget.replace('\\', '/');
+#endif
+        const QString key = (ruleTarget + QString::fromUtf8("::") + displayName).toLower();
         if (seen.contains(key)) {
             return;
         }
-        if (key == QString::fromUtf8("kernel_task")
-            || key == QString::fromUtf8("launchd")
-            || key == QString::fromUtf8("system")
-            || key == QString::fromUtf8("idle")
-            || key == QString::fromUtf8("windowserver")) {
+
+        const QString displayLower = displayName.toLower();
+        if (displayLower == QString::fromUtf8("kernel_task")
+            || displayLower == QString::fromUtf8("launchd")
+            || displayLower == QString::fromUtf8("system")
+            || displayLower == QString::fromUtf8("idle")
+            || displayLower == QString::fromUtf8("windowserver")) {
             return;
         }
+
         seen.insert(key);
         QVariantMap item;
-        item.insert(QString::fromUtf8("process"), name);
+        item.insert(QString::fromUtf8("process"), displayName);
         item.insert(QString::fromUtf8("source"), source);
+        item.insert(QString::fromUtf8("ruleTarget"), ruleTarget);
+        if (!bundleId.trimmed().isEmpty()) {
+            item.insert(QString::fromUtf8("bundleId"), bundleId.trimmed());
+        }
         out.append(item);
     };
 
+    // Running processes provide immediate high-signal candidates.
     QProcess process;
 #if defined(Q_OS_WIN)
-    process.start(QString::fromUtf8("tasklist"), {QString::fromUtf8("/FO"), QString::fromUtf8("CSV"), QString::fromUtf8("/NH")});
+    process.start(QString::fromUtf8("tasklist"),
+                  {QString::fromUtf8("/FO"), QString::fromUtf8("CSV"), QString::fromUtf8("/NH")});
 #elif defined(Q_OS_MACOS)
-    process.start(QString::fromUtf8("/bin/ps"), {QString::fromUtf8("-axo"), QString::fromUtf8("comm=")});
+    process.start(QString::fromUtf8("/bin/ps"),
+                  {QString::fromUtf8("-axo"), QString::fromUtf8("comm=")});
 #else
-    process.start(QString::fromUtf8("ps"), {QString::fromUtf8("-eo"), QString::fromUtf8("comm=")});
+    process.start(QString::fromUtf8("ps"),
+                  {QString::fromUtf8("-eo"), QString::fromUtf8("comm=")});
 #endif
     if (process.waitForStarted(1500) && process.waitForFinished(4000)) {
-        const QString output = QString::fromUtf8(process.readAllStandardOutput());
-        const QStringList lines = output.split(QRegularExpression(QString::fromUtf8("[\\r\\n]+")), Qt::SkipEmptyParts);
+        const QStringList lines = QString::fromUtf8(process.readAllStandardOutput()).split(
+            QRegularExpression(QString::fromUtf8("[\\r\\n]+")), Qt::SkipEmptyParts);
         for (const QString& line : lines) {
 #if defined(Q_OS_WIN)
             QString trimmed = line.trimmed();
@@ -6567,21 +8760,191 @@ QVariantList VpnController::availableAppRuleItems() const
                 continue;
             }
             const QString imageName = trimmed.left(quoteIndex).trimmed();
-            appendName(imageName, QString::fromUtf8("tasklist"));
+            appendEntry(imageName, imageName, QString::fromUtf8("running"));
 #else
-            appendName(line, QString::fromUtf8("ps"));
+            const QString executablePath = line.trimmed();
+            const QString display = QFileInfo(executablePath).fileName().trimmed();
+            appendEntry(display, executablePath, QString::fromUtf8("running"));
 #endif
-            if (out.size() >= 240) {
+            if (out.size() >= 260) {
                 break;
             }
         }
     }
 
+#if defined(Q_OS_MACOS)
+    const QStringList macAppDirs {
+        QString::fromUtf8("/Applications"),
+        QString::fromUtf8("/Applications/Utilities"),
+        QDir::home().filePath(QString::fromUtf8("Applications"))
+    };
+    int macAdded = 0;
+    for (const QString& appDirPath : macAppDirs) {
+        QDir appDir(appDirPath);
+        if (!appDir.exists()) {
+            continue;
+        }
+        const QFileInfoList bundles = appDir.entryInfoList(
+            QStringList() << QString::fromUtf8("*.app"),
+            QDir::Dirs | QDir::NoDotAndDotDot,
+            QDir::Name | QDir::IgnoreCase);
+        for (const QFileInfo& bundleInfo : bundles) {
+            if (macAdded >= 220) {
+                break;
+            }
+            const QString bundlePath = bundleInfo.absoluteFilePath();
+            const QString displayName = bundleInfo.completeBaseName();
+            const QString plistPath = bundlePath + QString::fromUtf8("/Contents/Info.plist");
+            QSettings plist(plistPath, QSettings::NativeFormat);
+            const QString bundleId = plist.value(QString::fromUtf8("CFBundleIdentifier")).toString().trimmed();
+            QString executableName = plist.value(QString::fromUtf8("CFBundleExecutable")).toString().trimmed();
+            if (executableName.isEmpty()) {
+                executableName = displayName;
+            }
+            QString executablePath = bundlePath + QString::fromUtf8("/Contents/MacOS/") + executableName;
+            if (!QFileInfo::exists(executablePath)) {
+                executablePath = executableName;
+            }
+            appendEntry(displayName, executablePath, QString::fromUtf8("installed-app"), bundleId);
+            ++macAdded;
+        }
+    }
+#elif defined(Q_OS_WIN)
+    auto parsePipePairs = [&appendEntry](const QString& output, const QString& sourceTag) {
+        const QStringList lines = output.split(QRegularExpression(QString::fromUtf8("[\\r\\n]+")), Qt::SkipEmptyParts);
+        for (const QString& rawLine : lines) {
+            const QString line = rawLine.trimmed();
+            const int sep = line.indexOf('|');
+            if (sep <= 0) {
+                continue;
+            }
+            const QString left = line.left(sep).trimmed();
+            QString right = line.mid(sep + 1).trimmed();
+            if (right.startsWith('\"') && right.endsWith('\"') && right.size() > 1) {
+                right = right.mid(1, right.size() - 2);
+            }
+            if (right.contains(QString::fromUtf8(",0"))) {
+                right = right.left(right.lastIndexOf(',')).trimmed();
+            }
+            appendEntry(left, right, sourceTag);
+        }
+    };
+
+    QProcess startMenuProbe;
+    startMenuProbe.start(QString::fromUtf8("powershell"),
+                         {
+                             QString::fromUtf8("-NoProfile"),
+                             QString::fromUtf8("-Command"),
+                             QString::fromUtf8(
+                                 "$paths=@($env:APPDATA+'\\Microsoft\\Windows\\Start Menu\\Programs',$env:ProgramData+'\\Microsoft\\Windows\\Start Menu\\Programs');"
+                                 "$w=New-Object -ComObject WScript.Shell;"
+                                 "Get-ChildItem $paths -Recurse -Filter *.lnk -ErrorAction SilentlyContinue | "
+                                 "ForEach-Object { try { $s=$w.CreateShortcut($_.FullName); if($s.TargetPath){ Write-Output ($_.BaseName + '|' + $s.TargetPath) } } catch {} }")
+                         });
+    if (startMenuProbe.waitForStarted(1800) && startMenuProbe.waitForFinished(9000)) {
+        parsePipePairs(QString::fromUtf8(startMenuProbe.readAllStandardOutput()), QString::fromUtf8("start-menu"));
+    }
+
+    QProcess registryProbe;
+    registryProbe.start(QString::fromUtf8("powershell"),
+                        {
+                            QString::fromUtf8("-NoProfile"),
+                            QString::fromUtf8("-Command"),
+                            QString::fromUtf8(
+                                "$roots='HKLM:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall',"
+                                "'HKLM:\\Software\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall',"
+                                "'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall';"
+                                "foreach($r in $roots){Get-ChildItem $r -ErrorAction SilentlyContinue | "
+                                "ForEach-Object { $p=Get-ItemProperty $_.PSPath -ErrorAction SilentlyContinue; "
+                                "if($p.DisplayName){$icon=$p.DisplayIcon; if($icon){$icon=$icon -replace ',\\d+$','';}; "
+                                "Write-Output ($p.DisplayName + '|' + $icon) }}}")
+                        });
+    if (registryProbe.waitForStarted(1800) && registryProbe.waitForFinished(9000)) {
+        parsePipePairs(QString::fromUtf8(registryProbe.readAllStandardOutput()), QString::fromUtf8("registry"));
+    }
+
+    const QStringList installRoots {
+        qEnvironmentVariable("ProgramFiles"),
+        qEnvironmentVariable("ProgramFiles(x86)")
+    };
+    int exeCount = 0;
+    for (const QString& rootPath : installRoots) {
+        if (rootPath.trimmed().isEmpty()) {
+            continue;
+        }
+        QDirIterator it(rootPath,
+                        QStringList() << QString::fromUtf8("*.exe"),
+                        QDir::Files | QDir::NoDotAndDotDot,
+                        QDirIterator::Subdirectories);
+        while (it.hasNext() && exeCount < 240) {
+            const QString exePath = it.next();
+            const QFileInfo info(exePath);
+            if (info.fileName().startsWith(QString::fromUtf8("unins"), Qt::CaseInsensitive)) {
+                continue;
+            }
+            appendEntry(info.completeBaseName(), exePath, QString::fromUtf8("install-path"));
+            ++exeCount;
+        }
+    }
+#else
+    const QStringList desktopDirs {
+        QString::fromUtf8("/usr/share/applications"),
+        QString::fromUtf8("/usr/local/share/applications"),
+        QDir::home().filePath(QString::fromUtf8(".local/share/applications"))
+    };
+    int desktopCount = 0;
+    for (const QString& dirPath : desktopDirs) {
+        QDir dir(dirPath);
+        if (!dir.exists()) {
+            continue;
+        }
+        QDirIterator it(dirPath,
+                        QStringList() << QString::fromUtf8("*.desktop"),
+                        QDir::Files | QDir::NoDotAndDotDot,
+                        QDirIterator::Subdirectories);
+        while (it.hasNext() && desktopCount < 240) {
+            const QString filePath = it.next();
+            QFile file(filePath);
+            if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+                continue;
+            }
+            QString name;
+            QString exec;
+            while (!file.atEnd()) {
+                const QString line = QString::fromUtf8(file.readLine()).trimmed();
+                if (line.startsWith(QString::fromUtf8("Name="))) {
+                    name = line.mid(5).trimmed();
+                } else if (line.startsWith(QString::fromUtf8("Exec="))) {
+                    exec = line.mid(5).trimmed();
+                } else if (line.startsWith(QString::fromUtf8("NoDisplay=true"), Qt::CaseInsensitive)) {
+                    name.clear();
+                    exec.clear();
+                    break;
+                }
+            }
+            if (name.isEmpty() || exec.isEmpty()) {
+                continue;
+            }
+            exec.remove(QRegularExpression(QString::fromUtf8("\\s+%[a-zA-Z]")));
+            const QString executable = exec.split(QRegularExpression(QString::fromUtf8("\\s+")),
+                                                  Qt::SkipEmptyParts).value(0).trimmed();
+            appendEntry(name, executable, QString::fromUtf8("desktop-file"));
+            ++desktopCount;
+        }
+    }
+#endif
+
     std::sort(out.begin(), out.end(), [](const QVariant& a, const QVariant& b) {
         return a.toMap().value(QString::fromUtf8("process")).toString().toLower()
-               < b.toMap().value(QString::fromUtf8("process")).toString().toLower();
+            < b.toMap().value(QString::fromUtf8("process")).toString().toLower();
     });
+
+    if (out.size() > 400) {
+        out.erase(out.begin() + 400, out.end());
+    }
+
     return out;
+#endif
 }
 
 void VpnController::appendAppRule(const QString& target, const QString& process)
@@ -6597,54 +8960,98 @@ void VpnController::appendAppRule(const QString& target, const QString& process)
         return;
     }
 
-    auto removeEntry = [this, &normalizedProcess](const QString& existingText) {
-        const QString key = normalizedProcess.toLower();
-        QStringList rules = parseRules(existingText);
-        QStringList next;
-        next.reserve(rules.size());
-        for (const QString& rule : std::as_const(rules)) {
-            if (rule.trimmed().toLower() == key) {
-                continue;
-            }
-            next.append(rule);
-        }
-        return next.join('\n');
-    };
-
-    auto appendUnique = [this, &normalizedProcess](const QString& existingText) {
-        QStringList rules = parseRules(existingText);
-        const QString key = normalizedProcess.toLower();
-        bool exists = false;
-        for (const QString& rule : std::as_const(rules)) {
-            if (rule.toLower() == key) {
-                exists = true;
-                break;
-            }
-        }
-        if (!exists) {
-            rules.append(normalizedProcess);
-        }
-        return rules.join('\n');
-    };
-
-    QString proxyRules = removeEntry(m_proxyAppRules);
-    QString directRules = removeEntry(m_directAppRules);
-    QString blockRules = removeEntry(m_blockAppRules);
-
     const QString bucket = target.trimmed().toLower();
-    if (bucket == QString::fromUtf8("proxy") || bucket == QString::fromUtf8("tunnel")) {
-        proxyRules = appendUnique(proxyRules);
+    QString normalizedAction;
+    if (bucket == QString::fromUtf8("proxy") || bucket == QString::fromUtf8("tunnel") || bucket == QString::fromUtf8("vpn")) {
+        normalizedAction = QString::fromUtf8("proxy");
     } else if (bucket == QString::fromUtf8("direct")) {
-        directRules = appendUnique(directRules);
+        normalizedAction = QString::fromUtf8("direct");
     } else if (bucket == QString::fromUtf8("block")) {
-        blockRules = appendUnique(blockRules);
+        normalizedAction = QString::fromUtf8("block");
     } else {
         return;
     }
 
-    setProxyAppRules(proxyRules);
-    setDirectAppRules(directRules);
-    setBlockAppRules(blockRules);
+    QList<RoutingRule> nextRules;
+    nextRules.reserve(m_routingRules.size());
+    const QString compareKey = normalizedProcess;
+    for (const RoutingRule& rule : m_routingRules) {
+        const QString type = rule.targetType.trimmed().toLower();
+        if ((type == QString::fromUtf8("app") || type == QString::fromUtf8("process"))
+            && rule.profileId.trimmed().isEmpty()) {
+#if defined(Q_OS_WIN)
+            if (rule.targetValue.compare(compareKey, Qt::CaseInsensitive) == 0) {
+                continue;
+            }
+#else
+            if (rule.targetValue == compareKey) {
+                continue;
+            }
+#endif
+        }
+        nextRules.append(rule);
+    }
+
+    RoutingRule newRule;
+    newRule.id = QUuid::createUuid().toString(QUuid::WithoutBraces);
+    newRule.targetType = QString::fromUtf8("app");
+    newRule.targetValue = normalizedProcess;
+    newRule.action = normalizedAction;
+    newRule.enabled = true;
+    nextRules.append(newRule);
+    setRoutingRules(nextRules, true, true, true);
+}
+
+QVariantList VpnController::availableLanHostAddresses() const
+{
+    if (!lanSharingSupported()) {
+        return {};
+    }
+    return collectLanHostCandidates();
+}
+
+QString VpnController::effectiveLanSharingHost() const
+{
+    if (!m_lanSharingEnabled) {
+        return QString::fromUtf8("127.0.0.1");
+    }
+
+    const QString sanitized = sanitizedLanBindAddress(m_lanSharingBindAddress, m_lanSharingAllowAnyBind);
+    if (!sanitized.isEmpty()) {
+        return sanitized;
+    }
+    return QString::fromUtf8("127.0.0.1");
+}
+
+bool VpnController::applyLanSharingPreset(const QString& mode)
+{
+    const QString normalized = normalizeLanSharingMode(mode);
+    const QString previousMode = m_lanSharingMode;
+    const bool previousEnabled = m_lanSharingEnabled;
+    const QString previousBind = m_lanSharingBindAddress;
+    const bool previousAnyBind = m_lanSharingAllowAnyBind;
+    const QString previousInterface = m_lanSharingInterface;
+
+    m_lanSharingMode = normalized;
+    applyLanSharingDefaultsForMode(normalized, normalized != QString::fromUtf8("advanced"));
+
+    if (!lanSharingSupported()) {
+        m_lanSharingEnabled = false;
+    }
+
+    const bool changed = previousMode != m_lanSharingMode
+                         || previousEnabled != m_lanSharingEnabled
+                         || previousBind != m_lanSharingBindAddress
+                         || previousAnyBind != m_lanSharingAllowAnyBind
+                         || previousInterface != m_lanSharingInterface;
+    if (!changed) {
+        return true;
+    }
+
+    emit lanSharingSettingsChanged();
+    saveSettings();
+    maybeReconnectForLanSharingChange(QString::fromUtf8("LAN sharing preset changed."));
+    return true;
 }
 
 void VpnController::loadProfileUsage()
@@ -6695,10 +9102,17 @@ void VpnController::killProcessByPid(qint64 pid) const
         return;
     }
 
-#if defined(Q_OS_WIN)
+#if defined(Q_OS_IOS)
+    Q_UNUSED(pid)
+#elif defined(Q_OS_WIN)
     QProcess::execute(
         QString::fromUtf8("taskkill"),
-        {QString::fromUtf8("/PID"), QString::number(pid), QString::fromUtf8("/T"), QString::fromUtf8("/F")});
+        {
+            QString::fromUtf8("/PID"),
+            QString::number(pid),
+            QString::fromUtf8("/T"),
+            QString::fromUtf8("/F")
+        });
 #else
     ::kill(static_cast<pid_t>(pid), SIGTERM);
     QThread::msleep(120);
@@ -6706,24 +9120,105 @@ void VpnController::killProcessByPid(qint64 pid) const
 #endif
 }
 
+QList<qint64> VpnController::managedRuntimePidsByConfig() const
+{
+    QList<qint64> pids;
+
+    if (m_runtimeIsMobile) {
+        return pids;
+    }
+
+#if defined(Q_OS_IOS)
+    return pids;
+#elif defined(Q_OS_WIN)
+    return pids;
+#else
+    const QString executable = m_xrayExecutablePath.trimmed();
+    const QString configPath = m_runtimeConfigPath.trimmed();
+
+    if (executable.isEmpty() || configPath.isEmpty()) {
+        return pids;
+    }
+
+    const QString pattern = QString::fromUtf8("%1 run -config %2").arg(executable, configPath);
+
+    QProcess process;
+    process.start(QString::fromUtf8("pgrep"), {QString::fromUtf8("-f"), pattern});
+
+    if (!process.waitForStarted(1200)) {
+        return pids;
+    }
+
+    if (!process.waitForFinished(2500)) {
+        process.kill();
+        process.waitForFinished(200);
+        return pids;
+    }
+
+    const QByteArray stdoutBytes = process.readAllStandardOutput();
+    const QList<QByteArray> lines = stdoutBytes.split('\n');
+
+    for (const QByteArray& line : lines) {
+        bool ok = false;
+        const qint64 pid = QString::fromUtf8(line).trimmed().toLongLong(&ok);
+
+        if (ok && pid > 0 && !pids.contains(pid)) {
+            pids.append(pid);
+        }
+    }
+
+    return pids;
+#endif
+}
+
+void VpnController::cleanupOrphanManagedRuntimeProcesses(qint64 keepPid)
+{
+    if (m_runtimeIsMobile) {
+        return;
+    }
+
+    const qint64 appPid = static_cast<qint64>(QCoreApplication::applicationPid());
+    const QList<qint64> pids = managedRuntimePidsByConfig();
+    for (qint64 pid : pids) {
+        if (pid <= 0 || pid == keepPid || pid == appPid) {
+            continue;
+        }
+        if (!isProcessLikelyManagedXray(pid, m_xrayExecutablePath)) {
+            continue;
+        }
+
+        appendSystemLog(QString::fromUtf8("[System] Cleaning orphan xray runtime (pid=%1) for current config.")
+                            .arg(pid));
+        killProcessByPid(pid);
+    }
+}
+
 bool VpnController::isProcessAlive(qint64 pid)
 {
     if (pid <= 0) {
         return false;
     }
-#if defined(Q_OS_WIN)
+
+#if defined(Q_OS_IOS)
+    Q_UNUSED(pid)
+    return false;
+#elif defined(Q_OS_WIN)
     HANDLE handle = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, static_cast<DWORD>(pid));
+
     if (handle == nullptr) {
         return false;
     }
+
     DWORD exitCode = 0;
     const BOOL ok = GetExitCodeProcess(handle, &exitCode);
     CloseHandle(handle);
+
     return ok && exitCode == STILL_ACTIVE;
 #else
     if (::kill(static_cast<pid_t>(pid), 0) == 0) {
         return true;
     }
+
     return errno == EPERM;
 #endif
 }
@@ -6872,9 +9367,11 @@ void VpnController::cleanupManagedRuntimeOnStartup()
     QJsonObject record;
     if (!tryLoadManagedRuntimeRecord(&record)) {
         stopPrivilegedTunRuntimeByPidPath();
+        cleanupOrphanManagedRuntimeProcesses();
         return;
     }
     cleanupManagedRuntimeFromRecord(record, QString::fromUtf8("previous session was not terminated cleanly"));
+    cleanupOrphanManagedRuntimeProcesses();
 }
 
 void VpnController::stopPrivilegedTunRuntimeByPidPath()
@@ -7559,7 +10056,7 @@ bool VpnController::startPrivilegedTunProcess(QString *errorMessage)
     readyTimer.start();
     while (readyTimer.elapsed() < 12000) {
         QString checkError;
-        if (checkLocalProxyConnectivitySync(m_buildOptions.socksPort, &checkError)) {
+        if (checkLocalProxyPortConnectivitySync(m_buildOptions.socksPort, &checkError)) {
             ready = true;
             break;
         }
@@ -7569,6 +10066,7 @@ bool VpnController::startPrivilegedTunProcess(QString *errorMessage)
 
     if (!ready) {
         QString tailLine;
+        bool observedTunProxyAcceptance = false;
         QFile logFile(m_privilegedTunLogPath);
         if (logFile.open(QIODevice::ReadOnly)) {
             const QByteArray all = logFile.readAll();
@@ -7576,10 +10074,21 @@ bool VpnController::startPrivilegedTunProcess(QString *errorMessage)
             for (int i = lines.size() - 1; i >= 0; --i) {
                 const QString candidate = QString::fromUtf8(lines[i]).trimmed();
                 if (!candidate.isEmpty()) {
-                    tailLine = candidate;
-                    break;
+                    if (tailLine.isEmpty()) {
+                        tailLine = candidate;
+                    }
+                    if (isTunProxyAcceptedLine(candidate)) {
+                        observedTunProxyAcceptance = true;
+                        break;
+                    }
                 }
             }
+        }
+
+        if (observedTunProxyAcceptance) {
+            // Some routes block the fixed HTTP readiness probes, but if Xray has
+            // already accepted real tun->proxy flows we treat startup as healthy.
+            return true;
         }
 
         QString stopError;
@@ -7802,12 +10311,53 @@ bool VpnController::writeRuntimeConfig(const ServerProfile& profile, QString *er
     m_effectiveTunMode = options.enableTun;
     m_selectedTunInterfaceName = options.tunInterfaceName;
     options.whitelistMode = m_whitelistMode;
+    options.lanSharingEnabled = m_lanSharingEnabled && lanSharingSupported();
+    options.lanSharingAllowAnyBind = m_lanSharingAllowAnyBind;
+    options.lanSharingBindAddress = options.lanSharingEnabled
+                                        ? sanitizedLanBindAddress(m_lanSharingBindAddress, m_lanSharingAllowAnyBind)
+                                        : QString();
     options.proxyDomains = parseRules(m_proxyDomainRules);
     options.directDomains = parseRules(m_directDomainRules);
     options.blockDomains = parseRules(m_blockDomainRules);
     options.proxyProcesses = parseRules(m_proxyAppRules);
     options.directProcesses = parseRules(m_directAppRules);
     options.blockProcesses = parseRules(m_blockAppRules);
+
+    bool requiresDomainAwareRouting = !options.proxyDomains.isEmpty()
+                                      || !options.directDomains.isEmpty()
+                                      || !options.blockDomains.isEmpty();
+
+    const bool hasStructuredRules = !m_routingRules.isEmpty();
+    if (hasStructuredRules) {
+        // Unified routing rules become the source of truth when available.
+        options.proxyDomains.clear();
+        options.directDomains.clear();
+        options.blockDomains.clear();
+        options.proxyProcesses.clear();
+        options.directProcesses.clear();
+        options.blockProcesses.clear();
+
+        const QString activeProfileId = profile.id.trimmed();
+        for (const RoutingRule& rule : m_routingRules) {
+            if (!rule.enabled) {
+                continue;
+            }
+            if (!rule.profileId.trimmed().isEmpty()
+                && rule.profileId.compare(activeProfileId, Qt::CaseInsensitive) != 0) {
+                continue;
+            }
+            if (rule.targetType.compare(QString::fromUtf8("domain"), Qt::CaseInsensitive) == 0) {
+                requiresDomainAwareRouting = true;
+                break;
+            }
+        }
+    }
+
+    if (options.enableTun && requiresDomainAwareRouting && !options.enableFakeDnsSniffing) {
+        options.enableFakeDnsSniffing = true;
+        appendSystemLog(QString::fromUtf8(
+            "[Routing] Domain rules detected in TUN mode; forcing FakeDNS/sniffing to keep domain matching reliable."));
+    }
 
     const bool hasAppRules = !options.proxyProcesses.isEmpty()
                              || !options.directProcesses.isEmpty()
@@ -7828,8 +10378,139 @@ bool VpnController::writeRuntimeConfig(const ServerProfile& profile, QString *er
         ensureTunNoiseBlockRules(&config);
     }
 
+    if (hasStructuredRules) {
+        QJsonObject routing = config.value(QString::fromUtf8("routing")).toObject();
+        QJsonArray existingRules = routing.value(QString::fromUtf8("rules")).toArray();
+        QJsonArray userRules;
+        int skippedRules = 0;
+        int skippedDisabled = 0;
+        int skippedProfileScope = 0;
+        int skippedInvalid = 0;
+        int skippedProcessUnsupported = 0;
+        const QString activeProfileId = profile.id.trimmed();
+        for (const RoutingRule& rule : m_routingRules) {
+            if (!rule.enabled) {
+                ++skippedDisabled;
+                continue;
+            }
+            if (!rule.profileId.trimmed().isEmpty()
+                && rule.profileId.compare(activeProfileId, Qt::CaseInsensitive) != 0) {
+                ++skippedProfileScope;
+                continue;
+            }
+
+            QString appendError;
+            if (!appendRoutingRuleToConfig(&userRules,
+                                           rule,
+                                           activeProfileId,
+                                           options.enableProcessRouting,
+                                           &appendError)) {
+                if (!appendError.trimmed().isEmpty()) {
+                    ++skippedRules;
+                    if (appendError.contains(QString::fromUtf8("Process routing"), Qt::CaseInsensitive)) {
+                        ++skippedProcessUnsupported;
+                    } else {
+                        ++skippedInvalid;
+                    }
+                }
+            }
+        }
+
+        appendSystemLog(QString::fromUtf8(
+                            "[Routing] Structured rules for profile id '%1': total=%2 applied=%3 skipped(disabled=%4,scope=%5,invalid=%6,process=%7).")
+                            .arg(activeProfileId.isEmpty() ? QString::fromUtf8("unknown") : activeProfileId)
+                            .arg(m_routingRules.size())
+                            .arg(userRules.size())
+                            .arg(skippedDisabled)
+                            .arg(skippedProfileScope)
+                            .arg(skippedInvalid)
+                            .arg(skippedProcessUnsupported));
+
+        if (!userRules.isEmpty()) {
+            QStringList appliedRuleDebug;
+            appliedRuleDebug.reserve(userRules.size());
+            for (const QJsonValue& value : userRules) {
+                const QJsonObject ruleObj = value.toObject();
+                const QString outbound = ruleObj.value(QString::fromUtf8("outboundTag")).toString().trimmed();
+                QString matcher;
+                if (ruleObj.contains(QString::fromUtf8("domain"))) {
+                    matcher = ruleObj.value(QString::fromUtf8("domain")).toArray().toVariantList().value(0).toString();
+                } else if (ruleObj.contains(QString::fromUtf8("ip"))) {
+                    matcher = ruleObj.value(QString::fromUtf8("ip")).toArray().toVariantList().value(0).toString();
+                } else if (ruleObj.contains(QString::fromUtf8("process"))) {
+                    matcher = ruleObj.value(QString::fromUtf8("process")).toArray().toVariantList().value(0).toString();
+                } else if (ruleObj.contains(QString::fromUtf8("protocol"))) {
+                    QStringList protocolTokens;
+                    const QJsonArray protocolArray = ruleObj.value(QString::fromUtf8("protocol")).toArray();
+                    protocolTokens.reserve(protocolArray.size());
+                    for (const QJsonValue& protocolValue : protocolArray) {
+                        const QString token = protocolValue.toString().trimmed();
+                        if (!token.isEmpty()) {
+                            protocolTokens.append(token);
+                        }
+                    }
+                    matcher = QString::fromUtf8("protocol:")
+                              + protocolTokens.join(',');
+                } else if (ruleObj.contains(QString::fromUtf8("network"))) {
+                    matcher = QString::fromUtf8("network:") + ruleObj.value(QString::fromUtf8("network")).toString();
+                }
+                if (!matcher.trimmed().isEmpty() && !outbound.isEmpty()) {
+                    appliedRuleDebug.append(QString::fromUtf8("%1 -> %2").arg(matcher.trimmed(), outbound));
+                }
+            }
+
+            int fallbackIndex = existingRules.size();
+            for (int i = existingRules.size() - 1; i >= 0; --i) {
+                const QJsonObject rule = existingRules.at(i).toObject();
+                if (rule.value(QString::fromUtf8("type")).toString() != QString::fromUtf8("field")) {
+                    continue;
+                }
+                if (rule.value(QString::fromUtf8("network")).toString() != QString::fromUtf8("tcp,udp")) {
+                    continue;
+                }
+                const QString outboundTag = rule.value(QString::fromUtf8("outboundTag")).toString();
+                if (outboundTag == QString::fromUtf8("proxy")
+                    || outboundTag == QString::fromUtf8("direct")) {
+                    fallbackIndex = i;
+                }
+            }
+
+            QJsonArray mergedRules;
+            for (int i = 0; i < fallbackIndex; ++i) {
+                mergedRules.append(existingRules.at(i));
+            }
+            for (const QJsonValue& value : userRules) {
+                mergedRules.append(value);
+            }
+            for (int i = fallbackIndex; i < existingRules.size(); ++i) {
+                mergedRules.append(existingRules.at(i));
+            }
+
+            routing.insert(QString::fromUtf8("rules"), mergedRules);
+            config.insert(QString::fromUtf8("routing"), routing);
+            appendSystemLog(QString::fromUtf8("[Routing] Applied %1 active structured rule(s) for profile id '%2'.")
+                                .arg(userRules.size())
+                                .arg(profile.id.trimmed().isEmpty() ? QString::fromUtf8("unknown") : profile.id.trimmed()));
+            if (!appliedRuleDebug.isEmpty()) {
+                appendSystemLog(QString::fromUtf8("[Routing] Applied rule details: %1")
+                                    .arg(appliedRuleDebug.mid(0, 12).join(QString::fromUtf8("; "))));
+            }
+        } else {
+            appendSystemLog(QString::fromUtf8("[Routing] No structured rule matched current profile/config. Runtime is using baseline routing only."));
+        }
+        if (skippedRules > 0 && !options.enableProcessRouting) {
+            appendSystemLog(QString::fromUtf8("[Routing] Skipped %1 app/process rule(s): process routing is unavailable on this core/runtime.")
+                                .arg(skippedRules));
+        }
+    }
+
     if (options.enableTun && !options.tunInterfaceName.trimmed().isEmpty()) {
         appendSystemLog(QString::fromUtf8("[System] TUN interface selected: %1").arg(options.tunInterfaceName));
+    }
+    if (options.lanSharingEnabled && !options.lanSharingBindAddress.trimmed().isEmpty()) {
+        appendSystemLog(QString::fromUtf8("[LAN] Proxy sharing listen address: %1:%2")
+                            .arg(options.lanSharingBindAddress)
+                            .arg(options.socksPort));
     }
     QSaveFile file(m_runtimeConfigPath);
     if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
@@ -7930,6 +10611,10 @@ void VpnController::loadProfiles()
     }
 
     m_profileModel->setProfiles(loadedProfiles);
+    if (!m_selectedUsageProfileId.trimmed().isEmpty()
+        && m_profileModel->indexOfId(m_selectedUsageProfileId.trimmed()) < 0) {
+        m_selectedUsageProfileId.clear();
+    }
     if (m_autoPingProfiles && !loadedProfiles.isEmpty()) {
         QTimer::singleShot(50, this, [this]() { pingAllProfiles(); });
     }
@@ -8052,6 +10737,7 @@ void VpnController::loadSettings()
     m_autoPingProfiles = settings.value(QString::fromUtf8("profiles/autoPing"), false).toBool();
     m_currentProfileIndex = settings.value(QString::fromUtf8("profiles/currentIndex"), -1).toInt();
     m_currentProfileId = settings.value(QString::fromUtf8("profiles/currentId")).toString().trimmed();
+    m_selectedUsageProfileId = settings.value(QString::fromUtf8("usage/selectedProfileId")).toString().trimmed();
 
     m_profileGroupOptions.clear();
     const QString rawGroupOptions = settings.value(QString::fromUtf8("profiles/groupOptionsJson")).toString().trimmed();
@@ -8120,9 +10806,18 @@ void VpnController::loadSettings()
     m_customDnsServers = parseDnsServers(
                              settings.value(QString::fromUtf8("routing/customDnsServers")).toString())
                              .join('\n');
+    m_lanSharingMode = normalizeLanSharingMode(
+        settings.value(QString::fromUtf8("lanSharing/mode"), QString::fromUtf8("console")).toString());
+    m_lanSharingEnabled = settings.value(QString::fromUtf8("lanSharing/enabled"), false).toBool();
+    m_lanSharingAllowAnyBind = settings.value(QString::fromUtf8("lanSharing/allowAnyBind"), false).toBool();
+    m_lanSharingBindAddress = settings.value(QString::fromUtf8("lanSharing/bindAddress")).toString().trimmed();
+    m_lanSharingInterface = settings.value(QString::fromUtf8("lanSharing/interface")).toString().trimmed();
+    m_lanGatewayExperimentalEnabled = settings.value(QString::fromUtf8("lanSharing/gatewayExperimental"), false).toBool();
+    applyLanSharingDefaultsForMode(m_lanSharingMode, false);
     m_proxyAppRules = settings.value(QString::fromUtf8("routing/proxyApps")).toString();
     m_directAppRules = settings.value(QString::fromUtf8("routing/directApps")).toString();
     m_blockAppRules = settings.value(QString::fromUtf8("routing/blockApps")).toString();
+    loadRoutingRulesFromSettings(settings.value(QString::fromUtf8("routing/rulesJson")).toString());
     m_speedTestSelectedSizeMb = normalizedSpeedTestSizeMb(
         settings.value(QString::fromUtf8("speedtest/sizeMb"), kSpeedTestDefaultSizeMb).toInt());
     const QString endpointTemplate = settings.value(
@@ -8147,6 +10842,7 @@ void VpnController::saveSettings() const
     settings.setValue(QString::fromUtf8("profiles/currentIndex"), m_currentProfileIndex);
     settings.setValue(QString::fromUtf8("profiles/currentId"), m_currentProfileId);
     settings.setValue(QString::fromUtf8("profiles/currentGroup"), m_currentProfileGroup);
+    settings.setValue(QString::fromUtf8("usage/selectedProfileId"), m_selectedUsageProfileId);
 
     QJsonArray groupOptionsArray;
     for (const ProfileGroupOptions& options : m_profileGroupOptions) {
@@ -8174,9 +10870,17 @@ void VpnController::saveSettings() const
     settings.setValue(QString::fromUtf8("routing/directDomains"), m_directDomainRules);
     settings.setValue(QString::fromUtf8("routing/blockDomains"), m_blockDomainRules);
     settings.setValue(QString::fromUtf8("routing/customDnsServers"), m_customDnsServers);
+    settings.setValue(QString::fromUtf8("lanSharing/mode"), m_lanSharingMode);
+    settings.setValue(QString::fromUtf8("lanSharing/enabled"), m_lanSharingEnabled);
+    settings.setValue(QString::fromUtf8("lanSharing/allowAnyBind"), m_lanSharingAllowAnyBind);
+    settings.setValue(QString::fromUtf8("lanSharing/bindAddress"), m_lanSharingBindAddress);
+    settings.setValue(QString::fromUtf8("lanSharing/interface"), m_lanSharingInterface);
+    settings.setValue(QString::fromUtf8("lanSharing/gatewayExperimental"), m_lanGatewayExperimentalEnabled);
     settings.setValue(QString::fromUtf8("routing/proxyApps"), m_proxyAppRules);
     settings.setValue(QString::fromUtf8("routing/directApps"), m_directAppRules);
     settings.setValue(QString::fromUtf8("routing/blockApps"), m_blockAppRules);
+    settings.setValue(QString::fromUtf8("routing/rulesJson"), routingRulesJson());
     settings.setValue(QString::fromUtf8("speedtest/sizeMb"), m_speedTestSelectedSizeMb);
     settings.setValue(QString::fromUtf8("speedtest/downloadEndpointTemplate"), m_speedTestDownloadEndpointTemplate);
+    settings.sync();
 }

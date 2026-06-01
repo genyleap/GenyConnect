@@ -46,7 +46,7 @@ bool IosVpnRuntime::connectRuntime(
     Q_UNUSED(configPath)
     Q_UNUSED(workingDirectory)
 
-    // TODO(iOS): Replace this stub with NetworkExtension Packet Tunnel bridge.
+    // TODO(iOS): I'll code NetworkExtension Packet Tunnel bridge.
     m_lastError = QString::fromUtf8(
         "iOS VPN runtime bridge is not wired yet. Packet Tunnel Provider integration is required.");
     if (errorMessage) {

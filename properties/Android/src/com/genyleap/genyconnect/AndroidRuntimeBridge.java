@@ -6,6 +6,7 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
+import android.database.Cursor;
 import android.net.ConnectivityManager;
 import android.net.Network;
 import android.net.NetworkCapabilities;
@@ -14,6 +15,7 @@ import android.net.Uri;
 import android.net.VpnService;
 import android.os.BatteryManager;
 import android.os.Build;
+import android.os.SystemClock;
 import android.os.PowerManager;
 import android.provider.Settings;
 import android.content.SharedPreferences;
@@ -33,19 +35,67 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
 
 public final class AndroidRuntimeBridge {
+    private static final String TAG = "AndroidRuntimeBridge";
     private static final String PERMISSION_PROMPT_LAUNCHED =
         "Android VPN permission is required. Grant it and tap Connect again.";
     private static final String PREFS_NAME = "genyconnect_vpn";
     private static final String PREF_PROMPT_AT_MS = "prompt_at_ms";
     private static final String PREF_PROMPT_COUNT = "prompt_count";
+    private static final String VPN_STATE_AUTHORITY_SUFFIX = ".vpnstate";
+    private static final String VPN_STATE_PATH = "state";
+    private static final long STATE_QUERY_TIMEOUT_MS = 250L;
+    private static final long STATE_CACHE_TTL_MS = 150L;
+    private static final long STATE_STALE_FALLBACK_MS = 2500L;
+    private static final AtomicBoolean STATE_QUERY_IN_FLIGHT = new AtomicBoolean(false);
+    private static final ThreadLocal<Boolean> IN_STATE_QUERY = new ThreadLocal<>();
+    private static final ExecutorService STATE_QUERY_EXECUTOR = Executors.newSingleThreadExecutor(
+        new ThreadFactory() {
+            @Override
+            public Thread newThread(Runnable runnable) {
+                final Thread thread = new Thread(runnable, "GenyConnectVpnStateQuery");
+                thread.setDaemon(true);
+                return thread;
+            }
+        });
+    private static volatile RuntimeState sCachedRuntimeState = new RuntimeState();
 
     private AndroidRuntimeBridge() {
+    }
+
+    private static final class RuntimeState {
+        boolean valid = false;
+        boolean running = false;
+        long rxBytes = 0L;
+        long txBytes = 0L;
+        String lastError = "";
+        long queriedElapsedMs = 0L;
+        boolean startupPending = false;
+        boolean runtimeAlive = false;
+
+        RuntimeState copy() {
+            final RuntimeState copy = new RuntimeState();
+            copy.valid = valid;
+            copy.running = running;
+            copy.rxBytes = rxBytes;
+            copy.txBytes = txBytes;
+            copy.lastError = lastError;
+            copy.queriedElapsedMs = queriedElapsedMs;
+            copy.startupPending = startupPending;
+            copy.runtimeAlive = runtimeAlive;
+            return copy;
+        }
     }
 
     private static Context context() {
@@ -292,33 +342,161 @@ public final class AndroidRuntimeBridge {
     }
 
     public static boolean isRunning() {
-        return GenyConnectVpnService.isRunning();
+        final RuntimeState state = queryLiveRuntimeState();
+        return state.valid ? state.running : GenyConnectVpnService.isRunning();
     }
 
     public static boolean queryState() {
         final Context context = context();
         if (context == null) {
-            return GenyConnectVpnService.isRunning();
+            final RuntimeState state = queryLiveRuntimeState();
+            return state.valid ? state.running : GenyConnectVpnService.isRunning();
         }
+
+        final RuntimeState state = queryLiveRuntimeState();
+        if (state.valid) {
+            return state.running;
+        }
+
         final Intent queryIntent = new Intent(context, GenyConnectVpnService.class);
         queryIntent.setAction(GenyConnectVpnService.ACTION_QUERY_STATE);
         try {
             context.startService(queryIntent);
         } catch (Exception ignored) {
         }
-        return GenyConnectVpnService.isRunning();
+
+        final RuntimeState refreshedState = queryLiveRuntimeState();
+        return refreshedState.valid ? refreshedState.running : GenyConnectVpnService.isRunning();
+    }
+
+    public static boolean isStartupPending() {
+        final RuntimeState state = queryLiveRuntimeState();
+        return state.valid && state.startupPending;
     }
 
     public static String lastError() {
-        return GenyConnectVpnService.lastError();
+        final RuntimeState state = queryLiveRuntimeState();
+        return state.valid ? state.lastError : GenyConnectVpnService.lastError();
     }
 
     public static long rxBytes() {
-        return GenyConnectVpnService.rxBytes();
+        final RuntimeState state = queryLiveRuntimeState();
+        return state.valid ? state.rxBytes : GenyConnectVpnService.rxBytes();
     }
 
     public static long txBytes() {
-        return GenyConnectVpnService.txBytes();
+        final RuntimeState state = queryLiveRuntimeState();
+        return state.valid ? state.txBytes : GenyConnectVpnService.txBytes();
+    }
+
+    private static RuntimeState queryLiveRuntimeState() {
+        final long nowElapsedMs = SystemClock.elapsedRealtime();
+        final RuntimeState cached = sCachedRuntimeState;
+        if (cached.valid && (nowElapsedMs - cached.queriedElapsedMs) <= STATE_CACHE_TTL_MS) {
+            return cached.copy();
+        }
+        if (Boolean.TRUE.equals(IN_STATE_QUERY.get())) {
+            return queryLiveRuntimeStateDirect();
+        }
+        if (!STATE_QUERY_IN_FLIGHT.compareAndSet(false, true)) {
+            return cachedStateIfFresh(nowElapsedMs);
+        }
+
+        final Future<RuntimeState> future = STATE_QUERY_EXECUTOR.submit(() -> {
+            IN_STATE_QUERY.set(Boolean.TRUE);
+            try {
+                final RuntimeState state = queryLiveRuntimeStateDirect();
+                if (state.valid) {
+                    sCachedRuntimeState = state.copy();
+                }
+                return state;
+            } finally {
+                IN_STATE_QUERY.remove();
+                STATE_QUERY_IN_FLIGHT.set(false);
+            }
+        });
+        try {
+            final RuntimeState state = future.get(STATE_QUERY_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+            if (state.valid) {
+                sCachedRuntimeState = state.copy();
+            }
+            return state;
+        } catch (TimeoutException exception) {
+            future.cancel(true);
+            android.util.Log.w(TAG, "Timed out while querying live VPN state; using bounded fallback.");
+            return cachedStateIfFresh(nowElapsedMs);
+        } catch (Exception exception) {
+            future.cancel(true);
+            android.util.Log.w(TAG, "Failed to query live VPN state: " + exception.getMessage());
+            STATE_QUERY_IN_FLIGHT.set(false);
+            return cachedStateIfFresh(nowElapsedMs);
+        }
+    }
+
+    private static RuntimeState cachedStateIfFresh(long nowElapsedMs) {
+        final RuntimeState cached = sCachedRuntimeState;
+        if (cached.valid && (nowElapsedMs - cached.queriedElapsedMs) <= STATE_STALE_FALLBACK_MS) {
+            return cached.copy();
+        }
+        return new RuntimeState();
+    }
+
+    private static RuntimeState queryLiveRuntimeStateDirect() {
+        final RuntimeState state = new RuntimeState();
+        final Context appContext = context();
+        if (appContext == null) {
+            return state;
+        }
+
+        Cursor cursor = null;
+        try {
+            final Uri uri = Uri.parse("content://" + appContext.getPackageName()
+                + VPN_STATE_AUTHORITY_SUFFIX + "/" + VPN_STATE_PATH);
+            cursor = appContext.getContentResolver().query(uri, null, null, null, null);
+            if (cursor == null || !cursor.moveToFirst()) {
+                return state;
+            }
+
+            state.running = cursor.getInt(cursor.getColumnIndexOrThrow(GenyConnectVpnStateProvider.COL_RUNNING)) != 0;
+            state.rxBytes = Math.max(0L, cursor.getLong(cursor.getColumnIndexOrThrow(GenyConnectVpnStateProvider.COL_RX_BYTES)));
+            state.txBytes = Math.max(0L, cursor.getLong(cursor.getColumnIndexOrThrow(GenyConnectVpnStateProvider.COL_TX_BYTES)));
+            state.lastError = safeString(cursor.getString(cursor.getColumnIndexOrThrow(GenyConnectVpnStateProvider.COL_LAST_ERROR)));
+            final int startQueuedColumn = cursor.getColumnIndex(GenyConnectVpnStateProvider.COL_START_QUEUED);
+            if (startQueuedColumn >= 0) {
+                state.startupPending = cursor.getInt(startQueuedColumn) != 0;
+            }
+            final int runtimeAliveColumn = cursor.getColumnIndex(GenyConnectVpnStateProvider.COL_RUNTIME_ALIVE);
+            if (runtimeAliveColumn >= 0) {
+                state.runtimeAlive = cursor.getInt(runtimeAliveColumn) != 0;
+            }
+            state.queriedElapsedMs = SystemClock.elapsedRealtime();
+            state.valid = true;
+        } catch (Exception ignored) {
+            state.valid = false;
+        } finally {
+            if (cursor != null) {
+                cursor.close();
+            }
+        }
+        return state;
+    }
+
+    public static boolean moveTaskToBack() {
+        final Activity currentActivity = activity();
+        if (currentActivity == null) {
+            return false;
+        }
+        try {
+            currentActivity.runOnUiThread(() -> {
+                try {
+                    currentActivity.moveTaskToBack(true);
+                } catch (Exception ignored) {
+                }
+            });
+            return true;
+        } catch (Exception ignored) {
+            return false;
+        }
     }
 
     public static int batteryLevel() {
@@ -501,6 +679,39 @@ public final class AndroidRuntimeBridge {
         } catch (Exception ignored) {
             return false;
         }
+    }
+
+    public static boolean openSystemProxySettings() {
+        final Activity currentActivity = activity();
+        final Context appContext = context();
+        final Context launchContext = currentActivity != null ? currentActivity : appContext;
+        if (launchContext == null) {
+            return false;
+        }
+        ensureStandardSystemUi(currentActivity);
+
+        final String[] actions = new String[] {
+            Settings.ACTION_WIFI_IP_SETTINGS,
+            Settings.ACTION_WIFI_SETTINGS,
+            Settings.ACTION_SETTINGS
+        };
+
+        for (String action : actions) {
+            try {
+                final Intent intent = new Intent(action);
+                if (currentActivity == null) {
+                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                }
+                if (currentActivity != null) {
+                    currentActivity.startActivity(intent);
+                } else {
+                    launchContext.startActivity(intent);
+                }
+                return true;
+            } catch (Exception ignored) {
+            }
+        }
+        return false;
     }
 
     public static boolean shareText(String subject, String text) {
