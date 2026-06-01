@@ -327,6 +327,46 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Prepare Linux toolchain
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          apt-get update
+          apt-get install -y \
+            clang \
+            clang-tools \
+            llvm \
+            lld \
+            ninja-build \
+            file \
+            tar \
+            gzip
+
+          CLANG_BIN="$(command -v clang)"
+          CLANGXX_BIN="$(command -v clang++)"
+          SCAN_DEPS="$(command -v clang-scan-deps || true)"
+
+          if [[ -z "${SCAN_DEPS}" ]]; then
+            SCAN_DEPS="$(find /usr -name clang-scan-deps -type f 2>/dev/null | head -n 1 || true)"
+          fi
+
+          if [[ -z "${SCAN_DEPS}" || ! -x "${SCAN_DEPS}" ]]; then
+            echo "clang-scan-deps not found."
+            find /usr -name '*scan-deps*' -type f 2>/dev/null || true
+            exit 1
+          fi
+
+          echo "CC=${CLANG_BIN}" >> "$GITHUB_ENV"
+          echo "CXX=${CLANGXX_BIN}" >> "$GITHUB_ENV"
+          echo "CLANG_SCAN_DEPS=${SCAN_DEPS}" >> "$GITHUB_ENV"
+
+          cmake --version
+          ninja --version
+          "${CLANG_BIN}" --version
+          "${CLANGXX_BIN}" --version
+          "${SCAN_DEPS}" --version || true
+
       - name: Configure Linux
         shell: bash
         run: |
@@ -334,7 +374,12 @@ jobs:
 
           cmake -S . -B build -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_C_COMPILER="${CC}" \
+            -DCMAKE_CXX_COMPILER="${CXX}" \
+            -DCMAKE_CXX_SCAN_FOR_MODULES=ON \
+            -DCMAKE_CXX_COMPILER_CLANG_SCAN_DEPS="${CLANG_SCAN_DEPS}" \
             -DGENYCONNECT_USE_MODULES=ON \
+            -DGENYCONNECT_LLVM_AUTO_SCAN=ON \
             -DGENYCONNECT_TARGET_OS=linux \
             -DGENYCONNECT_TARGET_ARCH=x86_64 \
             -DGENYCONNECT_TARGET_BUILD_ARCH=x86_64
