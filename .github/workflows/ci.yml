@@ -695,8 +695,8 @@ jobs:
             ninja-build
 
           NINJA_VERSION="1.13.1"
-          wget -O /tmp/ninja-linux.zip "https://github.com/ninja-build/ninja/releases/download/v${NINJA_VERSION}/ninja-linux.zip"
-          sudo unzip -o /tmp/ninja-linux.zip -d /usr/local/bin
+          wget -O /tmp/ninja-linux-aarch64.zip "https://github.com/ninja-build/ninja/releases/download/v${NINJA_VERSION}/ninja-linux-aarch64.zip"
+          sudo unzip -o /tmp/ninja-linux-aarch64.zip -d /usr/local/bin
           sudo chmod +x /usr/local/bin/ninja
 
           echo "/usr/local/bin" >> "$GITHUB_PATH"
