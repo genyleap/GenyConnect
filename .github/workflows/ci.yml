@@ -715,9 +715,12 @@ jobs:
 
           export PATH="${HOME}/.local/bin:${PATH}"
 
+          echo "Available ARM64 Qt architectures:"
+          aqt list-qt linux_arm64 desktop --arch "${QT_VERSION}" || true
+
+          echo "Installing Qt Linux ARM64..."
           aqt install-qt linux_arm64 desktop "${QT_VERSION}" gcc_arm64 \
-            -O "${HOME}/Qt" \
-            --modules qt5compat qtshadertools
+            -O "${HOME}/Qt"
 
           QT_ROOT="${HOME}/Qt/${QT_VERSION}/gcc_arm64"
 
@@ -729,6 +732,8 @@ jobs:
 
           echo "QT_ROOT_DIR=${QT_ROOT}" >> "$GITHUB_ENV"
           echo "${QT_ROOT}/bin" >> "$GITHUB_PATH"
+
+          echo "Qt ARM64 installed at: ${QT_ROOT}"
 
       - name: Configure Linux ARM64
         shell: bash
