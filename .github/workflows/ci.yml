@@ -716,19 +716,21 @@ jobs:
           export PATH="${HOME}/.local/bin:${PATH}"
 
           echo "Available ARM64 Qt architectures:"
-          aqt list-qt linux_arm64 desktop --arch "${QT_VERSION}" || true
+          aqt list-qt linux_arm64 desktop --arch "${QT_VERSION}"
 
           echo "Installing Qt Linux ARM64..."
-          aqt install-qt linux_arm64 desktop "${QT_VERSION}" gcc_arm64 \
+          aqt install-qt linux_arm64 desktop "${QT_VERSION}" linux_gcc_arm64 \
             -O "${HOME}/Qt"
 
-          QT_ROOT="${HOME}/Qt/${QT_VERSION}/gcc_arm64"
+          QT_CONFIG="$(find "${HOME}/Qt" -type f -path "*/lib/cmake/Qt6/Qt6Config.cmake" | head -n 1)"
 
-          if [[ ! -f "${QT_ROOT}/lib/cmake/Qt6/Qt6Config.cmake" ]]; then
-            echo "Qt ARM64 install failed: ${QT_ROOT}"
-            find "${HOME}/Qt" -maxdepth 5 -type f -name Qt6Config.cmake || true
+          if [[ -z "${QT_CONFIG}" || ! -f "${QT_CONFIG}" ]]; then
+            echo "Qt ARM64 install failed."
+            find "${HOME}/Qt" -maxdepth 6 -type f | sort || true
             exit 1
           fi
+
+          QT_ROOT="$(dirname "$(dirname "$(dirname "$(dirname "${QT_CONFIG}")")")")"
 
           echo "QT_ROOT_DIR=${QT_ROOT}" >> "$GITHUB_ENV"
           echo "${QT_ROOT}/bin" >> "$GITHUB_PATH"
