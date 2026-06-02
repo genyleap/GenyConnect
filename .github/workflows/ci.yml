@@ -186,6 +186,10 @@ jobs:
           mkdir -p "$OUT_DIR"
           DMG_PATH="${OUT_DIR}/GenyConnect-${VERSION}-macos-${{ matrix.target_arch }}.dmg"
 
+          hdiutil detach "/Volumes/GenyConnect" -force || true
+          rm -f "$DMG_PATH"
+          sleep 2
+
           xattr -cr "$APP" || true
 
           chmod +x "$APP/Contents/MacOS/GenyConnect" || true
@@ -215,6 +219,9 @@ jobs:
           STAGING="$(mktemp -d)"
           cp -R "$APP" "$STAGING/GenyConnect.app"
           ln -s /Applications "$STAGING/Applications"
+
+          hdiutil detach "/Volumes/GenyConnect" -force || true
+          sleep 2
 
           hdiutil create \
             -volname "GenyConnect" \
@@ -344,69 +351,22 @@ jobs:
 
           apt-get update
           apt-get install -y \
-            wget \
-            curl \
-            gnupg \
-            lsb-release \
-            software-properties-common \
-            ca-certificates \
-            unzip \
-            zip \
-            file \
-            tar \
-            gzip \
-            patchelf \
-            desktop-file-utils \
-            fakeroot \
-            fuse \
-            libfuse2 \
-            imagemagick \
-            libgl1 \
-            libgl1-mesa-dev \
-            libegl1 \
-            libegl1-mesa-dev \
-            libxkbcommon0 \
-            libxkbcommon-dev \
-            libxkbcommon-x11-0 \
-            libxkbcommon-x11-dev \
-            libxcb1 \
-            libxcb1-dev \
-            libxcb-cursor0 \
-            libxcb-cursor-dev \
-            libxcb-icccm4 \
-            libxcb-icccm4-dev \
-            libxcb-image0 \
-            libxcb-image0-dev \
-            libxcb-keysyms1 \
-            libxcb-keysyms1-dev \
-            libxcb-render-util0 \
-            libxcb-render-util0-dev \
-            libxcb-shape0 \
-            libxcb-shape0-dev \
-            libxcb-xfixes0 \
-            libxcb-xfixes0-dev \
-            libfontconfig1 \
-            libfontconfig1-dev \
-            libfreetype6 \
-            libfreetype6-dev \
-            libglib2.0-0 \
-            libglib2.0-dev \
-            libharfbuzz0b \
-            libharfbuzz-dev \
-            libpng16-16 \
-            libpng-dev \
-            zsync
+            wget curl gnupg lsb-release software-properties-common ca-certificates \
+            unzip zip file tar gzip patchelf desktop-file-utils fakeroot fuse libfuse2 imagemagick \
+            libgl1 libgl1-mesa-dev libegl1 libegl1-mesa-dev \
+            libxkbcommon0 libxkbcommon-dev libxkbcommon-x11-0 libxkbcommon-x11-dev \
+            libxcb1 libxcb1-dev libxcb-cursor0 libxcb-cursor-dev libxcb-icccm4 libxcb-icccm4-dev \
+            libxcb-image0 libxcb-image0-dev libxcb-keysyms1 libxcb-keysyms1-dev \
+            libxcb-render-util0 libxcb-render-util0-dev libxcb-shape0 libxcb-shape0-dev \
+            libxcb-xfixes0 libxcb-xfixes0-dev libfontconfig1 libfontconfig1-dev \
+            libfreetype6 libfreetype6-dev libglib2.0-0 libglib2.0-dev \
+            libharfbuzz0b libharfbuzz-dev libpng16-16 libpng-dev zsync
 
           wget -O /tmp/llvm.sh https://apt.llvm.org/llvm.sh
           chmod +x /tmp/llvm.sh
           /tmp/llvm.sh 18
 
-          apt-get install -y \
-            clang-18 \
-            clang-tools-18 \
-            lld-18 \
-            llvm-18 \
-            ninja-build
+          apt-get install -y clang-18 clang-tools-18 lld-18 llvm-18 ninja-build
 
           NINJA_VERSION="1.13.1"
           wget -O /tmp/ninja-linux.zip "https://github.com/ninja-build/ninja/releases/download/v${NINJA_VERSION}/ninja-linux.zip"
@@ -482,22 +442,17 @@ jobs:
 
           if [[ -f ui/Resources/image/GenyConnect.png ]]; then
             if command -v magick >/dev/null 2>&1; then
-              magick ui/Resources/image/GenyConnect.png -resize 512x512! \
-                AppDir/usr/share/icons/hicolor/512x512/apps/genyconnect.png
+              magick ui/Resources/image/GenyConnect.png -resize 512x512! AppDir/usr/share/icons/hicolor/512x512/apps/genyconnect.png
             else
-              convert ui/Resources/image/GenyConnect.png -resize 512x512! \
-                AppDir/usr/share/icons/hicolor/512x512/apps/genyconnect.png
+              convert ui/Resources/image/GenyConnect.png -resize 512x512! AppDir/usr/share/icons/hicolor/512x512/apps/genyconnect.png
             fi
           fi
 
           chmod +x AppDir/usr/bin/GenyConnect || true
           chmod +x AppDir/usr/bin/xray-core || true
 
-          wget -O tools/linuxdeploy.AppImage \
-            "https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-${APPIMAGE_ARCH}.AppImage"
-
-          wget -O tools/linuxdeploy-plugin-qt.AppImage \
-            "https://github.com/linuxdeploy/linuxdeploy-plugin-qt/releases/download/continuous/linuxdeploy-plugin-qt-${APPIMAGE_ARCH}.AppImage"
+          wget -O tools/linuxdeploy.AppImage "https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-${APPIMAGE_ARCH}.AppImage"
+          wget -O tools/linuxdeploy-plugin-qt.AppImage "https://github.com/linuxdeploy/linuxdeploy-plugin-qt/releases/download/continuous/linuxdeploy-plugin-qt-${APPIMAGE_ARCH}.AppImage"
 
           chmod +x tools/linuxdeploy.AppImage tools/linuxdeploy-plugin-qt.AppImage
 
@@ -512,6 +467,15 @@ jobs:
             echo "qmake/qmake6 not found."
             exit 1
           fi
+
+          QT_PREFIX="$("${QMAKE_BIN}" -query QT_INSTALL_PREFIX)"
+          QT_LIB_DIR="$("${QMAKE_BIN}" -query QT_INSTALL_LIBS)"
+          export LD_LIBRARY_PATH="${QT_LIB_DIR}:${QT_PREFIX}/lib:${LD_LIBRARY_PATH:-}"
+
+          echo "QMAKE=${QMAKE_BIN}"
+          echo "QT_PREFIX=${QT_PREFIX}"
+          echo "QT_LIB_DIR=${QT_LIB_DIR}"
+          echo "LD_LIBRARY_PATH=${LD_LIBRARY_PATH}"
 
           export QMAKE="${QMAKE_BIN}"
           export QML_SOURCES_PATHS="${PWD}/ui"
@@ -528,8 +492,7 @@ jobs:
 
           test -f "${OUTPUT}"
           mv "${OUTPUT}" "${OUT_DIR}/${OUTPUT}"
-          sha256sum "${OUT_DIR}/GenyConnect-${VERSION}-linux-${TARGET_ARCH}.AppImage" \
-            > "${OUT_DIR}/GenyConnect-${VERSION}-linux-${TARGET_ARCH}.AppImage.sha256"
+          sha256sum "${OUT_DIR}/GenyConnect-${VERSION}-linux-${TARGET_ARCH}.AppImage" > "${OUT_DIR}/GenyConnect-${VERSION}-linux-${TARGET_ARCH}.AppImage.sha256"
 
           ls -lah "${OUT_DIR}"
 
@@ -626,80 +589,24 @@ jobs:
 
           sudo apt-get update
           sudo apt-get install -y \
-            python3 \
-            python3-pip \
-            python3-venv \
-            imagemagick \
-            wget \
-            curl \
-            gnupg \
-            lsb-release \
-            software-properties-common \
-            ca-certificates \
-            unzip \
-            zip \
-            p7zip-full \
-            file \
-            tar \
-            gzip \
-            patchelf \
-            desktop-file-utils \
-            fakeroot \
-            fuse \
-            libfuse2 \
-            libgl1 \
-            libgl1-mesa-dev \
-            libegl1 \
-            libegl1-mesa-dev \
-            libxkbcommon0 \
-            libxkbcommon-dev \
-            libxkbcommon-x11-0 \
-            libxkbcommon-x11-dev \
-            libxcb1 \
-            libxcb1-dev \
-            libxcb-cursor0 \
-            libxcb-cursor-dev \
-            libxcb-icccm4 \
-            libxcb-icccm4-dev \
-            libxcb-image0 \
-            libxcb-image0-dev \
-            libxcb-keysyms1 \
-            libxcb-keysyms1-dev \
-            libxcb-render-util0 \
-            libxcb-render-util0-dev \
-            libxcb-shape0 \
-            libxcb-shape0-dev \
-            libxcb-xfixes0 \
-            libxcb-xfixes0-dev \
-            libfontconfig1 \
-            libfontconfig1-dev \
-            libfreetype6 \
-            libfreetype6-dev \
-            libglib2.0-0 \
-            libglib2.0-dev \
-            libharfbuzz0b \
-            libharfbuzz-dev \
-            libpng16-16 \
-            libpng-dev \
-            zsync
+            python3 python3-pip python3-venv imagemagick \
+            wget curl gnupg lsb-release software-properties-common ca-certificates \
+            unzip zip p7zip-full file tar gzip patchelf desktop-file-utils fakeroot fuse libfuse2 \
+            libgl1 libgl1-mesa-dev libegl1 libegl1-mesa-dev \
+            libxkbcommon0 libxkbcommon-dev libxkbcommon-x11-0 libxkbcommon-x11-dev \
+            libxcb1 libxcb1-dev libxcb-cursor0 libxcb-cursor-dev libxcb-icccm4 libxcb-icccm4-dev \
+            libxcb-image0 libxcb-image0-dev libxcb-keysyms1 libxcb-keysyms1-dev \
+            libxcb-render-util0 libxcb-render-util0-dev libxcb-shape0 libxcb-shape0-dev \
+            libxcb-xfixes0 libxcb-xfixes0-dev libfontconfig1 libfontconfig1-dev \
+            libfreetype6 libfreetype6-dev libglib2.0-0 libglib2.0-dev \
+            libharfbuzz0b libharfbuzz-dev libpng16-16 libpng-dev zsync
 
           wget -O /tmp/llvm.sh https://apt.llvm.org/llvm.sh
           chmod +x /tmp/llvm.sh
           sudo /tmp/llvm.sh 18
 
-          sudo apt-get install -y \
-            clang-18 \
-            clang-tools-18 \
-            lld-18 \
-            llvm-18 \
-            ninja-build
+          sudo apt-get install -y clang-18 clang-tools-18 lld-18 llvm-18 ninja-build
 
-          NINJA_VERSION="1.13.1"
-          wget -O /tmp/ninja-linux-aarch64.zip "https://github.com/ninja-build/ninja/releases/download/v${NINJA_VERSION}/ninja-linux-aarch64.zip"
-          sudo unzip -o /tmp/ninja-linux-aarch64.zip -d /usr/local/bin
-          sudo chmod +x /usr/local/bin/ninja
-
-          echo "/usr/local/bin" >> "$GITHUB_PATH"
           echo "CC=/usr/bin/clang-18" >> "$GITHUB_ENV"
           echo "CXX=/usr/bin/clang++-18" >> "$GITHUB_ENV"
           echo "CLANG_SCAN_DEPS=/usr/bin/clang-scan-deps-18" >> "$GITHUB_ENV"
@@ -719,8 +626,7 @@ jobs:
           aqt list-qt linux_arm64 desktop --arch "${QT_VERSION}"
 
           echo "Installing Qt Linux ARM64..."
-          aqt install-qt linux_arm64 desktop "${QT_VERSION}" linux_gcc_arm64 \
-            -O "${HOME}/Qt"
+          aqt install-qt linux_arm64 desktop "${QT_VERSION}" linux_gcc_arm64 -O "${HOME}/Qt"
 
           QT_CONFIG="$(find "${HOME}/Qt" -type f -path "*/lib/cmake/Qt6/Qt6Config.cmake" | head -n 1)"
 
@@ -802,22 +708,17 @@ jobs:
 
           if [[ -f ui/Resources/image/GenyConnect.png ]]; then
             if command -v magick >/dev/null 2>&1; then
-              magick ui/Resources/image/GenyConnect.png -resize 512x512! \
-                AppDir/usr/share/icons/hicolor/512x512/apps/genyconnect.png
+              magick ui/Resources/image/GenyConnect.png -resize 512x512! AppDir/usr/share/icons/hicolor/512x512/apps/genyconnect.png
             else
-              convert ui/Resources/image/GenyConnect.png -resize 512x512! \
-                AppDir/usr/share/icons/hicolor/512x512/apps/genyconnect.png
+              convert ui/Resources/image/GenyConnect.png -resize 512x512! AppDir/usr/share/icons/hicolor/512x512/apps/genyconnect.png
             fi
           fi
 
           chmod +x AppDir/usr/bin/GenyConnect || true
           chmod +x AppDir/usr/bin/xray-core || true
 
-          wget -O tools/linuxdeploy.AppImage \
-            "https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-${APPIMAGE_ARCH}.AppImage"
-
-          wget -O tools/linuxdeploy-plugin-qt.AppImage \
-            "https://github.com/linuxdeploy/linuxdeploy-plugin-qt/releases/download/continuous/linuxdeploy-plugin-qt-${APPIMAGE_ARCH}.AppImage"
+          wget -O tools/linuxdeploy.AppImage "https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-${APPIMAGE_ARCH}.AppImage"
+          wget -O tools/linuxdeploy-plugin-qt.AppImage "https://github.com/linuxdeploy/linuxdeploy-plugin-qt/releases/download/continuous/linuxdeploy-plugin-qt-${APPIMAGE_ARCH}.AppImage"
 
           chmod +x tools/linuxdeploy.AppImage tools/linuxdeploy-plugin-qt.AppImage
 
@@ -830,6 +731,15 @@ jobs:
             find "${QT_ROOT_DIR}" -type f \( -name qmake6 -o -name qmake \) || true
             exit 1
           fi
+
+          QT_PREFIX="$("${QMAKE_BIN}" -query QT_INSTALL_PREFIX)"
+          QT_LIB_DIR="$("${QMAKE_BIN}" -query QT_INSTALL_LIBS)"
+          export LD_LIBRARY_PATH="${QT_LIB_DIR}:${QT_PREFIX}/lib:${LD_LIBRARY_PATH:-}"
+
+          echo "QMAKE=${QMAKE_BIN}"
+          echo "QT_PREFIX=${QT_PREFIX}"
+          echo "QT_LIB_DIR=${QT_LIB_DIR}"
+          echo "LD_LIBRARY_PATH=${LD_LIBRARY_PATH}"
 
           export QMAKE="${QMAKE_BIN}"
           export QML_SOURCES_PATHS="${PWD}/ui"
@@ -846,8 +756,7 @@ jobs:
 
           test -f "${OUTPUT}"
           mv "${OUTPUT}" "${OUT_DIR}/${OUTPUT}"
-          sha256sum "${OUT_DIR}/GenyConnect-${VERSION}-linux-${TARGET_ARCH}.AppImage" \
-            > "${OUT_DIR}/GenyConnect-${VERSION}-linux-${TARGET_ARCH}.AppImage.sha256"
+          sha256sum "${OUT_DIR}/GenyConnect-${VERSION}-linux-${TARGET_ARCH}.AppImage" > "${OUT_DIR}/GenyConnect-${VERSION}-linux-${TARGET_ARCH}.AppImage.sha256"
 
           ls -lah "${OUT_DIR}"
 
