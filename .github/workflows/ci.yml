@@ -320,36 +320,24 @@ jobs:
           name: ${{ matrix.artifact_name }}
           path: artifacts/*
 
-  linux:
-    name: Build ${{ matrix.artifact_name }}
-    runs-on: ${{ matrix.os }}
+  linux-x64:
+    name: Build GenyConnect-linux-x86_64
+    runs-on: ubuntu-latest
+
     container:
-      image: ${{ matrix.container_image }}
+      image: a12e/docker-qt:6.8-linux
       options: --user 0
 
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - artifact_name: GenyConnect-linux-x86_64
-            os: ubuntu-latest
-            container_image: a12e/docker-qt:6.8-linux
-            target_arch: x86_64
-            appimage_arch: x86_64
-            selfupdate_arch: x64
-
-          - artifact_name: GenyConnect-linux-arm64
-            os: ubuntu-24.04-arm
-            container_image: a12e/docker-qt:6.8-linux
-            target_arch: arm64
-            appimage_arch: aarch64
-            selfupdate_arch: arm64
+    env:
+      TARGET_ARCH: x86_64
+      APPIMAGE_ARCH: x86_64
+      SELFUPDATE_ARCH: x64
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Prepare Linux toolchain
+      - name: Prepare Linux x64 toolchain
         shell: bash
         run: |
           set -euo pipefail
@@ -436,7 +424,7 @@ jobs:
           /usr/bin/clang++-18 --version
           /usr/bin/clang-scan-deps-18 --version || true
 
-      - name: Configure Linux
+      - name: Configure Linux x64
         shell: bash
         run: |
           set -euo pipefail
@@ -451,82 +439,17 @@ jobs:
             -DGENYCONNECT_USE_MODULES=ON \
             -DGENYCONNECT_LLVM_AUTO_SCAN=ON \
             -DGENYCONNECT_TARGET_OS=linux \
-            -DGENYCONNECT_TARGET_ARCH="${{ matrix.target_arch }}" \
-            -DGENYCONNECT_TARGET_BUILD_ARCH="${{ matrix.target_arch }}" \
+            -DGENYCONNECT_TARGET_ARCH="${TARGET_ARCH}" \
+            -DGENYCONNECT_TARGET_BUILD_ARCH="${TARGET_ARCH}" \
             -DGENYCONNECT_LINUX_INSTALL_DEPLOY=OFF
 
-      - name: Build Linux
+      - name: Build Linux x64
         shell: bash
         run: |
           set -euo pipefail
           cmake --build build --config Release --parallel
 
-      - name: Create Linux AppDir
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          rm -rf AppDir
-          mkdir -p AppDir
-
-          DESTDIR="${PWD}/AppDir" cmake --install build --config Release --prefix /usr
-
-          mkdir -p AppDir/usr/share/applications
-          mkdir -p AppDir/usr/share/icons/hicolor/512x512/apps
-
-          if [[ ! -f AppDir/usr/share/applications/genyconnect.desktop ]]; then
-            cat > AppDir/usr/share/applications/genyconnect.desktop <<'EOF'
-          [Desktop Entry]
-          Type=Application
-          Name=GenyConnect
-          Comment=GenyConnect VPN Client
-          Exec=GenyConnect
-          Icon=genyconnect
-          Terminal=false
-          Categories=Network;Qt;
-          EOF
-          fi
-
-          if [[ -f ui/Resources/image/GenyConnect.png && ! -f AppDir/usr/share/icons/hicolor/512x512/apps/genyconnect.png ]]; then
-            cp ui/Resources/image/GenyConnect.png AppDir/usr/share/icons/hicolor/512x512/apps/genyconnect.png
-          fi
-
-          if [[ -f AppDir/usr/bin/GenyConnect ]]; then
-            chmod +x AppDir/usr/bin/GenyConnect
-          fi
-
-          if [[ -f AppDir/usr/bin/xray-core ]]; then
-            chmod +x AppDir/usr/bin/xray-core
-          fi
-
-          echo "==== AppDir tree before linuxdeploy ===="
-          find AppDir -maxdepth 5 -type f | sort | head -500
-
-      - name: Download linuxdeploy tools
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          mkdir -p tools
-
-          ARCH="${{ matrix.appimage_arch }}"
-
-          wget -O tools/linuxdeploy.AppImage \
-            "https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-${ARCH}.AppImage"
-
-          wget -O tools/linuxdeploy-plugin-qt.AppImage \
-            "https://github.com/linuxdeploy/linuxdeploy-plugin-qt/releases/download/continuous/linuxdeploy-plugin-qt-${ARCH}.AppImage"
-
-          chmod +x tools/linuxdeploy.AppImage
-          chmod +x tools/linuxdeploy-plugin-qt.AppImage
-
-          ./tools/linuxdeploy.AppImage --appimage-extract >/dev/null
-          ./tools/linuxdeploy-plugin-qt.AppImage --appimage-extract >/dev/null
-
-          mv squashfs-root tools/linuxdeploy-root
-          mv squashfs-root tools/linuxdeploy-qt-root 2>/dev/null || true
-
-      - name: Build Linux AppImage
+      - name: Create Linux x64 AppImage
         shell: bash
         run: |
           set -euo pipefail
@@ -538,8 +461,44 @@ jobs:
             VERSION="$(grep -E 'project\(\$\{PROJECT_NAME\} VERSION ' CMakeLists.txt | sed -E 's/.*VERSION ([0-9]+\.[0-9]+\.[0-9]+).*/\1/')"
           fi
 
-          OUT_DIR="build/final/linux-${{ matrix.target_arch }}"
+          OUT_DIR="build/final/linux-${TARGET_ARCH}"
           mkdir -p "${OUT_DIR}"
+
+          rm -rf AppDir tools
+          mkdir -p AppDir tools
+
+          DESTDIR="${PWD}/AppDir" cmake --install build --config Release --prefix /usr
+
+          mkdir -p AppDir/usr/share/applications
+          mkdir -p AppDir/usr/share/icons/hicolor/512x512/apps
+
+          if [[ ! -f AppDir/usr/share/applications/genyconnect.desktop ]]; then
+            printf '%s\n' \
+              '[Desktop Entry]' \
+              'Type=Application' \
+              'Name=GenyConnect' \
+              'Comment=GenyConnect VPN Client' \
+              'Exec=GenyConnect' \
+              'Icon=genyconnect' \
+              'Terminal=false' \
+              'Categories=Network;Qt;' \
+              > AppDir/usr/share/applications/genyconnect.desktop
+          fi
+
+          if [[ -f ui/Resources/image/GenyConnect.png && ! -f AppDir/usr/share/icons/hicolor/512x512/apps/genyconnect.png ]]; then
+            cp ui/Resources/image/GenyConnect.png AppDir/usr/share/icons/hicolor/512x512/apps/genyconnect.png
+          fi
+
+          chmod +x AppDir/usr/bin/GenyConnect || true
+          chmod +x AppDir/usr/bin/xray-core || true
+
+          wget -O tools/linuxdeploy.AppImage \
+            "https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-${APPIMAGE_ARCH}.AppImage"
+
+          wget -O tools/linuxdeploy-plugin-qt.AppImage \
+            "https://github.com/linuxdeploy/linuxdeploy-plugin-qt/releases/download/continuous/linuxdeploy-plugin-qt-${APPIMAGE_ARCH}.AppImage"
+
+          chmod +x tools/linuxdeploy.AppImage tools/linuxdeploy-plugin-qt.AppImage
 
           QMAKE_BIN="$(command -v qmake6 || true)"
           if [[ -z "${QMAKE_BIN}" ]]; then
@@ -548,17 +507,15 @@ jobs:
           if [[ -z "${QMAKE_BIN}" ]]; then
             QMAKE_BIN="$(find /opt /usr /root -type f \( -name qmake6 -o -name qmake \) 2>/dev/null | head -n 1 || true)"
           fi
-
           if [[ -z "${QMAKE_BIN}" || ! -x "${QMAKE_BIN}" ]]; then
-            echo "qmake/qmake6 not found. Cannot run linuxdeploy Qt plugin."
-            find / -type f \( -name qmake6 -o -name qmake \) 2>/dev/null | head -50 || true
+            echo "qmake/qmake6 not found."
             exit 1
           fi
 
           export QMAKE="${QMAKE_BIN}"
           export QML_SOURCES_PATHS="${PWD}/ui"
           export EXTRA_QT_PLUGINS="platforms/libqxcb.so;imageformats/libqsvg.so"
-          export OUTPUT="GenyConnect-${VERSION}-linux-${{ matrix.target_arch }}.AppImage"
+          export OUTPUT="GenyConnect-${VERSION}-linux-${TARGET_ARCH}.AppImage"
           export APPIMAGE_EXTRACT_AND_RUN=1
 
           ./tools/linuxdeploy.AppImage \
@@ -568,31 +525,20 @@ jobs:
             --plugin qt \
             --output appimage
 
-          if [[ ! -f "${OUTPUT}" ]]; then
-            echo "AppImage was not created."
-            find . -maxdepth 3 -type f -name "*.AppImage" -print
-            exit 1
-          fi
-
+          test -f "${OUTPUT}"
           mv "${OUTPUT}" "${OUT_DIR}/${OUTPUT}"
-
-          sha256sum "${OUT_DIR}/${OUTPUT}" > "${OUT_DIR}/${OUTPUT}.sha256"
+          sha256sum "${OUT_DIR}/GenyConnect-${VERSION}-linux-${TARGET_ARCH}.AppImage" \
+            > "${OUT_DIR}/GenyConnect-${VERSION}-linux-${TARGET_ARCH}.AppImage.sha256"
 
           ls -lah "${OUT_DIR}"
 
-      - name: Verify Linux AppImage
+      - name: Verify Linux x64 AppImage
         shell: bash
         run: |
           set -euo pipefail
 
           APPIMAGE="$(find build/final -type f -name "*.AppImage" | head -n 1)"
-
-          if [[ -z "${APPIMAGE}" || ! -f "${APPIMAGE}" ]]; then
-            echo "No AppImage found."
-            find build/final -type f | sort || true
-            exit 1
-          fi
-
+          test -f "${APPIMAGE}"
           chmod +x "${APPIMAGE}"
 
           rm -rf /tmp/genyconnect-appimage-check
@@ -603,45 +549,32 @@ jobs:
           "./$(basename "${APPIMAGE}")" --appimage-extract >/dev/null
 
           BIN="$(find squashfs-root -type f -name GenyConnect | head -n 1)"
+          test -f "${BIN}"
 
-          if [[ -z "${BIN}" || ! -f "${BIN}" ]]; then
-            echo "GenyConnect binary not found inside AppImage."
-            find squashfs-root -maxdepth 5 -type f | sort | head -500
+          ldd "${BIN}" | tee /tmp/genyconnect-linux-x64-ldd.txt || true
+
+          if grep -q "not found" /tmp/genyconnect-linux-x64-ldd.txt; then
+            grep "not found" /tmp/genyconnect-linux-x64-ldd.txt
             exit 1
           fi
 
-          echo "Checking binary: ${BIN}"
-
-          ldd "${BIN}" | tee /tmp/genyconnect-linux-ldd.txt || true
-
-          if grep -q "not found" /tmp/genyconnect-linux-ldd.txt; then
-            echo "ERROR: Missing runtime dependencies inside AppImage:"
-            grep "not found" /tmp/genyconnect-linux-ldd.txt
-            exit 1
-          fi
-
-      - name: Create Linux self-update assets
+      - name: Create Linux x64 self-update assets
         shell: bash
         run: |
           set -euo pipefail
 
           mkdir -p build/selfupdate
 
-          SRC="$(find build/final -type f -name "*.AppImage" | head -n 1 || true)"
+          SRC="$(find build/final -type f -name "*.AppImage" | head -n 1)"
+          test -f "${SRC}"
 
-          if [[ -z "${SRC}" || ! -f "${SRC}" ]]; then
-            echo "No Linux AppImage found."
-            find build -maxdepth 8 -type f | sort | tail -300
-            exit 1
-          fi
-
-          OUT="build/selfupdate/GenyConnect-selfupdate-linux-${{ matrix.selfupdate_arch }}.AppImage"
+          OUT="build/selfupdate/GenyConnect-selfupdate-linux-${SELFUPDATE_ARCH}.AppImage"
           cp "${SRC}" "${OUT}"
           sha256sum "${OUT}" > "${OUT}.sha256"
 
           ls -lah build/selfupdate
 
-      - name: Collect Linux packages
+      - name: Collect Linux x64 packages
         shell: bash
         run: |
           set -euo pipefail
@@ -653,17 +586,321 @@ jobs:
           find build/selfupdate -type f -name "GenyConnect-selfupdate-*" -exec cp {} artifacts/ \; || true
 
           if [ -z "$(find artifacts -type f -print -quit)" ]; then
-            echo "No Linux artifacts found."
+            echo "No Linux x64 artifacts found."
             find build -maxdepth 8 -type f | sort | tail -300
             exit 1
           fi
 
           ls -lah artifacts
 
-      - name: Upload Linux artifact
+      - name: Upload Linux x64 artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.artifact_name }}
+          name: GenyConnect-linux-x86_64
+          path: artifacts/*
+
+  linux-arm64:
+    name: Build GenyConnect-linux-arm64
+    runs-on: ubuntu-24.04-arm
+
+    env:
+      QT_VERSION: "6.11.0"
+      TARGET_ARCH: arm64
+      APPIMAGE_ARCH: aarch64
+      SELFUPDATE_ARCH: arm64
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install CMake
+        uses: lukka/get-cmake@latest
+        with:
+          cmakeVersion: ${{ env.CMAKE_VERSION }}
+
+      - name: Prepare Linux ARM64 toolchain
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          sudo apt-get update
+          sudo apt-get install -y \
+            python3 \
+            python3-pip \
+            python3-venv \
+            wget \
+            curl \
+            gnupg \
+            lsb-release \
+            software-properties-common \
+            ca-certificates \
+            unzip \
+            zip \
+            p7zip-full \
+            file \
+            tar \
+            gzip \
+            patchelf \
+            desktop-file-utils \
+            fakeroot \
+            fuse \
+            libfuse2 \
+            libgl1 \
+            libgl1-mesa-dev \
+            libegl1 \
+            libegl1-mesa-dev \
+            libxkbcommon0 \
+            libxkbcommon-dev \
+            libxkbcommon-x11-0 \
+            libxkbcommon-x11-dev \
+            libxcb1 \
+            libxcb1-dev \
+            libxcb-cursor0 \
+            libxcb-cursor-dev \
+            libxcb-icccm4 \
+            libxcb-icccm4-dev \
+            libxcb-image0 \
+            libxcb-image0-dev \
+            libxcb-keysyms1 \
+            libxcb-keysyms1-dev \
+            libxcb-render-util0 \
+            libxcb-render-util0-dev \
+            libxcb-shape0 \
+            libxcb-shape0-dev \
+            libxcb-xfixes0 \
+            libxcb-xfixes0-dev \
+            libfontconfig1 \
+            libfontconfig1-dev \
+            libfreetype6 \
+            libfreetype6-dev \
+            libglib2.0-0 \
+            libglib2.0-dev \
+            libharfbuzz0b \
+            libharfbuzz-dev \
+            libpng16-16 \
+            libpng-dev \
+            zsync
+
+          wget -O /tmp/llvm.sh https://apt.llvm.org/llvm.sh
+          chmod +x /tmp/llvm.sh
+          sudo /tmp/llvm.sh 18
+
+          sudo apt-get install -y \
+            clang-18 \
+            clang-tools-18 \
+            lld-18 \
+            llvm-18 \
+            ninja-build
+
+          NINJA_VERSION="1.13.1"
+          wget -O /tmp/ninja-linux.zip "https://github.com/ninja-build/ninja/releases/download/v${NINJA_VERSION}/ninja-linux.zip"
+          sudo unzip -o /tmp/ninja-linux.zip -d /usr/local/bin
+          sudo chmod +x /usr/local/bin/ninja
+
+          echo "/usr/local/bin" >> "$GITHUB_PATH"
+          echo "CC=/usr/bin/clang-18" >> "$GITHUB_ENV"
+          echo "CXX=/usr/bin/clang++-18" >> "$GITHUB_ENV"
+          echo "CLANG_SCAN_DEPS=/usr/bin/clang-scan-deps-18" >> "$GITHUB_ENV"
+          echo "APPIMAGE_EXTRACT_AND_RUN=1" >> "$GITHUB_ENV"
+
+      - name: Install Qt Linux ARM64
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          python3 -m pip install --user --upgrade pip
+          python3 -m pip install --user aqtinstall
+
+          export PATH="${HOME}/.local/bin:${PATH}"
+
+          aqt install-qt linux_arm64 desktop "${QT_VERSION}" linux_gcc_arm64 \
+            -O "${HOME}/Qt" \
+            --modules qt5compat qtshadertools
+
+          QT_ROOT="${HOME}/Qt/${QT_VERSION}/linux_gcc_arm64"
+
+          if [[ ! -f "${QT_ROOT}/lib/cmake/Qt6/Qt6Config.cmake" ]]; then
+            echo "Qt ARM64 install failed: ${QT_ROOT}"
+            find "${HOME}/Qt" -maxdepth 4 -type f -name Qt6Config.cmake || true
+            exit 1
+          fi
+
+          echo "QT_ROOT_DIR=${QT_ROOT}" >> "$GITHUB_ENV"
+          echo "${QT_ROOT}/bin" >> "$GITHUB_PATH"
+
+      - name: Configure Linux ARM64
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_PREFIX_PATH="${QT_ROOT_DIR}" \
+            -DQt6_DIR="${QT_ROOT_DIR}/lib/cmake/Qt6" \
+            -DCMAKE_C_COMPILER="${CC}" \
+            -DCMAKE_CXX_COMPILER="${CXX}" \
+            -DCMAKE_CXX_STANDARD=23 \
+            -DCMAKE_CXX_STANDARD_REQUIRED=ON \
+            -DCMAKE_CXX_COMPILER_CLANG_SCAN_DEPS="${CLANG_SCAN_DEPS}" \
+            -DGENYCONNECT_USE_MODULES=ON \
+            -DGENYCONNECT_LLVM_AUTO_SCAN=ON \
+            -DGENYCONNECT_TARGET_OS=linux \
+            -DGENYCONNECT_TARGET_ARCH="${TARGET_ARCH}" \
+            -DGENYCONNECT_TARGET_BUILD_ARCH="${TARGET_ARCH}" \
+            -DGENYCONNECT_LINUX_INSTALL_DEPLOY=OFF
+
+      - name: Build Linux ARM64
+        shell: bash
+        run: |
+          set -euo pipefail
+          cmake --build build --config Release --parallel
+
+      - name: Create Linux ARM64 AppImage
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          VERSION=""
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            VERSION="${GITHUB_REF_NAME#v}"
+          else
+            VERSION="$(grep -E 'project\(\$\{PROJECT_NAME\} VERSION ' CMakeLists.txt | sed -E 's/.*VERSION ([0-9]+\.[0-9]+\.[0-9]+).*/\1/')"
+          fi
+
+          OUT_DIR="build/final/linux-${TARGET_ARCH}"
+          mkdir -p "${OUT_DIR}"
+
+          rm -rf AppDir tools
+          mkdir -p AppDir tools
+
+          DESTDIR="${PWD}/AppDir" cmake --install build --config Release --prefix /usr
+
+          mkdir -p AppDir/usr/share/applications
+          mkdir -p AppDir/usr/share/icons/hicolor/512x512/apps
+
+          if [[ ! -f AppDir/usr/share/applications/genyconnect.desktop ]]; then
+            printf '%s\n' \
+              '[Desktop Entry]' \
+              'Type=Application' \
+              'Name=GenyConnect' \
+              'Comment=GenyConnect VPN Client' \
+              'Exec=GenyConnect' \
+              'Icon=genyconnect' \
+              'Terminal=false' \
+              'Categories=Network;Qt;' \
+              > AppDir/usr/share/applications/genyconnect.desktop
+          fi
+
+          if [[ -f ui/Resources/image/GenyConnect.png && ! -f AppDir/usr/share/icons/hicolor/512x512/apps/genyconnect.png ]]; then
+            cp ui/Resources/image/GenyConnect.png AppDir/usr/share/icons/hicolor/512x512/apps/genyconnect.png
+          fi
+
+          chmod +x AppDir/usr/bin/GenyConnect || true
+          chmod +x AppDir/usr/bin/xray-core || true
+
+          wget -O tools/linuxdeploy.AppImage \
+            "https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-${APPIMAGE_ARCH}.AppImage"
+
+          wget -O tools/linuxdeploy-plugin-qt.AppImage \
+            "https://github.com/linuxdeploy/linuxdeploy-plugin-qt/releases/download/continuous/linuxdeploy-plugin-qt-${APPIMAGE_ARCH}.AppImage"
+
+          chmod +x tools/linuxdeploy.AppImage tools/linuxdeploy-plugin-qt.AppImage
+
+          QMAKE_BIN="${QT_ROOT_DIR}/bin/qmake6"
+          if [[ ! -x "${QMAKE_BIN}" ]]; then
+            QMAKE_BIN="${QT_ROOT_DIR}/bin/qmake"
+          fi
+          if [[ ! -x "${QMAKE_BIN}" ]]; then
+            echo "qmake/qmake6 not found."
+            find "${QT_ROOT_DIR}" -type f \( -name qmake6 -o -name qmake \) || true
+            exit 1
+          fi
+
+          export QMAKE="${QMAKE_BIN}"
+          export QML_SOURCES_PATHS="${PWD}/ui"
+          export EXTRA_QT_PLUGINS="platforms/libqxcb.so;imageformats/libqsvg.so"
+          export OUTPUT="GenyConnect-${VERSION}-linux-${TARGET_ARCH}.AppImage"
+          export APPIMAGE_EXTRACT_AND_RUN=1
+
+          ./tools/linuxdeploy.AppImage \
+            --appdir AppDir \
+            --desktop-file AppDir/usr/share/applications/genyconnect.desktop \
+            --icon-file AppDir/usr/share/icons/hicolor/512x512/apps/genyconnect.png \
+            --plugin qt \
+            --output appimage
+
+          test -f "${OUTPUT}"
+          mv "${OUTPUT}" "${OUT_DIR}/${OUTPUT}"
+          sha256sum "${OUT_DIR}/GenyConnect-${VERSION}-linux-${TARGET_ARCH}.AppImage" \
+            > "${OUT_DIR}/GenyConnect-${VERSION}-linux-${TARGET_ARCH}.AppImage.sha256"
+
+          ls -lah "${OUT_DIR}"
+
+      - name: Verify Linux ARM64 AppImage
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          APPIMAGE="$(find build/final -type f -name "*.AppImage" | head -n 1)"
+          test -f "${APPIMAGE}"
+          chmod +x "${APPIMAGE}"
+
+          rm -rf /tmp/genyconnect-appimage-check
+          mkdir -p /tmp/genyconnect-appimage-check
+          cp "${APPIMAGE}" /tmp/genyconnect-appimage-check/
+          cd /tmp/genyconnect-appimage-check
+
+          "./$(basename "${APPIMAGE}")" --appimage-extract >/dev/null
+
+          BIN="$(find squashfs-root -type f -name GenyConnect | head -n 1)"
+          test -f "${BIN}"
+
+          ldd "${BIN}" | tee /tmp/genyconnect-linux-arm64-ldd.txt || true
+
+          if grep -q "not found" /tmp/genyconnect-linux-arm64-ldd.txt; then
+            grep "not found" /tmp/genyconnect-linux-arm64-ldd.txt
+            exit 1
+          fi
+
+      - name: Create Linux ARM64 self-update assets
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          mkdir -p build/selfupdate
+
+          SRC="$(find build/final -type f -name "*.AppImage" | head -n 1)"
+          test -f "${SRC}"
+
+          OUT="build/selfupdate/GenyConnect-selfupdate-linux-${SELFUPDATE_ARCH}.AppImage"
+          cp "${SRC}" "${OUT}"
+          sha256sum "${OUT}" > "${OUT}.sha256"
+
+          ls -lah build/selfupdate
+
+      - name: Collect Linux ARM64 packages
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          mkdir -p artifacts
+
+          find build/final -type f -name "*.AppImage" -exec cp {} artifacts/ \; || true
+          find build/final -type f -name "*.AppImage.sha256" -exec cp {} artifacts/ \; || true
+          find build/selfupdate -type f -name "GenyConnect-selfupdate-*" -exec cp {} artifacts/ \; || true
+
+          if [ -z "$(find artifacts -type f -print -quit)" ]; then
+            echo "No Linux ARM64 artifacts found."
+            find build -maxdepth 8 -type f | sort | tail -300
+            exit 1
+          fi
+
+          ls -lah artifacts
+
+      - name: Upload Linux ARM64 artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: GenyConnect-linux-arm64
           path: artifacts/*
 
   android:
@@ -874,7 +1111,8 @@ jobs:
     if: startsWith(github.ref, 'refs/tags/')
     needs:
       - desktop
-      - linux
+      - linux-x64
+      - linux-arm64
       - android
     runs-on: ubuntu-latest
 
