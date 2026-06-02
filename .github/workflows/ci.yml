@@ -360,6 +360,7 @@ jobs:
             fakeroot \
             fuse \
             libfuse2 \
+            imagemagick \
             libgl1 \
             libgl1-mesa-dev \
             libegl1 \
@@ -417,12 +418,6 @@ jobs:
           echo "CXX=/usr/bin/clang++-18" >> "$GITHUB_ENV"
           echo "CLANG_SCAN_DEPS=/usr/bin/clang-scan-deps-18" >> "$GITHUB_ENV"
           echo "APPIMAGE_EXTRACT_AND_RUN=1" >> "$GITHUB_ENV"
-
-          cmake --version
-          /usr/local/bin/ninja --version
-          /usr/bin/clang-18 --version
-          /usr/bin/clang++-18 --version
-          /usr/bin/clang-scan-deps-18 --version || true
 
       - name: Configure Linux x64
         shell: bash
@@ -485,8 +480,14 @@ jobs:
               > AppDir/usr/share/applications/genyconnect.desktop
           fi
 
-          if [[ -f ui/Resources/image/GenyConnect.png && ! -f AppDir/usr/share/icons/hicolor/512x512/apps/genyconnect.png ]]; then
-            cp ui/Resources/image/GenyConnect.png AppDir/usr/share/icons/hicolor/512x512/apps/genyconnect.png
+          if [[ -f ui/Resources/image/GenyConnect.png ]]; then
+            if command -v magick >/dev/null 2>&1; then
+              magick ui/Resources/image/GenyConnect.png -resize 512x512! \
+                AppDir/usr/share/icons/hicolor/512x512/apps/genyconnect.png
+            else
+              convert ui/Resources/image/GenyConnect.png -resize 512x512! \
+                AppDir/usr/share/icons/hicolor/512x512/apps/genyconnect.png
+            fi
           fi
 
           chmod +x AppDir/usr/bin/GenyConnect || true
@@ -628,6 +629,7 @@ jobs:
             python3 \
             python3-pip \
             python3-venv \
+            imagemagick \
             wget \
             curl \
             gnupg \
@@ -713,15 +715,15 @@ jobs:
 
           export PATH="${HOME}/.local/bin:${PATH}"
 
-          aqt install-qt linux_arm64 desktop "${QT_VERSION}" linux_gcc_arm64 \
+          aqt install-qt linux_arm64 desktop "${QT_VERSION}" gcc_arm64 \
             -O "${HOME}/Qt" \
             --modules qt5compat qtshadertools
 
-          QT_ROOT="${HOME}/Qt/${QT_VERSION}/linux_gcc_arm64"
+          QT_ROOT="${HOME}/Qt/${QT_VERSION}/gcc_arm64"
 
           if [[ ! -f "${QT_ROOT}/lib/cmake/Qt6/Qt6Config.cmake" ]]; then
             echo "Qt ARM64 install failed: ${QT_ROOT}"
-            find "${HOME}/Qt" -maxdepth 4 -type f -name Qt6Config.cmake || true
+            find "${HOME}/Qt" -maxdepth 5 -type f -name Qt6Config.cmake || true
             exit 1
           fi
 
@@ -791,8 +793,14 @@ jobs:
               > AppDir/usr/share/applications/genyconnect.desktop
           fi
 
-          if [[ -f ui/Resources/image/GenyConnect.png && ! -f AppDir/usr/share/icons/hicolor/512x512/apps/genyconnect.png ]]; then
-            cp ui/Resources/image/GenyConnect.png AppDir/usr/share/icons/hicolor/512x512/apps/genyconnect.png
+          if [[ -f ui/Resources/image/GenyConnect.png ]]; then
+            if command -v magick >/dev/null 2>&1; then
+              magick ui/Resources/image/GenyConnect.png -resize 512x512! \
+                AppDir/usr/share/icons/hicolor/512x512/apps/genyconnect.png
+            else
+              convert ui/Resources/image/GenyConnect.png -resize 512x512! \
+                AppDir/usr/share/icons/hicolor/512x512/apps/genyconnect.png
+            fi
           fi
 
           chmod +x AppDir/usr/bin/GenyConnect || true
