@@ -207,6 +207,7 @@ qint64 readPidFromFile(const QString& pidPath)
     return (ok && pid > 0) ? pid : -1;
 }
 
+bool isProcessAlive(qint64 pid);
 bool isIpv4(const QString& address);
 bool isIpv6(const QString& address);
 

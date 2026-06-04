@@ -828,16 +828,28 @@ jobs:
           path: artifacts/*
 
   android:
-    name: Build GenyConnect-android-arm64-v8a
+    name: Build GenyConnect-android-${{ matrix.android_output_arch }}
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
 
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - qt_arch: android_arm64_v8a
+            android_abi: arm64-v8a
+            android_output_arch: arm64-v8a
+            target_arch: arm64
+            selfupdate_arch: arm64
+
+          - qt_arch: android_armv7
+            android_abi: armeabi-v7a
+            android_output_arch: armeabi-v7a
+            target_arch: armv7
+            selfupdate_arch: armv7
+
     env:
       QT_VERSION: "6.11.0"
-      QT_ARCH: android_arm64_v8a
-      ANDROID_ABI: arm64-v8a
-      ANDROID_OUTPUT_ARCH: arm64-v8a
-      TARGET_ARCH: arm64
       ANDROID_API: "28"
       ANDROID_DEPLOY_PLATFORM: "36"
       ANDROID_NDK_VERSION: "27.2.12479018"
@@ -851,6 +863,11 @@ jobs:
         with:
           distribution: temurin
           java-version: "21"
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.24.x"
 
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
@@ -877,14 +894,13 @@ jobs:
         with:
           version: ${{ env.QT_VERSION }}
           target: android
-          arch: ${{ env.QT_ARCH }}
+          arch: ${{ matrix.qt_arch }}
           cache: true
 
       - name: Save Qt Android and host paths
         shell: bash
         run: |
           set -euo pipefail
-
           echo "ANDROID_QT_ROOT=${QT_ROOT_DIR}" >> "${GITHUB_ENV}"
           echo "QT_HOST_ROOT=$(dirname "${QT_ROOT_DIR}")/gcc_64" >> "${GITHUB_ENV}"
 
@@ -898,7 +914,7 @@ jobs:
         run: |
           set -euo pipefail
           sudo apt-get update
-          sudo apt-get install -y ninja-build unzip zip p7zip-full curl file
+          sudo apt-get install -y ninja-build unzip zip p7zip-full curl file git
 
       - name: Prepare Android signing
         shell: bash
@@ -917,7 +933,6 @@ jobs:
 
           mkdir -p "${RUNNER_TEMP}/android-signing"
           echo "${ANDROID_KEYSTORE_BASE64}" | base64 --decode > "${RUNNER_TEMP}/android-signing/release.keystore"
-          test -s "${RUNNER_TEMP}/android-signing/release.keystore"
 
           echo "QT_ANDROID_KEYSTORE_PATH=${RUNNER_TEMP}/android-signing/release.keystore" >> "${GITHUB_ENV}"
           echo "QT_ANDROID_KEYSTORE_ALIAS=${ANDROID_KEY_ALIAS}" >> "${GITHUB_ENV}"
@@ -928,15 +943,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-
           SCAN_DEPS="${ANDROID_NDK_ROOT}/toolchains/llvm/prebuilt/linux-x86_64/bin/clang-scan-deps"
-
-          if [[ ! -x "${SCAN_DEPS}" ]]; then
-            echo "clang-scan-deps not found: ${SCAN_DEPS}"
-            find "${ANDROID_NDK_ROOT}/toolchains/llvm/prebuilt/linux-x86_64/bin" -maxdepth 1 -type f | sort
-            exit 1
-          fi
-
+          test -x "${SCAN_DEPS}"
           echo "CLANG_SCAN_DEPS=${SCAN_DEPS}" >> "${GITHUB_ENV}"
 
       - name: Configure Android Release
@@ -960,21 +968,21 @@ jobs:
             -DCMAKE_TOOLCHAIN_FILE="${ANDROID_QT_ROOT}/lib/cmake/Qt6/qt.toolchain.cmake" \
             -DCMAKE_CXX_STANDARD=23 \
             -DCMAKE_CXX_STANDARD_REQUIRED=ON \
-            -DCMAKE_CXX_SCAN_FOR_MODULES=ON \
             -DCMAKE_CXX_COMPILER_CLANG_SCAN_DEPS="${CLANG_SCAN_DEPS}" \
-            -DANDROID_ABI="${ANDROID_ABI}" \
+            -DANDROID_ABI="${{ matrix.android_abi }}" \
             -DANDROID_PLATFORM="android-${ANDROID_API}" \
             -DANDROID_SDK_ROOT="${ANDROID_SDK_ROOT}" \
             -DANDROID_NDK_ROOT="${ANDROID_NDK_ROOT}" \
-            -DQT_ANDROID_ABIS="${ANDROID_ABI}" \
+            -DQT_ANDROID_ABIS="${{ matrix.android_abi }}" \
             -DGENYCONNECT_BUILD_DESKTOP=OFF \
             -DGENYCONNECT_BUILD_ANDROID=ON \
             -DGENYCONNECT_ENABLE_MOBILE_VPN=ON \
             -DGENYCONNECT_AUTO_DOWNLOAD_XRAY=ON \
+            -DGENYCONNECT_AUTO_BUILD_ANDROID_ARMV7_XRAY=ON \
             -DGENYCONNECT_USE_MODULES=ON \
             -DGENYCONNECT_TARGET_OS=android \
-            -DGENYCONNECT_TARGET_ARCH="${TARGET_ARCH}" \
-            -DGENYCONNECT_TARGET_BUILD_ARCH="${TARGET_ARCH}"
+            -DGENYCONNECT_TARGET_ARCH="${{ matrix.target_arch }}" \
+            -DGENYCONNECT_TARGET_BUILD_ARCH="${{ matrix.target_arch }}"
 
       - name: Build Android APK
         shell: bash
@@ -987,7 +995,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          OUT_DIR="build/final/android-${ANDROID_OUTPUT_ARCH}"
+          OUT_DIR="build/final/android-${{ matrix.android_output_arch }}"
           mkdir -p "${OUT_DIR}"
 
           if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
@@ -998,36 +1006,25 @@ jobs:
 
           APK="$(find build -type f \( -name "*release*.apk" -o -name "*.apk" \) | grep -vi debug | sort | head -n 1)"
 
-          cp "${APK}" "${OUT_DIR}/GenyConnect-${VERSION}-android-${ANDROID_OUTPUT_ARCH}.apk"
-          cp "${APK}" "${OUT_DIR}/GenyConnect-selfupdate-android-arm64.apk"
+          cp "${APK}" "${OUT_DIR}/GenyConnect-${VERSION}-android-${{ matrix.android_output_arch }}.apk"
+          cp "${APK}" "${OUT_DIR}/GenyConnect-selfupdate-android-${{ matrix.selfupdate_arch }}.apk"
 
-          sha256sum "${OUT_DIR}/GenyConnect-selfupdate-android-arm64.apk" \
-            > "${OUT_DIR}/GenyConnect-selfupdate-android-arm64.apk.sha256"
-
-          ls -lah "${OUT_DIR}"
+          sha256sum "${OUT_DIR}/GenyConnect-selfupdate-android-${{ matrix.selfupdate_arch }}.apk" \
+            > "${OUT_DIR}/GenyConnect-selfupdate-android-${{ matrix.selfupdate_arch }}.apk.sha256"
 
       - name: Collect Android packages
         shell: bash
         run: |
           set -euo pipefail
-
           mkdir -p artifacts
-
           find build/final -type f -name "*.apk" -exec cp {} artifacts/ \;
           find build/final -type f -name "*.apk.sha256" -exec cp {} artifacts/ \;
-
-          if [ -z "$(find artifacts -type f -print -quit)" ]; then
-            echo "No Android artifacts found."
-            find build -maxdepth 8 -type f | sort | tail -300
-            exit 1
-          fi
-
           ls -lah artifacts
 
       - name: Upload Android artifact
         uses: actions/upload-artifact@v4
         with:
-          name: GenyConnect-android-arm64-v8a
+          name: GenyConnect-android-${{ matrix.android_output_arch }}
           path: artifacts/*
 
   release:
