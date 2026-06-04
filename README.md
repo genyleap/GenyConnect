@@ -1,4 +1,5 @@
-![genyconnect-cover](https://github.com/user-attachments/assets/a65daa50-b9ce-46e4-a23b-7886b1c41258)
+<img width="1983" height="793" alt="IMG_2823" src="https://github.com/user-attachments/assets/8e1b1d9d-9ba6-4c47-b2b0-f5629951b532" />
+
 ---
 # GenyConnect
 
@@ -132,10 +133,8 @@ Power Mode behavior is adaptive and may vary depending on platform capabilities 
 ---
 
 ## Screenshots
-
-<img width="413" alt="GenyConnect screenshot 1" src="https://github.com/user-attachments/assets/c3c4fa7b-997c-4968-a019-ec8f1a88a7a1" />
-
-<img width="422" alt="GenyConnect screenshot 2" src="https://github.com/user-attachments/assets/e8996ce9-1064-4754-8b4b-5d3c83009fa4" />
+<img width="420" height="754" alt="Screenshot 2026-06-04 at 23 35 19" src="https://github.com/user-attachments/assets/ca927696-f2fe-445d-93ed-2da8a40e3d2e" />
+<img width="423" height="753" alt="Screenshot 2026-06-04 at 23 35 29" src="https://github.com/user-attachments/assets/aadde2a8-03d9-4c12-8875-31ee81d4ff2c" />
 
 ---
 
