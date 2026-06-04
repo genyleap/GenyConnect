@@ -1115,15 +1115,83 @@ QString linuxRouteDeviceFor(const QString& destination, bool ipv6, QString* erro
     return match.captured(1).trimmed();
 }
 
+QString linuxIpOutput(const QStringList& args, int timeoutMs, QString* errorOut)
+{
+    const QString ipTool = linuxIpTool();
+    if (ipTool.trimmed().isEmpty()) {
+        if (errorOut != nullptr) {
+            *errorOut = u"`ip` utility not found."_s;
+        }
+        return {};
+    }
+
+    QString stdoutText;
+    QString stderrText;
+    const bool ok = runProcess(ipTool, args, timeoutMs, &stdoutText, &stderrText);
+    if (!ok && errorOut != nullptr) {
+        *errorOut = stderrText.trimmed().isEmpty()
+            ? u"ip %1 failed."_s.arg(args.join(u" "_s))
+            : stderrText.trimmed();
+    }
+    return stdoutText.trimmed();
+}
+
+QStringList linuxTunAddressesFromConfig(const QString& configPath)
+{
+    QFile file(configPath);
+    if (!file.open(QIODevice::ReadOnly)) {
+        return {};
+    }
+
+    QJsonParseError parseError;
+    const QJsonDocument doc = QJsonDocument::fromJson(file.readAll(), &parseError);
+    if (parseError.error != QJsonParseError::NoError || !doc.isObject()) {
+        return {};
+    }
+
+    const QJsonArray inbounds = doc.object().value(u"inbounds"_s).toArray();
+    for (const QJsonValue& value : inbounds) {
+        const QJsonObject inbound = value.toObject();
+        if (inbound.value(u"tag"_s).toString().compare(u"tun-in"_s, Qt::CaseInsensitive) != 0
+            && inbound.value(u"protocol"_s).toString().compare(u"tun"_s, Qt::CaseInsensitive) != 0) {
+            continue;
+        }
+
+        QStringList addresses;
+        const QJsonArray addressArray = inbound.value(u"settings"_s).toObject().value(u"address"_s).toArray();
+        addresses.reserve(addressArray.size());
+        for (const QJsonValue& address : addressArray) {
+            const QString normalized = address.toString().trimmed();
+            if (!normalized.isEmpty()) {
+                addresses.append(normalized);
+            }
+        }
+        return addresses;
+    }
+    return {};
+}
+
+QString linuxTunDiagnostics()
+{
+    QString ignored;
+    const QString addr = linuxIpOutput({u"addr"_s}, 3000, &ignored);
+    const QString routes = linuxIpOutput({u"route"_s, u"show"_s, u"table"_s, u"all"_s}, 3000, &ignored);
+    const QString routes6 = linuxIpOutput({u"-6"_s, u"route"_s, u"show"_s, u"table"_s, u"all"_s}, 3000, &ignored);
+    const QString rules = linuxIpOutput({u"rule"_s}, 3000, &ignored);
+    return u"ip addr:\n%1\nip route table all:\n%2\nip -6 route table all:\n%3\nip rule:\n%4"_s
+        .arg(addr, routes, routes6, rules);
+}
+
 bool validateLinuxTunRouting(
     const QString& requestedTunIf,
     const QString& serverIp,
     qint64 runtimePid,
     const QString& logPath,
+    const QStringList& expectedAddresses,
     QString* errorOut)
 {
     QString lastError;
-    const QString requiredTun = requestedTunIf.trimmed();
+    const QString requiredTun = requestedTunIf.trimmed().isEmpty() ? u"xray0"_s : requestedTunIf.trimmed();
     for (int i = 0; i < 80; ++i) {
         if (runtimePid > 0 && !isProcessAlive(runtimePid)) {
             const QString tailLine = lastNonEmptyLogLine(logPath);
@@ -1133,52 +1201,91 @@ bool validateLinuxTunRouting(
             break;
         }
 
-        QString errA;
-        QString errB;
-        const QString devA = linuxRouteDeviceFor(u"1.1.1.1"_s, false, &errA);
-        const QString devB = linuxRouteDeviceFor(u"129.0.0.1"_s, false, &errB);
-        if (!devA.isEmpty() && devA == devB) {
-            const bool looksTun = devA.startsWith(u"tun"_s, Qt::CaseInsensitive)
-                                  || devA.startsWith(u"tap"_s, Qt::CaseInsensitive)
-                                  || devA.contains(u"xray"_s, Qt::CaseInsensitive);
-            const bool matchesRequested = requiredTun.isEmpty()
-                                          || devA.compare(requiredTun, Qt::CaseInsensitive) == 0;
-            if (looksTun && matchesRequested) {
-                if (!serverIp.trimmed().isEmpty() && isIpv4(serverIp)) {
-                    QString serverErr;
-                    const QString serverDev = linuxRouteDeviceFor(serverIp.trimmed(), false, &serverErr);
-                    if (!serverDev.isEmpty() && serverDev.compare(devA, Qt::CaseInsensitive) == 0) {
-                        lastError = u"VPN server endpoint route is still pointed at TUN."_s;
-                    } else {
-                        return true;
-                    }
-                } else if (!serverIp.trimmed().isEmpty() && isIpv6(serverIp)) {
-                    QString serverErr;
-                    const QString serverDev = linuxRouteDeviceFor(serverIp.trimmed(), true, &serverErr);
-                    if (!serverDev.isEmpty() && serverDev.compare(devA, Qt::CaseInsensitive) == 0) {
-                        lastError = u"VPN server endpoint IPv6 route is still pointed at TUN."_s;
-                    } else {
-                        return true;
-                    }
-                } else {
-                    return true;
-                }
-            } else if (!matchesRequested) {
-                lastError = u"Linux default route device (%1) does not match requested TUN interface (%2)."_s
-                                .arg(devA, requiredTun);
-            } else {
-                lastError = u"Linux default route device (%1) is not a TUN interface."_s.arg(devA);
-            }
-        } else {
-            lastError = !errA.isEmpty() ? errA : errB;
+        QString linkError;
+        const QString linkOutput = linuxIpOutput({u"-o"_s, u"link"_s, u"show"_s, u"dev"_s, requiredTun}, 1200, &linkError);
+        if (linkOutput.isEmpty()) {
+            lastError = linkError.trimmed().isEmpty()
+                ? u"Linux TUN interface %1 is not present yet."_s.arg(requiredTun)
+                : linkError.trimmed();
+            QThread::msleep(150);
+            continue;
         }
-        QThread::msleep(150);
+        if (!linkOutput.contains(u"<"_s) || !linkOutput.contains(u"UP"_s)) {
+            lastError = u"Linux TUN interface %1 exists but is not UP: %2"_s.arg(requiredTun, linkOutput);
+            QThread::msleep(150);
+            continue;
+        }
+
+        QString addrError;
+        const QString addrOutput = linuxIpOutput({u"-o"_s, u"addr"_s, u"show"_s, u"dev"_s, requiredTun}, 1200, &addrError);
+        bool addressReady = expectedAddresses.isEmpty();
+        for (const QString& expectedAddress : expectedAddresses) {
+            if (addrOutput.contains(expectedAddress)) {
+                addressReady = true;
+                break;
+            }
+        }
+        if (!addressReady) {
+            lastError = u"Linux TUN interface %1 is missing configured address/range. Expected one of [%2]. Current: %3"_s
+                            .arg(requiredTun,
+                                 expectedAddresses.join(u", "_s),
+                                 addrOutput.isEmpty() ? addrError.trimmed() : addrOutput);
+            QThread::msleep(150);
+            continue;
+        }
+
+        QString routeError;
+        const QString routeOutput = linuxIpOutput({u"route"_s, u"show"_s, u"table"_s, u"all"_s}, 1500, &routeError);
+        QString route6Error;
+        const QString route6Output = linuxIpOutput({u"-6"_s, u"route"_s, u"show"_s, u"table"_s, u"all"_s}, 1500, &route6Error);
+        QString ruleError;
+        const QString ruleOutput = linuxIpOutput({u"rule"_s}, 1500, &ruleError);
+        const bool routeMentionsTun = routeOutput.contains(u"dev %1"_s.arg(requiredTun))
+                                      || route6Output.contains(u"dev %1"_s.arg(requiredTun));
+        if (!routeMentionsTun) {
+            lastError = u"Linux TUN interface %1 is up, but route tables do not reference it yet. routeError=%2 ruleError=%3"_s
+                            .arg(requiredTun,
+                                 routeError.trimmed(),
+                                 ruleError.trimmed());
+            QThread::msleep(150);
+            continue;
+        }
+
+        if (!serverIp.trimmed().isEmpty() && isIpv4(serverIp)) {
+            QString serverErr;
+            const QString serverDev = linuxRouteDeviceFor(serverIp.trimmed(), false, &serverErr);
+            if (!serverDev.isEmpty() && serverDev.compare(requiredTun, Qt::CaseInsensitive) == 0) {
+                lastError = u"VPN server endpoint route is still pointed at TUN."_s;
+                QThread::msleep(150);
+                continue;
+            }
+        } else if (!serverIp.trimmed().isEmpty() && isIpv6(serverIp)) {
+            QString serverErr;
+            const QString serverDev = linuxRouteDeviceFor(serverIp.trimmed(), true, &serverErr);
+            if (!serverDev.isEmpty() && serverDev.compare(requiredTun, Qt::CaseInsensitive) == 0) {
+                lastError = u"VPN server endpoint IPv6 route is still pointed at TUN."_s;
+                QThread::msleep(150);
+                continue;
+            }
+        }
+
+        appendLineToFile(logPath, u"[System] Linux TUN readiness OK: interface=%1 addresses=%2 routeState=%3 ruleState=%4"_s
+                                      .arg(requiredTun,
+                                           expectedAddresses.join(u", "_s),
+                                           u"tun-routes"_s,
+                                           ruleOutput.left(160)));
+        return true;
+    }
+
+    const QString diagnostics = linuxTunDiagnostics();
+    if (!diagnostics.trimmed().isEmpty()) {
+        appendLineToFile(logPath, u"[System] Linux TUN readiness diagnostics:\n%1"_s.arg(diagnostics));
     }
 
     if (errorOut != nullptr) {
         *errorOut = lastError.trimmed().isEmpty()
             ? u"Linux TUN routes were not applied correctly."_s
-            : lastError.trimmed();
+            : u"%1\n%2"_s.arg(lastError.trimmed(), diagnostics);
     }
     return false;
 }
@@ -1719,27 +1826,16 @@ private:
         QDir().mkpath(QFileInfo(pidPath).absolutePath());
         QDir().mkpath(QFileInfo(logPath).absolutePath());
 
-#if defined(Q_OS_WIN)
         if (QFile::exists(pidPath)) {
-            QFile oldPidFile(pidPath);
-            if (oldPidFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
-                const QString oldPidText = QString::fromUtf8(oldPidFile.readAll()).trimmed();
-                bool oldPidOk = false;
-                const qint64 oldPid = oldPidText.toLongLong(&oldPidOk);
-                if (oldPidOk && oldPid > 0) {
-                    QString ignoredOut;
-                    QString ignoredErr;
-                    Q_UNUSED(runProcess(
-                        u"taskkill"_s,
-                        {u"/PID"_s, QString::number(oldPid), u"/T"_s, u"/F"_s},
-                        5000,
-                        &ignoredOut,
-                        &ignoredErr));
-                }
-            }
-            QFile::remove(pidPath);
+            QString cleanupError;
+            Q_UNUSED(stopTun(QJsonObject{
+                {u"pid_path"_s, pidPath},
+                {u"tun_if"_s, tunIf},
+                {u"server_ip"_s, resolveIpForHost(serverIpRequested)}
+            }, &cleanupError));
         }
 
+#if defined(Q_OS_WIN)
         const QString workingDir = QFileInfo(xrayPath).absolutePath();
         qint64 pidValue = 0;
         QProcess detachedProcess;
@@ -1909,7 +2005,8 @@ private:
             return false;
         }
         QString routeError;
-        if (!validateLinuxTunRouting(tunIf, resolvedServerIp, runtimePid, logPath, &routeError)) {
+        const QStringList expectedTunAddresses = linuxTunAddressesFromConfig(configPath);
+        if (!validateLinuxTunRouting(tunIf, resolvedServerIp, runtimePid, logPath, expectedTunAddresses, &routeError)) {
             QString cleanupErr;
             Q_UNUSED(stopTun(QJsonObject{
                 {u"pid_path"_s, pidPath},

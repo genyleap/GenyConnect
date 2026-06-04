@@ -293,11 +293,14 @@ jobs:
           OUT="build/selfupdate/GenyConnect-selfupdate-${PLATFORM}-${ARCH}.${EXT}"
           cp "${SRC}" "${OUT}"
 
-          if command -v sha256sum >/dev/null 2>&1; then
-            sha256sum "${OUT}" > "${OUT}.sha256"
-          else
-            shasum -a 256 "${OUT}" > "${OUT}.sha256"
-          fi
+          (
+            cd build/selfupdate
+            if command -v sha256sum >/dev/null 2>&1; then
+              sha256sum "$(basename "${OUT}")" > "$(basename "${OUT}").sha256"
+            else
+              shasum -a 256 "$(basename "${OUT}")" > "$(basename "${OUT}").sha256"
+            fi
+          )
 
           ls -lah build/selfupdate
 
@@ -454,6 +457,8 @@ jobs:
           fi
 
           chmod +x AppDir/usr/bin/GenyConnect || true
+          chmod +x AppDir/usr/bin/GenyConnectTunHelper || true
+          chmod +x AppDir/usr/bin/GenyConnectUpdater || true
           chmod +x AppDir/usr/bin/xray-core || true
 
           wget -O tools/linuxdeploy.AppImage "https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-${APPIMAGE_ARCH}.AppImage"
@@ -492,7 +497,11 @@ jobs:
 
           test -f "${OUTPUT}"
           mv "${OUTPUT}" "${OUT_DIR}/${OUTPUT}"
-          sha256sum "${OUT_DIR}/GenyConnect-${VERSION}-linux-${TARGET_ARCH}.AppImage" > "${OUT_DIR}/GenyConnect-${VERSION}-linux-${TARGET_ARCH}.AppImage.sha256"
+          (
+            cd "${OUT_DIR}"
+            sha256sum "GenyConnect-${VERSION}-linux-${TARGET_ARCH}.AppImage" \
+              > "GenyConnect-${VERSION}-linux-${TARGET_ARCH}.AppImage.sha256"
+          )
 
           ls -lah "${OUT_DIR}"
 
@@ -512,15 +521,27 @@ jobs:
 
           "./$(basename "${APPIMAGE}")" --appimage-extract >/dev/null
 
-          BIN="$(find squashfs-root -type f -name GenyConnect | head -n 1)"
-          test -f "${BIN}"
-
-          ldd "${BIN}" | tee /tmp/genyconnect-linux-x64-ldd.txt || true
+          : > /tmp/genyconnect-linux-x64-ldd.txt
+          for name in GenyConnect GenyConnectTunHelper GenyConnectUpdater xray-core; do
+            BIN="$(find squashfs-root -type f -name "${name}" | head -n 1 || true)"
+            if [[ -z "${BIN}" ]]; then
+              if [[ "${name}" == "xray-core" ]]; then
+                continue
+              fi
+              echo "Missing expected binary: ${name}"
+              exit 1
+            fi
+            echo "==== ${BIN} ====" | tee -a /tmp/genyconnect-linux-x64-ldd.txt
+            ldd "${BIN}" | tee -a /tmp/genyconnect-linux-x64-ldd.txt || true
+          done
 
           if grep -q "not found" /tmp/genyconnect-linux-x64-ldd.txt; then
             grep "not found" /tmp/genyconnect-linux-x64-ldd.txt
             exit 1
           fi
+
+          grep -q '"mtu"), defaultTunMtu()' "${{ github.workspace }}/src/xrayconfigbuilder.cpp"
+          grep -q '"address"), QJsonArray' "${{ github.workspace }}/src/xrayconfigbuilder.cpp"
 
       - name: Create Linux x64 self-update assets
         shell: bash
@@ -534,7 +555,11 @@ jobs:
 
           OUT="build/selfupdate/GenyConnect-selfupdate-linux-${SELFUPDATE_ARCH}.AppImage"
           cp "${SRC}" "${OUT}"
-          sha256sum "${OUT}" > "${OUT}.sha256"
+          (
+            cd build/selfupdate
+            sha256sum "GenyConnect-selfupdate-linux-${SELFUPDATE_ARCH}.AppImage" \
+              > "GenyConnect-selfupdate-linux-${SELFUPDATE_ARCH}.AppImage.sha256"
+          )
 
           ls -lah build/selfupdate
 
@@ -718,6 +743,8 @@ jobs:
           fi
 
           chmod +x AppDir/usr/bin/GenyConnect || true
+          chmod +x AppDir/usr/bin/GenyConnectTunHelper || true
+          chmod +x AppDir/usr/bin/GenyConnectUpdater || true
           chmod +x AppDir/usr/bin/xray-core || true
 
           wget -O tools/linuxdeploy.AppImage "https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-${APPIMAGE_ARCH}.AppImage"
@@ -754,7 +781,11 @@ jobs:
 
           test -f "${OUTPUT}"
           mv "${OUTPUT}" "${OUT_DIR}/${OUTPUT}"
-          sha256sum "${OUT_DIR}/GenyConnect-${VERSION}-linux-${TARGET_ARCH}.AppImage" > "${OUT_DIR}/GenyConnect-${VERSION}-linux-${TARGET_ARCH}.AppImage.sha256"
+          (
+            cd "${OUT_DIR}"
+            sha256sum "GenyConnect-${VERSION}-linux-${TARGET_ARCH}.AppImage" \
+              > "GenyConnect-${VERSION}-linux-${TARGET_ARCH}.AppImage.sha256"
+          )
 
           ls -lah "${OUT_DIR}"
 
@@ -774,15 +805,27 @@ jobs:
 
           "./$(basename "${APPIMAGE}")" --appimage-extract >/dev/null
 
-          BIN="$(find squashfs-root -type f -name GenyConnect | head -n 1)"
-          test -f "${BIN}"
-
-          ldd "${BIN}" | tee /tmp/genyconnect-linux-arm64-ldd.txt || true
+          : > /tmp/genyconnect-linux-arm64-ldd.txt
+          for name in GenyConnect GenyConnectTunHelper GenyConnectUpdater xray-core; do
+            BIN="$(find squashfs-root -type f -name "${name}" | head -n 1 || true)"
+            if [[ -z "${BIN}" ]]; then
+              if [[ "${name}" == "xray-core" ]]; then
+                continue
+              fi
+              echo "Missing expected binary: ${name}"
+              exit 1
+            fi
+            echo "==== ${BIN} ====" | tee -a /tmp/genyconnect-linux-arm64-ldd.txt
+            ldd "${BIN}" | tee -a /tmp/genyconnect-linux-arm64-ldd.txt || true
+          done
 
           if grep -q "not found" /tmp/genyconnect-linux-arm64-ldd.txt; then
             grep "not found" /tmp/genyconnect-linux-arm64-ldd.txt
             exit 1
           fi
+
+          grep -q '"mtu"), defaultTunMtu()' "${{ github.workspace }}/src/xrayconfigbuilder.cpp"
+          grep -q '"address"), QJsonArray' "${{ github.workspace }}/src/xrayconfigbuilder.cpp"
 
       - name: Create Linux ARM64 self-update assets
         shell: bash
@@ -796,7 +839,11 @@ jobs:
 
           OUT="build/selfupdate/GenyConnect-selfupdate-linux-${SELFUPDATE_ARCH}.AppImage"
           cp "${SRC}" "${OUT}"
-          sha256sum "${OUT}" > "${OUT}.sha256"
+          (
+            cd build/selfupdate
+            sha256sum "GenyConnect-selfupdate-linux-${SELFUPDATE_ARCH}.AppImage" \
+              > "GenyConnect-selfupdate-linux-${SELFUPDATE_ARCH}.AppImage.sha256"
+          )
 
           ls -lah build/selfupdate
 
@@ -1057,8 +1104,11 @@ jobs:
           cp "${APK}" "${OUT_DIR}/GenyConnect-${VERSION}-android-${{ matrix.android_output_arch }}.apk"
           cp "${APK}" "${OUT_DIR}/GenyConnect-selfupdate-android-${{ matrix.selfupdate_arch }}.apk"
 
-          sha256sum "${OUT_DIR}/GenyConnect-selfupdate-android-${{ matrix.selfupdate_arch }}.apk" \
-            > "${OUT_DIR}/GenyConnect-selfupdate-android-${{ matrix.selfupdate_arch }}.apk.sha256"
+          (
+            cd "${OUT_DIR}"
+            sha256sum "GenyConnect-selfupdate-android-${{ matrix.selfupdate_arch }}.apk" \
+              > "GenyConnect-selfupdate-android-${{ matrix.selfupdate_arch }}.apk.sha256"
+          )
 
           ls -lah "${OUT_DIR}"
 

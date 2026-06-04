@@ -150,16 +150,12 @@ QString tunStack = QString::fromUtf8("system");
     tunStack = QString::fromUtf8("gvisor");
 #endif
 
-    const QJsonValue tunMtu = QJsonArray {
-        defaultTunMtu()
-    };
-
     QJsonObject settings {
         {QString::fromUtf8("address"), QJsonArray {
             QString::fromUtf8("172.19.0.1/30"),
             QString::fromUtf8("fd00:1234:5678::1/126")
         }},
-        {QString::fromUtf8("mtu"), tunMtu},
+        {QString::fromUtf8("mtu"), defaultTunMtu()},
         {QString::fromUtf8("stack"), tunStack},
         {QString::fromUtf8("autoRoute"), options.tunAutoRoute},
         {QString::fromUtf8("strictRoute"), options.tunStrictRoute},
@@ -192,6 +188,11 @@ QString tunStack = QString::fromUtf8("system");
         QString::fromUtf8("fd00:1234:5678::1/126")
     });
     settings.insert(QString::fromUtf8("dns"), toStringArray(tunDnsServers(options.dnsServers)));
+#elif defined(Q_OS_LINUX) && !defined(Q_OS_ANDROID)
+    const QString tunName = options.tunInterfaceName.trimmed().isEmpty()
+        ? QString::fromUtf8("xray0")
+        : options.tunInterfaceName.trimmed();
+    settings.insert(QString::fromUtf8("name"), tunName);
 #endif
 
     QJsonArray destOverride {

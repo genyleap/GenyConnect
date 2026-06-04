@@ -93,6 +93,7 @@ extern "C" {
 
 #if !defined(Q_OS_IOS)
 #include <QProcess>
+#include <QProcessEnvironment>
 #endif
 
 module genyconnect.backend.vpncontroller;
@@ -792,6 +793,28 @@ QString validateGeneratedRuntimeConfig(const QJsonObject& config,
     }
     if (expectTunInbound && !hasTunInbound) {
         return QString::fromUtf8("Generated Xray config is missing the TUN inbound required for this mode.");
+    }
+    if (expectTunInbound) {
+        bool foundTunIn = false;
+        for (const QJsonValue& inboundValue : inbounds) {
+            const QJsonObject inbound = inboundValue.toObject();
+            if (inbound.value(QString::fromUtf8("tag")).toString().compare(QString::fromUtf8("tun-in"), Qt::CaseInsensitive) != 0) {
+                continue;
+            }
+            foundTunIn = true;
+            const QJsonObject settings = inbound.value(QString::fromUtf8("settings")).toObject();
+            if (!settings.value(QString::fromUtf8("address")).isArray()) {
+                return QString::fromUtf8("Generated Xray TUN config is invalid: tun-in settings.address must be an array.");
+            }
+            const QJsonValue mtu = settings.value(QString::fromUtf8("mtu"));
+            if (!mtu.isDouble()) {
+                return QString::fromUtf8("Generated Xray TUN config is invalid: tun-in settings.mtu must be a numeric JSON value, not an array.");
+            }
+            break;
+        }
+        if (!foundTunIn) {
+            return QString::fromUtf8("Generated Xray config is missing required inbound tag tun-in for TUN mode.");
+        }
     }
     return QString();
 }
@@ -1726,10 +1749,41 @@ QString selectTunInterfaceName()
         }
     }
     return QString::fromUtf8("utun9");
+#elif defined(Q_OS_LINUX) && !defined(Q_OS_ANDROID)
+    return QString::fromUtf8("xray0");
 #else
     return {};
 #endif
 }
+
+#if defined(Q_OS_LINUX)
+QProcessEnvironment linuxAppImageHelperEnvironment()
+{
+    QProcessEnvironment environment = QProcessEnvironment::systemEnvironment();
+    const QString appDir = qEnvironmentVariable("APPDIR").trimmed();
+    if (appDir.isEmpty()) {
+        return environment;
+    }
+
+    QStringList libraryPaths {
+        QDir(appDir).filePath(QString::fromUtf8("usr/lib")),
+        QDir(appDir).filePath(QString::fromUtf8("usr/lib/aarch64-linux-gnu")),
+        QDir(appDir).filePath(QString::fromUtf8("usr/lib/x86_64-linux-gnu"))
+    };
+
+    const QString existing = environment.value(QString::fromUtf8("LD_LIBRARY_PATH")).trimmed();
+    if (!existing.isEmpty()) {
+        libraryPaths.append(existing);
+    }
+    environment.insert(QString::fromUtf8("LD_LIBRARY_PATH"), libraryPaths.join(QChar::fromLatin1(':')));
+    return environment;
+}
+
+QString linuxAppImageHelperLdLibraryPath()
+{
+    return linuxAppImageHelperEnvironment().value(QString::fromUtf8("LD_LIBRARY_PATH")).trimmed();
+}
+#endif
 
 bool ensureWindowsTunRuntimeReady(const QString& xrayExecutablePath,
                                   const QString& dataDirectory,
@@ -5253,6 +5307,7 @@ void VpnController::connectToProfile(int row)
                 QString stopError;
                 Q_UNUSED(guard->stopPrivilegedTunProcess(&stopError));
                 guard->stopPrivilegedTunRuntimeByPidPath();
+                guard->shutdownPrivilegedTunHelper();
                 guard->m_privilegedTunRuntimePid = -1;
                 ok = false;
                 elevateError = QString::fromUtf8("Connection attempt was cancelled.");
@@ -5381,6 +5436,7 @@ void VpnController::disconnect()
                     guard->appendSystemLog(QString::fromUtf8("[System] %1").arg(stopError));
                     guard->stopPrivilegedTunRuntimeByPidPath();
                 }
+                guard->shutdownPrivilegedTunHelper();
                 guard->m_disconnectRequested.store(false);
                 guard->setConnectionState(ConnectionState::Disconnected);
                 guard->maybeReconnectToPendingProfile();
@@ -10432,6 +10488,10 @@ bool VpnController::ensurePrivilegedTunHelper(QString *errorMessage)
         return true;
     }
 
+#if defined(Q_OS_LINUX)
+    shutdownPrivilegedTunHelper();
+#endif
+
     QString helperPath = privilegedTunHelperPath();
 #if defined(Q_OS_LINUX)
     QString helperStageError;
@@ -10524,10 +10584,22 @@ bool VpnController::ensurePrivilegedTunHelper(QString *errorMessage)
             continue;
         }
         QStringList pkexecArgs;
-        pkexecArgs << helperPath;
+        const QString ldLibraryPath = linuxAppImageHelperLdLibraryPath();
+        const QString envPath = QStandardPaths::findExecutable(QString::fromUtf8("env"));
+        if (!qEnvironmentVariable("APPDIR").trimmed().isEmpty() && !ldLibraryPath.isEmpty() && !envPath.isEmpty()) {
+            pkexecArgs << envPath;
+            pkexecArgs << QString::fromUtf8("LD_LIBRARY_PATH=%1").arg(ldLibraryPath);
+            pkexecArgs << helperPath;
+        } else {
+            pkexecArgs << helperPath;
+        }
         pkexecArgs << launchArgs;
         qint64 detachedPid = 0;
-        if (!QProcess::startDetached(QString::fromUtf8("pkexec"), pkexecArgs, QString(), &detachedPid)) {
+        QProcess process;
+        process.setProgram(QString::fromUtf8("pkexec"));
+        process.setArguments(pkexecArgs);
+        process.setProcessEnvironment(linuxAppImageHelperEnvironment());
+        if (!process.startDetached(&detachedPid)) {
             launchError = QString::fromUtf8("Failed to request elevation for Linux TUN helper.");
             continue;
         }
@@ -10569,6 +10641,9 @@ bool VpnController::ensurePrivilegedTunHelper(QString *errorMessage)
     }
 
     if (!ready) {
+#if defined(Q_OS_LINUX)
+        shutdownPrivilegedTunHelper();
+#endif
         m_privilegedTunHelperPort = 0;
         m_privilegedTunHelperToken.clear();
         if (errorMessage) {
@@ -10706,6 +10781,7 @@ bool VpnController::requestElevationForTun(QString *errorMessage)
 bool VpnController::startPrivilegedTunProcess(QString *errorMessage)
 {
     m_privilegedTunRuntimePid = -1;
+    stopPrivilegedTunRuntimeByPidPath();
     QFile::remove(m_privilegedTunPidPath);
     QFile::remove(m_privilegedTunLogPath);
     m_privilegedTunLogOffset = 0;
@@ -10749,6 +10825,8 @@ bool VpnController::startPrivilegedTunProcess(QString *errorMessage)
             &response,
             &helperError,
             90000)) {
+        shutdownPrivilegedTunHelper();
+        stopPrivilegedTunRuntimeByPidPath();
         if (errorMessage) {
             *errorMessage = helperError.isEmpty()
             ? QString::fromUtf8("Privileged helper failed to start TUN runtime.")
@@ -10758,6 +10836,8 @@ bool VpnController::startPrivilegedTunProcess(QString *errorMessage)
     }
 
     if (!response.value(QString::fromUtf8("ok")).toBool(false)) {
+        shutdownPrivilegedTunHelper();
+        stopPrivilegedTunRuntimeByPidPath();
         if (errorMessage) {
             *errorMessage = response.value(QString::fromUtf8("message")).toString().trimmed();
             if (errorMessage->isEmpty()) {
@@ -10769,6 +10849,8 @@ bool VpnController::startPrivilegedTunProcess(QString *errorMessage)
 
     QFile pidFile(m_privilegedTunPidPath);
     if (!pidFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        shutdownPrivilegedTunHelper();
+        stopPrivilegedTunRuntimeByPidPath();
         if (errorMessage) {
             *errorMessage = QString::fromUtf8("TUN start failed: pid file was not created.");
         }
@@ -10777,6 +10859,8 @@ bool VpnController::startPrivilegedTunProcess(QString *errorMessage)
     const QString pidText = QString::fromUtf8(pidFile.readAll()).trimmed();
     pidFile.close();
     if (pidText.isEmpty()) {
+        shutdownPrivilegedTunHelper();
+        stopPrivilegedTunRuntimeByPidPath();
         if (errorMessage) {
             *errorMessage = QString::fromUtf8("TUN start failed: invalid process id.");
         }
@@ -10785,6 +10869,8 @@ bool VpnController::startPrivilegedTunProcess(QString *errorMessage)
     bool pidOk = false;
     const qint64 pidValue = pidText.toLongLong(&pidOk);
     if (!pidOk || pidValue <= 0) {
+        shutdownPrivilegedTunHelper();
+        stopPrivilegedTunRuntimeByPidPath();
         if (errorMessage) {
             *errorMessage = QString::fromUtf8("TUN start failed: invalid process id.");
         }
@@ -10838,6 +10924,8 @@ bool VpnController::startPrivilegedTunProcess(QString *errorMessage)
 
         QString stopError;
         Q_UNUSED(stopPrivilegedTunProcess(&stopError));
+        stopPrivilegedTunRuntimeByPidPath();
+        shutdownPrivilegedTunHelper();
         if (errorMessage) {
             if (!tailLine.isEmpty()) {
                 *errorMessage = QString::fromUtf8("TUN startup failed: %1").arg(tailLine);
@@ -10855,8 +10943,12 @@ bool VpnController::startPrivilegedTunProcess(QString *errorMessage)
 bool VpnController::stopPrivilegedTunProcess(QString *errorMessage)
 {
     if (!m_privilegedTunHelperReady) {
+        stopPrivilegedTunRuntimeByPidPath();
         m_lastTunServerIp.clear();
         m_privilegedTunRuntimePid = -1;
+        if (errorMessage) {
+            errorMessage->clear();
+        }
         return true;
     }
 
