@@ -17,6 +17,7 @@ module;
 #include <QNetworkReply>
 #include <QNetworkRequest>
 #include <QRegularExpression>
+#include <QStringList>
 #include <QStandardPaths>
 #include <QSysInfo>
 #include <QTemporaryFile>
@@ -617,7 +618,11 @@ void Updater::checkForUpdates(bool userInitiated)
             m_downloadTotal = 0;
 
             const QJsonArray assets = root.value(QString::fromUtf8("assets")).toArray();
-            selectBestReleaseAsset(assets, &m_assetUrl, &m_assetName, &m_assetExpectedSha256, &m_assetChecksumUrl);
+            QStringList assetDiagnostics;
+            selectBestReleaseAsset(assets, &m_assetUrl, &m_assetName, &m_assetExpectedSha256, &m_assetChecksumUrl, &assetDiagnostics);
+            for (const QString& line : assetDiagnostics) {
+                emit systemLog(line);
+            }
             if (!m_assetName.isEmpty()) {
                 emit systemLog(QString::fromUtf8("[Updater] Selected asset: %1").arg(m_assetName));
                 if (!m_assetExpectedSha256.isEmpty()) {
@@ -1177,7 +1182,11 @@ void Updater::onCheckFinished()
     m_downloadTotal = 0;
 
     const QJsonArray assets = root.value(QString::fromUtf8("assets")).toArray();
-    selectBestReleaseAsset(assets, &m_assetUrl, &m_assetName, &m_assetExpectedSha256, &m_assetChecksumUrl);
+    QStringList assetDiagnostics;
+    selectBestReleaseAsset(assets, &m_assetUrl, &m_assetName, &m_assetExpectedSha256, &m_assetChecksumUrl, &assetDiagnostics);
+    for (const QString& line : assetDiagnostics) {
+        emit systemLog(line);
+    }
     if (!m_assetName.isEmpty()) {
         emit systemLog(QString::fromUtf8("[Updater] Selected asset: %1").arg(m_assetName));
         if (!m_assetExpectedSha256.isEmpty()) {
@@ -1341,7 +1350,8 @@ bool Updater::selectBestReleaseAsset(
     QString *assetUrl,
     QString *assetName,
     QString *assetSha256,
-    QString *checksumAssetUrl)
+    QString *checksumAssetUrl,
+    QStringList *diagnostics)
 {
     if (assetUrl == nullptr || assetName == nullptr) {
         return false;
@@ -1355,40 +1365,160 @@ bool Updater::selectBestReleaseAsset(
     if (checksumAssetUrl != nullptr) {
         *checksumAssetUrl = QString();
     }
-    if (assets.isEmpty()) {
-        return false;
-    }
-
-    QString arch = QSysInfo::buildCpuArchitecture().toLower();
-    if (arch.isEmpty()) {
-        arch = QSysInfo::currentCpuArchitecture().toLower();
-    }
 #if defined(Q_OS_ANDROID)
-    constexpr bool isAndroid = true;
-    constexpr bool isMac = false;
-    constexpr bool isWin = false;
-    constexpr bool isLinux = false;
+    const QString currentPlatform = QString::fromUtf8("android");
 #elif defined(Q_OS_MACOS)
-    constexpr bool isAndroid = false;
-    constexpr bool isMac = true;
-    constexpr bool isWin = false;
-    constexpr bool isLinux = false;
+    const QString currentPlatform = QString::fromUtf8("macos");
 #elif defined(Q_OS_WIN)
-    constexpr bool isAndroid = false;
-    constexpr bool isMac = false;
-    constexpr bool isWin = true;
-    constexpr bool isLinux = false;
+    const QString currentPlatform = QString::fromUtf8("windows");
 #else
-    constexpr bool isAndroid = false;
-    constexpr bool isMac = false;
-    constexpr bool isWin = false;
-    constexpr bool isLinux = true;
+    const QString currentPlatform = QString::fromUtf8("linux");
 #endif
+    QString rawArch = QSysInfo::buildCpuArchitecture().toLower();
+    if (rawArch.isEmpty()) {
+        rawArch = QSysInfo::currentCpuArchitecture().toLower();
+    }
+    auto normalizedArchForPlatform = [&currentPlatform](const QString& arch) {
+        const QString value = arch.toLower();
+        if (currentPlatform == QString::fromUtf8("android")) {
+            if (value.contains(QString::fromUtf8("arm64")) || value.contains(QString::fromUtf8("aarch64"))) {
+                return QString::fromUtf8("arm64-v8a");
+            }
+            if (value.contains(QString::fromUtf8("armv7")) || value.contains(QString::fromUtf8("armeabi"))) {
+                return QString::fromUtf8("armeabi-v7a");
+            }
+        } else if (currentPlatform == QString::fromUtf8("macos")) {
+            if (value.contains(QString::fromUtf8("arm64")) || value.contains(QString::fromUtf8("aarch64"))) {
+                return QString::fromUtf8("arm64");
+            }
+            if (value.contains(QString::fromUtf8("x86_64")) || value.contains(QString::fromUtf8("x64")) || value.contains(QString::fromUtf8("amd64"))) {
+                return QString::fromUtf8("x86_64");
+            }
+        } else if (currentPlatform == QString::fromUtf8("windows")) {
+            if (value.contains(QString::fromUtf8("arm64")) || value.contains(QString::fromUtf8("aarch64"))) {
+                return QString::fromUtf8("arm64");
+            }
+            if (value.contains(QString::fromUtf8("x86_64")) || value.contains(QString::fromUtf8("x64")) || value.contains(QString::fromUtf8("amd64"))) {
+                return QString::fromUtf8("x64");
+            }
+        } else {
+            if (value.contains(QString::fromUtf8("arm64")) || value.contains(QString::fromUtf8("aarch64"))) {
+                return QString::fromUtf8("arm64");
+            }
+            if (value.contains(QString::fromUtf8("x86_64")) || value.contains(QString::fromUtf8("x64")) || value.contains(QString::fromUtf8("amd64"))) {
+                return QString::fromUtf8("x64");
+            }
+        }
+        return value;
+    };
+    const QString currentArch = normalizedArchForPlatform(rawArch);
+
+    if (diagnostics != nullptr) {
+        diagnostics->clear();
+        diagnostics->append(QString::fromUtf8("[Updater] Current platform: %1").arg(currentPlatform));
+        diagnostics->append(QString::fromUtf8("[Updater] Current arch: %1").arg(currentArch.isEmpty() ? rawArch : currentArch));
+    }
 
     int bestScore = std::numeric_limits<int>::min();
     QString bestUrl;
     QString bestName;
     QString bestDigest;
+    QStringList candidateNames;
+
+    auto reject = [diagnostics](const QString& name, const QString& reason) {
+        if (diagnostics != nullptr) {
+            diagnostics->append(QString::fromUtf8("[Updater] Rejected asset: %1 (%2)").arg(name, reason));
+        }
+    };
+
+    auto hasAny = [](const QString& text, const QStringList& tokens) {
+        for (const QString& token : tokens) {
+            if (text.contains(token)) {
+                return true;
+            }
+        }
+        return false;
+    };
+
+    auto hasRequiredPlatform = [&currentPlatform, &hasAny](const QString& lower) {
+        if (currentPlatform == QString::fromUtf8("linux")) {
+            return lower.contains(QString::fromUtf8("linux"));
+        }
+        if (currentPlatform == QString::fromUtf8("android")) {
+            return lower.contains(QString::fromUtf8("android"));
+        }
+        if (currentPlatform == QString::fromUtf8("macos")) {
+            return hasAny(lower, {QString::fromUtf8("macos"), QString::fromUtf8("mac"), QString::fromUtf8("darwin"), QString::fromUtf8("osx")});
+        }
+        return hasAny(lower, {QString::fromUtf8("windows"), QString::fromUtf8("win")});
+    };
+
+    auto hasWrongPlatform = [&currentPlatform, &hasAny](const QString& lower) {
+        const bool mentionsLinux = lower.contains(QString::fromUtf8("linux")) || lower.contains(QString::fromUtf8("appimage"));
+        const bool mentionsAndroid = lower.contains(QString::fromUtf8("android")) || lower.endsWith(QString::fromUtf8(".apk"));
+        const bool mentionsMac = hasAny(lower, {QString::fromUtf8("macos"), QString::fromUtf8("darwin"), QString::fromUtf8("osx"), QString::fromUtf8(".dmg")});
+        const bool mentionsWin = hasAny(lower, {QString::fromUtf8("windows"), QString::fromUtf8(".exe")});
+        if (currentPlatform == QString::fromUtf8("linux")) {
+            return mentionsAndroid || mentionsMac || mentionsWin;
+        }
+        if (currentPlatform == QString::fromUtf8("android")) {
+            return mentionsLinux || mentionsMac || mentionsWin;
+        }
+        if (currentPlatform == QString::fromUtf8("macos")) {
+            return mentionsLinux || mentionsAndroid || mentionsWin;
+        }
+        return mentionsLinux || mentionsAndroid || mentionsMac;
+    };
+
+    auto hasRequiredExtension = [&currentPlatform](const QString& lower) {
+        if (currentPlatform == QString::fromUtf8("linux")) {
+            return lower.endsWith(QString::fromUtf8(".appimage"));
+        }
+        if (currentPlatform == QString::fromUtf8("android")) {
+            return lower.endsWith(QString::fromUtf8(".apk"));
+        }
+        if (currentPlatform == QString::fromUtf8("macos")) {
+            return lower.endsWith(QString::fromUtf8(".dmg"));
+        }
+        return lower.endsWith(QString::fromUtf8(".exe"));
+    };
+
+    auto hasRequiredArch = [&currentPlatform, &currentArch](const QString& lower) {
+        if (currentPlatform == QString::fromUtf8("android")) {
+            if (currentArch == QString::fromUtf8("arm64-v8a")) {
+                return lower.contains(QString::fromUtf8("arm64-v8a"));
+            }
+            if (currentArch == QString::fromUtf8("armeabi-v7a")) {
+                return lower.contains(QString::fromUtf8("armeabi-v7a"));
+            }
+            return false;
+        }
+        if (currentPlatform == QString::fromUtf8("macos")) {
+            if (currentArch == QString::fromUtf8("arm64")) {
+                return lower.contains(QString::fromUtf8("macos-arm64")) || lower.contains(QString::fromUtf8("mac-arm64"));
+            }
+            if (currentArch == QString::fromUtf8("x86_64")) {
+                return lower.contains(QString::fromUtf8("macos-x86_64")) || lower.contains(QString::fromUtf8("mac-x86_64"));
+            }
+            return false;
+        }
+        if (currentPlatform == QString::fromUtf8("windows")) {
+            if (currentArch == QString::fromUtf8("arm64")) {
+                return lower.contains(QString::fromUtf8("windows-arm64")) || lower.contains(QString::fromUtf8("win-arm64"));
+            }
+            if (currentArch == QString::fromUtf8("x64")) {
+                return lower.contains(QString::fromUtf8("windows-x64")) || lower.contains(QString::fromUtf8("win-x64"));
+            }
+            return false;
+        }
+        if (currentArch == QString::fromUtf8("arm64")) {
+            return lower.contains(QString::fromUtf8("linux-arm64")) || lower.contains(QString::fromUtf8("linux-aarch64"));
+        }
+        if (currentArch == QString::fromUtf8("x64")) {
+            return lower.contains(QString::fromUtf8("linux-x64")) || lower.contains(QString::fromUtf8("linux-x86_64"));
+        }
+        return false;
+    };
 
     for (const QJsonValue& entry : assets) {
         if (!entry.isObject()) {
@@ -1402,65 +1532,26 @@ bool Updater::selectBestReleaseAsset(
         }
 
         const QString lower = name.toLower();
-        const bool mentionsMac = lower.contains(QString::fromUtf8("mac"))
-            || lower.contains(QString::fromUtf8("darwin"))
-            || lower.contains(QString::fromUtf8("osx"));
-        const bool mentionsWin = lower.contains(QString::fromUtf8("win"))
-            || lower.contains(QString::fromUtf8("windows"));
-        const bool mentionsLinux = lower.contains(QString::fromUtf8("linux"))
-            || lower.contains(QString::fromUtf8("appimage"))
-            || lower.contains(QString::fromUtf8(".deb"))
-            || lower.contains(QString::fromUtf8(".rpm"));
-        const bool mentionsAndroid = lower.contains(QString::fromUtf8("android"))
-            || lower.endsWith(QString::fromUtf8(".apk"));
+        candidateNames.append(name);
 
-        // Hard filter when asset explicitly targets a different platform.
-        if (isAndroid && (mentionsMac || mentionsWin || mentionsLinux)) {
+        if (isLikelyChecksumAsset(lower)) {
+            reject(name, QString::fromUtf8("checksum manifest"));
             continue;
         }
-        if (isAndroid && !mentionsAndroid) {
+        if (!hasRequiredExtension(lower)) {
+            reject(name, QString::fromUtf8("wrong file type for %1").arg(currentPlatform));
             continue;
         }
-        if (isWin && mentionsMac) {
+        if (hasWrongPlatform(lower)) {
+            reject(name, QString::fromUtf8("wrong platform"));
             continue;
         }
-        if (isWin && mentionsLinux) {
+        if (!hasRequiredPlatform(lower)) {
+            reject(name, QString::fromUtf8("missing %1 platform marker").arg(currentPlatform));
             continue;
         }
-        if (isWin && mentionsAndroid) {
-            continue;
-        }
-        if (isMac && mentionsWin) {
-            continue;
-        }
-        if (isMac && mentionsLinux) {
-            continue;
-        }
-        if (isMac && mentionsAndroid) {
-            continue;
-        }
-        if (isLinux && mentionsWin) {
-            continue;
-        }
-        if (isLinux && mentionsMac) {
-            continue;
-        }
-        if (isLinux && mentionsAndroid) {
-            continue;
-        }
-
-        const bool assetArm = lower.contains(QString::fromUtf8("arm64")) || lower.contains(QString::fromUtf8("aarch64"));
-        const bool assetX86 = lower.contains(QString::fromUtf8("x64"))
-            || lower.contains(QString::fromUtf8("x86_64"))
-            || lower.contains(QString::fromUtf8("amd64"))
-            || lower.contains(QString::fromUtf8("x86-64"));
-        const bool hostArm = arch.contains(QString::fromUtf8("arm")) || arch.contains(QString::fromUtf8("aarch64"));
-
-        // Hard filter when asset explicitly targets a different architecture.
-        if (hostArm && assetX86 && !assetArm) {
-            continue;
-        }
-        if (!hostArm && assetArm && !assetX86) {
+        if (!hasRequiredArch(lower)) {
+            reject(name, QString::fromUtf8("wrong architecture for %1").arg(currentArch));
             continue;
         }
 
@@ -1469,55 +1560,23 @@ bool Updater::selectBestReleaseAsset(
             score += 25;
         }
         if (lower.contains(QString::fromUtf8("selfupdate"))) {
-            score += 30;
+            score += 500;
         }
 
-        if (isMac) {
-            if (mentionsMac) {
-                score += 40;
-            }
-            if (lower.endsWith(QString::fromUtf8(".dmg"))) {
-                score += 35;
-            } else if (lower.endsWith(QString::fromUtf8(".pkg"))) {
-                score += 25;
-            } else if (lower.endsWith(QString::fromUtf8(".zip"))) {
-                score += 10;
-            }
-        } else if (isWin) {
-            if (mentionsWin) {
-                score += 40;
-            }
-            if (lower.endsWith(QString::fromUtf8(".exe")) || lower.endsWith(QString::fromUtf8(".msi"))) {
-                score += 35;
-            } else if (lower.endsWith(QString::fromUtf8(".zip"))) {
-                score += 10;
-            }
-        } else if (isLinux) {
-            if (mentionsLinux) {
-                score += 40;
-            }
-            if (lower.endsWith(QString::fromUtf8(".appimage")) || lower.endsWith(QString::fromUtf8(".deb")) || lower.endsWith(QString::fromUtf8(".rpm"))) {
-                score += 35;
-            } else if (lower.endsWith(QString::fromUtf8(".tar.gz")) || lower.endsWith(QString::fromUtf8(".zip"))) {
-                score += 15;
-            }
-        } else if (isAndroid) {
-            if (mentionsAndroid) {
-                score += 60;
-            }
-            if (lower.endsWith(QString::fromUtf8(".apk"))) {
-                score += 70;
-            }
-        }
-
-        if (hostArm) {
-            if (assetArm) {
-                score += 25;
-            }
+        if (currentPlatform == QString::fromUtf8("linux")) {
+            score += lower.contains(QString::fromUtf8("selfupdate-linux")) ? 300 : 100;
+            score += lower.endsWith(QString::fromUtf8(".appimage")) ? 80 : 0;
+        } else if (currentPlatform == QString::fromUtf8("android")) {
+            score += 200;
+        } else if (currentPlatform == QString::fromUtf8("macos")) {
+            score += 200;
         } else {
-            if (assetX86) {
-                score += 25;
-            }
+            score += 200;
+        }
+        score += 50;
+
+        if (diagnostics != nullptr) {
+            diagnostics->append(QString::fromUtf8("[Updater] Candidate asset: %1 (score %2)").arg(name).arg(score));
         }
 
         if (score > bestScore) {
@@ -1528,14 +1587,14 @@ bool Updater::selectBestReleaseAsset(
         }
     }
 
-    if (bestUrl.isEmpty()) {
-        const QJsonObject firstObj = assets.first().toObject();
-        bestName = firstObj.value(QString::fromUtf8("name")).toString().trimmed();
-        bestUrl = firstObj.value(QString::fromUtf8("browser_download_url")).toString().trimmed();
-        bestDigest = normalizeSha256Digest(firstObj.value(QString::fromUtf8("digest")).toString());
+    if (diagnostics != nullptr) {
+        diagnostics->append(QString::fromUtf8("[Updater] Release assets: %1").arg(candidateNames.join(QString::fromUtf8(", "))));
     }
 
     if (bestUrl.isEmpty()) {
+        if (diagnostics != nullptr) {
+            diagnostics->append(QString::fromUtf8("[Updater] No asset matched platform %1 arch %2.").arg(currentPlatform, currentArch));
+        }
         return false;
     }
 

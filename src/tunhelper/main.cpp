@@ -1182,6 +1182,84 @@ QString linuxTunDiagnostics()
         .arg(addr, routes, routes6, rules);
 }
 
+bool linuxRunIpIdempotent(
+    const QStringList& args,
+    int timeoutMs,
+    const QString& logPath,
+    QString* errorOut)
+{
+    const QString ipTool = linuxIpTool();
+    if (ipTool.trimmed().isEmpty()) {
+        if (errorOut != nullptr) {
+            *errorOut = u"`ip` utility not found."_s;
+        }
+        return false;
+    }
+
+    QString stdoutText;
+    QString stderrText;
+    const bool ok = runProcess(ipTool, args, timeoutMs, &stdoutText, &stderrText);
+    if (ok) {
+        return true;
+    }
+
+    const QString combined = (stdoutText + u"\n"_s + stderrText).trimmed();
+    if (combined.contains(u"File exists"_s, Qt::CaseInsensitive)) {
+        return true;
+    }
+
+    const QString message = combined.trimmed().isEmpty()
+        ? u"ip %1 failed."_s.arg(args.join(u" "_s))
+        : u"ip %1 failed: %2"_s.arg(args.join(u" "_s), combined);
+    appendLineToFile(logPath, u"[System] Linux TUN address setup failed: %1"_s.arg(message));
+    if (errorOut != nullptr) {
+        *errorOut = message;
+    }
+    return false;
+}
+
+bool linuxEnsureTunAddresses(
+    const QString& tunIf,
+    const QStringList& expectedAddresses,
+    const QString& logPath,
+    QString* errorOut)
+{
+    const QString requiredTun = tunIf.trimmed().isEmpty() ? u"xray0"_s : tunIf.trimmed();
+    if (requiredTun.isEmpty()) {
+        if (errorOut != nullptr) {
+            *errorOut = u"Missing Linux TUN interface name."_s;
+        }
+        return false;
+    }
+
+    if (!linuxRunIpIdempotent({u"link"_s, u"set"_s, u"dev"_s, requiredTun, u"up"_s}, 1200, logPath, errorOut)) {
+        return false;
+    }
+
+    for (const QString& address : expectedAddresses) {
+        const QString normalized = address.trimmed();
+        if (normalized.isEmpty()) {
+            continue;
+        }
+
+        QStringList args;
+        if (normalized.contains(u":"_s)) {
+            args = {u"-6"_s, u"addr"_s, u"add"_s, normalized, u"dev"_s, requiredTun};
+        } else {
+            args = {u"addr"_s, u"add"_s, normalized, u"dev"_s, requiredTun};
+        }
+        QString addressError;
+        Q_UNUSED(linuxRunIpIdempotent(args, 1200, logPath, &addressError));
+    }
+
+    if (errorOut != nullptr) {
+        // Address add failures are logged and readiness below decides whether
+        // enough configured address state exists to proceed.
+        errorOut->clear();
+    }
+    return true;
+}
+
 bool validateLinuxTunRouting(
     const QString& requestedTunIf,
     const QString& serverIp,
@@ -1210,19 +1288,46 @@ bool validateLinuxTunRouting(
             QThread::msleep(150);
             continue;
         }
-        if (!linkOutput.contains(u"<"_s) || !linkOutput.contains(u"UP"_s)) {
-            lastError = u"Linux TUN interface %1 exists but is not UP: %2"_s.arg(requiredTun, linkOutput);
+
+        QString setupError;
+        if (!linuxEnsureTunAddresses(requiredTun, expectedAddresses, logPath, &setupError)) {
+            lastError = setupError.trimmed().isEmpty()
+                ? u"Failed to ensure Linux TUN addresses."_s
+                : setupError.trimmed();
             QThread::msleep(150);
             continue;
         }
 
+        if (!linkOutput.contains(u"<"_s) || !linkOutput.contains(u"UP"_s)) {
+            QString refreshedLinkError;
+            const QString refreshedLinkOutput = linuxIpOutput({u"-o"_s, u"link"_s, u"show"_s, u"dev"_s, requiredTun}, 1200, &refreshedLinkError);
+            if (!refreshedLinkOutput.contains(u"<"_s) || !refreshedLinkOutput.contains(u"UP"_s)) {
+                lastError = u"Linux TUN interface %1 exists but is not UP: %2"_s
+                                .arg(requiredTun,
+                                     refreshedLinkOutput.isEmpty() ? refreshedLinkError.trimmed() : refreshedLinkOutput);
+                QThread::msleep(150);
+                continue;
+            }
+        }
+
         QString addrError;
-        const QString addrOutput = linuxIpOutput({u"-o"_s, u"addr"_s, u"show"_s, u"dev"_s, requiredTun}, 1200, &addrError);
+        QString addrOutput = linuxIpOutput({u"-o"_s, u"addr"_s, u"show"_s, u"dev"_s, requiredTun}, 1200, &addrError);
         bool addressReady = expectedAddresses.isEmpty();
         for (const QString& expectedAddress : expectedAddresses) {
             if (addrOutput.contains(expectedAddress)) {
                 addressReady = true;
                 break;
+            }
+        }
+        if (!addressReady) {
+            QString retrySetupError;
+            Q_UNUSED(linuxEnsureTunAddresses(requiredTun, expectedAddresses, logPath, &retrySetupError));
+            addrOutput = linuxIpOutput({u"-o"_s, u"addr"_s, u"show"_s, u"dev"_s, requiredTun}, 1200, &addrError);
+            for (const QString& expectedAddress : expectedAddresses) {
+                if (addrOutput.contains(expectedAddress)) {
+                    addressReady = true;
+                    break;
+                }
             }
         }
         if (!addressReady) {

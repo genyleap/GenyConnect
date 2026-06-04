@@ -819,6 +819,27 @@ QString validateGeneratedRuntimeConfig(const QJsonObject& config,
     return QString();
 }
 
+QString tunInboundSettingsPreview(const QJsonObject& config)
+{
+    const QJsonArray inbounds = config.value(QString::fromUtf8("inbounds")).toArray();
+    for (const QJsonValue& inboundValue : inbounds) {
+        const QJsonObject inbound = inboundValue.toObject();
+        if (inbound.value(QString::fromUtf8("tag")).toString().compare(QString::fromUtf8("tun-in"), Qt::CaseInsensitive) != 0) {
+            continue;
+        }
+        const QJsonObject settings = inbound.value(QString::fromUtf8("settings")).toObject();
+        if (settings.isEmpty()) {
+            return QString::fromUtf8("{}");
+        }
+        QString preview = QString::fromUtf8(QJsonDocument(settings).toJson(QJsonDocument::Compact));
+        if (preview.size() > 600) {
+            preview = preview.left(600) + QString::fromUtf8("...");
+        }
+        return preview;
+    }
+    return {};
+}
+
 QStringList extractShareLinks(const QString& text)
 {
     QStringList links;
@@ -11234,6 +11255,11 @@ bool VpnController::writeRuntimeConfig(const ServerProfile& profile, QString *er
         // Ensure noisy link-local/broadcast packets are blocked in TUN mode.
         // This prevents direct-route packet loops that can spike xray CPU usage.
         ensureTunNoiseBlockRules(&config);
+#if defined(Q_OS_LINUX)
+        const QString tunSettings = tunInboundSettingsPreview(config);
+        appendSystemLog(QString::fromUtf8("[System] Generated Linux tun-in settings: %1")
+                            .arg(tunSettings.isEmpty() ? QString::fromUtf8("missing") : tunSettings));
+#endif
     }
     QString runtimeConfigSummary;
     const QString runtimeConfigValidationError = validateGeneratedRuntimeConfig(

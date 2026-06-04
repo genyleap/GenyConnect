@@ -538,7 +538,7 @@ ColumnLayout {
 
         Controls.Button {
             text: "Select visible"
-            implicitWidth: 104
+            implicitWidth: 128
             implicitHeight: 32
             Layout.fillWidth: false
             enabled: vpnController.processRoutingSupported

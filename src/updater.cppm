@@ -26,6 +26,7 @@ module;
 #include <QNetworkReply>
 #include <QObject>
 #include <QString>
+#include <QStringList>
 
 export module genyconnect.backend.updater;
 
@@ -187,7 +188,8 @@ private:
         QString *assetUrl,
         QString *assetName,
         QString *assetSha256 = nullptr,
-        QString *checksumAssetUrl = nullptr);
+        QString *checksumAssetUrl = nullptr,
+        QStringList *diagnostics = nullptr);
     static QString fileSha256Hex(const QString& path);
     static bool isSelfInstallSupportedAsset(const QString& path);
     void consumePendingUpdateStatus();
