@@ -339,6 +339,8 @@ jobs:
       TARGET_ARCH: x86_64
       APPIMAGE_ARCH: x86_64
       SELFUPDATE_ARCH: x64
+      LANG: C.UTF-8
+      LC_ALL: C.UTF-8
 
     steps:
       - name: Checkout
@@ -351,6 +353,7 @@ jobs:
 
           apt-get update
           apt-get install -y \
+            locales \
             wget curl gnupg lsb-release software-properties-common ca-certificates \
             unzip zip file tar gzip patchelf desktop-file-utils fakeroot fuse libfuse2 imagemagick \
             libgl1 libgl1-mesa-dev libegl1 libegl1-mesa-dev \
@@ -361,6 +364,9 @@ jobs:
             libxcb-xfixes0 libxcb-xfixes0-dev libfontconfig1 libfontconfig1-dev \
             libfreetype6 libfreetype6-dev libglib2.0-0 libglib2.0-dev \
             libharfbuzz0b libharfbuzz-dev libpng16-16 libpng-dev zsync
+
+          locale-gen C.UTF-8 || true
+          update-locale LANG=C.UTF-8 || true
 
           wget -O /tmp/llvm.sh https://apt.llvm.org/llvm.sh
           chmod +x /tmp/llvm.sh
@@ -409,7 +415,6 @@ jobs:
         run: |
           set -euo pipefail
 
-          VERSION=""
           if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
             VERSION="${GITHUB_REF_NAME#v}"
           else
@@ -471,11 +476,6 @@ jobs:
           QT_PREFIX="$("${QMAKE_BIN}" -query QT_INSTALL_PREFIX)"
           QT_LIB_DIR="$("${QMAKE_BIN}" -query QT_INSTALL_LIBS)"
           export LD_LIBRARY_PATH="${QT_LIB_DIR}:${QT_PREFIX}/lib:${LD_LIBRARY_PATH:-}"
-
-          echo "QMAKE=${QMAKE_BIN}"
-          echo "QT_PREFIX=${QT_PREFIX}"
-          echo "QT_LIB_DIR=${QT_LIB_DIR}"
-          echo "LD_LIBRARY_PATH=${LD_LIBRARY_PATH}"
 
           export QMAKE="${QMAKE_BIN}"
           export QML_SOURCES_PATHS="${PWD}/ui"
@@ -572,6 +572,8 @@ jobs:
       TARGET_ARCH: arm64
       APPIMAGE_ARCH: aarch64
       SELFUPDATE_ARCH: arm64
+      LANG: C.UTF-8
+      LC_ALL: C.UTF-8
 
     steps:
       - name: Checkout
@@ -589,6 +591,7 @@ jobs:
 
           sudo apt-get update
           sudo apt-get install -y \
+            locales \
             python3 python3-pip python3-venv imagemagick \
             wget curl gnupg lsb-release software-properties-common ca-certificates \
             unzip zip p7zip-full file tar gzip patchelf desktop-file-utils fakeroot fuse libfuse2 \
@@ -600,6 +603,9 @@ jobs:
             libxcb-xfixes0 libxcb-xfixes0-dev libfontconfig1 libfontconfig1-dev \
             libfreetype6 libfreetype6-dev libglib2.0-0 libglib2.0-dev \
             libharfbuzz0b libharfbuzz-dev libpng16-16 libpng-dev zsync
+
+          sudo locale-gen C.UTF-8 || true
+          sudo update-locale LANG=C.UTF-8 || true
 
           wget -O /tmp/llvm.sh https://apt.llvm.org/llvm.sh
           chmod +x /tmp/llvm.sh
@@ -622,10 +628,8 @@ jobs:
 
           export PATH="${HOME}/.local/bin:${PATH}"
 
-          echo "Available ARM64 Qt architectures:"
-          aqt list-qt linux_arm64 desktop --arch "${QT_VERSION}"
+          aqt list-qt linux_arm64 desktop || true
 
-          echo "Installing Qt Linux ARM64..."
           aqt install-qt linux_arm64 desktop "${QT_VERSION}" linux_gcc_arm64 -O "${HOME}/Qt"
 
           QT_CONFIG="$(find "${HOME}/Qt" -type f -path "*/lib/cmake/Qt6/Qt6Config.cmake" | head -n 1)"
@@ -675,7 +679,6 @@ jobs:
         run: |
           set -euo pipefail
 
-          VERSION=""
           if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
             VERSION="${GITHUB_REF_NAME#v}"
           else
@@ -735,11 +738,6 @@ jobs:
           QT_PREFIX="$("${QMAKE_BIN}" -query QT_INSTALL_PREFIX)"
           QT_LIB_DIR="$("${QMAKE_BIN}" -query QT_INSTALL_LIBS)"
           export LD_LIBRARY_PATH="${QT_LIB_DIR}:${QT_PREFIX}/lib:${LD_LIBRARY_PATH:-}"
-
-          echo "QMAKE=${QMAKE_BIN}"
-          echo "QT_PREFIX=${QT_PREFIX}"
-          echo "QT_LIB_DIR=${QT_LIB_DIR}"
-          echo "LD_LIBRARY_PATH=${LD_LIBRARY_PATH}"
 
           export QMAKE="${QMAKE_BIN}"
           export QML_SOURCES_PATHS="${PWD}/ui"
@@ -853,6 +851,8 @@ jobs:
       ANDROID_API: "28"
       ANDROID_DEPLOY_PLATFORM: "36"
       ANDROID_NDK_VERSION: "27.2.12479018"
+      LANG: C.UTF-8
+      LC_ALL: C.UTF-8
 
     steps:
       - name: Checkout
@@ -886,7 +886,21 @@ jobs:
         run: |
           set -euo pipefail
 
-          yes | sdkmanager --licenses >/dev/null
+          rm -rf "${ANDROID_SDK_ROOT}/.temp" || true
+          rm -rf "${ANDROID_SDK_ROOT}/cmdline-tools/latest/.temp" || true
+
+          sdkmanager --licenses <<EOF >/dev/null 2>&1 || true
+          y
+          y
+          y
+          y
+          y
+          y
+          y
+          y
+          y
+          y
+          EOF
 
           sdkmanager --install \
             "platform-tools" \
@@ -910,6 +924,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+
           echo "ANDROID_QT_ROOT=${QT_ROOT_DIR}" >> "${GITHUB_ENV}"
           echo "QT_HOST_ROOT=$(dirname "${QT_ROOT_DIR}")/gcc_64" >> "${GITHUB_ENV}"
 
@@ -922,8 +937,16 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+
           sudo apt-get update
-          sudo apt-get install -y ninja-build unzip zip p7zip-full curl file git
+          sudo apt-get install -y \
+            ninja-build \
+            unzip \
+            zip \
+            p7zip-full \
+            curl \
+            file \
+            git
 
       - name: Prepare Android signing
         shell: bash
@@ -942,6 +965,7 @@ jobs:
 
           mkdir -p "${RUNNER_TEMP}/android-signing"
           echo "${ANDROID_KEYSTORE_BASE64}" | base64 --decode > "${RUNNER_TEMP}/android-signing/release.keystore"
+          test -s "${RUNNER_TEMP}/android-signing/release.keystore"
 
           echo "QT_ANDROID_KEYSTORE_PATH=${RUNNER_TEMP}/android-signing/release.keystore" >> "${GITHUB_ENV}"
           echo "QT_ANDROID_KEYSTORE_ALIAS=${ANDROID_KEY_ALIAS}" >> "${GITHUB_ENV}"
@@ -952,8 +976,15 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+
           SCAN_DEPS="${ANDROID_NDK_ROOT}/toolchains/llvm/prebuilt/linux-x86_64/bin/clang-scan-deps"
-          test -x "${SCAN_DEPS}"
+
+          if [[ ! -x "${SCAN_DEPS}" ]]; then
+            echo "clang-scan-deps not found: ${SCAN_DEPS}"
+            find "${ANDROID_NDK_ROOT}/toolchains/llvm/prebuilt/linux-x86_64/bin" -maxdepth 1 -type f | sort
+            exit 1
+          fi
+
           echo "CLANG_SCAN_DEPS=${SCAN_DEPS}" >> "${GITHUB_ENV}"
 
       - name: Configure Android Release
@@ -977,11 +1008,13 @@ jobs:
             -DCMAKE_TOOLCHAIN_FILE="${ANDROID_QT_ROOT}/lib/cmake/Qt6/qt.toolchain.cmake" \
             -DCMAKE_CXX_STANDARD=23 \
             -DCMAKE_CXX_STANDARD_REQUIRED=ON \
+            -DCMAKE_CXX_SCAN_FOR_MODULES=ON \
             -DCMAKE_CXX_COMPILER_CLANG_SCAN_DEPS="${CLANG_SCAN_DEPS}" \
             -DANDROID_ABI="${{ matrix.android_abi }}" \
             -DANDROID_PLATFORM="android-${ANDROID_API}" \
             -DANDROID_SDK_ROOT="${ANDROID_SDK_ROOT}" \
-            -DANDROID_NDK_ROOT="${ANDROID_NDK_ROOT}" \
+            -DANDROID_NDK="${ANDROID_NDK_ROOT}" \
+            -DCMAKE_ANDROID_NDK="${ANDROID_NDK_ROOT}" \
             -DQT_ANDROID_ABIS="${{ matrix.android_abi }}" \
             -DGENYCONNECT_BUILD_DESKTOP=OFF \
             -DGENYCONNECT_BUILD_ANDROID=ON \
@@ -1015,19 +1048,36 @@ jobs:
 
           APK="$(find build -type f \( -name "*release*.apk" -o -name "*.apk" \) | grep -vi debug | sort | head -n 1)"
 
+          if [[ -z "${APK}" || ! -f "${APK}" ]]; then
+            echo "No Android APK found."
+            find build -maxdepth 10 -type f | sort | tail -300
+            exit 1
+          fi
+
           cp "${APK}" "${OUT_DIR}/GenyConnect-${VERSION}-android-${{ matrix.android_output_arch }}.apk"
           cp "${APK}" "${OUT_DIR}/GenyConnect-selfupdate-android-${{ matrix.selfupdate_arch }}.apk"
 
           sha256sum "${OUT_DIR}/GenyConnect-selfupdate-android-${{ matrix.selfupdate_arch }}.apk" \
             > "${OUT_DIR}/GenyConnect-selfupdate-android-${{ matrix.selfupdate_arch }}.apk.sha256"
 
+          ls -lah "${OUT_DIR}"
+
       - name: Collect Android packages
         shell: bash
         run: |
           set -euo pipefail
+
           mkdir -p artifacts
+
           find build/final -type f -name "*.apk" -exec cp {} artifacts/ \;
           find build/final -type f -name "*.apk.sha256" -exec cp {} artifacts/ \;
+
+          if [ -z "$(find artifacts -type f -print -quit)" ]; then
+            echo "No Android artifacts found."
+            find build -maxdepth 10 -type f | sort | tail -300
+            exit 1
+          fi
+
           ls -lah artifacts
 
       - name: Upload Android artifact
