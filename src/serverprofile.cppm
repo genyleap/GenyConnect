@@ -50,6 +50,7 @@ export struct ServerProfile {
     QString publicKey;        //!< REALITY public key.
     QString shortId;          //!< REALITY short-id.
     QString spiderX;          //!< REALITY spiderX value.
+    QStringList pinnedPeerCertSha256; //!< TLS peer certificate pins.
 
     QString path;             //!< HTTP/WS/GRPC path.
     QString hostHeader;       //!< Host override header.
@@ -68,7 +69,7 @@ export struct ServerProfile {
     QStringList wgReserved;   //!< WireGuard reserved bytes list (usually 3 integers).
     QStringList wgDns;        //!< Per-profile DNS hints (imported only).
 
-    bool allowInsecure = false; //!< Allow insecure certificate mode.
+    bool allowInsecure = false; //!< Imported legacy insecure TLS flag.
 
     QString originalLink;     //!< Original imported share link.
     QString groupName;        //!< Logical group/category name (for filtering).

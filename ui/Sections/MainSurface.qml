@@ -1,3 +1,12 @@
+/*!
+ * @file        MainSurface.qml
+ *
+ * @author      Kambiz Asadzadeh
+ * @since       09 Feb 2026
+ * @copyright   Copyright (c) 2026 Genyleap.
+ * @license     See LICENSE in repository root.
+ */
+
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
@@ -22,6 +31,7 @@ Item {
     property alias updateNoticePopup: updateNoticePopup
     property alias donationSuggestPopup: donationSuggestPopup
     property alias tunConflictPopup: tunConflictPopup
+    property alias securityWarningPopup: securityWarningPopup
     property alias profilePopup: profilePopup
     property alias clearProfilesPopup: clearProfilesPopup
     property alias editProfilePopup: editProfilePopup
@@ -35,900 +45,18 @@ Item {
     property alias importPopup: importPopup
     property alias settingsFlickRef: settingsFlick
 
-    component PowerSectionCard: Rectangle {
-        id: sectionCard
-
-        property string title: ""
-        property string subtitle: ""
-        property string glyph: ""
-        property color accentColor: Colors.dsPrimarySolid
-        property bool animated: true
-
-        default property alias content: sectionBody.data
-
-        Layout.fillWidth: true
-        radius: Metrics.radiusLg
-        color: Colors.dsSurface
-        border.width: 1
-        border.color: Colors.dsBorderSoft
-        implicitHeight: sectionLayout.implicitHeight + 28
-
-        Behavior on border.color {
-            enabled: sectionCard.animated
-            ColorAnimation { duration: 120 }
-        }
-
-        ColumnLayout {
-            id: sectionLayout
-            anchors.fill: parent
-            anchors.margins: 14
-            spacing: 12
-
-            RowLayout {
-                Layout.fillWidth: true
-                spacing: 10
-
-                Rectangle {
-                    visible: sectionCard.glyph.length > 0
-                    Layout.preferredWidth: 34
-                    Layout.preferredHeight: 34
-                    radius: 17
-                    color: Qt.rgba(sectionCard.accentColor.r, sectionCard.accentColor.g, sectionCard.accentColor.b, Colors.lightMode ? 0.12 : 0.20)
-
-                    Text {
-                        anchors.centerIn: parent
-                        text: sectionCard.glyph
-                        color: sectionCard.accentColor
-                        font.family: root.faSolid
-                        font.pixelSize: 14
-                    }
-                }
-
-                ColumnLayout {
-                    Layout.fillWidth: true
-                    spacing: 2
-
-                    Text {
-                        Layout.fillWidth: true
-                        text: sectionCard.title
-                        color: Colors.dsText
-                        font.family: FontSystem.getContentFontBold.name
-                        font.pixelSize: Typography.uiTitleSm
-                        font.bold: true
-                        elide: Text.ElideRight
-                    }
-
-                    Text {
-                        Layout.fillWidth: true
-                        visible: sectionCard.subtitle.length > 0
-                        text: sectionCard.subtitle
-                        color: Colors.dsTextMuted
-                        font.family: FontSystem.contentFontFamily
-                        font.pixelSize: Typography.uiBody
-                        wrapMode: Text.WordWrap
-                    }
-                }
-            }
-
-            ColumnLayout {
-                id: sectionBody
-                Layout.fillWidth: true
-                spacing: 10
-            }
-        }
-    }
-
-    component PowerModeCard: Rectangle {
-        id: modeCard
-
-        property string modeName: ""
-        property string summary: ""
-        property string badgeText: ""
-        property string glyph: ""
-        property color accentColor: Colors.dsPrimarySolid
-        property bool selected: false
-        property bool compact: false
-        property bool animated: true
-
-        signal clicked()
-
-        Layout.fillWidth: true
-        implicitHeight: Math.max(compact ? 92 : 104, modeTextColumn.implicitHeight + (compact ? 22 : 24))
-        radius: Metrics.radiusMd
-        color: modeMouse.pressed
-               ? Colors.dsSurfaceElevated
-               : (selected
-                  ? Qt.rgba(accentColor.r, accentColor.g, accentColor.b, Colors.lightMode ? 0.12 : 0.20)
-                  : (modeMouse.containsMouse ? Colors.dsSurfaceSoft : Colors.dsSurface))
-        border.width: selected ? 2 : 1
-        border.color: modeCard.activeFocus
-                      ? modeCard.accentColor
-                      : (selected
-                      ? accentColor
-                      : (modeMouse.containsMouse ? Colors.dsBorder : Colors.dsBorderSoft))
-        activeFocusOnTab: true
-        focus: false
-        Accessible.role: Accessible.Button
-        Accessible.name: modeCard.modeName + (modeCard.selected ? " selected" : "")
-        Accessible.description: modeCard.summary
-
-        Behavior on color {
-            enabled: modeCard.animated
-            ColorAnimation { duration: 120 }
-        }
-
-        Behavior on border.color {
-            enabled: modeCard.animated
-            ColorAnimation { duration: 120 }
-        }
-
-            RowLayout {
-                anchors.fill: parent
-                anchors.margins: compact ? 10 : 11
-                spacing: 9
-
-                Rectangle {
-                Layout.preferredWidth: compact ? 36 : 40
-                Layout.preferredHeight: compact ? 36 : 40
-                radius: width / 2
-                color: selected
-                       ? modeCard.accentColor
-                       : Qt.rgba(modeCard.accentColor.r, modeCard.accentColor.g, modeCard.accentColor.b, Colors.lightMode ? 0.10 : 0.18)
-
-                Text {
-                    anchors.centerIn: parent
-                    text: modeCard.glyph
-                    color: selected ? Colors.dsPrimaryText : modeCard.accentColor
-                    font.family: root.faSolid
-                    font.pixelSize: compact ? 13 : 15
-                }
-            }
-
-                ColumnLayout {
-                id: modeTextColumn
-                Layout.fillWidth: true
-                spacing: 4
-
-                Text {
-                    Layout.fillWidth: true
-                    text: modeCard.modeName
-                    color: Colors.dsText
-                    font.family: FontSystem.getContentFontBold.name
-                    font.pixelSize: compact ? Typography.uiBodyLg : Typography.uiTitleSm
-                    font.bold: true
-                    elide: Text.ElideRight
-                }
-
-                Controls.StatusPill {
-                    visible: modeCard.badgeText.length > 0
-                    text: modeCard.badgeText
-                    glyph: "\uf0a3"
-                    bold: true
-                    pillColor: Qt.rgba(modeCard.accentColor.r, modeCard.accentColor.g, modeCard.accentColor.b, Colors.lightMode ? 0.12 : 0.20)
-                    borderColor: Qt.rgba(modeCard.accentColor.r, modeCard.accentColor.g, modeCard.accentColor.b, Colors.lightMode ? 0.34 : 0.52)
-                    textColor: modeCard.accentColor
-                }
-
-                Text {
-                    Layout.fillWidth: true
-                    text: modeCard.summary
-                    color: Colors.dsTextMuted
-                    font.family: FontSystem.contentFontFamily
-                    font.pixelSize: compact ? Typography.uiBody : Typography.uiBodyLg
-                    wrapMode: Text.NoWrap
-                    maximumLineCount: 1
-                    elide: Text.ElideRight
-                }
-            }
-
-            Text {
-                visible: modeCard.selected
-                text: "\uf00c"
-                color: modeCard.accentColor
-                font.family: root.faSolid
-                font.pixelSize: 14
-            }
-        }
-
-        MouseArea {
-            id: modeMouse
-            anchors.fill: parent
-            hoverEnabled: true
-            cursorShape: Qt.PointingHandCursor
-            onClicked: {
-                modeCard.forceActiveFocus()
-                modeCard.clicked()
-            }
-        }
-
-        Keys.onReturnPressed: modeCard.clicked()
-        Keys.onEnterPressed: modeCard.clicked()
-        Keys.onSpacePressed: modeCard.clicked()
-    }
-
-    component PowerMetricChip: Rectangle {
-        id: metricChip
-
-        property string label: ""
-        property string value: ""
-        property string glyph: ""
-        property color accentColor: Colors.dsPrimarySolid
-
-        Layout.fillWidth: true
-        implicitHeight: 58
-        radius: Metrics.radiusMd
-        color: Colors.dsSurfaceSoft
-        border.width: 1
-        border.color: Colors.dsBorderSoft
-
-        RowLayout {
-            anchors.fill: parent
-            anchors.margins: 10
-            spacing: 9
-
-            Rectangle {
-                Layout.preferredWidth: 30
-                Layout.preferredHeight: 30
-                radius: 15
-                color: Qt.rgba(metricChip.accentColor.r, metricChip.accentColor.g, metricChip.accentColor.b, Colors.lightMode ? 0.12 : 0.18)
-
-                Text {
-                    anchors.centerIn: parent
-                    text: metricChip.glyph
-                    color: metricChip.accentColor
-                    font.family: root.faSolid
-                    font.pixelSize: 12
-                }
-            }
-
-            ColumnLayout {
-                Layout.fillWidth: true
-                spacing: 1
-
-                Text {
-                    Layout.fillWidth: true
-                    text: metricChip.label
-                    color: Colors.dsTextMuted
-                    font.family: FontSystem.contentFontFamily
-                    font.pixelSize: Typography.uiCaption
-                    elide: Text.ElideRight
-                }
-
-                Text {
-                    Layout.fillWidth: true
-                    text: metricChip.value
-                    color: Colors.dsText
-                    font.family: FontSystem.getContentFontBold.name
-                    font.pixelSize: Typography.uiBodyLg
-                    font.bold: true
-                    elide: Text.ElideRight
-                }
-            }
-        }
-    }
-
-    component LanStatTile: Rectangle {
-        id: statTile
-
-        property string label: ""
-        property string value: ""
-        property string glyph: ""
-        property color accentColor: Colors.dsPrimarySolid
-
-        Layout.fillWidth: true
-        implicitHeight: 58
-        radius: Metrics.radiusMd
-        color: Colors.dsSurfaceSoft
-        border.width: 1
-        border.color: Colors.dsBorderSoft
-
-        RowLayout {
-            anchors.fill: parent
-            anchors.margins: 8
-            spacing: 8
-
-            Rectangle {
-                Layout.preferredWidth: 28
-                Layout.preferredHeight: 28
-                radius: 14
-                color: Qt.rgba(statTile.accentColor.r, statTile.accentColor.g, statTile.accentColor.b, Colors.lightMode ? 0.12 : 0.20)
-
-                Text {
-                    anchors.centerIn: parent
-                    text: statTile.glyph
-                    color: statTile.accentColor
-                    font.family: root.faSolid
-                    font.pixelSize: 11
-                }
-            }
-
-            ColumnLayout {
-                Layout.fillWidth: true
-                spacing: 0
-
-                Text {
-                    Layout.fillWidth: true
-                    text: statTile.label
-                    color: Colors.dsTextSubtle
-                    font.family: FontSystem.contentFontFamily
-                    font.pixelSize: Typography.uiCaption
-                    elide: Text.ElideRight
-                }
-
-                Text {
-                    Layout.fillWidth: true
-                    text: statTile.value
-                    color: Colors.dsText
-                    font.family: FontSystem.getContentFontBold.name
-                    font.pixelSize: Typography.uiBody
-                    font.bold: true
-                    elide: Text.ElideMiddle
-                }
-            }
-        }
-    }
-
-    component LanBadge: Rectangle {
-        id: lanBadge
-
-        property string text: ""
-        property string glyph: ""
-        property color badgeColor: Colors.dsSurfaceSoft
-        property color borderColor: Colors.dsBorderSoft
-        property color textColor: Colors.dsTextMuted
-        property bool bold: true
-        property int textPixelSize: Typography.t4
-        property int horizontalPadding: 14
-
-        radius: Metrics.radiusPill
-        color: badgeColor
-        border.width: 1
-        border.color: borderColor
-        implicitHeight: textPixelSize <= 11 ? 24 : 28
-        implicitWidth: badgeRow.implicitWidth + horizontalPadding
-
-        RowLayout {
-            id: badgeRow
-            anchors.centerIn: parent
-            spacing: 5
-
-            Text {
-                visible: lanBadge.glyph.length > 0
-                text: lanBadge.glyph
-                color: lanBadge.textColor
-                font.family: root.faSolid
-                font.pixelSize: 8
-            }
-
-            Text {
-                text: lanBadge.text
-                color: lanBadge.textColor
-                font.family: lanBadge.bold ? FontSystem.getContentFontBold.name : FontSystem.contentFontFamily
-                font.pixelSize: lanBadge.textPixelSize
-                font.bold: lanBadge.bold
-            }
-        }
-    }
-
-    component LanActionButton: Rectangle {
-        id: lanAction
-
-        property string text: ""
-        property string glyph: ""
-        property color accentColor: Colors.dsPrimarySolid
-
-        signal clicked()
-
-        Layout.fillWidth: true
-        implicitHeight: 46
-        radius: Metrics.radiusSm
-        color: actionMouse.pressed
-               ? Qt.rgba(accentColor.r, accentColor.g, accentColor.b, Colors.lightMode ? 0.12 : 0.24)
-               : (actionMouse.containsMouse
-                  ? Qt.rgba(accentColor.r, accentColor.g, accentColor.b, Colors.lightMode ? 0.06 : 0.16)
-                  : Colors.dsSurface)
-        border.width: 1
-        border.color: Qt.rgba(accentColor.r, accentColor.g, accentColor.b, Colors.lightMode ? 0.34 : 0.48)
-
-        RowLayout {
-            anchors.fill: parent
-            anchors.leftMargin: 10
-            anchors.rightMargin: 10
-            spacing: 7
-
-            Item { Layout.fillWidth: true }
-
-            Text {
-                text: lanAction.glyph
-                color: lanAction.accentColor
-                font.family: root.faSolid
-                font.pixelSize: root.compact ? 12 : 14
-            }
-
-            Text {
-                Layout.maximumWidth: Math.max(42, lanAction.width - 58)
-                text: lanAction.text
-                color: lanAction.accentColor
-                font.family: FontSystem.getContentFontBold.name
-                font.pixelSize: root.compact ? Typography.uiBody : Typography.uiBodyLg
-                font.bold: true
-                elide: Text.ElideRight
-            }
-
-            Item { Layout.fillWidth: true }
-        }
-
-        MouseArea {
-            id: actionMouse
-            anchors.fill: parent
-            hoverEnabled: true
-            cursorShape: Qt.PointingHandCursor
-            onClicked: lanAction.clicked()
-        }
-    }
-
-    component LanInfoCell: Item {
-        id: lanInfoCell
-
-        property string label: ""
-        property string value: ""
-        property string glyph: ""
-        property bool copyable: false
-        property bool chip: false
-        property color accentColor: Colors.dsPrimarySolid
-        property bool tight: width < 156
-        property bool ultraTight: width < 124
-
-        signal copyClicked()
-
-        Layout.fillWidth: true
-        implicitHeight: 66
-
-        RowLayout {
-            anchors.fill: parent
-            anchors.leftMargin: lanInfoCell.tight ? 9 : 14
-            anchors.rightMargin: lanInfoCell.tight ? 7 : 12
-            spacing: lanInfoCell.tight ? 4 : 8
-
-            ColumnLayout {
-                Layout.fillWidth: true
-                spacing: 5
-
-                Text {
-                    Layout.fillWidth: true
-                    text: lanInfoCell.label
-                    color: Colors.dsTextMuted
-                    font.family: FontSystem.contentFontFamily
-                    font.pixelSize: Typography.uiCaption
-                    elide: Text.ElideRight
-                }
-
-                Text {
-                    Layout.fillWidth: true
-                    visible: !lanInfoCell.chip
-                    text: lanInfoCell.value
-                    color: Colors.dsText
-                    font.family: FontSystem.getContentFontBold.name
-                    font.pixelSize: lanInfoCell.ultraTight ? Typography.uiBodySm : (lanInfoCell.tight ? Typography.uiBody : Typography.uiTitleSm)
-                    font.bold: true
-                    elide: lanInfoCell.label === "Port" ? Text.ElideNone : Text.ElideMiddle
-                }
-
-                Rectangle {
-                    id: protocolChip
-                    visible: lanInfoCell.chip
-                    Layout.alignment: Qt.AlignLeft
-                    readonly property real maxChipWidth: Math.max(82, lanInfoCell.width - (lanInfoCell.copyable ? 20 : 12))
-                    readonly property real desiredChipWidth: protocolText.implicitWidth
-                                                          + (protocolGlyph.visible ? protocolGlyph.implicitWidth : 0)
-                                                          + protocolChipRow.spacing
-                                                          + (lanInfoCell.ultraTight ? 20 : 24)
-                    implicitWidth: Math.max(82, Math.min(maxChipWidth, desiredChipWidth))
-                    implicitHeight: lanInfoCell.ultraTight ? 26 : 29
-                    radius: Metrics.radiusPill
-                    color: Qt.rgba(lanInfoCell.accentColor.r, lanInfoCell.accentColor.g, lanInfoCell.accentColor.b, Colors.lightMode ? 0.10 : 0.18)
-                    border.width: 1
-                    border.color: Qt.rgba(lanInfoCell.accentColor.r, lanInfoCell.accentColor.g, lanInfoCell.accentColor.b, Colors.lightMode ? 0.26 : 0.42)
-
-                    RowLayout {
-                        id: protocolChipRow
-                        anchors.fill: parent
-                        anchors.leftMargin: lanInfoCell.ultraTight ? 8 : 10
-                        anchors.rightMargin: lanInfoCell.ultraTight ? 8 : 10
-                        spacing: lanInfoCell.ultraTight ? 5 : 6
-
-                        Text {
-                            id: protocolGlyph
-                            text: lanInfoCell.glyph
-                            color: lanInfoCell.accentColor
-                            font.family: root.faSolid
-                            font.pixelSize: lanInfoCell.ultraTight ? 11 : 12
-                            verticalAlignment: Text.AlignVCenter
-                        }
-
-                        Text {
-                            id: protocolText
-                            text: lanInfoCell.value
-                            color: lanInfoCell.accentColor
-                            font.family: FontSystem.getContentFontBold.name
-                            font.pixelSize: lanInfoCell.ultraTight ? 10 : Typography.uiBodySm
-                            font.bold: true
-                            elide: Text.ElideRight
-                            maximumLineCount: 1
-                            verticalAlignment: Text.AlignVCenter
-                        }
-                    }
-                }
-            }
-
-            Rectangle {
-                visible: lanInfoCell.copyable
-                Layout.preferredWidth: 28
-                Layout.preferredHeight: 28
-                radius: 14
-                color: copyMouse.containsMouse
-                       ? Qt.rgba(lanInfoCell.accentColor.r, lanInfoCell.accentColor.g, lanInfoCell.accentColor.b, Colors.lightMode ? 0.12 : 0.20)
-                       : "transparent"
-
-                Text {
-                    anchors.centerIn: parent
-                    text: "\uf0c5"
-                    color: lanInfoCell.accentColor
-                    font.family: root.faSolid
-                    font.pixelSize: 13
-                }
-
-                MouseArea {
-                    id: copyMouse
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: lanInfoCell.copyClicked()
-                }
-            }
-        }
-    }
-
-    component LanPresetTile: Rectangle {
-        id: presetTile
-
-        property string title: ""
-        property string glyph: ""
-        property color accentColor: Colors.dsPrimarySolid
-        property bool selected: false
-
-        signal clicked()
-
-        Layout.fillWidth: true
-        implicitHeight: root.compact ? 94 : 110
-        radius: Metrics.radiusMd
-        color: presetMouse.pressed
-               ? Colors.dsSurfaceElevated
-               : (selected
-                  ? Qt.rgba(accentColor.r, accentColor.g, accentColor.b, Colors.lightMode ? 0.09 : 0.18)
-                  : (presetMouse.containsMouse ? Colors.dsSurfaceSoft : Colors.dsSurface))
-        border.width: selected ? 2 : 1
-        border.color: selected ? accentColor : Colors.dsBorderSoft
-
-        ColumnLayout {
-            anchors.centerIn: parent
-            width: parent.width - 18
-            spacing: root.compact ? 6 : 8
-
-            Rectangle {
-                Layout.alignment: Qt.AlignHCenter
-                Layout.preferredWidth: root.compact ? 44 : 48
-                Layout.preferredHeight: root.compact ? 44 : 48
-                radius: 24
-                color: Qt.rgba(presetTile.accentColor.r, presetTile.accentColor.g, presetTile.accentColor.b, Colors.lightMode ? 0.10 : 0.18)
-
-                Text {
-                    anchors.centerIn: parent
-                    text: presetTile.glyph
-                    color: presetTile.accentColor
-                    font.family: root.faSolid
-                    font.pixelSize: root.compact ? 21 : 24
-                }
-            }
-
-            Text {
-                Layout.fillWidth: true
-                text: presetTile.title
-                color: presetTile.selected ? presetTile.accentColor : Colors.dsText
-                font.family: presetTile.selected ? FontSystem.getContentFontBold.name : FontSystem.contentFontFamily
-                font.pixelSize: presetTile.width < 124 ? Typography.uiCaption : Typography.uiBody
-                font.bold: presetTile.selected
-                horizontalAlignment: Text.AlignHCenter
-                wrapMode: Text.WordWrap
-                maximumLineCount: 2
-                elide: Text.ElideRight
-            }
-        }
-
-        Rectangle {
-            visible: presetTile.selected
-            width: 24
-            height: 24
-            radius: 12
-            anchors.top: parent.top
-            anchors.right: parent.right
-            anchors.topMargin: -6
-            anchors.rightMargin: -6
-            color: presetTile.accentColor
-
-            Text {
-                anchors.centerIn: parent
-                text: "\uf00c"
-                color: Colors.dsPrimaryText
-                font.family: root.faSolid
-                font.pixelSize: 11
-            }
-        }
-
-        MouseArea {
-            id: presetMouse
-            anchors.fill: parent
-            hoverEnabled: true
-            cursorShape: Qt.PointingHandCursor
-            onClicked: presetTile.clicked()
-        }
-    }
-
-    component LanGuideStep: Rectangle {
-        id: guideStep
-
-        property string stepNumber: ""
-        property string text: ""
-        property string value: ""
-        property string glyph: ""
-        property bool copyable: false
-        property color accentColor: Colors.dsPrimarySolid
-
-        signal copyClicked()
-
-        Layout.fillWidth: true
-        implicitHeight: 46
-        radius: Metrics.radiusSm
-        color: Colors.dsSurface
-        border.width: 1
-        border.color: Colors.dsBorderSoft
-
-        RowLayout {
-            anchors.fill: parent
-            anchors.leftMargin: 12
-            anchors.rightMargin: 12
-            spacing: 14
-
-            Rectangle {
-                Layout.preferredWidth: 26
-                Layout.preferredHeight: 26
-                radius: 13
-                color: guideStep.accentColor
-
-                Text {
-                    anchors.centerIn: parent
-                    text: guideStep.stepNumber
-                    color: Colors.dsPrimaryText
-                    font.family: FontSystem.getContentFontBold.name
-                    font.pixelSize: Typography.uiCaption
-                    font.bold: true
-                }
-            }
-
-            Text {
-                Layout.fillWidth: true
-                text: guideStep.text
-                color: Colors.dsText
-                font.family: FontSystem.contentFontFamily
-                font.pixelSize: Typography.uiBody
-                elide: Text.ElideRight
-            }
-
-            LanBadge {
-                visible: guideStep.value.length > 0
-                Layout.leftMargin: 4
-                text: guideStep.value
-                glyph: guideStep.copyable ? "\uf0c5" : ""
-                badgeColor: Qt.rgba(guideStep.accentColor.r, guideStep.accentColor.g, guideStep.accentColor.b, Colors.lightMode ? 0.10 : 0.18)
-                borderColor: "transparent"
-                textColor: guideStep.accentColor
-                bold: true
-
-                MouseArea {
-                    anchors.fill: parent
-                    enabled: guideStep.copyable
-                    hoverEnabled: true
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: guideStep.copyClicked()
-                }
-            }
-
-            Rectangle {
-                Layout.preferredWidth: 28
-                Layout.preferredHeight: 28
-                radius: 14
-                color: Qt.rgba(guideStep.accentColor.r, guideStep.accentColor.g, guideStep.accentColor.b, Colors.lightMode ? 0.08 : 0.16)
-
-                Text {
-                    anchors.centerIn: parent
-                    text: guideStep.glyph
-                    color: guideStep.accentColor
-                    font.family: root.faSolid
-                    font.pixelSize: 12
-                }
-            }
-        }
-    }
-
-    component LanModeCard: Rectangle {
-        id: lanModeCard
-
-        property string modeName: ""
-        property string summary: ""
-        property string badgeText: ""
-        property string glyph: ""
-        property color accentColor: Colors.dsPrimarySolid
-        property bool selected: false
-        property bool animated: true
-
-        signal clicked()
-
-        Layout.fillWidth: true
-        implicitHeight: 84
-        radius: Metrics.radiusMd
-        color: lanModeMouse.pressed
-               ? Colors.dsSurfaceElevated
-               : (selected
-                  ? Qt.rgba(accentColor.r, accentColor.g, accentColor.b, Colors.lightMode ? 0.10 : 0.17)
-                  : (lanModeMouse.containsMouse ? Colors.dsSurfaceSoft : Colors.dsSurface))
-        border.width: selected ? 2 : 1
-        border.color: selected ? accentColor : (lanModeMouse.containsMouse ? Colors.dsBorder : Colors.dsBorderSoft)
-        activeFocusOnTab: true
-        focus: false
-        Accessible.role: Accessible.Button
-        Accessible.name: lanModeCard.modeName + (lanModeCard.selected ? " selected" : "")
-        Accessible.description: lanModeCard.summary
-
-        Behavior on color {
-            enabled: lanModeCard.animated
-            ColorAnimation { duration: 120 }
-        }
-
-        Behavior on border.color {
-            enabled: lanModeCard.animated
-            ColorAnimation { duration: 120 }
-        }
-
-        RowLayout {
-            anchors.fill: parent
-            anchors.margins: 10
-            spacing: 9
-
-            Rectangle {
-                Layout.preferredWidth: 34
-                Layout.preferredHeight: 34
-                radius: width / 2
-                color: lanModeCard.selected
-                       ? lanModeCard.accentColor
-                       : Qt.rgba(lanModeCard.accentColor.r, lanModeCard.accentColor.g, lanModeCard.accentColor.b, Colors.lightMode ? 0.12 : 0.20)
-
-                Text {
-                    anchors.centerIn: parent
-                    text: lanModeCard.glyph
-                    color: lanModeCard.selected ? Colors.dsPrimaryText : lanModeCard.accentColor
-                    font.family: root.faSolid
-                    font.pixelSize: 12
-                }
-            }
-
-            ColumnLayout {
-                Layout.fillWidth: true
-                spacing: 2
-
-                Text {
-                    Layout.fillWidth: true
-                    text: lanModeCard.modeName
-                    color: Colors.dsText
-                    font.family: FontSystem.getContentFontBold.name
-                    font.pixelSize: Typography.uiBodyLg
-                    font.bold: true
-                    elide: Text.ElideRight
-                }
-
-                LanBadge {
-                    visible: lanModeCard.badgeText.length > 0
-                    text: lanModeCard.badgeText
-                    glyph: "\uf0a3"
-                    badgeColor: Qt.rgba(lanModeCard.accentColor.r, lanModeCard.accentColor.g, lanModeCard.accentColor.b, Colors.lightMode ? 0.10 : 0.16)
-                    borderColor: Qt.rgba(lanModeCard.accentColor.r, lanModeCard.accentColor.g, lanModeCard.accentColor.b, Colors.lightMode ? 0.30 : 0.44)
-                    textColor: lanModeCard.accentColor
-                }
-
-                Text {
-                    Layout.fillWidth: true
-                    text: lanModeCard.summary
-                    color: Colors.dsTextMuted
-                    font.family: FontSystem.contentFontFamily
-                    font.pixelSize: Typography.uiCaption
-                    elide: Text.ElideRight
-                    maximumLineCount: 1
-                }
-            }
-
-            Text {
-                text: lanModeCard.selected ? "\uf00c" : "\uf054"
-                color: lanModeCard.selected ? lanModeCard.accentColor : Colors.dsTextSubtle
-                font.family: root.faSolid
-                font.pixelSize: 12
-            }
-        }
-
-        MouseArea {
-            id: lanModeMouse
-            anchors.fill: parent
-            hoverEnabled: true
-            cursorShape: Qt.PointingHandCursor
-            onClicked: {
-                lanModeCard.forceActiveFocus()
-                lanModeCard.clicked()
-            }
-        }
-
-        Keys.onReturnPressed: lanModeCard.clicked()
-        Keys.onEnterPressed: lanModeCard.clicked()
-        Keys.onSpacePressed: lanModeCard.clicked()
-    }
-
-    component PowerStatusBadge: Rectangle {
-        id: statusBadge
-
-        property string status: "Balanced"
-        readonly property bool friendly: status.indexOf("Battery") >= 0
-        readonly property bool highPower: status.indexOf("High") >= 0
-        readonly property color badgeColor: friendly ? Colors.dsSuccess : (highPower ? Colors.dsWarning : Colors.dsPrimarySolid)
-        readonly property string badgeGlyph: friendly ? "\uf06c" : (highPower ? "\uf0e7" : "\uf3fd")
-
-        radius: Metrics.radiusPill
-        color: Qt.rgba(badgeColor.r, badgeColor.g, badgeColor.b, Colors.lightMode ? 0.13 : 0.20)
-        border.width: 1
-        border.color: Qt.rgba(badgeColor.r, badgeColor.g, badgeColor.b, Colors.lightMode ? 0.36 : 0.55)
-        implicitHeight: 34
-        implicitWidth: badgeRow.implicitWidth + 18
-
-        RowLayout {
-            id: badgeRow
-            anchors.centerIn: parent
-            spacing: 7
-
-            Text {
-                text: statusBadge.badgeGlyph
-                color: statusBadge.badgeColor
-                font.family: root.faSolid
-                font.pixelSize: 12
-            }
-
-            Text {
-                text: statusBadge.status
-                color: statusBadge.badgeColor
-                font.family: FontSystem.getContentFontBold.name
-                font.pixelSize: Typography.uiBody
-                font.bold: true
-            }
-        }
-    }
-
     component PowerHomeBadge: Rectangle {
         id: homeBadge
-
+    
         property string modeName: "Normal"
         property bool compact: true
         readonly property color accentColor: root.powerModeAccent(modeName)
         readonly property string glyph: root.powerModeGlyph(modeName)
-
+    
         signal clicked()
-
-        Layout.preferredWidth: compact ? 34 : Math.max(82, badgeRow.implicitWidth + 18)
-        Layout.preferredHeight: compact ? 34 : 36
+    
+        Layout.preferredWidth: 32
+        Layout.preferredHeight: 32
         Layout.alignment: Qt.AlignVCenter
         radius: height / 2
         color: homeBadgeMouse.pressed
@@ -937,34 +65,34 @@ Item {
         border.width: 1
         border.color: Qt.rgba(accentColor.r, accentColor.g, accentColor.b, Colors.lightMode ? 0.28 : 0.46)
         scale: homeBadgeMouse.pressed ? 0.96 : 1.0
-
+    
         Behavior on color {
             enabled: root.powerVisualAnimationsEnabled
             ColorAnimation { duration: 140 }
         }
-
+    
         Behavior on border.color {
             enabled: root.powerVisualAnimationsEnabled
             ColorAnimation { duration: 140 }
         }
-
+    
         Behavior on scale {
             enabled: root.powerVisualAnimationsEnabled
             NumberAnimation { duration: 90 }
         }
-
+    
         RowLayout {
             id: badgeRow
             anchors.centerIn: parent
             spacing: 6
-
+    
             Text {
                 text: homeBadge.glyph
                 color: homeBadge.accentColor
                 font.family: root.faSolid
                 font.pixelSize: homeBadge.compact ? 13 : 12
             }
-
+    
             Text {
                 visible: !homeBadge.compact
                 text: homeBadge.modeName === "High Performance" ? "Performance" : homeBadge.modeName
@@ -974,7 +102,7 @@ Item {
                 font.bold: true
             }
         }
-
+    
         MouseArea {
             id: homeBadgeMouse
             anchors.fill: parent
@@ -982,9 +110,126 @@ Item {
             cursorShape: Qt.PointingHandCursor
             onClicked: homeBadge.clicked()
         }
+    }
 
-        ToolTip.visible: homeBadgeMouse.containsMouse
-        ToolTip.text: homeBadge.modeName + " Power Mode"
+    component ProfileActionChip: Rectangle {
+        id: chip
+    
+        property string label: ""
+        property string glyph: ""
+        property bool compactStyle: root.compact
+        property color accentColor: Colors.dsPrimarySolid
+        property color fillColor: compactStyle ? Colors.dsSurfaceSoft : Colors.dsSurface
+        property color hoverFillColor: compactStyle ? Colors.dsSurface : Colors.dsSurfaceSoft
+        property color strokeColor: Colors.dsBorder
+        property color labelColor: Colors.dsText
+        property color iconBubbleColor: Qt.rgba(accentColor.r, accentColor.g, accentColor.b, Colors.lightMode ? 0.14 : 0.22)
+        readonly property color disabledFillColor: Colors.dsSurfaceSoft
+        readonly property color disabledStrokeColor: Colors.dsBorderSoft
+        readonly property color disabledLabelColor: Colors.dsTextSubtle
+        readonly property color disabledAccentColor: Colors.dsTextSubtle
+        readonly property color disabledIconBubbleColor: Qt.rgba(Colors.dsTextSubtle.r, Colors.dsTextSubtle.g, Colors.dsTextSubtle.b, Colors.lightMode ? 0.10 : 0.18)
+    
+        signal clicked()
+    
+        Layout.fillWidth: true
+        Layout.preferredHeight: compactStyle ? 70 : 46
+        radius: compactStyle ? 18 : 14
+        color: !enabled
+               ? disabledFillColor
+               : chipMouse.pressed
+                 ? (Colors.lightMode ? Qt.darker(hoverFillColor, 1.03) : Qt.lighter(hoverFillColor, 1.08))
+                 : (chipMouse.containsMouse ? hoverFillColor : fillColor)
+        border.width: 1
+        border.color: enabled ? strokeColor : disabledStrokeColor
+        opacity: 1.0
+        scale: enabled && chipMouse.pressed ? 0.985 : 1.0
+        antialiasing: true
+    
+        Behavior on color { ColorAnimation { duration: 120 } }
+        Behavior on border.color { ColorAnimation { duration: 120 } }
+        Behavior on scale { NumberAnimation { duration: 90 } }
+    
+        ColumnLayout {
+            anchors.fill: parent
+            anchors.margins: compactStyle ? 8 : 0
+            spacing: compactStyle ? 6 : 0
+            visible: compactStyle
+    
+            Rectangle {
+                Layout.alignment: Qt.AlignHCenter
+                Layout.preferredWidth: 30
+                Layout.preferredHeight: 30
+                radius: 15
+                color: chip.enabled ? chip.iconBubbleColor : chip.disabledIconBubbleColor
+                border.width: 0
+    
+                Text {
+                    anchors.centerIn: parent
+                    text: chip.glyph
+                    color: chip.enabled ? chip.accentColor : chip.disabledAccentColor
+                    font.family: root.faSolid
+                    font.pixelSize: 13
+                }
+            }
+    
+            Text {
+                Layout.fillWidth: true
+                text: chip.label
+                color: chip.enabled ? chip.labelColor : chip.disabledLabelColor
+                font.family: FontSystem.getContentFontBold.name
+                font.pixelSize: 11
+                font.bold: true
+                horizontalAlignment: Text.AlignHCenter
+                wrapMode: Text.WordWrap
+                maximumLineCount: 2
+                elide: Text.ElideRight
+            }
+        }
+    
+        RowLayout {
+            anchors.fill: parent
+            anchors.leftMargin: 12
+            anchors.rightMargin: 12
+            spacing: 10
+            visible: !compactStyle
+    
+            Rectangle {
+                Layout.preferredWidth: 28
+                Layout.preferredHeight: 28
+                radius: 14
+                color: chip.enabled ? chip.iconBubbleColor : chip.disabledIconBubbleColor
+                border.width: 0
+    
+                Text {
+                    anchors.centerIn: parent
+                    text: chip.glyph
+                    color: chip.enabled ? chip.accentColor : chip.disabledAccentColor
+                    font.family: root.faSolid
+                    font.pixelSize: 12
+                }
+            }
+    
+            Text {
+                Layout.fillWidth: true
+                text: chip.label
+                color: chip.enabled ? chip.labelColor : chip.disabledLabelColor
+                font.family: FontSystem.getContentFontBold.name
+                font.pixelSize: 13
+                font.bold: true
+                elide: Text.ElideRight
+                verticalAlignment: Text.AlignVCenter
+            }
+        }
+    
+        MouseArea {
+            id: chipMouse
+            anchors.fill: parent
+            enabled: chip.enabled
+            hoverEnabled: true
+            cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+            onClicked: chip.clicked()
+        }
     }
 
     Popup {
@@ -1306,7 +551,9 @@ Item {
             }
 
             Text {
-                text: "VPN Conflict Detected"
+                text: root.tunConflictPopupTitle.length > 0
+                      ? root.tunConflictPopupTitle
+                      : "Connection Issue"
                 color: root.themeColorToken("mainHex_1f2a3a", "mainHex_d8e1f0")
                 font.family: FontSystem.contentFontFamily
                 font.pixelSize: 22
@@ -1342,6 +589,126 @@ Item {
                     text: "OK"
                     onClicked: tunConflictPopup.close()
                 }
+            }
+        }
+    }
+
+    Popup {
+        id: securityWarningPopup
+        modal: true
+        focus: true
+        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+        width: root.sheetWidth(430)
+        height: root.sheetHeight(330)
+        x: (root.width - width) * 0.5
+        y: root.drawerY(height)
+        padding: 0
+
+        enter: Transition {
+            NumberAnimation {
+                property: "y"
+                from: root.height
+                to: root.drawerY(securityWarningPopup.height)
+                duration: Animations.fast * 1.15
+                easing.type: Easing.OutCubic
+            }
+        }
+
+        exit: Transition {
+            NumberAnimation {
+                property: "y"
+                to: root.height
+                duration: Animations.fast * 0.9
+                easing.type: Easing.InCubic
+            }
+        }
+
+        background: Rectangle {
+            topLeftRadius: 24
+            topRightRadius: 24
+            color: root.themeColorToken("mainHex_ffffff", "mainHex_090b14")
+            border.width: 0
+        }
+
+        contentItem: ColumnLayout {
+            anchors.fill: parent
+            anchors.leftMargin: root.compact ? 12 : 16
+            anchors.rightMargin: root.compact ? 12 : 16
+            anchors.topMargin: root.compact ? 12 : 16
+            anchors.bottomMargin: root.compact ? (12 + root.safeBottomInset) : 16
+            spacing: 10
+
+            Rectangle {
+                Layout.alignment: Qt.AlignHCenter
+                Layout.preferredWidth: 42
+                Layout.preferredHeight: 4
+                radius: 2
+                color: root.themeColorToken("mainHex_d6dde8", "mainHex_151c32")
+            }
+
+            Text {
+                text: "Security Warning"
+                color: root.themeColorToken("mainHex_1f2a3a", "mainHex_d8e1f0")
+                font.family: FontSystem.contentFontFamily
+                font.pixelSize: 22
+                font.bold: true
+            }
+
+            Text {
+                Layout.fillWidth: true
+                text: "This profile uses legacy or insecure TLS settings. Newer Xray-core versions no longer support allowInsecure. GenyConnect will try to handle it safely, but you should review the profile before connecting."
+                color: root.themeColorToken("mainHex_5f6f86", "mainHex_9bb0cb")
+                font.family: FontSystem.contentFontFamily
+                font.pixelSize: 13
+                wrapMode: Text.WordWrap
+            }
+
+            CheckBox {
+                id: securityWarningDontShowAgainBox
+                Layout.fillWidth: true
+                checked: root.securityWarningDontShowAgain
+                text: "Don't show this warning again for this profile"
+                onToggled: root.securityWarningDontShowAgain = checked
+            }
+
+            Item { Layout.fillHeight: true }
+
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 10
+
+                Controls.Button {
+                    Layout.fillWidth: true
+                    text: "Review Profile"
+                    onClicked: {
+                        const row = root.securityWarningProfileRow
+                        securityWarningPopup.close()
+                        if (row >= 0) {
+                            root.openEditProfile(row, vpnController.currentProfileLabel(), vpnController.currentProfileGroupLabel(), vpnController.exportProfileLink(row))
+                        }
+                    }
+                }
+
+                Controls.Button {
+                    Layout.fillWidth: true
+                    text: "Connect Anyway"
+                    onClicked: {
+                        const row = root.securityWarningProfileRow
+                        if (row >= 0 && root.securityWarningDontShowAgain) {
+                            vpnController.setSecurityWarningDismissedForProfile(row, true)
+                        }
+                        securityWarningPopup.close()
+                        if (row >= 0) {
+                            vpnController.connectToProfile(row)
+                        }
+                    }
+                }
+            }
+
+            Controls.Button {
+                Layout.fillWidth: true
+                text: "Cancel"
+                onClicked: securityWarningPopup.close()
             }
         }
     }
@@ -1406,7 +773,7 @@ Item {
             implicitHeight: 16
                             + searchBar.implicitHeight
                             + 8
-                            + (root.compact ? compactActionIconRow.implicitHeight : actionsRow.implicitHeight)
+                            + (root.compact ? compactActionGrid.implicitHeight : actionsRow.implicitHeight)
                             + 8
                             + groupRow.implicitHeight
                             + (groupOptionsRow.visible ? (8 + groupOptionsRow.implicitHeight) : 0)
@@ -1549,83 +916,64 @@ Item {
                     }
                 }
 
-                RowLayout {
-                    id: compactActionIconRow
+                GridLayout {
+                    id: compactActionGrid
                     Layout.fillWidth: true
-                    Layout.preferredHeight: 36
-                    spacing: 8
+                    columns: 3
+                    columnSpacing: 8
+                    rowSpacing: 8
                     visible: root.compact
 
-                    Item { Layout.fillWidth: true }
-
-                    Controls.CircleIconButton {
-                        diameter: 32
-                        elevated: false
+                    ProfileActionChip {
+                        compactStyle: true
                         enabled: listView.count > 0
-                        iconText: root.iconTrash
-                        iconFontFamily: root.faSolid
-                        iconPixelSize: 13
-                        backgroundColor: Qt.rgba(Colors.dsDanger.r, Colors.dsDanger.g, Colors.dsDanger.b, root.darkThemeEnabled ? 0.24 : 0.12)
-                        iconColor: Colors.dsDanger
-                        onClicked: clearProfilesPopup.open()
-                    }
-
-                    Controls.CircleIconButton {
-                        diameter: 32
-                        elevated: false
-                        enabled: listView.count > 0
-                        iconText: root.iconPing
-                        iconFontFamily: root.faSolid
-                        iconPixelSize: 12
-                        backgroundColor: Colors.dsSurface
-                        borderColor: Colors.dsBorder
-                        iconColor: root.themeColorToken("mainHex_4b5d78", "mainHex_b0c3db")
+                        label: (vpnController.currentProfileGroup || "All").toLowerCase() === "all" ? "Ping" : "Ping Group"
+                        glyph: root.iconPing
+                        accentColor: Colors.dsPrimarySolid
                         onClicked: vpnController.pingAllProfiles()
                     }
 
-                    Item {
-                        width: 32
-                        height: 32
-
-                        Controls.CircleIconButton {
-                            anchors.fill: parent
-                            diameter: 32
-                            elevated: false
-                            enabled: vpnController.subscriptions.length > 0 && !vpnController.subscriptionBusy
-                            iconText: "\uf2f1"
-                            iconFontFamily: root.faSolid
-                            iconPixelSize: 12
-                            backgroundColor: Colors.dsSurface
-                            borderColor: Colors.dsBorder
-                            iconColor: root.themeColorToken("mainHex_4b5d78", "mainHex_b0c3db")
-                            onClicked: {
-                                const current = (vpnController.currentProfileGroup || "All")
-                                if (current === "All")
-                                    vpnController.refreshSubscriptions()
-                                else
-                                    vpnController.refreshSubscriptionsByGroup(current)
-                            }
-                        }
-
-                        BusyIndicator {
-                            anchors.centerIn: parent
-                            width: 14
-                            height: 14
-                            running: vpnController.subscriptionBusy
-                            visible: vpnController.subscriptionBusy
+                    ProfileActionChip {
+                        compactStyle: true
+                        enabled: vpnController.subscriptions.length > 0 && !vpnController.subscriptionBusy
+                        label: (vpnController.currentProfileGroup || "All") === "All" ? "Refresh" : "Refresh Group"
+                        glyph: "\uf021"
+                        accentColor: Colors.dsPrimarySolid
+                        onClicked: {
+                            const current = (vpnController.currentProfileGroup || "All")
+                            if (current === "All")
+                                vpnController.refreshSubscriptions()
+                            else
+                                vpnController.refreshSubscriptionsByGroup(current)
                         }
                     }
 
-                    Controls.CircleIconButton {
-                        diameter: 32
-                        elevated: false
+                    ProfileActionChip {
+                        compactStyle: true
+                        enabled: listView.count > 0 && !vpnController.busy
+                        label: "Cleanup"
+                        glyph: root.iconShield
+                        accentColor: Colors.dsWarning
+                        onClicked: {
+                            const removed = vpnController.removeDeadProfiles()
+                            if (removed > 0) {
+                                root.syncSelectedProfileFromController()
+                                root.showSettingsFeedback("Removed " + removed + " dead profile(s).")
+                                Qt.callLater(root.positionProfilePopup)
+                            } else if ((vpnController.lastError || "").trim().length > 0) {
+                                root.showSettingsFeedback(vpnController.lastError)
+                            } else {
+                                root.showSettingsFeedback("No dead profiles to remove.")
+                            }
+                        }
+                    }
+
+                    ProfileActionChip {
+                        compactStyle: true
                         enabled: listView.count > 0
-                        iconText: root.iconFileLines
-                        iconFontFamily: root.faSolid
-                        iconPixelSize: 12
-                        backgroundColor: Colors.dsSurface
-                        borderColor: Colors.dsBorder
-                        iconColor: root.themeColorToken("mainHex_4b5d78", "mainHex_b0c3db")
+                        label: "Export"
+                        glyph: root.iconFileLines
+                        accentColor: Colors.dsTextMuted
                         onClicked: {
                             const payload = vpnController.exportProfiles([])
                             if ((payload || "").trim().length === 0) {
@@ -1641,227 +989,152 @@ Item {
                         }
                     }
 
+                    ProfileActionChip {
+                        compactStyle: true
+                        enabled: listView.count > 1
+                        label: "Delete Rest"
+                        glyph: root.iconTrash
+                        accentColor: Colors.dsDanger
+                        onClicked: clearProfilesPopup.open()
+                    }
+
+                    ProfileActionChip {
+                        compactStyle: true
+                        enabled: vpnController.subscriptions.length > 0 && !vpnController.subscriptionBusy && !vpnController.busy
+                        label: "Remove Subs"
+                        glyph: root.iconMinus
+                        accentColor: Colors.dsDanger
+                        onClicked: {
+                            const current = (vpnController.currentProfileGroup || "All")
+                            const removed = vpnController.removeSubscriptionsByGroup(current)
+                            if (removed > 0) {
+                                root.syncSelectedProfileFromController()
+                                root.showSettingsFeedback(current === "All"
+                                                              ? "Removed " + removed + " subscription(s)."
+                                                              : "Removed " + removed + " subscription(s) from " + current + ".")
+                                Qt.callLater(root.positionProfilePopup)
+                            } else if ((vpnController.lastError || "").trim().length > 0) {
+                                root.showSettingsFeedback(vpnController.lastError)
+                            } else {
+                                root.showSettingsFeedback("No subscriptions removed.")
+                            }
+                        }
+                    }
                 }
 
                 GridLayout {
                     id: actionsRow
                     Layout.fillWidth: true
-                    columns: 2
-                    columnSpacing: 8
-                    rowSpacing: 8
+                    columns: 3
+                    columnSpacing: 10
+                    rowSpacing: 10
                     visible: !root.compact
 
-                    Rectangle {
-                        Layout.fillWidth: true
-                        Layout.preferredWidth: 1
-                        Layout.preferredHeight: root.compact ? 34 : 36
-                        radius: root.compact ? 11 : 12
-                        color: addProfileMouse.containsMouse ? Colors.dsPrimaryPressed : Colors.dsPrimarySolid
-                        border.width: 0
-                        border.color: Colors.dsPrimarySolid
-                        Behavior on color { ColorAnimation { duration: 120 } }
-
-                        Text {
-                            anchors.centerIn: parent
-                            text: root.compact ? "Add" : "Add Profile"
-                            color: Colors.mainHex_ffffff
-                            font.family: FontSystem.contentFontFamily
-                            font.pixelSize: root.compact ? 12 : 13
-                            font.bold: false
+                    ProfileActionChip {
+                        enabled: true
+                        label: "Add Profile"
+                        glyph: root.iconPlus
+                        accentColor: Colors.dsPrimarySolid
+                        onClicked: {
+                            profilePopup.close()
+                            importPopup.open()
                         }
+                    }
 
-                        MouseArea {
-                            id: addProfileMouse
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: {
-                                profilePopup.close()
-                                importPopup.open()
+                    ProfileActionChip {
+                        enabled: listView.count > 0
+                        label: (vpnController.currentProfileGroup || "All").toLowerCase() === "all"
+                               ? "Ping Profiles"
+                               : "Ping Group"
+                        glyph: root.iconPing
+                        accentColor: Colors.dsPrimarySolid
+                        onClicked: vpnController.pingAllProfiles()
+                    }
+
+                    ProfileActionChip {
+                        enabled: vpnController.subscriptions.length > 0 && !vpnController.subscriptionBusy
+                        label: (vpnController.currentProfileGroup || "All") === "All"
+                               ? "Refresh Subs"
+                               : "Refresh Group"
+                        glyph: "\uf021"
+                        accentColor: Colors.dsPrimarySolid
+                        onClicked: {
+                            const current = (vpnController.currentProfileGroup || "All")
+                            if (current === "All")
+                                vpnController.refreshSubscriptions()
+                            else
+                                vpnController.refreshSubscriptionsByGroup(current)
+                        }
+                    }
+
+                    ProfileActionChip {
+                        enabled: listView.count > 0 && !vpnController.busy
+                        label: "Remove Dead"
+                        glyph: root.iconShield
+                        accentColor: Colors.dsWarning
+                        onClicked: {
+                            const removed = vpnController.removeDeadProfiles()
+                            if (removed > 0) {
+                                root.syncSelectedProfileFromController()
+                                root.showSettingsFeedback("Removed " + removed + " dead profile(s).")
+                                Qt.callLater(root.positionProfilePopup)
+                            } else if ((vpnController.lastError || "").trim().length > 0) {
+                                root.showSettingsFeedback(vpnController.lastError)
+                            } else {
+                                root.showSettingsFeedback("No dead profiles to remove.")
                             }
                         }
                     }
 
-                    Rectangle {
-                        Layout.fillWidth: true
-                        Layout.preferredWidth: 1
-                        Layout.preferredHeight: root.compact ? 34 : 36
-                        radius: root.compact ? 11 : 12
-                        color: clearAllMouse.containsMouse
-                               ? Qt.rgba(Colors.dsDanger.r, Colors.dsDanger.g, Colors.dsDanger.b, root.darkThemeEnabled ? 0.34 : 0.18)
-                               : Qt.rgba(Colors.dsDanger.r, Colors.dsDanger.g, Colors.dsDanger.b, root.darkThemeEnabled ? 0.26 : 0.12)
-                        border.width: 0
-                        border.color: Qt.rgba(Colors.dsDanger.r, Colors.dsDanger.g, Colors.dsDanger.b, root.darkThemeEnabled ? 0.45 : 0.24)
-                        opacity: listView.count > 0 ? 1.0 : 0.55
-                        Behavior on color { ColorAnimation { duration: 120 } }
-
-                        Text {
-                            anchors.centerIn: parent
-                            text: root.compact ? "Delete" : "Delete Others"
-                            color: Colors.dsDanger
-                            font.family: FontSystem.contentFontFamily
-                            font.pixelSize: root.compact ? 11 : 12
-                            font.bold: false
-                        }
-
-                        MouseArea {
-                            id: clearAllMouse
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            enabled: listView.count > 0
-                            cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
-                            onClicked: clearProfilesPopup.open()
+                    ProfileActionChip {
+                        enabled: listView.count > 0
+                        label: "Export All"
+                        glyph: root.iconFileLines
+                        accentColor: Colors.dsTextMuted
+                        onClicked: {
+                            const payload = vpnController.exportProfiles([])
+                            if ((payload || "").trim().length === 0) {
+                                root.showSettingsFeedback("No profiles available to export.")
+                                return
+                            }
+                            const shared = vpnController.shareText("GenyConnect Profiles Export", payload)
+                            if (!shared)
+                                vpnController.copyTextToClipboard(payload)
+                            root.showSettingsFeedback(shared
+                                                      ? "Export opened in share sheet."
+                                                      : "Export copied to clipboard.")
                         }
                     }
 
-                    Rectangle {
-                        Layout.fillWidth: true
-                        Layout.preferredWidth: 1
-                        Layout.preferredHeight: root.compact ? 34 : 36
-                        radius: root.compact ? 11 : 12
-                        color: pingAllMouse.containsMouse
-                               ? Colors.dsSurfaceSoft
-                               : Colors.dsSurface
-                        border.width: 0
-                        border.color: Colors.dsBorder
-                        opacity: listView.count > 0 ? 1.0 : 0.55
-                        Behavior on color { ColorAnimation { duration: 120 } }
-
-                        Text {
-                            anchors.centerIn: parent
-                            text: root.compact
-                                  ? "Ping"
-                                  : ((vpnController.currentProfileGroup || "All").toLowerCase() === "all"
-                                     ? "Ping All"
-                                     : "Ping Group")
-                            color: root.themeColorToken("mainHex_4b5d78", "mainHex_b0c3db")
-                            font.family: FontSystem.contentFontFamily
-                            font.pixelSize: root.compact ? 12 : 13
-                            font.bold: false
-                        }
-
-                        MouseArea {
-                            id: pingAllMouse
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            enabled: listView.count > 0
-                            cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
-                            onClicked: vpnController.pingAllProfiles()
-                        }
+                    ProfileActionChip {
+                        enabled: listView.count > 1
+                        label: "Delete Others"
+                        glyph: root.iconTrash
+                        accentColor: Colors.dsDanger
+                        onClicked: clearProfilesPopup.open()
                     }
 
-                    Rectangle {
-                        Layout.fillWidth: true
-                        Layout.preferredWidth: 1
-                        Layout.preferredHeight: root.compact ? 34 : 36
-                        radius: root.compact ? 11 : 12
-                        color: refreshSubsMouse.containsMouse
-                               ? Colors.dsSurfaceSoft
-                               : Colors.dsSurface
-                        border.width: 0
-                        border.color: Colors.dsBorder
-                        opacity: vpnController.subscriptions.length > 0 ? 1.0 : 0.55
-                        Behavior on color { ColorAnimation { duration: 120 } }
-
-                        Text {
-                            anchors.centerIn: parent
-                            text: root.compact
-                                  ? "Refresh"
-                                  : ((vpnController.currentProfileGroup || "All") === "All"
-                                     ? "Refresh Subs"
-                                     : "Refresh Group")
-                            color: root.themeColorToken("mainHex_4b5d78", "mainHex_b0c3db")
-                            opacity: vpnController.subscriptionBusy ? 0.5 : 1.0
-                            font.family: FontSystem.contentFontFamily
-                            font.pixelSize: root.compact ? 12 : 13
-                            font.bold: false
-                        }
-
-                        MouseArea {
-                            id: refreshSubsMouse
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            enabled: vpnController.subscriptions.length > 0 && !vpnController.subscriptionBusy
-                            cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
-                            onClicked: {
-                                const current = (vpnController.currentProfileGroup || "All")
-                                if (current === "All") {
-                                    vpnController.refreshSubscriptions()
-                                } else {
-                                    vpnController.refreshSubscriptionsByGroup(current)
-                                }
+                    ProfileActionChip {
+                        enabled: vpnController.subscriptions.length > 0 && !vpnController.subscriptionBusy && !vpnController.busy
+                        label: "Remove Subs"
+                        glyph: root.iconMinus
+                        accentColor: Colors.dsDanger
+                        onClicked: {
+                            const current = (vpnController.currentProfileGroup || "All")
+                            const removed = vpnController.removeSubscriptionsByGroup(current)
+                            if (removed > 0) {
+                                root.syncSelectedProfileFromController()
+                                root.showSettingsFeedback(current === "All"
+                                                              ? "Removed " + removed + " subscription(s)."
+                                                              : "Removed " + removed + " subscription(s) from " + current + ".")
+                                Qt.callLater(root.positionProfilePopup)
+                            } else if ((vpnController.lastError || "").trim().length > 0) {
+                                root.showSettingsFeedback(vpnController.lastError)
+                            } else {
+                                root.showSettingsFeedback("No subscriptions removed.")
                             }
                         }
                     }
-
-                    Rectangle {
-                        Layout.fillWidth: true
-                        Layout.preferredWidth: 1
-                        Layout.preferredHeight: root.compact ? 34 : 36
-                        radius: root.compact ? 11 : 12
-                        color: exportAllMouse.containsMouse
-                               ? Colors.dsSurfaceSoft
-                               : Colors.dsSurface
-                        border.width: 0
-                        border.color: Colors.dsBorder
-                        opacity: listView.count > 0 ? 1.0 : 0.55
-                        Behavior on color { ColorAnimation { duration: 120 } }
-
-                        Text {
-                            anchors.centerIn: parent
-                            text: root.compact ? "Export" : "Export All"
-                            color: root.themeColorToken("mainHex_4b5d78", "mainHex_b0c3db")
-                            font.family: FontSystem.contentFontFamily
-                            font.pixelSize: root.compact ? 12 : 13
-                            font.bold: false
-                        }
-
-                        MouseArea {
-                            id: exportAllMouse
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            enabled: listView.count > 0
-                            cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
-                            onClicked: {
-                                const payload = vpnController.exportProfiles([])
-                                if ((payload || "").trim().length === 0) {
-                                    root.showSettingsFeedback("No profiles available to export.")
-                                    return
-                                }
-                                const shared = vpnController.shareText("GenyConnect Profiles Export", payload)
-                                if (!shared)
-                                    vpnController.copyTextToClipboard(payload)
-                                root.showSettingsFeedback(shared
-                                                          ? "Export opened in share sheet."
-                                                          : "Export copied to clipboard.")
-                            }
-                        }
-                    }
-
-                    // Item { Layout.fillWidth: true }
-
-                    BusyIndicator {
-                        Layout.preferredWidth: 16
-                        Layout.preferredHeight: 16
-                        running: vpnController.subscriptionBusy
-                        visible: vpnController.subscriptionBusy
-                    }
-
-                    Item { Layout.fillWidth: true; visible: false }
-
-                    // Text {
-                    // Layout.preferredWidth: Math.min(profilePopup.width * 0.45, 280)
-                    // text: vpnController.subscriptionMessage
-                    // visible: text.length > 0
-                    // color: vpnController.subscriptionBusy
-                    // ? Colors.mainHex_2b6dcf
-                    // : ((text.toLowerCase().indexOf("fail") >= 0 || text.toLowerCase().indexOf("error") >= 0)
-                    // ? Colors.mainHex_bf4d4d
-                    // : Colors.mainHex_6f7f95)
-                    // font.family: FontSystem.contentFontFamily
-                    // font.pixelSize: 12
-                    // elide: Text.ElideRight
-                    // }
                 }
 
                 RowLayout {
@@ -2532,17 +1805,13 @@ Item {
                                             anchors.fill: parent
                                             cursorShape: Qt.PointingHandCursor
                                             onClicked: {
-                                                const payload = vpnController.exportProfile(index)
+                                                const payload = vpnController.exportProfileLink(index)
                                                 if ((payload || "").trim().length === 0) {
-                                                    root.showSettingsFeedback("Profile export failed.")
+                                                    root.showSettingsFeedback("Profile link unavailable.")
                                                     return
                                                 }
-                                                const shared = vpnController.shareText("GenyConnect Profile Export", payload)
-                                                if (!shared)
-                                                    vpnController.copyTextToClipboard(payload)
-                                                root.showSettingsFeedback(shared
-                                                                          ? "Profile export opened."
-                                                                          : "Profile export copied to clipboard.")
+                                                vpnController.copyTextToClipboard(payload)
+                                                root.showSettingsFeedback("Profile link copied to clipboard.")
                                             }
                                         }
                                     }
@@ -2565,7 +1834,6 @@ Item {
 
                                     Text {
                                         Layout.preferredWidth: root.compact ? 17 : 20
-                                        visible: !selected
                                         text: root.iconTrash
                                         color: root.themeColorToken("mainHex_cb4f4f", "mainHex_ff8e8e")
                                         font.family: root.faSolid
@@ -2671,7 +1939,7 @@ Item {
             }
 
             Text {
-                text: "Delete all profiles?"
+                text: "Delete other profiles?"
                 color: root.themeColorToken("mainHex_1f2530", "mainHex_d8e1f0")
                 font.family: FontSystem.contentFontFamily
                 font.pixelSize: 24
@@ -2680,7 +1948,7 @@ Item {
 
             Text {
                 Layout.fillWidth: true
-                text: "This removes inactive profiles only. Active/connected profile(s) will be kept."
+                text: "This keeps the selected profile and any active connection, then removes the rest."
                 color: root.themeColorToken("mainHex_6a778b", "mainHex_9eb3cc")
                 font.family: FontSystem.contentFontFamily
                 font.pixelSize: 13
@@ -3286,226 +2554,19 @@ Item {
                         spacing: root.compact ? 14 : 10
                         clip: true
 
-                        Rectangle {
+                        SettingsMainList {
                             Layout.fillWidth: true
                             visible: root.settingsSection === "main"
-                            implicitHeight: compactSettingsList.implicitHeight
-                            color: "transparent"
-
-                            ColumnLayout {
-                                id: compactSettingsList
-                                anchors.left: parent.left
-                                anchors.right: parent.right
-                                spacing: 5
-
-                                Repeater {
-                                    model: [
-                                        { "title": "Interface", "icon": "\uf53f", "action": "interface" },
-                                        { "title": "App Updates", "icon": "\uf2f1", "action": "updates" },
-                                        { "title": "Connection Mode", "icon": "\uf6ff", "action": "connection" },
-                                        { "title": "Power Mode", "icon": "\uf0e7", "action": "power" },
-                                        { "title": "Routing Rules", "icon": "\uf542", "action": "routing" },
-                                        { "title": "LAN Sharing", "icon": "\uf1eb", "action": "lan" },
-                                        { "title": "Custom DNS", "icon": "\uf1eb", "action": "dns" },
-                                        { "title": "Logs", "icon": "\uf1da", "action": "logs" },
-                                        { "title": "Terms & License", "icon": "\uf15c", "action": "terms" },
-                                        { "title": "Share App", "icon": "\uf1e0", "action": "share" },
-                                        { "title": "Donate $GENY", "icon": "\uf4b9", "action": "donate" },
-                                        { "title": "About App", "icon": "\uf05a", "action": "about" }
-                                    ]
-
-                                    delegate: Rectangle {
-                                        required property var modelData
-                                        color: "transparent"
-                                        Layout.fillWidth: true
-                                        Layout.preferredHeight: rowControl.implicitHeight
-
-                                        Controls.SettingRow {
-                                            id: rowControl
-                                            anchors.left: parent.left
-                                            anchors.right: parent.right
-                                            compact: root.compact
-                                            title: modelData.title
-                                            glyph: modelData.icon
-                                            glyphFontFamily: root.faSolid
-                                            onClicked: root.openSettingsSection(modelData.action)
-                                        }
-                                    }
-                                }
-                            }
+                            root: surface.root
                         }
 
-                        Rectangle {
+                        InterfaceSettings {
                             Layout.fillWidth: true
                             visible: root.settingsSection === "interface"
-                            implicitHeight: interfaceColumn.implicitHeight + 28
-                            radius: Colors.innerRadius
-                            color: root.themeColorToken("mainHex_f7f9fc", "mainHex_151c32")
-
-                            ColumnLayout {
-                                id: interfaceColumn
-                                anchors.fill: parent
-                                anchors.margins: 14
-                                spacing: 12
-
-                                Text {
-                                    text: "Dashboard Stats"
-                                    color: root.themeColorToken("mainHex_2a3240", "mainHex_d5deeb")
-                                    font.family: FontSystem.getContentFontBold.name
-                                    font.pixelSize: 16
-                                    font.bold: true
-                                }
-
-                                Text {
-                                    Layout.fillWidth: true
-                                    text: "Choose visual behavior, privacy display, and the unit used by live transfer-rate indicators."
-                                    color: root.themeColorToken("mainHex_7c8697", "mainHex_93a2b8")
-                                    font.family: FontSystem.contentFontFamily
-                                    font.pixelSize: 13
-                                    wrapMode: Text.WordWrap
-                                }
-
-                                RowLayout {
-                                    Layout.fillWidth: true
-                                    spacing: 10
-
-                                    Text {
-                                        Layout.fillWidth: true
-                                        text: "Theme"
-                                        color: root.themeColorToken("mainHex_334155", "mainHex_c8d3e2")
-                                        font.family: FontSystem.contentFontFamily
-                                        font.pixelSize: 14
-                                    }
-
-                                    Controls.ComboBox {
-                                        Layout.preferredWidth: 140
-                                        Layout.preferredHeight: 40
-                                        model: root.themeModeOptions
-                                        currentIndex: root.unitIndex(root.themeModeOptions, interfaceThemeSettings.mode)
-                                        onActivated: function(activatedIndex) {
-                                            interfaceThemeSettings.mode = root.themeModeOptions[activatedIndex]
-                                        }
-                                    }
-                                }
-
-                                Text {
-                                    Layout.fillWidth: true
-                                    text: "System follows macOS/Windows appearance. Light keeps current look."
-                                    color: root.themeColorToken("mainHex_8a95a8", "mainHex_8ea0b8")
-                                    font.family: FontSystem.contentFontFamily
-                                    font.pixelSize: 12
-                                    wrapMode: Text.WordWrap
-                                }
-
-                                Rectangle {
-                                    Layout.fillWidth: true
-                                    height: 1
-                                    color: root.themeColorToken("mainHex_e3e8f1", "mainHex_30435d")
-                                }
-
-                                RowLayout {
-                                    Layout.fillWidth: true
-                                    spacing: 10
-
-                                    Text {
-                                        Layout.fillWidth: true
-                                        text: "IP Privacy"
-                                        color: root.themeColorToken("mainHex_334155", "mainHex_c8d3e2")
-                                        font.family: FontSystem.contentFontFamily
-                                        font.pixelSize: 14
-                                    }
-
-                                    Controls.ComboBox {
-                                        Layout.preferredWidth: 140
-                                        Layout.preferredHeight: 40
-                                        model: root.ipPrivacyOptions
-                                        currentIndex: root.unitIndex(root.ipPrivacyOptions, interfacePrivacySettings.ipDisplayMode)
-                                        onActivated: function(activatedIndex) {
-                                            interfacePrivacySettings.ipDisplayMode = root.ipPrivacyOptions[activatedIndex]
-                                        }
-                                    }
-                                }
-
-                                Text {
-                                    Layout.fillWidth: true
-                                    text: interfacePrivacySettings.ipDisplayMode === "Hidden"
-                                          ? "Home and status panels show *.*.*.* or Endpoint hidden instead of visible IP details."
-                                          : (interfacePrivacySettings.ipDisplayMode === "Partial Mask"
-                                             ? "Home and status panels keep enough context for troubleshooting while masking the precise address."
-                                             : "Visible IP and endpoint details are shown normally.")
-                                    color: root.themeColorToken("mainHex_8a95a8", "mainHex_8ea0b8")
-                                    font.family: FontSystem.contentFontFamily
-                                    font.pixelSize: 12
-                                    wrapMode: Text.WordWrap
-                                }
-
-                                Rectangle {
-                                    Layout.fillWidth: true
-                                    height: 1
-                                    color: root.themeColorToken("mainHex_e3e8f1", "mainHex_30435d")
-                                }
-
-                                RowLayout {
-                                    Layout.fillWidth: true
-                                    spacing: 10
-
-                                    Text {
-                                        Layout.fillWidth: true
-                                        text: "Speed Units"
-                                        color: root.themeColorToken("mainHex_334155", "mainHex_c8d3e2")
-                                        font.family: FontSystem.contentFontFamily
-                                        font.pixelSize: 14
-                                    }
-
-                                    Controls.ComboBox {
-                                        Layout.preferredWidth: 140
-                                        Layout.preferredHeight: 40
-                                        model: root.speedUnitOptions
-                                        currentIndex: root.unitIndex(root.speedUnitOptions, dashboardStatsSettings.speedUnit)
-                                        onActivated: function(activatedIndex) {
-                                            dashboardStatsSettings.speedUnit = root.speedUnitOptions[activatedIndex]
-                                        }
-                                    }
-                                }
-
-                                Text {
-                                    Layout.fillWidth: true
-                                    text: "Use lowercase b for bits and uppercase B for bytes."
-                                    color: root.themeColorToken("mainHex_8a95a8", "mainHex_8ea0b8")
-                                    font.family: FontSystem.contentFontFamily
-                                    font.pixelSize: 12
-                                    wrapMode: Text.WordWrap
-                                }
-
-                                Rectangle {
-                                    Layout.fillWidth: true
-                                    height: 1
-                                    color: root.themeColorToken("mainHex_e3e8f1", "mainHex_30435d")
-                                }
-
-                                RowLayout {
-                                    Layout.fillWidth: true
-                                    spacing: 10
-
-                                    Text {
-                                        Layout.fillWidth: true
-                                        text: "Total Traffic Units"
-                                        color: root.themeColorToken("mainHex_334155", "mainHex_c8d3e2")
-                                        font.family: FontSystem.contentFontFamily
-                                        font.pixelSize: 14
-                                    }
-
-                                    Controls.ComboBox {
-                                        Layout.preferredWidth: 140
-                                        Layout.preferredHeight: 40
-                                        model: root.trafficUnitOptions
-                                        currentIndex: root.unitIndex(root.trafficUnitOptions, dashboardStatsSettings.trafficUnit)
-                                        onActivated: function(activatedIndex) {
-                                            dashboardStatsSettings.trafficUnit = root.trafficUnitOptions[activatedIndex]
-                                        }
-                                    }
-                                }
-                            }
+                            root: surface.root
+                            dashboardStatsSettings: surface.dashboardStatsSettings
+                            interfaceThemeSettings: surface.interfaceThemeSettings
+                            interfacePrivacySettings: surface.interfacePrivacySettings
                         }
 
                         Rectangle {
@@ -3797,80 +2858,340 @@ Item {
                                     color: root.themeColorToken("mainHex_ffffff", "mainHex_1a2b42")
                                     border.width: 1
                                     border.color: root.themeColorToken("mainHex_dce4f1", "mainHex_355173")
-                                    implicitHeight: aboutDetailsGrid.implicitHeight + 14
+                                    implicitHeight: aboutSoftwareColumn.implicitHeight + 14
 
-                                    GridLayout {
-                                        id: aboutDetailsGrid
+                                    ColumnLayout {
+                                        id: aboutSoftwareColumn
                                         anchors.fill: parent
-                                        anchors.margins: 7
-                                        columns: 2
-                                        columnSpacing: 8
-                                        rowSpacing: 5
+                                        anchors.margins: 10
+                                        spacing: 7
 
                                         Text {
-                                            text: "App Version"
-                                            color: root.themeColorToken("mainHex_7c8697", "mainHex_9bb0cb")
-                                            font.family: FontSystem.contentFontFamily
-                                            font.pixelSize: 12
-                                        }
-                                        Text {
-                                            text: updater.appVersion
-                                            color: root.themeColorToken("mainHex_2a3240", "mainHex_d7e4f6")
+                                            text: "Software Information"
+                                            color: root.themeColorToken("mainHex_1f2530", "mainHex_d8e1f0")
                                             font.family: FontSystem.getContentFontBold.name
-                                            font.pixelSize: 12
-                                            elide: Text.ElideRight
-                                            Layout.fillWidth: true
-                                            horizontalAlignment: Text.AlignRight
+                                            font.pixelSize: 14
+                                            font.bold: true
                                         }
 
                                         Text {
-                                            text: "xray-core"
+                                            Layout.fillWidth: true
+                                            text: "App, runtime, and operating system details."
                                             color: root.themeColorToken("mainHex_7c8697", "mainHex_9bb0cb")
                                             font.family: FontSystem.contentFontFamily
-                                            font.pixelSize: 12
-                                        }
-                                        Text {
-                                            text: vpnController.xrayVersion
-                                            color: root.themeColorToken("mainHex_2a3240", "mainHex_d7e4f6")
-                                            font.family: FontSystem.getContentFontBold.name
-                                            font.pixelSize: 12
-                                            elide: Text.ElideRight
-                                            Layout.fillWidth: true
-                                            horizontalAlignment: Text.AlignRight
+                                            font.pixelSize: 11
+                                            wrapMode: Text.WordWrap
                                         }
 
-                                        Text {
-                                            text: "Platform"
-                                            color: root.themeColorToken("mainHex_7c8697", "mainHex_9bb0cb")
-                                            font.family: FontSystem.contentFontFamily
-                                            font.pixelSize: 12
-                                        }
-                                        Text {
-                                            text: osNameText() + (vpnController.isMobile ? " (Mobile)" : " (Desktop)")
-                                            color: root.themeColorToken("mainHex_2a3240", "mainHex_d7e4f6")
-                                            font.family: FontSystem.getContentFontBold.name
-                                            font.pixelSize: 12
-                                            elide: Text.ElideRight
+                                        GridLayout {
                                             Layout.fillWidth: true
-                                            horizontalAlignment: Text.AlignRight
-                                        }
+                                            columns: 2
+                                            columnSpacing: 8
+                                            rowSpacing: 5
 
-                                        Text {
-                                            text: "Developer"
-                                            color: root.themeColorToken("mainHex_7c8697", "mainHex_9bb0cb")
-                                            font.family: FontSystem.contentFontFamily
-                                            font.pixelSize: 12
-                                        }
-                                        Text {
-                                            text: "Genyleap LLC"
-                                            color: root.themeColorToken("mainHex_2a3240", "mainHex_d7e4f6")
-                                            font.family: FontSystem.getContentFontBold.name
-                                            font.pixelSize: 12
-                                            elide: Text.ElideRight
-                                            Layout.fillWidth: true
-                                            horizontalAlignment: Text.AlignRight
+                                            Text {
+                                                text: "App Version"
+                                                color: root.themeColorToken("mainHex_7c8697", "mainHex_9bb0cb")
+                                                font.family: FontSystem.contentFontFamily
+                                                font.pixelSize: 12
+                                            }
+                                            Text {
+                                                text: aboutPopup.aboutSoftwareValue("appVersion")
+                                                color: root.themeColorToken("mainHex_2a3240", "mainHex_d7e4f6")
+                                                font.family: FontSystem.getContentFontBold.name
+                                                font.pixelSize: 12
+                                                elide: Text.ElideRight
+                                                Layout.fillWidth: true
+                                                horizontalAlignment: Text.AlignRight
+                                            }
+
+                                            Text {
+                                                text: "xray-core"
+                                                color: root.themeColorToken("mainHex_7c8697", "mainHex_9bb0cb")
+                                                font.family: FontSystem.contentFontFamily
+                                                font.pixelSize: 12
+                                            }
+                                            Text {
+                                                text: aboutPopup.aboutSoftwareValue("xrayVersion")
+                                                color: root.themeColorToken("mainHex_2a3240", "mainHex_d7e4f6")
+                                                font.family: FontSystem.getContentFontBold.name
+                                                font.pixelSize: 12
+                                                elide: Text.ElideRight
+                                                Layout.fillWidth: true
+                                                horizontalAlignment: Text.AlignRight
+                                            }
+
+                                            Text {
+                                                text: "Qt Runtime"
+                                                color: root.themeColorToken("mainHex_7c8697", "mainHex_9bb0cb")
+                                                font.family: FontSystem.contentFontFamily
+                                                font.pixelSize: 12
+                                            }
+                                            Text {
+                                                text: aboutPopup.aboutSoftwareValue("qtVersion")
+                                                color: root.themeColorToken("mainHex_2a3240", "mainHex_d7e4f6")
+                                                font.family: FontSystem.getContentFontBold.name
+                                                font.pixelSize: 12
+                                                elide: Text.ElideRight
+                                                Layout.fillWidth: true
+                                                horizontalAlignment: Text.AlignRight
+                                            }
+
+                                            Text {
+                                                text: "Runtime"
+                                                color: root.themeColorToken("mainHex_7c8697", "mainHex_9bb0cb")
+                                                font.family: FontSystem.contentFontFamily
+                                                font.pixelSize: 12
+                                            }
+                                            Text {
+                                                text: aboutPopup.aboutSoftwareValue("platformMode")
+                                                color: root.themeColorToken("mainHex_2a3240", "mainHex_d7e4f6")
+                                                font.family: FontSystem.getContentFontBold.name
+                                                font.pixelSize: 12
+                                                elide: Text.ElideRight
+                                                Layout.fillWidth: true
+                                                horizontalAlignment: Text.AlignRight
+                                            }
+
+                                            Text {
+                                                text: "Platform"
+                                                color: root.themeColorToken("mainHex_7c8697", "mainHex_9bb0cb")
+                                                font.family: FontSystem.contentFontFamily
+                                                font.pixelSize: 12
+                                            }
+                                            Text {
+                                                text: aboutPopup.aboutSoftwareValue("platform")
+                                                color: root.themeColorToken("mainHex_2a3240", "mainHex_d7e4f6")
+                                                font.family: FontSystem.getContentFontBold.name
+                                                font.pixelSize: 12
+                                                elide: Text.ElideRight
+                                                Layout.fillWidth: true
+                                                horizontalAlignment: Text.AlignRight
+                                            }
+
+                                            Text {
+                                                text: "OS Name"
+                                                color: root.themeColorToken("mainHex_7c8697", "mainHex_9bb0cb")
+                                                font.family: FontSystem.contentFontFamily
+                                                font.pixelSize: 12
+                                            }
+                                            Text {
+                                                text: aboutPopup.aboutSoftwareValue("osName")
+                                                color: root.themeColorToken("mainHex_2a3240", "mainHex_d7e4f6")
+                                                font.family: FontSystem.getContentFontBold.name
+                                                font.pixelSize: 12
+                                                elide: Text.ElideRight
+                                                Layout.fillWidth: true
+                                                horizontalAlignment: Text.AlignRight
+                                            }
+
+                                            Text {
+                                                text: "OS Kernel / API"
+                                                color: root.themeColorToken("mainHex_7c8697", "mainHex_9bb0cb")
+                                                font.family: FontSystem.contentFontFamily
+                                                font.pixelSize: 12
+                                            }
+                                            Text {
+                                                text: aboutPopup.aboutSoftwareValue("apiText")
+                                                color: root.themeColorToken("mainHex_2a3240", "mainHex_d7e4f6")
+                                                font.family: FontSystem.getContentFontBold.name
+                                                font.pixelSize: 12
+                                                elide: Text.ElideRight
+                                                Layout.fillWidth: true
+                                                horizontalAlignment: Text.AlignRight
+                                            }
+
+                                            Text {
+                                                text: "SDK / Runtime"
+                                                color: root.themeColorToken("mainHex_7c8697", "mainHex_9bb0cb")
+                                                font.family: FontSystem.contentFontFamily
+                                                font.pixelSize: 12
+                                            }
+                                            Text {
+                                                text: aboutPopup.aboutSoftwareValue("sdkText")
+                                                color: root.themeColorToken("mainHex_2a3240", "mainHex_d7e4f6")
+                                                font.family: FontSystem.getContentFontBold.name
+                                                font.pixelSize: 12
+                                                elide: Text.ElideRight
+                                                Layout.fillWidth: true
+                                                horizontalAlignment: Text.AlignRight
+                                            }
+
+                                            Text {
+                                                text: "Language Standard"
+                                                color: root.themeColorToken("mainHex_7c8697", "mainHex_9bb0cb")
+                                                font.family: FontSystem.contentFontFamily
+                                                font.pixelSize: 12
+                                            }
+                                            Text {
+                                                text: aboutPopup.aboutSoftwareValue("languageStandard")
+                                                color: root.themeColorToken("mainHex_2a3240", "mainHex_d7e4f6")
+                                                font.family: FontSystem.getContentFontBold.name
+                                                font.pixelSize: 12
+                                                elide: Text.ElideRight
+                                                Layout.fillWidth: true
+                                                horizontalAlignment: Text.AlignRight
+                                            }
+
+                                            Text {
+                                                text: "Developer"
+                                                color: root.themeColorToken("mainHex_7c8697", "mainHex_9bb0cb")
+                                                font.family: FontSystem.contentFontFamily
+                                                font.pixelSize: 12
+                                            }
+                                            Text {
+                                                text: "Genyleap LLC"
+                                                color: root.themeColorToken("mainHex_2a3240", "mainHex_d7e4f6")
+                                                font.family: FontSystem.getContentFontBold.name
+                                                font.pixelSize: 12
+                                                elide: Text.ElideRight
+                                                Layout.fillWidth: true
+                                                horizontalAlignment: Text.AlignRight
+                                            }
                                         }
                                     }
+                                }
+
+                                Rectangle {
+                                    Layout.fillWidth: true
+                                    radius: 10
+                                    color: root.themeColorToken("mainHex_ffffff", "mainHex_1a2b42")
+                                    border.width: 1
+                                    border.color: root.themeColorToken("mainHex_dce4f1", "mainHex_355173")
+                                    implicitHeight: aboutSystemColumn.implicitHeight + 14
+
+                                    ColumnLayout {
+                                        id: aboutSystemColumn
+                                        anchors.fill: parent
+                                        anchors.margins: 10
+                                        spacing: 7
+
+                                        Text {
+                                            text: "System Information"
+                                            color: root.themeColorToken("mainHex_1f2530", "mainHex_d8e1f0")
+                                            font.family: FontSystem.getContentFontBold.name
+                                            font.pixelSize: 14
+                                            font.bold: true
+                                        }
+
+                                        Text {
+                                            Layout.fillWidth: true
+                                            text: "Hardware, memory, and display details for troubleshooting."
+                                            color: root.themeColorToken("mainHex_7c8697", "mainHex_9bb0cb")
+                                            font.family: FontSystem.contentFontFamily
+                                            font.pixelSize: 11
+                                            wrapMode: Text.WordWrap
+                                        }
+
+                                        GridLayout {
+                                            Layout.fillWidth: true
+                                            columns: 2
+                                            columnSpacing: 8
+                                            rowSpacing: 5
+
+                                            Text {
+                                                text: "CPU"
+                                                color: root.themeColorToken("mainHex_7c8697", "mainHex_9bb0cb")
+                                                font.family: FontSystem.contentFontFamily
+                                                font.pixelSize: 12
+                                            }
+                                            Text {
+                                                text: aboutPopup.aboutHardwareValue("cpuName")
+                                                color: root.themeColorToken("mainHex_2a3240", "mainHex_d7e4f6")
+                                                font.family: FontSystem.getContentFontBold.name
+                                                font.pixelSize: 12
+                                                elide: Text.ElideRight
+                                                Layout.fillWidth: true
+                                                horizontalAlignment: Text.AlignRight
+                                            }
+
+                                            Text {
+                                                text: "Architecture"
+                                                color: root.themeColorToken("mainHex_7c8697", "mainHex_9bb0cb")
+                                                font.family: FontSystem.contentFontFamily
+                                                font.pixelSize: 12
+                                            }
+                                            Text {
+                                                text: aboutPopup.aboutHardwareValue("cpuArchitecture")
+                                                color: root.themeColorToken("mainHex_2a3240", "mainHex_d7e4f6")
+                                                font.family: FontSystem.getContentFontBold.name
+                                                font.pixelSize: 12
+                                                elide: Text.ElideRight
+                                                Layout.fillWidth: true
+                                                horizontalAlignment: Text.AlignRight
+                                            }
+
+                                            Text {
+                                                text: "Memory"
+                                                color: root.themeColorToken("mainHex_7c8697", "mainHex_9bb0cb")
+                                                font.family: FontSystem.contentFontFamily
+                                                font.pixelSize: 12
+                                            }
+                                            Text {
+                                                text: aboutPopup.aboutMemoryValue()
+                                                color: root.themeColorToken("mainHex_2a3240", "mainHex_d7e4f6")
+                                                font.family: FontSystem.getContentFontBold.name
+                                                font.pixelSize: 12
+                                                elide: Text.ElideRight
+                                                Layout.fillWidth: true
+                                                horizontalAlignment: Text.AlignRight
+                                            }
+
+                                            Text {
+                                                text: "Process Memory"
+                                                color: root.themeColorToken("mainHex_7c8697", "mainHex_9bb0cb")
+                                                font.family: FontSystem.contentFontFamily
+                                                font.pixelSize: 12
+                                            }
+                                            Text {
+                                                text: aboutPopup.aboutHardwareValue("processMemoryText")
+                                                color: root.themeColorToken("mainHex_2a3240", "mainHex_d7e4f6")
+                                                font.family: FontSystem.getContentFontBold.name
+                                                font.pixelSize: 12
+                                                elide: Text.ElideRight
+                                                Layout.fillWidth: true
+                                                horizontalAlignment: Text.AlignRight
+                                            }
+
+                                            Text {
+                                                text: "Device / Host"
+                                                color: root.themeColorToken("mainHex_7c8697", "mainHex_9bb0cb")
+                                                font.family: FontSystem.contentFontFamily
+                                                font.pixelSize: 12
+                                            }
+                                            Text {
+                                                text: aboutPopup.aboutHardwareValue("deviceName")
+                                                color: root.themeColorToken("mainHex_2a3240", "mainHex_d7e4f6")
+                                                font.family: FontSystem.getContentFontBold.name
+                                                font.pixelSize: 12
+                                                elide: Text.ElideRight
+                                                Layout.fillWidth: true
+                                                horizontalAlignment: Text.AlignRight
+                                            }
+
+                                            Text {
+                                                text: "Display"
+                                                color: root.themeColorToken("mainHex_7c8697", "mainHex_9bb0cb")
+                                                font.family: FontSystem.contentFontFamily
+                                                font.pixelSize: 12
+                                            }
+                                            Text {
+                                                text: aboutPopup.aboutHardwareValue("displayText")
+                                                color: root.themeColorToken("mainHex_2a3240", "mainHex_d7e4f6")
+                                                font.family: FontSystem.getContentFontBold.name
+                                                font.pixelSize: 12
+                                                elide: Text.ElideRight
+                                                Layout.fillWidth: true
+                                                horizontalAlignment: Text.AlignRight
+                                            }
+                                        }
+                                    }
+                                }
+
+                                Controls.OutlineButton {
+                                    Layout.fillWidth: true
+                                    text: "Copy System Info"
+                                    onClicked: vpnController.copyTextToClipboard(vpnController.systemInfoText())
                                 }
 
                                 RowLayout {
@@ -4227,50 +3548,6 @@ Item {
                                     }
                                 }
 
-                                // ColumnLayout {
-                                //     Layout.fillWidth: true
-                                //     spacing: 4
-
-                                //     Row {
-                                //         Layout.alignment: Qt.AlignHCenter
-                                //         spacing: 6
-
-                                //         Text {
-                                //             text: "\uf3ed"
-                                //             color: Colors.dsTextSubtle
-                                //             font.family: root.faSolid
-                                //             font.pixelSize: Typography.uiBody
-                                //         }
-
-                                //         Text {
-                                //             text: "Donations are voluntary and non-refundable."
-                                //             color: Colors.dsTextSubtle
-                                //             font.family: FontSystem.contentFontFamily
-                                //             font.pixelSize: Typography.uiBodySm
-                                //         }
-                                //     }
-
-                                //     Row {
-                                //         Layout.alignment: Qt.AlignHCenter
-                                //         spacing: 6
-
-                                //         Text {
-                                //             text: "\uf3ed"
-                                //             color: Colors.dsTextSubtle
-                                //             font.family: root.faSolid
-                                //             font.pixelSize: Typography.uiBody
-                                //         }
-
-                                //         Text {
-                                //             text: "Always verify the network and receiver address before sending."
-                                //             color: Colors.dsTextSubtle
-                                //             font.family: FontSystem.contentFontFamily
-                                //             font.pixelSize: Typography.uiBodySm
-                                //         }
-                                //     }
-
-                                // }
-
                                 Text {
                                     Layout.fillWidth: true
                                     visible: root.donationFeedbackText.length > 0
@@ -4284,2538 +3561,67 @@ Item {
                             }
                         }
 
-                        Rectangle {
+                        UpdatesSettings {
                             Layout.fillWidth: true
-                            visible: root.settingsSection === "updates" && vpnController.supportsAutoUpdate
-                            Layout.maximumWidth: settingsFlick.width
-                            implicitHeight: updateColumn.implicitHeight + 24
-                            radius: Colors.innerRadius
-                            color: root.themeColorToken("mainHex_eff4fb", "mainHex_151c32")
-                            border.width: 1
-                            border.color: root.themeColorToken("mainHex_d7e4f6", "mainHex_30435d")
-
-                            ColumnLayout {
-                                id: updateColumn
-                                anchors.fill: parent
-                                anchors.margins: 14
-                                spacing: 8
-
-                                RowLayout {
-                                    Layout.fillWidth: true
-                                    spacing: 8
-
-                                    Text {
-                                        text: "App Updates"
-                                        color: root.themeColorToken("mainHex_2a3240", "mainHex_d7e4f6")
-                                        font.family: FontSystem.contentFontFamily
-                                        font.pixelSize: 15
-                                        font.bold: true
-                                    }
-
-                                    Item { Layout.fillWidth: true }
-
-                                    Text {
-                                        text: "Current " + updater.appVersion
-                                        color: root.themeColorToken("mainHex_677385", "mainHex_9bb0cb")
-                                        font.family: FontSystem.contentFontFamily
-                                        font.pixelSize: 13
-                                    }
-                                }
-
-                                Text {
-                                    Layout.fillWidth: true
-                                    text: updater.status
-                                    color: updater.error.length > 0
-                                           ? root.themeColorToken("mainHex_c44a4a", "mainHex_ff8e8e")
-                                           : (updater.updateAvailable
-                                              ? root.themeColorToken("mainHex_1f7a51", "mainHex_55d793")
-                                              : root.themeColorToken("mainHex_5f6f88", "mainHex_9bb0cb"))
-                                    font.family: FontSystem.contentFontFamily
-                                    font.pixelSize: 13
-                                    wrapMode: Text.WordWrap
-                                }
-
-                                Text {
-                                    Layout.fillWidth: true
-                                    visible: updater.updateAvailable && updater.latestVersion.length > 0
-                                    text: "Latest " + updater.latestVersion
-                                    color: root.themeColorToken("mainHex_7f8897", "mainHex_99abc4")
-                                    font.family: FontSystem.contentFontFamily
-                                    font.pixelSize: 12
-                                }
-
-                                Rectangle {
-                                    id: updateProgressTrack
-                                    Layout.fillWidth: true
-                                    Layout.preferredHeight: 8
-                                    visible: updater.checking
-                                    radius: 4
-                                    color: root.themeColorToken("mainHex_dfe7f2", "mainHex_223147")
-                                    border.width: 0
-                                    clip: true
-
-                                    readonly property real normalizedProgress: Math.max(0, Math.min(1, updater.downloadProgress))
-                                    readonly property bool indeterminateMode: normalizedProgress <= 0.001 || normalizedProgress >= 0.999
-
-                                    Rectangle {
-                                        id: updateProgressDeterminate
-                                        anchors.left: parent.left
-                                        anchors.verticalCenter: parent.verticalCenter
-                                        height: parent.height
-                                        radius: parent.radius
-                                        visible: !parent.indeterminateMode
-                                        width: parent.width * parent.normalizedProgress
-                                        gradient: Gradient {
-                                            GradientStop { position: 0.0; color: root.themeColorToken("mainHex_2f74ff", "mainHex_3f7cf3") }
-                                            GradientStop { position: 1.0; color: root.themeColorToken("mainHex_7b53ff", "mainHex_7f72ff") }
-                                        }
-                                    }
-
-                                    Rectangle {
-                                        id: updateProgressIndeterminate
-                                        width: Math.max(36, parent.width * 0.26)
-                                        height: parent.height
-                                        y: 0
-                                        x: -width
-                                        radius: parent.radius
-                                        visible: parent.indeterminateMode
-                                        gradient: Gradient {
-                                            GradientStop { position: 0.0; color: "transparent" }
-                                            GradientStop { position: 0.2; color: root.themeColorToken("mainHex_2f74ff", "mainHex_3f7cf3") }
-                                            GradientStop { position: 0.8; color: root.themeColorToken("mainHex_7b53ff", "mainHex_7f72ff") }
-                                            GradientStop { position: 1.0; color: "transparent" }
-                                        }
-
-                                        NumberAnimation on x {
-                                            running: updater.checking && updateProgressIndeterminate.visible
-                                            from: -updateProgressIndeterminate.width
-                                            to: updateProgressTrack.width
-                                            duration: 1100
-                                            loops: Animation.Infinite
-                                            easing.type: Easing.InOutQuad
-                                        }
-                                    }
-                                }
-
-                                GridLayout {
-                                    Layout.fillWidth: true
-                                    columns: 1
-                                    columnSpacing: 8
-                                    rowSpacing: 8
-
-                                    Controls.Button {
-                                        text: updater.checking ? "Checking..." : "Check Now"
-                                        enabled: !updater.checking
-                                        Layout.fillWidth: true
-                                        onClicked: updater.checkForUpdates(true)
-                                    }
-
-                                    Controls.Button {
-                                        text: updater.downloadedFilePath.length > 0
-                                              ? (updater.canInstallDownloadedUpdate ? "Install & Restart" : "Open Installer")
-                                              : "Download"
-                                        enabled: updater.updateAvailable && !updater.checking
-                                        Layout.fillWidth: true
-                                        onClicked: {
-                                            if (updater.downloadedFilePath.length > 0) {
-                                                if (updater.canInstallDownloadedUpdate) {
-                                                    updater.installDownloadedUpdate()
-                                                } else {
-                                                    updater.openDownloadedUpdate()
-                                                }
-                                            } else {
-                                                updater.downloadUpdate()
-                                            }
-                                        }
-                                    }
-
-                                    Controls.Button {
-                                        text: "Release Page"
-                                        isDefault: false
-                                        visible: !root.mobilePlatform
-                                        enabled: !root.mobilePlatform && updater.releaseUrl.length > 0
-                                        Layout.fillWidth: true
-                                        onClicked: updater.openReleasePage()
-                                    }
-                                }
-                            }
+                            visible: root.settingsSection === "updates"
+                            root: surface.root
+                            vpnController: surface.vpnController
+                            updater: surface.updater
                         }
 
-                        Rectangle {
-                            Layout.fillWidth: true
-                            visible: root.settingsSection === "updates" && !vpnController.supportsAutoUpdate && !root.mobilePlatform
-                            Layout.maximumWidth: settingsFlick.width
-                            implicitHeight: manualUpdateColumn.implicitHeight + 24
-                            radius: Colors.innerRadius
-                            color: root.themeColorToken("mainHex_eff4fb", "mainHex_151c32")
-                            border.width: 1
-                            border.color: root.themeColorToken("mainHex_d7e4f6", "mainHex_30435d")
 
-                            ColumnLayout {
-                                id: manualUpdateColumn
-                                anchors.fill: parent
-                                anchors.margins: 14
-                                spacing: 8
-
-                                Text {
-                                    Layout.fillWidth: true
-                                    text: "App Updates"
-                                    color: root.themeColorToken("mainHex_2a3240", "mainHex_d7e4f6")
-                                    font.family: FontSystem.contentFontFamily
-                                    font.pixelSize: 15
-                                    font.bold: true
-                                }
-
-                                Text {
-                                    Layout.fillWidth: true
-                                    text: "Current " + updater.appVersion
-                                    color: root.themeColorToken("mainHex_677385", "mainHex_9bb0cb")
-                                    font.family: FontSystem.contentFontFamily
-                                    font.pixelSize: 13
-                                }
-
-                                Text {
-                                    Layout.fillWidth: true
-                                    text: "Auto-update is not available on this runtime build. Use the release page to get the latest APK or desktop package."
-                                    color: root.themeColorToken("mainHex_5f6f88", "mainHex_9bb0cb")
-                                    font.family: FontSystem.contentFontFamily
-                                    font.pixelSize: 13
-                                    wrapMode: Text.WordWrap
-                                }
-
-                                Controls.Button {
-                                    text: "Release Page"
-                                    Layout.fillWidth: true
-                                    onClicked: updater.openReleasePage()
-                                }
-
-                                Controls.Button {
-                                    text: "Open Project"
-                                    Layout.fillWidth: true
-                                    isDefault: false
-                                    onClicked: Qt.openUrlExternally("https://github.com/genyleap/genyconnect")
-                                }
-                            }
-                        }
-
-                        Rectangle {
+                        ConnectionModeSettings {
                             Layout.fillWidth: true
                             visible: root.settingsSection === "connection"
-                            Layout.maximumWidth: settingsFlick.width
-                            implicitHeight: modeColumn.implicitHeight + 24
-                            Layout.preferredHeight: implicitHeight
-                            radius: Colors.innerRadius
-                            color: root.themeColorToken("mainHex_f7f9fc", "mainHex_151c32")
-                            border.width: 0
-                            border.color: root.themeColorToken("mainHex_e0e6f0", "mainHex_30435d")
-
-                            ColumnLayout {
-                                id: modeColumn
-                                anchors.fill: parent
-                                anchors.margins: 12
-                                spacing: 8
-
-                                Text {
-                                    text: "Connection Mode"
-                                    color: root.themeColorToken("mainHex_2a3240", "mainHex_d7e4f6")
-                                    font.family: FontSystem.contentFontFamily
-                                    font.pixelSize: 15
-                                    font.bold: true
-                                }
-
-                                Text {
-                                    text: vpnController.useSystemProxy
-                                          ? "Global mode: " + osNameText() + " routes compatible apps through GenyConnect automatically."
-                                          : (vpnController.tunMode
-                                             ? "TUN mode: " + osNameText() + " routes system traffic through Xray TUN without changing proxy settings."
-                                             : (vpnController.isMobile
-                                                ? "Mobile mode: runtime uses platform VPN APIs and ignores desktop proxy helpers."
-                                                : "Clean mode: " + osNameText() + " proxy stays untouched. Only apps set to 127.0.0.1:10808 use the tunnel."))
-                                    color: root.themeColorToken("mainHex_7c8697", "mainHex_9bb0cb")
-                                    font.family: FontSystem.contentFontFamily
-                                    font.pixelSize: 13
-                                    wrapMode: Text.WordWrap
-                                    Layout.fillWidth: true
-                                }
-
-                                ColumnLayout {
-                                    Layout.fillWidth: true
-                                    spacing: 8
-
-                                    Repeater {
-                                        model: [
-                                            {
-                                                "title": "Global Mode",
-                                                "subtitle": vpnController.supportsSystemProxy
-                                                            ? "Apply system proxy for compatible apps."
-                                                            : "Unavailable on this runtime (system proxy control is not supported).",
-                                                "checked": vpnController.supportsSystemProxy && vpnController.useSystemProxy && !vpnController.tunMode,
-                                                "enabled": vpnController.supportsSystemProxy,
-                                                "apply": function() {
-                                                    vpnController.tunMode = false
-                                                    vpnController.useSystemProxy = true
-                                                    vpnController.autoDisableSystemProxyOnDisconnect = true
-                                                }
-                                            },
-                                            {
-                                                "title": "Clean Mode",
-                                                "subtitle": "Keep OS proxy unchanged and route manual proxy apps only.",
-                                                "checked": !vpnController.tunMode && (!vpnController.supportsSystemProxy || !vpnController.useSystemProxy),
-                                                "enabled": true,
-                                                "apply": function() {
-                                                    vpnController.tunMode = false
-                                                    vpnController.useSystemProxy = false
-                                                    vpnController.autoDisableSystemProxyOnDisconnect = true
-                                                }
-                                            },
-                                            {
-                                                "title": "TUN Mode",
-                                                "subtitle": "Route system traffic through Xray TUN.",
-                                                "checked": vpnController.tunMode,
-                                                "enabled": vpnController.supportsTun,
-                                                "apply": function() {
-                                                    vpnController.useSystemProxy = false
-                                                    vpnController.tunMode = true
-                                                }
-                                            }
-                                        ]
-
-                                        delegate: Rectangle {
-                                            required property var modelData
-                                            Layout.fillWidth: true
-                                            Layout.preferredHeight: root.compact ? 66 : 56
-                                            radius: 8
-                                            opacity: modelData.enabled ? 1.0 : 0.58
-                                            color: modelData.checked
-                                                   ? root.themeColorToken("mainHex_edf4ff", "mainHex_274062")
-                                                   : root.themeColorToken("mainHex_ffffff", "mainHex_22324a")
-                                            border.width: 0
-                                            border.color: modelData.checked
-                                                          ? root.themeColorToken("mainHex_6da2ff", "mainHex_4f86e6")
-                                                          : root.themeColorToken("mainHex_d9e0ec", "mainHex_3a5470")
-
-                                            RowLayout {
-                                                anchors.fill: parent
-                                                anchors.leftMargin: 12
-                                                anchors.rightMargin: 12
-                                                spacing: 10
-
-                                                Rectangle {
-                                                    Layout.preferredWidth: 18
-                                                    Layout.preferredHeight: 18
-                                                    radius: 9
-                                                    color: "transparent"
-                                                    border.width: 2
-                                                    border.color: modelData.checked
-                                                                  ? root.themeColorToken("mainHex_2f6ff1", "mainHex_7eb1ff")
-                                                                  : root.themeColorToken("mainHex_9aa6ba", "mainHex_90a6c2")
-
-                                                    Rectangle {
-                                                        visible: modelData.checked
-                                                        anchors.centerIn: parent
-                                                        width: 8
-                                                        height: 8
-                                                        radius: 4
-                                                        color: root.themeColorToken("mainHex_2f6ff1", "mainHex_7eb1ff")
-                                                    }
-                                                }
-
-                                                ColumnLayout {
-                                                    Layout.fillWidth: true
-                                                    spacing: 1
-
-                                                    Text {
-                                                        Layout.fillWidth: true
-                                                        text: modelData.title
-                                                        color: root.themeColorToken("mainHex_2a3240", "mainHex_d7e4f6")
-                                                        font.family: FontSystem.contentFontFamily
-                                                        font.pixelSize: 13
-                                                        font.bold: true
-                                                    }
-
-                                                    Text {
-                                                        Layout.fillWidth: true
-                                                        text: modelData.subtitle
-                                                        color: root.themeColorToken("mainHex_7c8697", "mainHex_9bb0cb")
-                                                        font.family: FontSystem.contentFontFamily
-                                                        font.pixelSize: 11
-                                                        wrapMode: root.compact ? Text.WordWrap : Text.NoWrap
-                                                        elide: root.compact ? Text.ElideNone : Text.ElideRight
-                                                        maximumLineCount: root.compact ? 2 : 1
-                                                    }
-                                                }
-                                            }
-
-                                            MouseArea {
-                                                anchors.fill: parent
-                                                enabled: modelData.enabled
-                                                cursorShape: modelData.enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
-                                                onClicked: modelData.apply()
-                                            }
-                                        }
-                                    }
-                                }
-                            }
+                            root: surface.root
+                            vpnController: surface.vpnController
                         }
 
-                        RowLayout {
-                            Layout.fillWidth: true
-                            visible: root.settingsSection === "connection"
-                            spacing: 10
-
-                            Controls.Switch {
-                                id: autoDisableSwitch
-                                checked: vpnController.autoDisableSystemProxyOnDisconnect
-                                enabled: vpnController.supportsSystemProxy && vpnController.useSystemProxy && !vpnController.tunMode
-                                onToggled: vpnController.autoDisableSystemProxyOnDisconnect = checked
-                            }
-
-                            Text {
-                                Layout.fillWidth: true
-                                text: "Auto-disable system proxy when disconnecting"
-                                color: root.themeColorToken("mainHex_334155", "mainHex_d7e4f6")
-                                font.family: FontSystem.contentFontFamily
-                                font.pixelSize: 14
-                                wrapMode: Text.WordWrap
-                            }
-                        }
-
-                        RowLayout {
-                            Layout.fillWidth: true
-                            visible: root.settingsSection === "connection"
-                            spacing: 10
-
-                            Controls.Switch {
-                                checked: vpnController.killSwitchEnabled
-                                enabled: vpnController.supportsSystemProxy
-                                onToggled: vpnController.killSwitchEnabled = checked
-                            }
-
-                            ColumnLayout {
-                                Layout.fillWidth: true
-                                spacing: 2
-
-                                Text {
-                                    Layout.fillWidth: true
-                                    text: vpnController.supportsSystemProxy ? "Kill Switch" : "Kill Switch (Unavailable)"
-                                    color: root.themeColorToken("mainHex_334155", "mainHex_d7e4f6")
-                                    font.family: FontSystem.getContentFontBold.name
-                                    font.pixelSize: 14
-                                    font.bold: true
-                                }
-
-                                Text {
-                                    Layout.fillWidth: true
-                                    text: "When disconnected, keep the OS proxy locked to GenyConnect so proxy-aware apps cannot fall back to direct traffic."
-                                    color: root.themeColorToken("mainHex_7c8697", "mainHex_9bb0cb")
-                                    font.family: FontSystem.contentFontFamily
-                                    font.pixelSize: 12
-                                    wrapMode: Text.WordWrap
-                                }
-                            }
-                        }
-
-                        Text {
-                            Layout.fillWidth: true
-                            visible: root.settingsSection === "connection" && !vpnController.supportsSystemProxy
-                            text: "Global mode and Kill Switch require system proxy control, which is not available on this runtime. Use TUN Mode for full-device routing."
-                            color: root.themeColorToken("mainHex_a0682a", "mainHex_f4c56a")
-                            font.family: FontSystem.contentFontFamily
-                            font.pixelSize: 12
-                            wrapMode: Text.WordWrap
-                        }
-
-                        Rectangle {
+                        LogsSettings {
                             Layout.fillWidth: true
                             visible: root.settingsSection === "logs"
-                            radius: Metrics.radiusLg
-                            color: Colors.dsSurfaceSoft
-                            border.width: 1
-                            border.color: Colors.dsBorder
-                            implicitHeight: logsSettingsColumn.implicitHeight + 22
-
-                            ColumnLayout {
-                                id: logsSettingsColumn
-                                anchors.fill: parent
-                                anchors.margins: 11
-                                spacing: 10
-
-                                RowLayout {
-                                    Layout.fillWidth: true
-                                    spacing: 10
-
-                                    ColumnLayout {
-                                        Layout.fillWidth: true
-                                        spacing: 2
-
-                                        Text {
-                                            Layout.fillWidth: true
-                                            text: "Logs & Diagnostics"
-                                            color: Colors.dsText
-                                            font.family: FontSystem.getContentFontBold.name
-                                            font.pixelSize: Typography.uiTitle
-                                            font.bold: true
-                                            wrapMode: Text.WordWrap
-                                        }
-
-                                        Text {
-                                            Layout.fillWidth: true
-                                            text: vpnController.loggingEnabled
-                                                  ? "Captured lines: " + vpnController.recentLogs.length
-                                                  : "Enable logging to capture connection diagnostics."
-                                            color: Colors.dsTextMuted
-                                            font.family: FontSystem.contentFontFamily
-                                            font.pixelSize: Typography.uiBody
-                                            wrapMode: Text.WordWrap
-                                        }
-                                    }
-
-                                    Controls.StatusPill {
-                                        text: vpnController.loggingEnabled ? "Enabled" : "Disabled"
-                                        pillColor: vpnController.loggingEnabled ? Colors.dsPrimarySolid : Colors.dsSurface
-                                        borderColor: vpnController.loggingEnabled ? Colors.dsPrimarySolid : Colors.dsBorder
-                                        textColor: vpnController.loggingEnabled ? Colors.dsPrimaryText : Colors.dsTextMuted
-
-                                        MouseArea {
-                                            anchors.fill: parent
-                                            cursorShape: Qt.PointingHandCursor
-                                            onClicked: vpnController.loggingEnabled = !vpnController.loggingEnabled
-                                        }
-                                    }
-                                }
-
-                                GridLayout {
-                                    Layout.fillWidth: true
-                                    columns: root.compact ? 2 : 3
-                                    columnSpacing: 8
-                                    rowSpacing: 8
-
-                                    Controls.PrimaryButton {
-                                        Layout.fillWidth: true
-                                        Layout.preferredWidth: 1
-                                        Layout.columnSpan: root.compact ? 2 : 1
-                                        compact: true
-                                        text: "Open Viewer"
-                                        onClicked: logsPopup.open()
-                                    }
-
-                                    Controls.OutlineButton {
-                                        Layout.fillWidth: true
-                                        Layout.preferredWidth: 1
-                                        compact: true
-                                        text: "Copy"
-                                        enabled: vpnController.loggingEnabled && vpnController.recentLogs.length > 0
-                                        onClicked: vpnController.copyLogsToClipboard()
-                                    }
-
-                                    Controls.OutlineButton {
-                                        Layout.fillWidth: true
-                                        Layout.preferredWidth: 1
-                                        compact: true
-                                        text: "Clear"
-                                        enabled: vpnController.recentLogs.length > 0
-                                        onClicked: vpnController.clearLogs()
-                                    }
-                                }
-                            }
+                            root: surface.root
+                            vpnController: surface.vpnController
+                            logsPopup: surface.logsPopup
                         }
 
-                        RowLayout {
+                        CacheSettings {
                             Layout.fillWidth: true
-                            visible: root.settingsSection === "connection"
-                            spacing: 10
-
-                            Controls.Switch {
-                                checked: vpnController.autoPingProfiles
-                                onToggled: vpnController.autoPingProfiles = checked
-                            }
-
-                            Text {
-                                Layout.fillWidth: true
-                                text: "Auto ping profile endpoints"
-                                color: root.themeColorToken("mainHex_334155", "mainHex_d7e4f6")
-                                font.family: FontSystem.contentFontFamily
-                                font.pixelSize: 14
-                                wrapMode: Text.WordWrap
-                            }
+                            visible: root.settingsSection === "cache"
+                            root: surface.root
+                            vpnController: surface.vpnController
                         }
 
-                        Controls.Button {
-                            visible: root.settingsSection === "connection"
-                            text: (vpnController.currentProfileGroup || "All").toLowerCase() === "all"
-                                  ? "Ping Profiles Now"
-                                  : "Ping Current Group"
-                            Layout.fillWidth: true
-                            onClicked: vpnController.pingAllProfiles()
-                        }
-
-                        Text {
-                            Layout.fillWidth: true
-                            visible: root.settingsSection === "connection"
-                            text: vpnController.tunMode
-                                  ? (vpnController.isMobile
-                                     ? "Mobile TUN uses VPN service permissions and native runtime bridge setup."
-                                     : "TUN mode does not change OS proxy settings. If connect fails, run app with elevated privileges.")
-                                  : (vpnController.useSystemProxy
-                                     ? "Recommended: keep this enabled to restore system proxy cleanly after tunnel disconnect."
-                                     : "In Clean mode this option is ignored because system proxy remains disabled.")
-                            color: root.themeColorToken("mainHex_7f8897", "mainHex_99abc4")
-                            font.family: FontSystem.contentFontFamily
-                            font.pixelSize: 12
-                            wrapMode: Text.WordWrap
-                        }
-
-                        ColumnLayout {
+                        PowerModeSettings {
                             Layout.fillWidth: true
                             visible: root.settingsSection === "power"
-                            spacing: root.compact ? 12 : 14
-
-                            PowerSectionCard {
-                                title: "Power Mode"
-                                subtitle: "Choose how GenyConnect balances battery use, stats refresh, reconnect pressure, and visual effects. The tunnel lifecycle stays owned by the existing VPN runtime."
-                                glyph: "\uf0e7"
-                                accentColor: root.powerModeAccent(vpnController.powerMode)
-                                animated: root.powerVisualAnimationsEnabled
-
-                                Rectangle {
-                                    Layout.fillWidth: true
-                                    radius: Metrics.radiusMd
-                                    color: Qt.rgba(root.powerModeAccent(vpnController.powerMode).r,
-                                                   root.powerModeAccent(vpnController.powerMode).g,
-                                                   root.powerModeAccent(vpnController.powerMode).b,
-                                                   Colors.lightMode ? 0.08 : 0.14)
-                                    border.width: 1
-                                    border.color: Qt.rgba(root.powerModeAccent(vpnController.powerMode).r,
-                                                          root.powerModeAccent(vpnController.powerMode).g,
-                                                          root.powerModeAccent(vpnController.powerMode).b,
-                                                          Colors.lightMode ? 0.18 : 0.30)
-                                    implicitHeight: introRow.implicitHeight + 22
-
-                                    RowLayout {
-                                        id: introRow
-                                        anchors.fill: parent
-                                        anchors.margins: 11
-                                        spacing: 10
-
-                                        Text {
-                                            Layout.preferredWidth: 22
-                                            text: root.powerModeGlyph(vpnController.powerMode)
-                                            color: root.powerModeAccent(vpnController.powerMode)
-                                            font.family: root.faSolid
-                                            font.pixelSize: 18
-                                            horizontalAlignment: Text.AlignHCenter
-                                        }
-
-                                        Text {
-                                            Layout.fillWidth: true
-                                            text: root.powerModeSummary(vpnController.powerMode)
-                                            color: Colors.dsText
-                                            font.family: FontSystem.contentFontFamily
-                                            font.pixelSize: Typography.uiBodyLg
-                                            wrapMode: Text.WordWrap
-                                        }
-                                    }
-                                }
-                            }
-
-                            GridLayout {
-                                Layout.fillWidth: true
-                                columns: root.compact ? 1 : 3
-                                columnSpacing: 10
-                                rowSpacing: 10
-
-                                Repeater {
-                                    model: ["Save", "Normal", "High Performance"]
-
-                                    delegate: PowerModeCard {
-                                        required property string modelData
-                                        Layout.fillWidth: true
-                                        compact: root.compact
-                                        animated: root.powerVisualAnimationsEnabled
-                                        modeName: modelData
-                                        glyph: root.powerModeGlyph(modelData)
-                                        accentColor: root.powerModeAccent(modelData)
-                                        summary: root.powerModeSummary(modelData)
-                                        selected: vpnController.powerMode === modelData
-                                        onClicked: vpnController.powerMode = modelData
-                                    }
-                                }
-                            }
-
-                            PowerSectionCard {
-                                title: "Active Policy"
-                                subtitle: "Effective runtime and UI intervals after mode and adaptive tuning."
-                                glyph: "\uf085"
-                                accentColor: Colors.dsPrimarySolid
-                                animated: root.powerVisualAnimationsEnabled
-
-                                GridLayout {
-                                    Layout.fillWidth: true
-                                    columns: root.compact ? 2 : 3
-                                    columnSpacing: 8
-                                    rowSpacing: 8
-
-                                    PowerMetricChip {
-                                        label: "Stats Poll"
-                                        value: root.powerMsText((vpnController.powerPolicy || {}).statsPollIntervalMs || 1000)
-                                        glyph: "\uf201"
-                                        accentColor: Colors.dsPrimarySolid
-                                    }
-
-                                    PowerMetricChip {
-                                        label: "UI Refresh"
-                                        value: root.powerMsText(root.powerUiStatsIntervalMs)
-                                        glyph: "\uf2f1"
-                                        accentColor: Colors.dsSuccess
-                                    }
-
-                                    PowerMetricChip {
-                                        label: "Gauge"
-                                        value: root.powerMsText(root.powerGaugeRefreshIntervalMs)
-                                        glyph: "\uf3fd"
-                                        accentColor: Colors.dsWarning
-                                    }
-
-                                    PowerMetricChip {
-                                        label: "Reconnect"
-                                        value: ((vpnController.powerPolicy || {}).conservativeReconnect === true) ? "Backoff" : "Standard"
-                                        glyph: "\uf2f1"
-                                        accentColor: ((vpnController.powerPolicy || {}).conservativeReconnect === true) ? Colors.dsSuccess : Colors.dsPrimarySolid
-                                    }
-
-                                    PowerMetricChip {
-                                        label: "Visuals"
-                                        value: root.powerVisualAnimationsEnabled ? "Enabled" : "Reduced"
-                                        glyph: "\uf53f"
-                                        accentColor: root.powerVisualAnimationsEnabled ? Colors.dsPrimarySolid : Colors.dsSuccess
-                                    }
-
-                                    PowerMetricChip {
-                                        label: "FakeDNS Sniff"
-                                        value: ((vpnController.powerPolicy || {}).reduceFakeDnsSniffing === true) ? "Reduced" : "Standard"
-                                        glyph: "\uf1eb"
-                                        accentColor: ((vpnController.powerPolicy || {}).reduceFakeDnsSniffing === true) ? Colors.dsSuccess : Colors.dsPrimarySolid
-                                    }
-                                }
-                            }
-
-                            PowerSectionCard {
-                                title: "Transport Power Profile"
-                                subtitle: vpnController.transportPowerDescription(vpnController.currentProfileTransportPowerClass())
-                                glyph: "\uf362"
-                                accentColor: root.powerModeAccent(vpnController.powerMode)
-                                animated: root.powerVisualAnimationsEnabled
-
-                                RowLayout {
-                                    Layout.fillWidth: true
-                                    spacing: 10
-
-                                    PowerStatusBadge {
-                                        status: vpnController.currentProfileTransportPowerClass()
-                                    }
-
-                                    Item { Layout.fillWidth: true }
-
-                                    Text {
-                                        text: "Metadata only"
-                                        color: Colors.dsTextSubtle
-                                        font.family: FontSystem.contentFontFamily
-                                        font.pixelSize: Typography.uiCaption
-                                        elide: Text.ElideRight
-                                    }
-                                }
-                            }
-
-                            PowerSectionCard {
-                                title: "Diagnostics"
-                                subtitle: "Clean counters for wakeups, reconnect pressure, and adaptive state."
-                                glyph: "\uf7d9"
-                                accentColor: Colors.dsPrimarySolid
-                                animated: root.powerVisualAnimationsEnabled
-
-                                GridLayout {
-                                    Layout.fillWidth: true
-                                    columns: root.compact ? 2 : 3
-                                    columnSpacing: 8
-                                    rowSpacing: 8
-
-                                    PowerMetricChip {
-                                        label: "Wakeups"
-                                        value: String(root.powerDiagnosticValue("timerWakeups", 0))
-                                        glyph: "\uf017"
-                                        accentColor: Colors.dsPrimarySolid
-                                    }
-
-                                    PowerMetricChip {
-                                        label: "Reconnects"
-                                        value: String(root.powerDiagnosticValue("reconnectAttempts", 0))
-                                        glyph: "\uf2f1"
-                                        accentColor: Colors.dsWarning
-                                    }
-
-                                    PowerMetricChip {
-                                        label: "Instability"
-                                        value: String(root.powerDiagnosticValue("instabilityCount", 0))
-                                        glyph: "\uf071"
-                                        accentColor: Number(root.powerDiagnosticValue("instabilityCount", 0)) > 0 ? Colors.dsDanger : Colors.dsSuccess
-                                    }
-
-                                    PowerMetricChip {
-                                        label: "Battery"
-                                        value: root.powerBatteryText()
-                                        glyph: "\uf240"
-                                        accentColor: Colors.dsSuccess
-                                    }
-
-                                    PowerMetricChip {
-                                        label: "Network"
-                                        value: root.powerNetworkText()
-                                        glyph: "\uf1eb"
-                                        accentColor: Colors.dsPrimarySolid
-                                    }
-                                }
-                            }
-
-                            PowerSectionCard {
-                                visible: root.powerAdaptiveInputsAvailable()
-                                title: "Adaptive Inputs"
-                                subtitle: "Signals that can tune intervals at runtime without reconnecting."
-                                glyph: "\uf1da"
-                                accentColor: Colors.dsSuccess
-                                animated: root.powerVisualAnimationsEnabled
-
-                                GridLayout {
-                                    Layout.fillWidth: true
-                                    columns: root.compact ? 2 : 3
-                                    columnSpacing: 8
-                                    rowSpacing: 8
-
-                                    PowerMetricChip {
-                                        label: "Screen"
-                                        value: (vpnController.powerDiagnostics || {}).screenOn === false ? "Off" : "On"
-                                        glyph: "\uf108"
-                                        accentColor: (vpnController.powerDiagnostics || {}).screenOn === false ? Colors.dsSuccess : Colors.dsPrimarySolid
-                                    }
-
-                                    PowerMetricChip {
-                                        label: "Charging"
-                                        value: (vpnController.powerDiagnostics || {}).charging === true ? "Yes" : "No"
-                                        glyph: "\uf1e6"
-                                        accentColor: (vpnController.powerDiagnostics || {}).charging === true ? Colors.dsSuccess : Colors.dsTextSubtle
-                                    }
-
-                                    PowerMetricChip {
-                                        label: "Battery Saver"
-                                        value: (vpnController.powerDiagnostics || {}).batterySaver === true ? "On" : "Off"
-                                        glyph: "\uf06c"
-                                        accentColor: (vpnController.powerDiagnostics || {}).batterySaver === true ? Colors.dsSuccess : Colors.dsTextSubtle
-                                    }
-
-                                    PowerMetricChip {
-                                        label: "App State"
-                                        value: (vpnController.powerDiagnostics || {}).backgrounded === true ? "Background" : "Foreground"
-                                        glyph: "\uf2d0"
-                                        accentColor: (vpnController.powerDiagnostics || {}).backgrounded === true ? Colors.dsSuccess : Colors.dsPrimarySolid
-                                    }
-                                }
-                            }
+                            root: surface.root
+                            vpnController: surface.vpnController
                         }
 
-                        ColumnLayout {
+                        LanSharingSettings {
                             Layout.fillWidth: true
                             visible: root.settingsSection === "lan"
-                            spacing: root.compact ? 12 : 14
-
-                            Rectangle {
-                                id: lanStatusCard
-                                Layout.fillWidth: true
-                                radius: Metrics.radiusLg
-                                color: vpnController.lanSharingEnabled
-                                       ? Qt.rgba(Colors.dsSuccess.r, Colors.dsSuccess.g, Colors.dsSuccess.b, Colors.lightMode ? 0.08 : 0.15)
-                                       : Colors.dsSurface
-                                border.width: 1
-                                border.color: vpnController.lanSharingEnabled
-                                              ? Qt.rgba(Colors.dsSuccess.r, Colors.dsSuccess.g, Colors.dsSuccess.b, Colors.lightMode ? 0.26 : 0.38)
-                                              : Colors.dsBorderSoft
-                                implicitHeight: lanStatusCardLayout.implicitHeight + 28
-
-                                ColumnLayout {
-                                    id: lanStatusCardLayout
-                                    anchors.fill: parent
-                                    anchors.margins: 14
-                                    spacing: 14
-
-                                    RowLayout {
-                                        Layout.fillWidth: true
-                                        spacing: 14
-
-                                        Rectangle {
-                                            Layout.preferredWidth: 58
-                                            Layout.preferredHeight: 58
-                                            radius: 29
-                                            color: vpnController.lanSharingEnabled
-                                                   ? Colors.dsSuccess
-                                                   : Qt.rgba(root.lanUiAccent.r, root.lanUiAccent.g, root.lanUiAccent.b, Colors.lightMode ? 0.14 : 0.22)
-
-                                            Text {
-                                                anchors.centerIn: parent
-                                                text: "\uf1eb"
-                                                color: vpnController.lanSharingEnabled ? Colors.dsPrimaryText : root.lanUiAccent
-                                                font.family: root.faSolid
-                                                font.pixelSize: 26
-                                            }
-
-                                            Rectangle {
-                                                visible: vpnController.lanSharingEnabled
-                                                width: 20
-                                                height: 20
-                                                radius: 10
-                                                anchors.right: parent.right
-                                                anchors.bottom: parent.bottom
-                                                anchors.rightMargin: -2
-                                                anchors.bottomMargin: -2
-                                                color: Colors.dsSuccess
-                                                border.width: 2
-                                                border.color: Colors.dsSurface
-
-                                                Text {
-                                                    anchors.centerIn: parent
-                                                    text: "\uf00c"
-                                                    color: Colors.dsPrimaryText
-                                                    font.family: root.faSolid
-                                                    font.pixelSize: 9
-                                                }
-                                            }
-                                        }
-
-                                        ColumnLayout {
-                                            Layout.fillWidth: true
-                                            spacing: 3
-
-                                            Text {
-                                                Layout.fillWidth: true
-                                                text: vpnController.lanSharingEnabled ? "Sharing On" : "Sharing Off"
-                                                color: vpnController.lanSharingEnabled ? Colors.dsSuccess : Colors.dsText
-                                                font.family: FontSystem.getContentFontBold.name
-                                                font.pixelSize: Typography.uiTitle
-                                                font.bold: true
-                                                elide: Text.ElideRight
-                                            }
-
-                                            Text {
-                                                Layout.fillWidth: true
-                                                text: vpnController.lanSharingEnabled
-                                                      ? (root.compact ? "Proxy is available on your LAN." : "Your proxy is available on the LAN.")
-                                                      : (root.compact ? "Share your proxy on local Wi-Fi." : "Enable to share your proxy on local Wi-Fi.")
-                                                color: Colors.dsTextMuted
-                                                font.family: FontSystem.contentFontFamily
-                                                font.pixelSize: root.compact ? Typography.uiBodySm : Typography.uiBody
-                                                elide: Text.ElideRight
-                                            }
-                                        }
-
-                                        Controls.Switch {
-                                            checked: vpnController.lanSharingEnabled
-                                            enabled: vpnController.lanSharingSupported
-                                            onToggled: vpnController.lanSharingEnabled = checked
-                                        }
-                                    }
-
-                                    Rectangle {
-                                        Layout.fillWidth: true
-                                        implicitHeight: 80
-                                        radius: Metrics.radiusMd
-                                        color: Colors.dsSurface
-                                        border.width: 1
-                                        border.color: Colors.dsBorderSoft
-
-                                        RowLayout {
-                                            anchors.fill: parent
-                                            anchors.leftMargin: root.compact ? 2 : 4
-                                            anchors.rightMargin: root.compact ? 2 : 4
-                                            spacing: 0
-
-                                            LanInfoCell {
-                                                Layout.minimumWidth: root.compact ? 96 : 166
-                                                Layout.preferredWidth: root.compact ? 148 : 260
-                                                Layout.maximumWidth: root.compact ? 208 : 360
-                                                label: settingsFlick.width < 560 ? "Host" : "LAN Address (Host)"
-                                                value: root.lanProxyHost()
-                                                copyable: true
-                                                accentColor: Colors.dsPrimarySolid
-                                                onCopyClicked: {
-                                                    vpnController.copyTextToClipboard(root.lanProxyHost())
-                                                    root.showSettingsFeedback("Host copied.")
-                                                }
-                                            }
-
-                                            Rectangle {
-                                                Layout.preferredWidth: 1
-                                                Layout.preferredHeight: 52
-                                                color: Colors.dsBorderSoft
-                                            }
-
-                                            LanInfoCell {
-                                                Layout.minimumWidth: root.compact ? 74 : 116
-                                                Layout.preferredWidth: root.compact ? 94 : 162
-                                                Layout.maximumWidth: root.compact ? 132 : 208
-                                                label: "Port"
-                                                value: String(vpnController.httpPort)
-                                                copyable: true
-                                                accentColor: Colors.dsPrimarySolid
-                                                onCopyClicked: {
-                                                    vpnController.copyTextToClipboard(String(vpnController.httpPort))
-                                                    root.showSettingsFeedback("Port copied.")
-                                                }
-                                            }
-
-                                            Rectangle {
-                                                Layout.preferredWidth: 1
-                                                Layout.preferredHeight: 52
-                                                color: Colors.dsBorderSoft
-                                            }
-
-                                            LanInfoCell {
-                                                Layout.minimumWidth: root.compact ? 104 : 188
-                                                Layout.preferredWidth: root.compact ? 140 : 274
-                                                Layout.maximumWidth: root.compact ? 210 : 380
-                                                label: "Protocol"
-                                                value: root.lanProtocolDisplay(root.lanUiMode)
-                                                glyph: "\uf0ac"
-                                                chip: true
-                                                accentColor: root.lanUiAccent
-                                            }
-                                        }
-                                    }
-
-                                    RowLayout {
-                                        Layout.fillWidth: true
-                                        spacing: 10
-
-                                        LanActionButton {
-                                            text: settingsFlick.width < 560 ? "Copy" : "Copy Address"
-                                            glyph: "\uf0c5"
-                                            accentColor: Colors.dsPrimarySolid
-                                            onClicked: {
-                                                vpnController.copyTextToClipboard(root.lanProxyHost())
-                                                root.showSettingsFeedback("Address copied.")
-                                            }
-                                        }
-
-                                        LanActionButton {
-                                            text: settingsFlick.width < 560 ? "Test" : "Test Connection"
-                                            glyph: "\uf2f1"
-                                            accentColor: Colors.dsPrimarySolid
-                                            onClicked: root.showLanStatusFeedback("Test with Host " + root.lanProxyHost() + " and Port " + String(vpnController.httpPort) + ".")
-                                        }
-                                    }
-
-                                    Text {
-                                        Layout.fillWidth: true
-                                        visible: root.settingsFeedbackText.length > 0 || root.lanStatusFeedbackText.length > 0
-                                        text: root.lanStatusFeedbackText.length > 0 ? root.lanStatusFeedbackText : root.settingsFeedbackText
-                                        color: Colors.dsTextSubtle
-                                        font.family: FontSystem.contentFontFamily
-                                        font.pixelSize: Typography.uiCaption
-                                        wrapMode: Text.WordWrap
-                                    }
-
-                                    Text {
-                                        Layout.fillWidth: true
-                                        visible: !vpnController.lanSharingSupported
-                                        text: "LAN proxy unavailable on this runtime."
-                                        color: Colors.dsDanger
-                                        font.family: FontSystem.contentFontFamily
-                                        font.pixelSize: Typography.uiBody
-                                        wrapMode: Text.WordWrap
-                                    }
-                                }
-                            }
-
-                            Rectangle {
-                                Layout.fillWidth: true
-                                radius: Metrics.radiusLg
-                                color: Colors.dsSurface
-                                border.width: 1
-                                border.color: Colors.dsBorderSoft
-                                implicitHeight: lanSecurityRow.implicitHeight + 20
-
-                                RowLayout {
-                                    id: lanSecurityRow
-                                    anchors.fill: parent
-                                    anchors.margins: 12
-                                    spacing: 12
-
-                                    Rectangle {
-                                        Layout.preferredWidth: 34
-                                        Layout.preferredHeight: 34
-                                        radius: 17
-                                        color: Qt.rgba(Colors.dsSuccess.r, Colors.dsSuccess.g, Colors.dsSuccess.b, Colors.lightMode ? 0.12 : 0.20)
-
-                                        Text {
-                                            anchors.centerIn: parent
-                                            text: "\uf132"
-                                            color: Colors.dsSuccess
-                                            font.family: root.faSolid
-                                            font.pixelSize: 15
-                                        }
-                                    }
-
-                                    ColumnLayout {
-                                        Layout.fillWidth: true
-                                        Layout.minimumWidth: 0
-                                        spacing: 4
-
-                                        RowLayout {
-                                            Layout.fillWidth: true
-                                            Layout.minimumWidth: 0
-                                            spacing: 6
-
-                                            Text {
-                                                Layout.fillWidth: true
-                                                Layout.minimumWidth: 0
-                                                text: vpnController.lanSharingAllowAnyBind
-                                                      ? (root.compact ? "Security: LAN Access Allowed" : "Security: LAN Connections Allowed")
-                                                      : (root.compact ? "Security: Private LAN" : "Security: Private LAN Only")
-                                                color: Colors.dsText
-                                                font.family: FontSystem.getContentFontBold.name
-                                                font.pixelSize: root.compact ? Typography.uiBodySm : Typography.uiBody
-                                                font.bold: true
-                                                wrapMode: Text.NoWrap
-                                                elide: Text.ElideRight
-                                            }
-
-                                            LanBadge {
-                                                Layout.alignment: Qt.AlignVCenter
-                                                text: vpnController.lanSharingAllowAnyBind ? "Review" : (root.compact ? "Safe" : "Recommended")
-                                                badgeColor: vpnController.lanSharingAllowAnyBind
-                                                           ? Qt.rgba(Colors.dsWarning.r, Colors.dsWarning.g, Colors.dsWarning.b, Colors.lightMode ? 0.12 : 0.20)
-                                                           : Qt.rgba(Colors.dsSuccess.r, Colors.dsSuccess.g, Colors.dsSuccess.b, Colors.lightMode ? 0.12 : 0.20)
-                                                borderColor: "transparent"
-                                                textColor: vpnController.lanSharingAllowAnyBind ? Colors.dsWarning : Colors.dsSuccess
-                                                textPixelSize: root.compact ? 11 : Typography.t4
-                                                horizontalPadding: root.compact ? 12 : 14
-                                            }
-                                        }
-
-                                        Text {
-                                            Layout.fillWidth: true
-                                            Layout.minimumWidth: 0
-                                            text: vpnController.lanSharingAllowAnyBind
-                                                  ? "Devices on your LAN can connect."
-                                                  : "Only devices on your local network can connect."
-                                            color: Colors.dsTextMuted
-                                            font.family: FontSystem.contentFontFamily
-                                            font.pixelSize: root.compact ? Typography.t4 : Typography.uiCaption
-                                            elide: Text.ElideRight
-                                        }
-                                    }
-
-                                    Controls.Switch {
-                                        Layout.alignment: Qt.AlignVCenter
-                                        checked: !vpnController.lanSharingAllowAnyBind
-                                        onToggled: vpnController.lanSharingAllowAnyBind = !checked
-                                    }
-                                }
-                            }
-
-                            Rectangle {
-                                Layout.fillWidth: true
-                                radius: Metrics.radiusLg
-                                color: Colors.dsSurface
-                                border.width: 1
-                                border.color: Colors.dsBorderSoft
-                                implicitHeight: lanDeviceCardLayout.implicitHeight + 28
-
-                                ColumnLayout {
-                                    id: lanDeviceCardLayout
-                                    anchors.fill: parent
-                                    anchors.margins: 12
-                                    spacing: 10
-
-                                    RowLayout {
-                                        Layout.fillWidth: true
-
-                                        Text {
-                                            Layout.fillWidth: true
-                                            text: "Choose Your Device"
-                                            color: Colors.dsText
-                                            font.family: FontSystem.getContentFontBold.name
-                                            font.pixelSize: Typography.uiTitleSm
-                                            font.bold: true
-                                            elide: Text.ElideRight
-                                        }
-
-                                        LanBadge {
-                                            text: root.lanUiModeLabelCompact
-                                            badgeColor: Qt.rgba(root.lanUiAccent.r, root.lanUiAccent.g, root.lanUiAccent.b, Colors.lightMode ? 0.10 : 0.18)
-                                            borderColor: "transparent"
-                                            textColor: root.lanUiAccent
-                                        }
-                                    }
-
-                                    GridLayout {
-                                        Layout.fillWidth: true
-                                        columns: settingsFlick.width < 360 ? 2 : 3
-                                        columnSpacing: root.compact ? 8 : 10
-                                        rowSpacing: root.compact ? 8 : 10
-
-                                        Repeater {
-                                            model: [
-                                                { "key": "mobile", "title": "Phone", "glyph": "\uf3cd", "accent": Colors.dsWarning },
-                                                { "key": "console", "title": "Game Console", "shortTitle": "Console", "glyph": "\uf11b", "accent": Colors.dsPrimarySolid },
-                                                { "key": "tv", "title": "Smart TV", "glyph": "\uf26c", "accent": Colors.dsSuccess },
-                                                { "key": "laptop", "title": "Laptop", "glyph": "\uf109", "accent": Colors.dsPrimarySolid },
-                                                { "key": "advanced", "title": "Advanced", "glyph": "\uf085", "accent": Colors.dsDanger }
-                                            ]
-
-                                            delegate: LanPresetTile {
-                                                required property var modelData
-                                                title: settingsFlick.width < 560 && (modelData.shortTitle || "").length > 0 ? modelData.shortTitle : (modelData.title || "")
-                                                glyph: modelData.glyph || ""
-                                                accentColor: modelData.accent || Colors.dsPrimarySolid
-                                                selected: root.lanModeKey() === (modelData.key || "")
-                                                onClicked: root.lanSetMode(modelData.key || "console")
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-
-                            Rectangle {
-                                Layout.fillWidth: true
-                                radius: Metrics.radiusLg
-                                color: Colors.dsSurface
-                                border.width: 1
-                                border.color: Colors.dsBorderSoft
-                                implicitHeight: lanGuideCardLayout.implicitHeight + 28
-
-                                ColumnLayout {
-                                    id: lanGuideCardLayout
-                                    anchors.fill: parent
-                                    anchors.margins: 14
-                                    spacing: 12
-
-                                    RowLayout {
-                                        Layout.fillWidth: true
-                                        spacing: 10
-
-                                        Rectangle {
-                                            Layout.preferredWidth: 34
-                                            Layout.preferredHeight: 34
-                                            radius: 17
-                                            color: Qt.rgba(root.lanUiAccent.r, root.lanUiAccent.g, root.lanUiAccent.b, Colors.lightMode ? 0.10 : 0.18)
-
-                                            Text {
-                                                anchors.centerIn: parent
-                                                text: root.lanModeGlyph(root.lanUiMode)
-                                                color: root.lanUiAccent
-                                                font.family: root.faSolid
-                                                font.pixelSize: 16
-                                            }
-                                        }
-
-                                        Text {
-                                            Layout.fillWidth: true
-                                            text: "Setup Guide: " + root.lanUiModeLabelCompact
-                                            color: Colors.dsText
-                                            font.family: FontSystem.getContentFontBold.name
-                                            font.pixelSize: Typography.uiTitleSm
-                                            font.bold: true
-                                            elide: Text.ElideRight
-                                        }
-
-                                        LanBadge {
-                                            text: "6 Steps"
-                                            badgeColor: Qt.rgba(Colors.dsPrimarySolid.r, Colors.dsPrimarySolid.g, Colors.dsPrimarySolid.b, Colors.lightMode ? 0.10 : 0.18)
-                                            borderColor: "transparent"
-                                            textColor: Colors.dsPrimarySolid
-                                        }
-                                    }
-
-                                    ColumnLayout {
-                                        Layout.fillWidth: true
-                                        spacing: 6
-
-                                        Repeater {
-                                            model: [
-                                                { "num": "1", "icon": "\uf1eb", "text": "Connect both devices to same Wi-Fi.", "value": "", "copy": "" },
-                                                { "num": "2", "icon": "\uf013", "text": "Open proxy/manual network settings.", "value": "", "copy": "" },
-                                                { "num": "3", "icon": "\uf1de", "text": "Set proxy to Manual.", "value": "", "copy": "" },
-                                                { "num": "4", "icon": "\uf0c5", "text": "Enter Host:", "value": root.lanProxyHost(), "copy": "host" },
-                                                { "num": "5", "icon": "\uf0c5", "text": "Enter Port:", "value": String(vpnController.httpPort), "copy": "port" },
-                                                { "num": "6", "icon": "\uf058", "text": "Test connection.", "value": "", "copy": "" }
-                                            ]
-
-                                            delegate: LanGuideStep {
-                                                required property var modelData
-                                                stepNumber: modelData.num || ""
-                                                text: modelData.text || ""
-                                                value: modelData.value || ""
-                                                glyph: modelData.icon || ""
-                                                copyable: (modelData.copy || "").length > 0
-                                                accentColor: root.lanUiAccent
-                                                onCopyClicked: {
-                                                    const target = modelData.copy || ""
-                                                    if (target === "host") {
-                                                        vpnController.copyTextToClipboard(root.lanProxyHost())
-                                                        root.showLanSetupFeedback("Host copied.")
-                                                    } else if (target === "port") {
-                                                        vpnController.copyTextToClipboard(String(vpnController.httpPort))
-                                                        root.showLanSetupFeedback("Port copied.")
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-
-                                    LanActionButton {
-                                        text: "Test Connection"
-                                        glyph: "\uf2f1"
-                                        accentColor: Colors.dsPrimarySolid
-                                        onClicked: root.showLanSetupFeedback("Use Host " + root.lanProxyHost() + " and Port " + String(vpnController.httpPort) + ".")
-                                    }
-
-                                    Text {
-                                        Layout.fillWidth: true
-                                        visible: root.lanSetupFeedbackText.length > 0
-                                        text: root.lanSetupFeedbackText
-                                        color: Colors.dsTextSubtle
-                                        font.family: FontSystem.contentFontFamily
-                                        font.pixelSize: Typography.uiCaption
-                                        horizontalAlignment: Text.AlignHCenter
-                                        wrapMode: Text.WordWrap
-                                    }
-                                }
-                            }
-
-                            PowerSectionCard {
-                                title: "Advanced Options"
-                                subtitle: "Collapsed by default."
-                                glyph: "\uf085"
-                                accentColor: Colors.dsPrimarySolid
-                                animated: root.powerVisualAnimationsEnabled
-
-                                RowLayout {
-                                    Layout.fillWidth: true
-                                    spacing: 8
-
-                                    Text {
-                                        Layout.fillWidth: true
-                                        text: root.lanAdvancedControlsExpanded
-                                              ? "Advanced controls visible."
-                                              : "Advanced controls hidden."
-                                        color: Colors.dsTextMuted
-                                        font.family: FontSystem.contentFontFamily
-                                        font.pixelSize: Typography.uiBody
-                                        elide: Text.ElideRight
-                                    }
-
-                                    LanBadge {
-                                        text: root.lanAdvancedControlsExpanded ? "Expanded" : "Collapsed"
-                                        glyph: root.lanAdvancedControlsExpanded ? "\uf06e" : "\uf070"
-                                        badgeColor: Qt.rgba(root.lanUiAccent.r, root.lanUiAccent.g, root.lanUiAccent.b, Colors.lightMode ? 0.11 : 0.18)
-                                        borderColor: Qt.rgba(root.lanUiAccent.r, root.lanUiAccent.g, root.lanUiAccent.b, Colors.lightMode ? 0.30 : 0.44)
-                                        textColor: root.lanUiAccent
-                                    }
-
-                                    Controls.OutlineButton {
-                                        compact: true
-                                        text: root.lanAdvancedControlsExpanded ? "Hide" : "Show"
-                                        onClicked: root.lanAdvancedControlsExpanded = !root.lanAdvancedControlsExpanded
-                                    }
-                                }
-
-                                ColumnLayout {
-                                    Layout.fillWidth: true
-                                    spacing: 8
-                                    visible: root.lanAdvancedControlsExpanded
-
-                                    GridLayout {
-                                        Layout.fillWidth: true
-                                        columns: settingsFlick.width < 700 ? 1 : 3
-                                        columnSpacing: 8
-                                        rowSpacing: 8
-
-                                        PowerMetricChip {
-                                            label: "Sharing"
-                                            value: vpnController.lanSharingEnabled ? "Enabled" : "Disabled"
-                                            glyph: vpnController.lanSharingEnabled ? "\uf00c" : "\uf00d"
-                                            accentColor: vpnController.lanSharingEnabled ? Colors.dsSuccess : Colors.dsTextSubtle
-                                        }
-
-                                        PowerMetricChip {
-                                            label: "Bind Mode"
-                                            value: vpnController.lanSharingAllowAnyBind ? "LAN Wide" : "Private LAN"
-                                            glyph: vpnController.lanSharingAllowAnyBind ? "\uf3ed" : "\uf132"
-                                            accentColor: vpnController.lanSharingAllowAnyBind ? Colors.dsWarning : Colors.dsSuccess
-                                        }
-
-                                        PowerMetricChip {
-                                            label: "Gateway"
-                                            value: vpnController.lanGatewayExperimentalEnabled ? "Enabled" : "Off"
-                                            glyph: "\uf0e7"
-                                            accentColor: vpnController.lanGatewayExperimentalEnabled ? Colors.dsDanger : Colors.dsTextSubtle
-                                        }
-                                    }
-
-                                    RowLayout {
-                                        Layout.fillWidth: true
-                                        spacing: 8
-
-                                        Controls.Switch {
-                                            checked: vpnController.lanSharingEnabled
-                                            enabled: vpnController.lanSharingSupported
-                                            onToggled: vpnController.lanSharingEnabled = checked
-                                        }
-
-                                        Text {
-                                            Layout.fillWidth: true
-                                            text: vpnController.lanSharingEnabled ? "Sharing enabled." : "Sharing disabled."
-                                            color: Colors.dsTextMuted
-                                            font.family: FontSystem.contentFontFamily
-                                            font.pixelSize: Typography.uiBody
-                                            wrapMode: Text.WordWrap
-                                        }
-                                    }
-
-                                    RowLayout {
-                                        Layout.fillWidth: true
-                                        spacing: 8
-
-                                        Controls.ComboBox {
-                                            id: lanBindAddressCombo
-                                            Layout.fillWidth: true
-                                            Layout.preferredHeight: 36
-                                            enabled: !vpnController.lanSharingAllowAnyBind
-                                                     && (root.lanHostCandidates || []).length > 0
-                                            model: (root.lanHostCandidates || []).length > 0
-                                                   ? root.lanHostCandidates
-                                                   : [{ "name": "No private LAN IP found", "address": "", "interface": "" }]
-                                            currentIndex: {
-                                                const wanted = (vpnController.lanSharingBindAddress || "").trim()
-                                                const list = model || []
-                                                for (let i = 0; i < list.length; ++i) {
-                                                    if ((((list[i] || {}).address || "").trim()) === wanted)
-                                                        return i
-                                                }
-                                                return list.length > 0 ? 0 : -1
-                                            }
-                                            onActivated: function(activatedIndex) {
-                                                const item = model[activatedIndex] || {}
-                                                if ((item.address || "").length > 0) {
-                                                    vpnController.lanSharingBindAddress = item.address
-                                                    vpnController.lanSharingInterface = item.interface || ""
-                                                }
-                                            }
-                                        }
-
-                                        Controls.OutlineButton {
-                                            compact: true
-                                            text: "Refresh"
-                                            onClicked: root.refreshLanHostCandidates()
-                                        }
-                                    }
-
-                                    RowLayout {
-                                        Layout.fillWidth: true
-                                        spacing: 8
-
-                                        Controls.Switch {
-                                            checked: vpnController.lanSharingAllowAnyBind
-                                            onToggled: vpnController.lanSharingAllowAnyBind = checked
-                                        }
-
-                                        LanBadge {
-                                            text: vpnController.lanSharingAllowAnyBind ? "LAN Wide (0.0.0.0)" : "Private LAN Only"
-                                            glyph: vpnController.lanSharingAllowAnyBind ? "\uf3ed" : "\uf132"
-                                            badgeColor: vpnController.lanSharingAllowAnyBind
-                                                       ? Qt.rgba(Colors.dsWarning.r, Colors.dsWarning.g, Colors.dsWarning.b, Colors.lightMode ? 0.14 : 0.22)
-                                                       : Qt.rgba(Colors.dsSuccess.r, Colors.dsSuccess.g, Colors.dsSuccess.b, Colors.lightMode ? 0.14 : 0.22)
-                                            borderColor: vpnController.lanSharingAllowAnyBind ? Colors.dsWarning : Colors.dsSuccess
-                                            textColor: vpnController.lanSharingAllowAnyBind ? Colors.dsWarning : Colors.dsSuccess
-                                        }
-
-                                        Item { Layout.fillWidth: true }
-                                    }
-
-                                    Rectangle {
-                                        Layout.fillWidth: true
-                                        radius: Metrics.radiusMd
-                                        color: Colors.dsSurfaceSoft
-                                        border.width: 1
-                                        border.color: Colors.dsBorderSoft
-                                        implicitHeight: gatewayRow.implicitHeight + gatewayHintText.implicitHeight + 18
-
-                                        ColumnLayout {
-                                            anchors.fill: parent
-                                            anchors.margins: 8
-                                            spacing: 5
-
-                                            RowLayout {
-                                                id: gatewayRow
-                                                Layout.fillWidth: true
-                                                spacing: 8
-
-                                                Controls.Switch {
-                                                    checked: vpnController.lanGatewayExperimentalEnabled
-                                                    enabled: root.lanGatewayPlatformSupported()
-                                                    onToggled: vpnController.lanGatewayExperimentalEnabled = checked
-                                                }
-
-                                                Text {
-                                                    Layout.fillWidth: false
-                                                    text: "Full VPN Gateway / Hotspot"
-                                                    color: Colors.dsText
-                                                    font.family: FontSystem.getContentFontBold.name
-                                                    font.pixelSize: Typography.uiBody
-                                                    elide: Text.ElideRight
-                                                }
-
-                                                Item { Layout.fillWidth: true; }
-
-                                            }
-
-                                            Text {
-                                                id: gatewayHintText
-                                                Layout.fillWidth: true
-                                                text: root.lanGatewayPlatformSupported()
-                                                      ? "Experimental: Use only when you need full-device routing. Proxy mode is recommended first."
-                                                      : "Not available on this platform runtime (Experimental)."
-                                                color: Colors.dsTextSubtle
-                                                font.family: FontSystem.contentFontFamily
-                                                font.pixelSize: Typography.uiCaption
-                                                wrapMode: Text.WordWrap
-                                            }
-                                        }
-                                    }
-                                }
-                            }
+                            root: surface.root
+                            vpnController: surface.vpnController
+                            settingsFlick: settingsFlick
                         }
 
-                        RowLayout {
+                        RoutingRulesSettings {
                             Layout.fillWidth: true
                             visible: root.settingsSection === "routing"
-                            spacing: 10
-
-                            Controls.Switch {
-                                checked: vpnController.whitelistMode
-                                onToggled: vpnController.whitelistMode = checked
-                            }
-
-                            Text {
-                                text: "Whitelist mode"
-                                color: root.themeColorToken("mainHex_334155", "mainHex_d7e4f6")
-                                font.family: FontSystem.contentFontFamily
-                                font.pixelSize: 14
-                            }
+                            root: surface.root
+                            vpnController: surface.vpnController
                         }
 
-                        Text {
-                            Layout.fillWidth: true
-                            visible: root.settingsSection === "routing"
-                            text: {
-                                if (vpnController.tunMode)
-                                    return "TUN mode keeps unmatched traffic on VPN by default. Use Direct rules for explicit bypass targets."
-                                return vpnController.whitelistMode
-                                       ? "Whitelist mode is ON: unmatched traffic goes Direct, and only rules set to VPN/Tunnel use the VPN."
-                                       : "Whitelist mode is OFF: unmatched traffic goes through VPN, unless a rule sends it Direct or Block."
-                            }
-                            wrapMode: Text.Wrap
-                            color: root.themeColorToken("mainHex_8a95a8", "mainHex_9eb2cb")
-                            font.family: FontSystem.contentFontFamily
-                            font.pixelSize: 12
-                        }
-
-                        Button {
-                            visible: root.settingsSection === "connection" && vpnController.supportsSystemProxy
-                            isDefault: false
-                            text: "Reset System Proxy Now"
-                            Layout.fillWidth: true
-                            onClicked: vpnController.cleanSystemProxy()
-                        }
-
-                        Rectangle {
-                            Layout.fillWidth: true
-                            visible: root.settingsSection === "routing"
-                            height: 1
-                            color: root.themeColorToken("mainHex_e4e8ef", "mainHex_30435d")
-                        }
-
-                        Text {
-                            visible: root.settingsSection === "routing"
-                            text: "Routing Rules"
-                            color: root.themeColorToken("mainHex_667081", "mainHex_9ab0ca")
-                            font.family: FontSystem.contentFontFamily
-                            font.pixelSize: 14
-                        }
-
-                        Text {
-                            Layout.fillWidth: true
-                            visible: root.settingsSection === "routing"
-                            text: "Create rules with Target Type + Target Value + Action. Rules are evaluated from top to bottom."
-                            wrapMode: Text.Wrap
-                            color: root.themeColorToken("mainHex_8a95a8", "mainHex_9eb2cb")
-                            font.family: FontSystem.contentFontFamily
-                            font.pixelSize: 12
-                        }
-
-                        Text {
-                            Layout.fillWidth: true
-                            visible: root.settingsSection === "routing"
-                            text: "Tip: choose Action = Direct to bypass VPN for that target."
-                            wrapMode: Text.Wrap
-                            color: root.themeColorToken("mainHex_8a95a8", "mainHex_9eb2cb")
-                            font.family: FontSystem.contentFontFamily
-                            font.pixelSize: 12
-                        }
-
-                        Controls.TextArea {
-                            Layout.fillWidth: true
-                            visible: false
-                            Layout.preferredHeight: 74
-                            placeholderText: "Tunnel Domains\nexample.com\ndomain:youtube.com\nregexp:.*\\\\.openai\\\\.com$"
-                            text: vpnController.proxyDomainRules
-                            onTextChanged: vpnController.proxyDomainRules = text
-                        }
-
-                        Controls.TextArea {
-                            Layout.fillWidth: true
-                            visible: false
-                            Layout.preferredHeight: 74
-                            placeholderText: "Direct Domains\nfull:localhost\ngeosite:private\nexample.org"
-                            text: vpnController.directDomainRules
-                            onTextChanged: vpnController.directDomainRules = text
-                        }
-
-                        Controls.TextArea {
-                            Layout.fillWidth: true
-                            visible: false
-                            Layout.preferredHeight: 74
-                            placeholderText: "Block Domains\ngeosite:category-ads-all\nregexp:.*ads.*"
-                            text: vpnController.blockDomainRules
-                            onTextChanged: vpnController.blockDomainRules = text
-                        }
-
-                        Rectangle {
-                            Layout.fillWidth: true
-                            visible: root.settingsSection === "routing"
-                            radius: 14
-                            color: root.themeColorToken("mainHex_f8fbff", "mainHex_171a2b")
-                            border.width: 1
-                            border.color: root.themeColorToken("mainHex_d7e4f5", "mainHex_2e4260")
-                            implicitHeight: routingRuleEditorColumn.implicitHeight + 20
-
-                            ColumnLayout {
-                                id: routingRuleEditorColumn
-                                anchors.fill: parent
-                                anchors.margins: 10
-                                spacing: 8
-
-                                Text {
-                                    Layout.fillWidth: true
-                                    text: root.routingRuleEditingId.length > 0 ? "Edit Rule" : "Create Rule"
-                                    color: root.themeColorToken("mainHex_334155", "mainHex_d7e4f6")
-                                    font.family: FontSystem.getContentFontBold.name
-                                    font.pixelSize: 13
-                                    font.bold: true
-                                }
-
-                                RowLayout {
-                                    Layout.fillWidth: true
-                                    spacing: 8
-
-                                    Controls.ComboBox {
-                                        id: routingTypeCombo
-                                        Layout.fillWidth: true
-                                        Layout.preferredHeight: 38
-                                        model: [
-                                            { "name": "Domain", "value": "domain" },
-                                            { "name": "IP/CIDR", "value": "ip" },
-                                            { "name": "App", "value": "app" },
-                                            { "name": "Process", "value": "process" },
-                                            { "name": "Protocol", "value": "protocol" }
-                                        ]
-                                        currentIndex: {
-                                            const wanted = (root.routingRuleDraftType || "domain").toLowerCase()
-                                            const list = model || []
-                                            for (let i = 0; i < list.length; ++i) {
-                                                if (((list[i] || {}).value || "").toLowerCase() === wanted)
-                                                    return i
-                                            }
-                                            return 0
-                                        }
-                                        onActivated: function(activatedIndex) {
-                                            const item = model[activatedIndex] || {}
-                                            root.routingRuleDraftType = item.value || "domain"
-                                            root.routingRuleValidationText = ""
-                                        }
-                                    }
-
-                                    Controls.ComboBox {
-                                        id: routingActionCombo
-                                        Layout.fillWidth: true
-                                        Layout.preferredHeight: 38
-                                        model: [
-                                            { "name": "VPN", "value": "proxy" },
-                                            { "name": "Direct", "value": "direct" },
-                                            { "name": "Block", "value": "block" }
-                                        ]
-                                        currentIndex: {
-                                            const wanted = (root.routingRuleDraftAction || "proxy").toLowerCase()
-                                            const list = model || []
-                                            for (let i = 0; i < list.length; ++i) {
-                                                if (((list[i] || {}).value || "").toLowerCase() === wanted)
-                                                    return i
-                                            }
-                                            return 0
-                                        }
-                                        onActivated: function(activatedIndex) {
-                                            const item = model[activatedIndex] || {}
-                                            root.routingRuleDraftAction = item.value || "proxy"
-                                            root.routingRuleValidationText = ""
-                                        }
-                                    }
-                                }
-
-                                RowLayout {
-                                    Layout.fillWidth: true
-                                    spacing: 8
-
-                                    Controls.ComboBox {
-                                        id: routingProfileScopeCombo
-                                        Layout.fillWidth: true
-                                        Layout.preferredHeight: 38
-                                        model: vpnController.usageProfileOptions
-                                        currentIndex: {
-                                            const wanted = (root.routingRuleDraftProfileId || "").trim()
-                                            const list = model || []
-                                            for (let i = 0; i < list.length; ++i) {
-                                                if ((((list[i] || {}).id || "").trim()) === wanted)
-                                                    return i
-                                            }
-                                            return 0
-                                        }
-                                        onActivated: function(activatedIndex) {
-                                            const item = model[activatedIndex] || {}
-                                            root.routingRuleDraftProfileId = item.id || ""
-                                        }
-                                    }
-
-                                    Controls.Switch {
-                                        checked: root.routingRuleDraftEnabled
-                                        onToggled: root.routingRuleDraftEnabled = checked
-                                    }
-
-                                    Text {
-                                        text: root.routingRuleDraftEnabled ? "Enabled" : "Disabled"
-                                        color: root.themeColorToken("mainHex_5f7088", "mainHex_9eb2cb")
-                                        font.family: FontSystem.contentFontFamily
-                                        font.pixelSize: 12
-                                    }
-                                }
-
-                                Controls.TextField {
-                                    Layout.fillWidth: true
-                                    Layout.preferredHeight: 40
-                                    text: root.routingRuleDraftValue
-                                    placeholderText: {
-                                        const type = (root.routingRuleDraftType || "domain").toLowerCase()
-                                        if (type === "ip")
-                                            return "Example: 185.143.233.0/24 or geoip:ir"
-                                        if (type === "app")
-                                            return "Example: C:/Games/game.exe or /Applications/Telegram.app/Contents/MacOS/Telegram"
-                                        if (type === "process")
-                                            return "Example: telegram.exe or com.apple.Safari"
-                                        if (type === "protocol")
-                                            return "Example: tcp,udp"
-                                        return "Example: bankmellat.ir or domain:bankmellat.ir"
-                                    }
-                                    onTextEdited: {
-                                        root.routingRuleDraftValue = text
-                                        root.routingRuleValidationText = ""
-                                    }
-                                }
-
-                                Text {
-                                    Layout.fillWidth: true
-                                    visible: root.routingRuleValidationText.length > 0
-                                    text: root.routingRuleValidationText
-                                    color: root.themeColorToken("mainHex_c65050", "mainHex_ff8e8e")
-                                    font.family: FontSystem.contentFontFamily
-                                    font.pixelSize: 12
-                                    wrapMode: Text.WordWrap
-                                }
-
-                                RowLayout {
-                                    Layout.fillWidth: true
-                                    spacing: 8
-
-                                    Controls.Button {
-                                        Layout.fillWidth: true
-                                        text: root.routingRuleEditingId.length > 0 ? "Save Rule" : "Add Rule"
-                                        onClicked: root.saveRoutingRuleDraft()
-                                    }
-
-                                    Controls.Button {
-                                        text: root.routingRuleEditingId.length > 0 ? "Cancel" : "Validate"
-                                        implicitWidth: 88
-                                        onClicked: {
-                                            if (root.routingRuleEditingId.length > 0) {
-                                                root.resetRoutingRuleDraft()
-                                                return
-                                            }
-                                            const validation = vpnController.validateRoutingRule(
-                                                root.routingRuleDraftType,
-                                                root.routingRuleDraftValue,
-                                                root.routingRuleDraftAction
-                                            ) || {}
-                                            root.routingRuleValidationText = validation.ok === true
-                                                                            ? (validation.warning || "Rule is valid.")
-                                                                            : (validation.error || "Invalid rule.")
-                                        }
-                                    }
-
-                                    Controls.Button {
-                                        text: "Clear All"
-                                        implicitWidth: 88
-                                        enabled: (root.currentRoutingRules() || []).length > 0
-                                        onClicked: vpnController.clearRoutingRules()
-                                    }
-                                }
-                            }
-                        }
-
-                        Rectangle {
-                            Layout.fillWidth: true
-                            visible: root.settingsSection === "routing"
-                            radius: 14
-                            color: root.themeColorToken("mainHex_f8fbff", "mainHex_171a2b")
-                            border.width: 1
-                            border.color: root.themeColorToken("mainHex_d7e4f5", "mainHex_2e4260")
-                            implicitHeight: routingRuleListColumn.implicitHeight + 20
-
-                            ColumnLayout {
-                                id: routingRuleListColumn
-                                anchors.fill: parent
-                                anchors.margins: 10
-                                spacing: 8
-
-                                Text {
-                                    Layout.fillWidth: true
-                                    text: "Active Rules"
-                                    color: root.themeColorToken("mainHex_334155", "mainHex_d7e4f6")
-                                    font.family: FontSystem.getContentFontBold.name
-                                    font.pixelSize: 13
-                                    font.bold: true
-                                }
-
-                                ListView {
-                                    id: routingRuleListView
-                                    Layout.fillWidth: true
-                                    Layout.preferredHeight: count > 0 ? Math.min(320, Math.max(140, count * 72)) : 90
-                                    clip: true
-                                    spacing: 6
-                                    model: root.currentRoutingRules()
-
-                                    delegate: Rectangle {
-                                        required property int index
-                                        required property var modelData
-                                        width: ListView.view.width
-                                        height: 66
-                                        radius: 10
-                                        color: root.themeColorToken("mainHex_ffffff", "mainHex_22324a")
-                                        border.width: 1
-                                        border.color: root.themeColorToken("mainHex_dbe3ef", "mainHex_3a5470")
-
-                                        RowLayout {
-                                            anchors.fill: parent
-                                            anchors.leftMargin: 8
-                                            anchors.rightMargin: 8
-                                            spacing: 6
-
-                                            ColumnLayout {
-                                                Layout.fillWidth: true
-                                                spacing: 1
-
-                                                Text {
-                                                    Layout.fillWidth: true
-                                                    text: (index + 1) + ". " + root.routingRuleTypeLabel(modelData.targetType)
-                                                          + " → " + root.routingRuleActionLabel(modelData.action)
-                                                    color: root.themeColorToken("mainHex_334155", "mainHex_d2def0")
-                                                    font.family: FontSystem.getContentFontBold.name
-                                                    font.pixelSize: 12
-                                                    font.bold: true
-                                                    elide: Text.ElideRight
-                                                }
-
-                                                Text {
-                                                    Layout.fillWidth: true
-                                                    text: modelData.targetValue || ""
-                                                    color: root.themeColorToken("mainHex_4f6078", "mainHex_9eb2cb")
-                                                    font.family: FontSystem.contentFontFamily
-                                                    font.pixelSize: 11
-                                                    elide: Text.ElideMiddle
-                                                }
-
-                                                Text {
-                                                    Layout.fillWidth: true
-                                                    text: "Scope: " + (modelData.profileName || "All Profiles")
-                                                          + " • " + (modelData.enabled === false ? "Disabled" : "Enabled")
-                                                    color: root.themeColorToken("mainHex_7f8da2", "mainHex_a8bdd7")
-                                                    font.family: FontSystem.contentFontFamily
-                                                    font.pixelSize: 10
-                                                    elide: Text.ElideRight
-                                                }
-                                            }
-
-                                            Controls.Button {
-                                                Layout.fillWidth: false
-                                                sizeType: "compact"
-                                                text: "↑"
-                                                implicitWidth: 32
-                                                implicitHeight: 28
-                                                enabled: index > 0
-                                                onClicked: vpnController.moveRoutingRule(modelData.id || "", index - 1)
-                                            }
-
-                                            Controls.Button {
-                                                Layout.fillWidth: false
-                                                sizeType: "compact"
-                                                text: "↓"
-                                                implicitWidth: 32
-                                                implicitHeight: 28
-                                                enabled: index < routingRuleListView.count - 1
-                                                onClicked: vpnController.moveRoutingRule(modelData.id || "", index + 1)
-                                            }
-
-                                            Controls.Button {
-                                                Layout.fillWidth: false
-                                                sizeType: "compact"
-                                                text: modelData.enabled === false ? "Off" : "On"
-                                                implicitWidth: 44
-                                                implicitHeight: 28
-                                                onClicked: vpnController.setRoutingRuleEnabled(modelData.id || "", modelData.enabled === false)
-                                            }
-
-                                            Controls.Button {
-                                                Layout.fillWidth: false
-                                                sizeType: "compact"
-                                                text: "Edit"
-                                                implicitWidth: 46
-                                                implicitHeight: 28
-                                                onClicked: root.editRoutingRule(modelData)
-                                            }
-
-                                            Controls.Button {
-                                                Layout.fillWidth: false
-                                                sizeType: "compact"
-                                                text: "Dup"
-                                                implicitWidth: 42
-                                                implicitHeight: 28
-                                                onClicked: vpnController.duplicateRoutingRule(modelData.id || "")
-                                            }
-
-                                            Controls.Button {
-                                                Layout.fillWidth: false
-                                                sizeType: "compact"
-                                                text: "Del"
-                                                implicitWidth: 42
-                                                implicitHeight: 28
-                                                onClicked: vpnController.removeRoutingRule(modelData.id || "")
-                                            }
-                                        }
-                                    }
-
-                                    Text {
-                                        anchors.fill: parent
-                                        visible: routingRuleListView.count === 0
-                                        text: "No rules yet. Add your first rule above.\nExample: Domain bankmellat.ir → Direct."
-                                        color: root.themeColorToken("mainHex_8a95a8", "mainHex_9eb1c9")
-                                        font.family: FontSystem.contentFontFamily
-                                        font.pixelSize: 12
-                                        horizontalAlignment: Text.AlignHCenter
-                                        verticalAlignment: Text.AlignVCenter
-                                        wrapMode: Text.WordWrap
-                                    }
-                                }
-                            }
-                        }
-
-                        Rectangle {
-                            id: customDnsCard
+                        CustomDnsSettings {
                             Layout.fillWidth: true
                             visible: root.settingsSection === "dns"
-                            Layout.maximumWidth: settingsFlick.width
-                            Layout.preferredHeight: customDnsColumn.implicitHeight + 20
-                            implicitHeight: customDnsColumn.implicitHeight + 20
-                            radius: 14
-                            color: root.themeColorToken("mainHex_f8fbff", "mainHex_171a2b")
-                            border.width: 0
-                            border.color: root.themeColorToken("mainHex_d7e4f5", "mainHex_151c32")
-
-                            ColumnLayout {
-                                id: customDnsColumn
-                                anchors.fill: parent
-                                anchors.margins: 10
-                                spacing: 8
-
-                                Text {
-                                    Layout.fillWidth: true
-                                    text: "Custom DNS (optional, TUN mode)"
-                                    color: root.themeColorToken("mainHex_3b4e67", "mainHex_d0ddf0")
-                                    font.family: FontSystem.getContentFontBold.name
-                                    font.pixelSize: 13
-                                }
-
-                                Text {
-                                    Layout.fillWidth: true
-                                    text: "Enter one resolver per line. Supports IPv4, IPv6, and DNS hostnames."
-                                    wrapMode: Text.Wrap
-                                    color: root.themeColorToken("mainHex_7c8ba1", "mainHex_9eb2cb")
-                                    font.family: FontSystem.contentFontFamily
-                                    font.pixelSize: 12
-                                }
-
-                                Controls.TextArea {
-                                    id: customDnsTextArea
-                                    Layout.fillWidth: true
-                                    Layout.preferredHeight: 86
-                                    fillColor: root.themeColorToken("mainHex_ffffff", "mainHex_4d20334d")
-                                    strokeColor: root.themeColorToken("mainHex_d8e2f0", "mainHex_4f6f95")
-                                    focusColor: root.themeColorToken("mainHex_8bb8ff", "mainHex_6ba0ff")
-                                    placeholderText: "1.1.1.1\n8.8.8.8\ndns.google"
-                                    text: root.customDnsDraft
-                                    onTextChanged: {
-                                        root.customDnsDraft = text
-                                        root.customDnsDirty = text.trim() !== (vpnController.customDnsServers || "").trim()
-                                    }
-                                }
-
-                                GridLayout {
-                                    Layout.fillWidth: true
-                                    columns: root.width < 520 ? 1 : 4
-
-                                    Repeater {
-                                        model: [
-                                            { "label": "Cloudflare", "server": "1.1.1.1" },
-                                            { "label": "Google", "server": "8.8.8.8" },
-                                            { "label": "Quad9", "server": "9.9.9.9" }
-                                        ]
-
-                                        delegate: Rectangle {
-                                            required property var modelData
-                                            Layout.fillWidth: true
-                                            Layout.preferredWidth: root.width < 520 ? 1 : 152
-                                            Layout.preferredHeight: 38
-                                            radius: 12
-                                            color: root.dnsDraftContains(modelData.server)
-                                                   ? root.themeColorToken("mainHex_eaf2ff", "mainHex_223753")
-                                                   : root.themeColorToken("mainHex_ffffff", "mainHex_22324a")
-                                            border.width: 0
-                                            border.color: root.dnsDraftContains(modelData.server)
-                                                          ? root.themeColorToken("mainHex_8bb8ff", "mainHex_4f86e6")
-                                                          : root.themeColorToken("mainHex_d8e2f0", "mainHex_151c32")
-
-                                            RowLayout {
-                                                anchors.fill: parent
-                                                anchors.leftMargin: 10
-                                                anchors.rightMargin: 8
-                                                spacing: 8
-
-                                                Text {
-                                                    Layout.fillWidth: true
-                                                    text: modelData.label
-                                                    color: root.themeColorToken("mainHex_43556f", "mainHex_d0ddf0")
-                                                    font.family: FontSystem.contentFontFamily
-                                                    font.pixelSize: 12
-                                                    elide: Text.ElideRight
-                                                }
-
-                                                Controls.Switch {
-                                                    checked: root.dnsDraftContains(modelData.server)
-                                                    onToggled: root.setDnsDraftContains(modelData.server, checked)
-                                                }
-                                            }
-                                        }
-                                    }
-
-                                    Item { Layout.fillWidth: true }
-
-                                    Text {
-                                        color: root.themeColorToken("mainHex_7c8ba1", "mainHex_9eb2cb")
-                                        font.family: FontSystem.contentFontFamily
-                                        font.pixelSize: 12
-                                        text: {
-                                            const count = (root.customDnsDraft || "")
-                                            .split(/[\n,;]+/)
-                                            .map(function(entry) { return entry.trim() })
-                                            .filter(function(entry) { return entry.length > 0 }).length
-                                            return count > 0 ? ("Resolvers: " + count) : "Resolvers: default"
-                                        }
-                                    }
-                                }
-
-                                RowLayout {
-                                    Layout.fillWidth: true
-                                    spacing: 8
-
-                                    Controls.Button {
-                                        text: "Reset"
-                                        implicitWidth: 86
-                                        implicitHeight: 34
-                                        Layout.fillWidth: false
-                                        enabled: root.customDnsDirty
-                                        onClicked: root.syncCustomDnsDraftFromController()
-                                    }
-
-                                    Item { Layout.fillWidth: true }
-
-                                    Controls.Button {
-                                        text: "Apply DNS"
-                                        implicitWidth: 106
-                                        implicitHeight: 34
-                                        Layout.fillWidth: false
-                                        enabled: root.customDnsDirty
-                                        onClicked: {
-                                            vpnController.customDnsServers = root.customDnsDraft
-                                            root.syncCustomDnsDraftFromController()
-                                        }
-                                    }
-                                }
-                            }
+                            root: surface.root
+                            vpnController: surface.vpnController
                         }
 
-                        Text {
-                            Layout.fillWidth: true
-                            visible: root.settingsSection === "routing"
-                            text: {
-                                if (!vpnController.supportsPerAppRouting) {
-                                    return "App/process routing is not supported on this platform runtime."
-                                }
-                                if (Qt.platform.os === "android" || Qt.platform.os === "ios")
-                                    return "Mobile platforms currently support domain/IP/protocol rules. App-level routing visibility may be limited by OS/runtime constraints."
-                                if (!vpnController.processRoutingSupported) {
-                                    const detected = (vpnController.xrayVersion || "").trim()
-                                    if (detected.length > 0)
-                                        return detected
-                                    return "Desktop app/process routing requires xray-core 26.1.23+ with process matching enabled."
-                                }
-                                return "App rules are supported on this runtime. Use absolute executable paths for the most reliable matching."
-                            }
-                            wrapMode: Text.Wrap
-                            color: (!vpnController.processRoutingSupported && vpnController.supportsPerAppRouting)
-                                   ? root.themeColorToken("mainHex_d97706", "mainHex_ffb454")
-                                   : root.themeColorToken("mainHex_8a95a8", "mainHex_9eb2cb")
-                            font.family: FontSystem.contentFontFamily
-                            font.pixelSize: 12
-                        }
-
-                        RowLayout {
-                            Layout.fillWidth: true
-                            visible: root.settingsSection === "routing" && vpnController.supportsPerAppRouting
-                            spacing: 8
-
-                            Text {
-                                Layout.fillWidth: true
-                                text: "Running apps"
-                                color: root.themeColorToken("mainHex_334155", "mainHex_d7e4f6")
-                                font.family: FontSystem.getContentFontBold.name
-                                font.pixelSize: 13
-                                font.bold: true
-                            }
-
-                            Controls.Button {
-                                text: root.appRuleSuggestionsLoading ? "Loading..." : "Refresh"
-                                implicitWidth: 82
-                                implicitHeight: 32
-                                enabled: vpnController.processRoutingSupported && !root.appRuleSuggestionsLoading
-                                onClicked: {
-                                    root.refreshAppRuleSuggestions()
-                                }
-                            }
-                        }
-
-                        RowLayout {
-                            Layout.fillWidth: true
-                            visible: root.settingsSection === "routing" && vpnController.supportsPerAppRouting
-                            spacing: 8
-
-                            Rectangle {
-                                Layout.fillWidth: true
-                                Layout.preferredHeight: 34
-                                radius: 10
-                                color: root.themeColorToken("mainHex_f7f9fd", "mainHex_151c32")
-                                border.width: 0
-                                border.color: appRuleSearchField.activeFocus
-                                              ? root.themeColorToken("mainHex_b9ccee", "mainHex_5f87c2")
-                                              : root.themeColorToken("mainHex_d9e1ef", "mainHex_3a5470")
-
-                                RowLayout {
-                                    anchors.fill: parent
-                                    anchors.leftMargin: 10
-                                    anchors.rightMargin: 10
-                                    spacing: 8
-
-                                    Text {
-                                        text: root.iconSearch
-                                        color: root.themeColorToken("mainHex_8da0ba", "mainHex_9eb4d0")
-                                        font.family: root.faSolid
-                                        font.pixelSize: 12
-                                    }
-
-                                    TextField {
-                                        id: appRuleSearchField
-                                        Layout.fillWidth: true
-                                        padding: 0
-                                        text: root.appRuleSearchQuery
-                                        placeholderText: "Search running apps"
-                                        color: root.themeColorToken("mainHex_1f2a3a", "mainHex_edf4ff")
-                                        font.family: FontSystem.contentFontFamily
-                                        font.pixelSize: 12
-                                        selectedTextColor: Colors.mainHex_ffffff
-                                        selectionColor: root.brandBlue
-                                        selectByMouse: true
-                                        background: null
-                                        onTextEdited: root.appRuleSearchQuery = text
-                                    }
-                                }
-                            }
-
-                            Controls.Button {
-                                text: "Select visible"
-                                implicitWidth: 104
-                                implicitHeight: 32
-                                Layout.fillWidth: false
-                                enabled: vpnController.processRoutingSupported
-                                         && (root.visibleAppRuleSuggestions() || []).length > 0
-                                onClicked: root.selectVisibleAppSuggestionItems()
-                            }
-                        }
-
-                        ColumnLayout {
-                            Layout.fillWidth: true
-                            visible: root.settingsSection === "routing" && vpnController.supportsPerAppRouting
-                            spacing: 8
-
-                            Text {
-                                Layout.fillWidth: true
-                                text: root.appRuleSuggestionsLoading
-                                      ? "Loading running and installed apps..."
-                                      : ((root.selectedAppRuleTargets || []).length > 0
-                                      ? ((root.selectedAppRuleTargets || []).length + " selected")
-                                      : (((root.visibleAppRuleSuggestions() || []).length > 0)
-                                         ? "Select apps to apply rules"
-                                         : "No matching app found"))
-                                color: root.themeColorToken("mainHex_6b7b92", "mainHex_9eb2cb")
-                                font.family: FontSystem.contentFontFamily
-                                font.pixelSize: 12
-                            }
-
-                            RowLayout {
-                                Layout.fillWidth: true
-                                visible: !root.compact
-                                spacing: 8
-
-                                Item { Layout.fillWidth: true }
-
-                                Controls.Button {
-                                    text: "Clear"
-                                    implicitWidth: 62
-                                    implicitHeight: 30
-                                    enabled: (root.selectedAppRuleTargets || []).length > 0
-                                    onClicked: root.clearAppSuggestionSelection()
-                                }
-
-                                Controls.Button {
-                                    text: "Direct"
-                                    implicitWidth: 72
-                                    implicitHeight: 30
-                                    enabled: vpnController.processRoutingSupported
-                                             && (root.selectedAppRuleTargets || []).length > 0
-                                    onClicked: root.appendSelectedAppRules("direct")
-                                }
-
-                                Controls.Button {
-                                    text: "Tunnel"
-                                    implicitWidth: 72
-                                    implicitHeight: 30
-                                    enabled: vpnController.processRoutingSupported
-                                             && (root.selectedAppRuleTargets || []).length > 0
-                                    onClicked: root.appendSelectedAppRules("proxy")
-                                }
-
-                                Controls.Button {
-                                    text: "Block"
-                                    implicitWidth: 72
-                                    implicitHeight: 30
-                                    enabled: vpnController.processRoutingSupported
-                                             && (root.selectedAppRuleTargets || []).length > 0
-                                    onClicked: root.appendSelectedAppRules("block")
-                                }
-                            }
-
-                            Flow {
-                                id: routingRuleActionFlow
-                                Layout.fillWidth: true
-                                visible: root.compact
-                                spacing: 6
-
-                                Controls.Button {
-                                    width: Math.max(66, Math.floor((routingRuleActionFlow.width - (routingRuleActionFlow.spacing * 3)) / 4))
-                                    implicitHeight: 30
-                                    text: "Clear"
-                                    enabled: (root.selectedAppRuleTargets || []).length > 0
-                                    onClicked: root.clearAppSuggestionSelection()
-                                }
-
-                                Controls.Button {
-                                    width: Math.max(66, Math.floor((routingRuleActionFlow.width - (routingRuleActionFlow.spacing * 3)) / 4))
-                                    implicitHeight: 30
-                                    text: "Direct"
-                                    enabled: vpnController.processRoutingSupported
-                                             && (root.selectedAppRuleTargets || []).length > 0
-                                    onClicked: root.appendSelectedAppRules("direct")
-                                }
-
-                                Controls.Button {
-                                    width: Math.max(66, Math.floor((routingRuleActionFlow.width - (routingRuleActionFlow.spacing * 3)) / 4))
-                                    implicitHeight: 30
-                                    text: "Tunnel"
-                                    enabled: vpnController.processRoutingSupported
-                                             && (root.selectedAppRuleTargets || []).length > 0
-                                    onClicked: root.appendSelectedAppRules("proxy")
-                                }
-
-                                Controls.Button {
-                                    width: Math.max(66, Math.floor((routingRuleActionFlow.width - (routingRuleActionFlow.spacing * 3)) / 4))
-                                    implicitHeight: 30
-                                    text: "Block"
-                                    enabled: vpnController.processRoutingSupported
-                                             && (root.selectedAppRuleTargets || []).length > 0
-                                    onClicked: root.appendSelectedAppRules("block")
-                                }
-                            }
-                        }
-
-                        Rectangle {
-                            Layout.fillWidth: true
-                            visible: root.settingsSection === "routing" && vpnController.supportsPerAppRouting
-                            Layout.preferredHeight: 240
-                            radius: 10
-                            color: root.themeColorToken("mainHex_f8fbff", "mainHex_171a2b")
-                            border.width: 0
-                            border.color: root.themeColorToken("mainHex_dfe7f2", "mainHex_151c32")
-
-                            ListView {
-                                anchors.fill: parent
-                                anchors.margins: 8
-                                clip: true
-                                spacing: 6
-                                model: root.visibleAppRuleSuggestions() || []
-
-                                delegate: Rectangle {
-                                    required property var modelData
-                                    width: ListView.view.width
-                                    height: 56
-                                    radius: 8
-                                    color: root.isAppSuggestionSelected(modelData)
-                                           ? root.themeColorToken("mainHex_edf4ff", "mainHex_274062")
-                                           : root.themeColorToken("mainHex_ffffff", "mainHex_22324a")
-                                    border.width: 0
-                                    border.color: root.isAppSuggestionSelected(modelData)
-                                                 ? root.themeColorToken("mainHex_b8d0ff", "mainHex_578dcf")
-                                                 : root.themeColorToken("mainHex_e1e9f4", "mainHex_3d5876")
-
-                                    RowLayout {
-                                        z: 1
-                                        anchors.fill: parent
-                                        anchors.leftMargin: 10
-                                        anchors.rightMargin: 8
-                                        spacing: 6
-
-                                        Rectangle {
-                                            Layout.preferredWidth: 26
-                                            Layout.preferredHeight: 26
-                                            radius: 13
-                                            color: root.isAppSuggestionSelected(modelData)
-                                                   ? root.themeColorToken("mainHex_dbe8ff", "mainHex_335178")
-                                                   : root.themeColorToken("mainHex_eff4fb", "mainHex_2a3f5b")
-                                            border.width: 0
-                                            border.color: root.isAppSuggestionSelected(modelData)
-                                                         ? root.themeColorToken("mainHex_9db9f9", "mainHex_659bdf")
-                                                         : root.themeColorToken("mainHex_d4dfef", "mainHex_496384")
-
-                                            Text {
-                                                anchors.centerIn: parent
-                                                text: root.appSuggestionInitial(modelData)
-                                                color: root.themeColorToken("mainHex_40618f", "mainHex_9fc3f2")
-                                                font.family: FontSystem.getContentFontBold.name
-                                                font.pixelSize: 11
-                                                font.bold: true
-                                            }
-                                        }
-
-                                        Column {
-                                            Layout.fillWidth: true
-                                            spacing: 0
-
-                                            Text {
-                                                width: parent.width
-                                                text: modelData.process || ""
-                                                color: root.themeColorToken("mainHex_334155", "mainHex_d2def0")
-                                                font.family: FontSystem.contentFontFamily
-                                                font.pixelSize: 12
-                                                elide: Text.ElideMiddle
-                                            }
-
-                                            Text {
-                                                width: parent.width
-                                                text: modelData.source ? ("Source: " + modelData.source) : ""
-                                                visible: text.length > 0
-                                                color: root.themeColorToken("mainHex_95a3b8", "mainHex_a4b6cd")
-                                                font.family: FontSystem.contentFontFamily
-                                                font.pixelSize: 10
-                                                elide: Text.ElideRight
-                                            }
-
-                                            Text {
-                                                width: parent.width
-                                                text: (modelData.ruleTarget || "").length > 0
-                                                      ? ("Match: " + modelData.ruleTarget)
-                                                      : ""
-                                                visible: text.length > 0
-                                                         && (modelData.ruleTarget || "") !== (modelData.process || "")
-                                                color: root.themeColorToken("mainHex_95a3b8", "mainHex_a4b6cd")
-                                                font.family: FontSystem.contentFontFamily
-                                                font.pixelSize: 10
-                                                elide: Text.ElideMiddle
-                                            }
-                                        }
-
-                                        Rectangle {
-                                            Layout.preferredWidth: 54
-                                            Layout.preferredHeight: 24
-                                            radius: 6
-                                            color: root.themeColorToken("mainHex_f3f7ff", "mainHex_20314b")
-                                            border.width: 0
-                                            border.color: root.themeColorToken("mainHex_d4e1f8", "mainHex_4c6990")
-                                            opacity: vpnController.processRoutingSupported ? 1.0 : 0.6
-
-                                            Text {
-                                                anchors.centerIn: parent
-                                                text: "Direct"
-                                                color: root.themeColorToken("mainHex_3862a9", "mainHex_8bb7ff")
-                                                font.family: FontSystem.contentFontFamily
-                                                font.pixelSize: 11
-                                                font.bold: true
-                                            }
-
-                                            MouseArea {
-                                                anchors.fill: parent
-                                                enabled: vpnController.processRoutingSupported
-                                                cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
-                                                onClicked: vpnController.appendAppRule("direct", root.appSuggestionRuleKey(modelData))
-                                            }
-                                        }
-
-                                        Rectangle {
-                                            Layout.preferredWidth: 56
-                                            Layout.preferredHeight: 24
-                                            radius: 6
-                                            color: root.themeColorToken("mainHex_e9f1ff", "mainHex_1b2f4c")
-                                            border.width: 0
-                                            border.color: root.themeColorToken("mainHex_c3d8ff", "mainHex_4770af")
-                                            opacity: vpnController.processRoutingSupported ? 1.0 : 0.6
-
-                                            Text {
-                                                anchors.centerIn: parent
-                                                text: "Tunnel"
-                                                color: root.themeColorToken("mainHex_2f6ff1", "mainHex_86b6ff")
-                                                font.family: FontSystem.contentFontFamily
-                                                font.pixelSize: 11
-                                                font.bold: true
-                                            }
-
-                                            MouseArea {
-                                                anchors.fill: parent
-                                                enabled: vpnController.processRoutingSupported
-                                                cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
-                                                onClicked: vpnController.appendAppRule("proxy", root.appSuggestionRuleKey(modelData))
-                                            }
-                                        }
-
-                                        Rectangle {
-                                            Layout.preferredWidth: 50
-                                            Layout.preferredHeight: 24
-                                            radius: 6
-                                            color: root.themeColorToken("mainHex_fff0f0", "mainHex_3b2631")
-                                            border.width: 0
-                                            border.color: root.themeColorToken("mainHex_ffd0d0", "mainHex_7d5062")
-                                            opacity: vpnController.processRoutingSupported ? 1.0 : 0.6
-
-                                            Text {
-                                                anchors.centerIn: parent
-                                                text: "Block"
-                                                color: root.themeColorToken("mainHex_ca3b3b", "mainHex_ff8da0")
-                                                font.family: FontSystem.contentFontFamily
-                                                font.pixelSize: 11
-                                                font.bold: true
-                                            }
-
-                                            MouseArea {
-                                                anchors.fill: parent
-                                                enabled: vpnController.processRoutingSupported
-                                                cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
-                                                onClicked: vpnController.appendAppRule("block", root.appSuggestionRuleKey(modelData))
-                                            }
-                                        }
-                                    }
-
-                                    MouseArea {
-                                        z: 0
-                                        anchors.fill: parent
-                                        acceptedButtons: Qt.LeftButton
-                                        onClicked: root.toggleAppSuggestionSelection(modelData)
-                                    }
-                                }
-                            }
-                        }
-
-                        Controls.TextArea {
-                            Layout.fillWidth: true
-                            visible: false
-                            Layout.preferredHeight: 66
-                            enabled: vpnController.processRoutingSupported
-                            opacity: enabled ? 1.0 : 0.6
-                            placeholderText: "Tunnel Apps\nTelegram\nchrome.exe\ncom.apple.Safari"
-                            text: vpnController.proxyAppRules
-                            onTextChanged: vpnController.proxyAppRules = text
-                        }
-
-                        Controls.TextArea {
-                            Layout.fillWidth: true
-                            visible: false
-                            Layout.preferredHeight: 66
-                            enabled: vpnController.processRoutingSupported
-                            opacity: enabled ? 1.0 : 0.6
-                            placeholderText: "Direct Apps\nFinder\nexplorer.exe\nfirefox"
-                            text: vpnController.directAppRules
-                            onTextChanged: vpnController.directAppRules = text
-                        }
-
-                        Controls.TextArea {
-                            Layout.fillWidth: true
-                            visible: false
-                            Layout.preferredHeight: 66
-                            enabled: vpnController.processRoutingSupported
-                            opacity: enabled ? 1.0 : 0.6
-                            placeholderText: "Block Apps\nsteam.exe\nDiscord\ncom.apple.Music"
-                            text: vpnController.blockAppRules
-                            onTextChanged: vpnController.blockAppRules = text
-                        }
                     }
-
                 }
             }
         }
@@ -7087,11 +3893,139 @@ Item {
         modal: true
         focus: true
         closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+        property var aboutSoftwareInfo: ({})
+        property var aboutHardwareInfo: ({})
         width: root.sheetWidth(430)
-        height: root.sheetHeight(540)
+        height: root.compact ? root.height : root.sheetHeight(700)
         x: (root.width - width) * 0.5
         y: root.drawerY(height)
         padding: 0
+
+        function aboutValue(map, key) {
+            if (!map)
+                return "Unavailable"
+            const value = map[key]
+            if (value === undefined || value === null)
+                return "Unavailable"
+            const text = String(value)
+            return text.length > 0 ? text : "Unavailable"
+        }
+
+        function normalizeAboutValue(value) {
+            if (value === undefined || value === null)
+                return "Unavailable"
+            const text = String(value).trim()
+            return text.length > 0 ? text : "Unavailable"
+        }
+
+        function aboutSoftwareValue(key) {
+            try {
+                return normalizeAboutValue(vpnController.systemSoftwareInfoValue(key))
+            } catch (error) {
+            }
+            return aboutValue(aboutSoftwareInfo, key)
+        }
+
+        function aboutHardwareValue(key) {
+            try {
+                return normalizeAboutValue(vpnController.systemHardwareInfoValue(key))
+            } catch (error) {
+            }
+            return aboutValue(aboutHardwareInfo, key)
+        }
+
+        function aboutMemoryValue() {
+            const value = aboutHardwareValue("memoryText")
+            return value === "Unavailable" ? value : (value + " total")
+        }
+
+        function refreshAboutSystemInfoFromReport() {
+            const software = ({})
+            const hardware = ({})
+            const softwareLabels = ({
+                "App Version": "appVersion",
+                "xray-core": "xrayVersion",
+                "Qt Runtime": "qtVersion",
+                "Language Standard": "languageStandard",
+                "Runtime": "platformMode",
+                "Platform": "platform",
+                "OS": "osName",
+                "Kernel / API": "apiText",
+                "SDK": "sdkText"
+            })
+            const hardwareLabels = ({
+                "CPU": "cpuName",
+                "Architecture": "cpuArchitecture",
+                "Memory": "memoryText",
+                "Process Memory": "processMemoryText",
+                "Device": "deviceName",
+                "Display": "displayText"
+            })
+            const lines = String(vpnController.systemInfoText() || "").split(/\r?\n/)
+            let section = ""
+
+            for (let index = 0; index < lines.length; ++index) {
+                const line = String(lines[index] || "").trim()
+                if (line.length === 0)
+                    continue
+                if (line === "Software") {
+                    section = "software"
+                    continue
+                }
+                if (line === "Hardware") {
+                    section = "hardware"
+                    continue
+                }
+                const separator = line.indexOf(":")
+                if (separator <= 0)
+                    continue
+
+                const label = line.slice(0, separator).trim()
+                const value = line.slice(separator + 1).trim()
+                if (section === "software" && softwareLabels[label])
+                    software[softwareLabels[label]] = value
+                else if (section === "hardware" && hardwareLabels[label])
+                    hardware[hardwareLabels[label]] = value
+            }
+
+            aboutSoftwareInfo = ({
+                "appVersion": software.appVersion,
+                "xrayVersion": software.xrayVersion,
+                "qtVersion": software.qtVersion,
+                "platformMode": software.platformMode,
+                "platform": software.platform,
+                "osName": software.osName,
+                "osKernel": software.osKernel,
+                "apiText": software.apiText,
+                "sdkText": software.sdkText,
+                "languageStandard": software.languageStandard
+            })
+
+            aboutHardwareInfo = ({
+                "cpuName": hardware.cpuName,
+                "cpuArchitecture": hardware.cpuArchitecture,
+                "memoryText": hardware.memoryText,
+                "processMemoryText": hardware.processMemoryText,
+                "deviceName": hardware.deviceName,
+                "displayText": hardware.displayText
+            })
+        }
+
+        function refreshAboutSystemInfo() {
+            if (vpnController.systemSoftwareInfo && vpnController.systemHardwareInfo) {
+                aboutSoftwareInfo = vpnController.systemSoftwareInfo() || ({})
+                aboutHardwareInfo = vpnController.systemHardwareInfo() || ({})
+                if (aboutValue(aboutSoftwareInfo, "appVersion") !== "Unavailable"
+                        || aboutValue(aboutHardwareInfo, "cpuName") !== "Unavailable")
+                    return
+            }
+
+            refreshAboutSystemInfoFromReport()
+        }
+
+        onVisibleChanged: if (visible) refreshAboutSystemInfo()
+        onAboutToShow: refreshAboutSystemInfo()
+        onOpened: refreshAboutSystemInfo()
 
         enter: Transition {
             NumberAnimation {
@@ -9494,7 +6428,7 @@ Item {
                 text: "<strong>GENY</strong>CONNECT"
                 color: Colors.textPrimary
                 font.family: FontSystem.getContentFontBold.name
-                font.pixelSize: 24
+                font.pixelSize: 20
             }
 
             Item { Layout.fillWidth: true }
@@ -9517,7 +6451,10 @@ Item {
                     iconFontFamily: root.faSolid
                     iconColor: root.themeColorToken("mainHex_a0a8b5", "mainHex_8ea1ba")
                     iconPixelSize: 18
-                    onClicked: aboutPopup.open()
+                    onClicked: {
+                        aboutPopup.refreshAboutSystemInfo()
+                        aboutPopup.open()
+                    }
                 }
 
                 Controls.CircleIconButton {
@@ -10189,22 +7126,22 @@ Item {
                         text: "<strong>GENY</strong>CONNECT"
                         color: root.themeColor(root.brandInk, Colors.mainHex_e5edf9)
                         font.family: FontSystem.contentFontFamily
-                        font.pixelSize: 15
+                        font.pixelSize: 18
                         elide: Text.ElideRight
-                        Layout.maximumWidth: Math.max(112, compactHomeContent.width * 0.40)
                     }
 
                     Item { Layout.fillWidth: true }
 
                     PowerHomeBadge {
                         modeName: vpnController.powerMode
-                        compact: compactHomeContent.width < 410
+                        Layout.preferredWidth: 32
+                        Layout.preferredHeight: 32
                         onClicked: root.openSettingsSection("power")
                     }
 
                     Rectangle {
-                        Layout.preferredWidth: 42
-                        Layout.preferredHeight: 42
+                        Layout.preferredWidth: 32
+                        Layout.preferredHeight: 32
                         radius: 21
                         color: root.themeColorToken("mainHex_f0edff", "mainHex_221c36")
 
@@ -10224,8 +7161,8 @@ Item {
                     }
 
                     Item {
-                        Layout.preferredWidth: 36
-                        Layout.preferredHeight: 36
+                        Layout.preferredWidth: 32
+                        Layout.preferredHeight: 32
 
                         Controls.CircleIconButton {
                             anchors.fill: parent
@@ -10328,10 +7265,10 @@ Item {
                             width: heroPowerCluster.width * (0.58 + (index * 0.14))
                             height: width
                             radius: width / 2
-                            color: root.connectRingColor()
+                            color: root.heroPowerRingColor()
                             opacity: index === 0 ? 1.0 : (vpnController.connectionState === ConnectionState.Disconnected ? 0.12 : 0.16)
                             border.width: index === 3 ? 1 : 0
-                            border.color: root.connectRingColor()
+                            border.color: root.heroPowerRingColor()
                             scale: root.powerDecorativeAnimationsEnabled && vpnController.connectionState === ConnectionState.Connecting && index > 0 ? 1.04 : 1.0
                             Behavior on color { ColorAnimation { duration: 280 } }
                             Behavior on border.color { ColorAnimation { duration: 280 } }
@@ -10342,14 +7279,38 @@ Item {
                         }
                     }
 
+                    Controls.PowerModeParticleEffect {
+                        anchors.fill: parent
+                        visible: active
+                        active: vpnController.connectionState !== ConnectionState.Disconnected
+                                && (root.powerEffectsEnabled || vpnController.powerMode === "Save")
+                        animationsEnabled: root.powerVisualAnimationsEnabled || vpnController.powerMode === "Save"
+                        modeName: vpnController.powerMode
+                        intensity: vpnController.powerMode === "High Performance" ? 1.52
+                                   : (vpnController.powerMode === "Save" ? 0.86 : 1.0)
+                        velocityScale: root.heroParticleSpeedFactor()
+                        accentColor: root.heroPowerRingColor()
+                    }
+
                     Rectangle {
                         id: heroConnectButton
                         anchors.centerIn: parent
                         property real idlePulseScale: 1.0
+                        property real networkPulseTrafficFactor: root.clamp01((Math.max(0, root.downRateBytesPerSec, root.upRateBytesPerSec) * 8.0 / 1000000.0) / 120.0)
+                        property bool networkPulseActive: root.powerDecorativeAnimationsEnabled
+                                                          && vpnController.connectionState !== ConnectionState.Disconnected
+                                                          && !heroConnectMouse.pressed
+                        property int networkPulseDuration: vpnController.connectionState === ConnectionState.Connecting
+                                                          ? 920
+                                                          : (vpnController.connectionState === ConnectionState.Error
+                                                             ? 1180
+                                                             : Math.round(1540 - (networkPulseTrafficFactor * 420)))
+                        property int networkPulseStagger: Math.max(150, Math.round(networkPulseDuration / 3.2))
+                        property int networkPulseCycle: networkPulseDuration + (networkPulseStagger * 2)
                         width: Math.max(82, Math.round(104 * root.mobileHomeScale))
                         height: width
                         radius: width * 0.5
-                        color: root.connectCoreColor()
+                        color: root.heroPowerCoreColor()
                         opacity: (vpnController.currentProfileIndex >= 0 || vpnController.connected || vpnController.busy) ? 1.0 : 0.82
                         scale: (heroConnectMouse.pressed ? 0.96 : 1.0) * heroConnectButton.idlePulseScale
                         Behavior on color {
@@ -10376,12 +7337,71 @@ Item {
                             }
                         }
 
+                        Repeater {
+                            model: 3
+
+                            Rectangle {
+                                id: pulseRing
+                                required property int index
+                                anchors.centerIn: parent
+                                width: parent.width * 1.02
+                                height: width
+                                radius: width * 0.5
+                                color: "transparent"
+                                border.width: 2
+                                border.color: Qt.rgba(root.heroPowerRingColor().r, root.heroPowerRingColor().g, root.heroPowerRingColor().b, 0.28)
+                                property real pulseProgress: 0.0
+                                scale: 0.68 + (pulseProgress * 0.94)
+                                opacity: heroConnectButton.networkPulseActive
+                                         ? ((0.30 + (heroConnectButton.networkPulseTrafficFactor * 0.08)) * (1.0 - pulseProgress))
+                                         : 0.0
+
+                                SequentialAnimation on pulseProgress {
+                                    running: heroConnectButton.networkPulseActive
+                                    loops: Animation.Infinite
+                                    PauseAnimation {
+                                        duration: index * heroConnectButton.networkPulseStagger
+                                    }
+                                    NumberAnimation {
+                                        from: 0.0
+                                        to: 1.0
+                                        duration: heroConnectButton.networkPulseDuration
+                                        easing.type: Easing.OutCubic
+                                    }
+                                    PauseAnimation {
+                                        duration: Math.max(1, heroConnectButton.networkPulseCycle - (index * heroConnectButton.networkPulseStagger) - heroConnectButton.networkPulseDuration)
+                                    }
+                                    onRunningChanged: {
+                                        if (!running)
+                                            pulseRing.pulseProgress = 0.0
+                                    }
+                                }
+
+                                Behavior on border.color {
+                                    enabled: root.powerVisualAnimationsEnabled
+                                    ColorAnimation { duration: 240 }
+                                }
+                            }
+                        }
+
                         Text {
                             anchors.centerIn: parent
                             text: root.homeConnectGlyph()
                             color: Colors.mainHex_ffffff
                             font.family: root.faSolid
                             font.pixelSize: 50
+                            scale: vpnController.connectionState === ConnectionState.Connecting
+                                   ? 1.04
+                                   : (heroConnectButton.networkPulseActive ? 1.01 + (heroConnectButton.networkPulseTrafficFactor * 0.03) : 1.0)
+                            opacity: vpnController.connectionState === ConnectionState.Connecting ? 0.96 : 1.0
+                            Behavior on scale {
+                                enabled: root.powerVisualAnimationsEnabled
+                                NumberAnimation { duration: 180; easing.type: Easing.InOutQuad }
+                            }
+                            Behavior on opacity {
+                                enabled: root.powerVisualAnimationsEnabled
+                                NumberAnimation { duration: 180; easing.type: Easing.InOutQuad }
+                            }
                         }
 
                         MouseArea {
@@ -10401,11 +7421,7 @@ Item {
                     width: Math.max(statusChipText.implicitWidth + 38, root.mobileHomeStatusMinWidth)
                     height: root.mobileHomeStatusChipHeight
                     radius: height * 0.5
-                    color: vpnController.connected
-                           ? root.themeColorToken("mainHex_e7faef", "mainHex_6646a77c")
-                           : (vpnController.busy
-                              ? root.themeColorToken("mainHex_fff5d8", "mainHex_666f5b2e")
-                              : root.themeColorToken("mainHex_f1f3f7", "mainHex_66557a9f"))
+                    color: root.heroPowerStatusColor()
                     scale: root.powerDecorativeAnimationsEnabled && vpnController.busy ? 1.04 : 1.0
                     Behavior on color {
                         enabled: root.powerVisualAnimationsEnabled
@@ -10431,11 +7447,7 @@ Item {
                         id: statusChipText
                         anchors.centerIn: parent
                         text: root.stateText()
-                        color: vpnController.connected
-                               ? root.themeColorToken("mainHex_55c982", "mainHex_82e3bb")
-                               : (vpnController.busy
-                                  ? root.themeColorToken("mainHex_d3a722", "mainHex_f0c86e")
-                                  : root.themeColorToken("mainHex_8993a4", "mainHex_c8d9ed"))
+                        color: root.heroPowerStatusTextColor()
                         font.family: FontSystem.getContentFontBold.name
                         font.pixelSize: 13
                         font.bold: true
@@ -10910,5 +7922,4 @@ Item {
             }
         }
     }
-
 }

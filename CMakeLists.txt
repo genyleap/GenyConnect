@@ -32,12 +32,35 @@ if(APPLE AND NOT IOS)
   set(CMAKE_OSX_DEPLOYMENT_TARGET "${GENYCONNECT_MACOS_DEPLOYMENT_TARGET}" CACHE STRING "Minimum macOS version" FORCE)
 endif()
 
-project(${PROJECT_NAME} VERSION 1.4.200 LANGUAGES CXX)
+project(${PROJECT_NAME} VERSION 1.4.768 LANGUAGES CXX)
 
 # -------------------------
-# Detect Windows generator architecture
+# Detect Android generator architecture
 # -------------------------
-if(WIN32 AND NOT GENYCONNECT_TARGET_BUILD_ARCH)
+if(ANDROID)
+  if(CMAKE_ANDROID_ARCH_ABI)
+    set(_geny_android_abi "${CMAKE_ANDROID_ARCH_ABI}")
+  elseif(ANDROID_ABI)
+    set(_geny_android_abi "${ANDROID_ABI}")
+  else()
+    message(FATAL_ERROR "Android ABI was not detected.")
+  endif()
+
+  if(_geny_android_abi STREQUAL "arm64-v8a")
+    set(GENYCONNECT_TARGET_BUILD_ARCH "arm64" CACHE STRING "Detected Android target arch" FORCE)
+  elseif(_geny_android_abi STREQUAL "armeabi-v7a")
+    set(GENYCONNECT_TARGET_BUILD_ARCH "armv7" CACHE STRING "Detected Android target arch" FORCE)
+  elseif(_geny_android_abi STREQUAL "x86_64")
+    set(GENYCONNECT_TARGET_BUILD_ARCH "x86_64" CACHE STRING "Detected Android target arch" FORCE)
+  elseif(_geny_android_abi STREQUAL "x86")
+    set(GENYCONNECT_TARGET_BUILD_ARCH "x86" CACHE STRING "Detected Android target arch" FORCE)
+  else()
+    message(FATAL_ERROR "Unsupported Android ABI: ${_geny_android_abi}")
+  endif()
+  # -------------------------
+  # Detect Windows generator architecture
+  # -------------------------
+elseif(WIN32 AND NOT GENYCONNECT_TARGET_BUILD_ARCH)
   if(CMAKE_GENERATOR_PLATFORM MATCHES "^[Aa][Rr][Mm]64$")
     set(GENYCONNECT_TARGET_BUILD_ARCH "arm64" CACHE STRING "Detected Windows target arch" FORCE)
   elseif(CMAKE_GENERATOR_PLATFORM MATCHES "^[Xx]64$|^[Ww]in64$|^[Aa][Mm][Dd]64$")
@@ -138,7 +161,15 @@ option(GENYCONNECT_BUNDLE_DOCS "Install README and LICENSE at package root + NSI
 option(GENYCONNECT_MACDEPLOYQT_ALWAYS_OVERWRITE "Pass -always-overwrite to macdeployqt" OFF)
 option(GENYCONNECT_MACDEPLOYQT_NO_STRIP         "Pass -no-strip to macdeployqt" OFF)
 
-set(GENYCONNECT_XRAY_VERSION      "v26.3.27" CACHE STRING   "Xray-core release tag (e.g. v26.3.27)")
+set(_GENYCONNECT_RECOMMENDED_XRAY_VERSION "v26.3.27")
+set(GENYCONNECT_XRAY_VERSION      "${_GENYCONNECT_RECOMMENDED_XRAY_VERSION}" CACHE STRING   "Xray-core release tag (e.g. v26.3.27)")
+if(GENYCONNECT_BUILD_ANDROID AND GENYCONNECT_XRAY_VERSION STREQUAL "v26.3.27")
+  message(STATUS
+    "Upgrading cached GENYCONNECT_XRAY_VERSION from v26.3.27 to ${_GENYCONNECT_RECOMMENDED_XRAY_VERSION} "
+    "to include the Android TUN UDP FullCone fix."
+  )
+  set(GENYCONNECT_XRAY_VERSION "${_GENYCONNECT_RECOMMENDED_XRAY_VERSION}" CACHE STRING "Xray-core release tag (e.g. v26.3.27)" FORCE)
+endif()
 set(GENYCONNECT_XRAY_ASSET_NAME   ""        CACHE STRING   "Optional explicit Xray release asset name override")
 set(GENYCONNECT_BUNDLED_XRAY_PATH ""        CACHE FILEPATH "Path to prebuilt xray-core binary to bundle with app")
 set(GENYCONNECT_BUNDLED_WINTUN_PATH ""      CACHE FILEPATH "Path to wintun.dll to bundle with Windows xray-core")
@@ -148,6 +179,162 @@ set(GENYCONNECT_WINTUN_URL "" CACHE STRING "Optional explicit wintun zip URL ove
 set(GENYCONNECT_TARGET_OS   "" CACHE STRING "Override target OS for output naming (macos|linux|windows)")
 set(GENYCONNECT_TARGET_ARCH "${GENYCONNECT_TARGET_BUILD_ARCH}" CACHE STRING "Override target arch for output naming (arm64|x86_64|armv7|universal)" FORCE)
 set(GENYCONNECT_OUTPUT_NAME "" CACHE STRING "Optional explicit output name (overrides generated name)")
+
+set(GENYCONNECT_LOCAL_XRAY_ROOT
+  "${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/xray"
+  CACHE PATH "Local prebuilt Xray binaries root"
+)
+
+set(GENYCONNECT_AUTO_BUILD_ANDROID_ARMV7_XRAY
+  ON
+  CACHE BOOL "Automatically build Xray-core for Android armeabi-v7a when local binary is missing"
+)
+
+if(ANDROID AND NOT GENYCONNECT_BUNDLED_XRAY_PATH)
+  if(CMAKE_ANDROID_ARCH_ABI STREQUAL "armeabi-v7a")
+    set(_geny_default_android_xray
+      "${GENYCONNECT_LOCAL_XRAY_ROOT}/android/armeabi-v7a/xray"
+    )
+
+    if(NOT EXISTS "${_geny_default_android_xray}" AND GENYCONNECT_AUTO_BUILD_ANDROID_ARMV7_XRAY)
+      find_program(GENYCONNECT_GO_EXECUTABLE go)
+
+      if(NOT GENYCONNECT_GO_EXECUTABLE)
+        message(FATAL_ERROR
+          "Android armeabi-v7a requires Xray-core, but Go was not found.\n"
+          "Install Go first:\n"
+          "  brew install go\n"
+          "Then configure again."
+        )
+      endif()
+
+      if(NOT CMAKE_ANDROID_NDK)
+        message(FATAL_ERROR "CMAKE_ANDROID_NDK is not set.")
+      endif()
+
+      file(MAKE_DIRECTORY "${GENYCONNECT_LOCAL_XRAY_ROOT}/android/armeabi-v7a")
+      file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/_deps")
+
+      set(_geny_xray_source_dir "${CMAKE_BINARY_DIR}/_deps/Xray-core-src")
+
+      if(NOT EXISTS "${_geny_xray_source_dir}/go.mod")
+        execute_process(
+          COMMAND git clone --depth 1 --branch "${GENYCONNECT_XRAY_VERSION}"
+                  https://github.com/XTLS/Xray-core.git
+                  "${_geny_xray_source_dir}"
+          RESULT_VARIABLE _geny_xray_git_result
+        )
+
+        if(NOT _geny_xray_git_result EQUAL 0)
+          message(FATAL_ERROR "Failed to clone Xray-core ${GENYCONNECT_XRAY_VERSION}.")
+        endif()
+      endif()
+
+      set(_geny_android_api "21")
+      if(CMAKE_SYSTEM_VERSION)
+        set(_geny_android_api "${CMAKE_SYSTEM_VERSION}")
+      endif()
+
+      set(_geny_ndk_host_tag "")
+
+      if(CMAKE_HOST_SYSTEM_NAME STREQUAL "Darwin")
+        if(CMAKE_HOST_SYSTEM_PROCESSOR MATCHES "arm64|aarch64")
+          set(_geny_ndk_host_tag "darwin-arm64")
+        else()
+          set(_geny_ndk_host_tag "darwin-x86_64")
+        endif()
+      elseif(CMAKE_HOST_SYSTEM_NAME STREQUAL "Linux")
+        set(_geny_ndk_host_tag "linux-x86_64")
+      elseif(CMAKE_HOST_SYSTEM_NAME STREQUAL "Windows")
+        set(_geny_ndk_host_tag "windows-x86_64")
+      else()
+        message(FATAL_ERROR "Unsupported host system for Android NDK: ${CMAKE_HOST_SYSTEM_NAME}")
+      endif()
+
+      set(_geny_ndk_prebuilt_dir
+        "${CMAKE_ANDROID_NDK}/toolchains/llvm/prebuilt/${_geny_ndk_host_tag}"
+      )
+
+      if(NOT EXISTS "${_geny_ndk_prebuilt_dir}")
+        message(FATAL_ERROR
+          "Android NDK LLVM prebuilt directory was not found:\n"
+          "  ${_geny_ndk_prebuilt_dir}"
+        )
+      endif()
+
+      if(CMAKE_HOST_SYSTEM_NAME STREQUAL "Windows")
+        if(EXISTS "${_geny_ndk_prebuilt_dir}/bin/armv7a-linux-androideabi${_geny_android_api}-clang.cmd")
+          set(_geny_tool_suffix ".cmd")
+        else()
+          set(_geny_tool_suffix ".exe")
+        endif()
+      else()
+        set(_geny_tool_suffix "")
+      endif()
+
+      if(NOT EXISTS "${_geny_ndk_prebuilt_dir}")
+        message(FATAL_ERROR
+          "Android NDK LLVM prebuilt directory was not found under:\n"
+          "  ${CMAKE_ANDROID_NDK}/toolchains/llvm/prebuilt"
+        )
+      endif()
+
+      set(_geny_android_armv7_cc
+        "${_geny_ndk_prebuilt_dir}/bin/armv7a-linux-androideabi${_geny_android_api}-clang${_geny_tool_suffix}"
+      )
+
+      set(_geny_android_armv7_cxx
+        "${_geny_ndk_prebuilt_dir}/bin/armv7a-linux-androideabi${_geny_android_api}-clang++${_geny_tool_suffix}"
+      )
+
+      if(NOT EXISTS "${_geny_android_armv7_cc}")
+        message(FATAL_ERROR "Android armv7 clang not found: ${_geny_android_armv7_cc}")
+      endif()
+
+      if(NOT EXISTS "${_geny_android_armv7_cxx}")
+        message(FATAL_ERROR "Android armv7 clang++ not found: ${_geny_android_armv7_cxx}")
+      endif()
+
+      message(STATUS "Building Xray-core for Android armeabi-v7a...")
+      message(STATUS "Android armv7 CC: ${_geny_android_armv7_cc}")
+
+      execute_process(
+        COMMAND "${CMAKE_COMMAND}" -E env
+          GOOS=android
+          GOARCH=arm
+          GOARM=7
+          CGO_ENABLED=1
+          CC=${_geny_android_armv7_cc}
+          CXX=${_geny_android_armv7_cxx}
+          "${GENYCONNECT_GO_EXECUTABLE}" build
+          -trimpath
+          "-ldflags=-s -w"
+          -o "${_geny_default_android_xray}"
+          ./main
+        WORKING_DIRECTORY "${_geny_xray_source_dir}"
+        RESULT_VARIABLE _geny_xray_armv7_build_result
+      )
+
+      if(NOT _geny_xray_armv7_build_result EQUAL 0)
+        message(FATAL_ERROR "Failed to build Xray-core for Android armeabi-v7a.")
+      endif()
+    endif()
+
+    if(EXISTS "${_geny_default_android_xray}")
+      set(GENYCONNECT_BUNDLED_XRAY_PATH
+        "${_geny_default_android_xray}"
+        CACHE FILEPATH "Path to bundled xray-core binary" FORCE
+      )
+      message(STATUS "Using local Android armeabi-v7a Xray: ${GENYCONNECT_BUNDLED_XRAY_PATH}")
+    else()
+      message(FATAL_ERROR
+        "Android armeabi-v7a requires a locally built Xray binary.\n"
+        "Expected path:\n"
+        "  ${_geny_default_android_xray}"
+      )
+    endif()
+  endif()
+endif()
 
 # -------------------------
 # Normalize OS / arch
@@ -453,8 +640,13 @@ set(GENYCONNECT_MODULE_IFS
   src/serverprofile.cppm
   src/serverprofilemodel.cppm
   src/linkparser.cppm
+  src/donationservice.cppm
   src/updater.cppm
   src/xrayconfigbuilder.cppm
+  src/networkcachemanager.cppm
+  src/platformactionservice.cppm
+  src/routingruleservice.cppm
+  src/systeminfoprovider.cppm
   src/systemproxymanager.cppm
   src/vpncontroller.cppm
 )
@@ -464,10 +656,15 @@ set(GENYCONNECT_IMPL_SOURCES
   src/serverprofile.cpp
   src/serverprofilemodel.cpp
   src/linkparser.cpp
+  src/donationservice.cpp
   src/powermodemanager.cpp
   src/thirdparty/qrcodegen/qrcodegen.cpp
   src/updater.cpp
   src/xrayconfigbuilder.cpp
+  src/networkcachemanager.cpp
+  src/platformactionservice.cpp
+  src/routingruleservice.cpp
+  src/systeminfoprovider.cpp
   src/vpncontroller.cpp
   src/runtime/vpnruntimebackend.cpp
   src/runtime/runtimefactory.cpp
@@ -523,6 +720,8 @@ if(GENYCONNECT_USE_MODULES)
 
   set_property(TARGET ${PROJECT_NAME} PROPERTY CXX_SCAN_FOR_MODULES ON)
 endif()
+
+target_compile_definitions(${PROJECT_NAME} PRIVATE GENYCONNECT_CXX_STANDARD=${CMAKE_CXX_STANDARD})
 
 set_target_properties(${PROJECT_NAME} PROPERTIES OUTPUT_NAME "${GENY_OUTPUT_NAME}"
   QT_ANDROID_PACKAGE_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/android")
@@ -688,6 +887,7 @@ set(qml_controls
   ui/Controls/PrimaryActionButton.qml
   ui/Controls/SignalBars.qml
   ui/Controls/SpeedTestGauge.qml
+  ui/Controls/PowerModeParticleEffect.qml
   ui/Controls/AppPage.qml
   ui/Controls/AppHeader.qml
   ui/Controls/GlassCard.qml
@@ -710,7 +910,18 @@ set(qml_controls
 )
 
 set(qml_sections
+  ui/Sections/CacheSettings.qml
+  ui/Sections/ConnectionModeSettings.qml
+  ui/Sections/CustomDnsSettings.qml
+  ui/Sections/InterfaceSettings.qml
+  ui/Sections/LanSharingSettings.qml
+  ui/Sections/LogsSettings.qml
   ui/Sections/MainSurface.qml
+  ui/Sections/PowerModeSettings.qml
+  ui/Sections/PowerSectionCard.qml
+  ui/Sections/RoutingRulesSettings.qml
+  ui/Sections/SettingsMainList.qml
+  ui/Sections/UpdatesSettings.qml
 )
 
 set(qml_main ui/Main.qml)
@@ -737,6 +948,9 @@ endif()
 
 if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/ui/Resources/image/map.png")
   list(APPEND genyconnect_image_assets ui/Resources/image/map.png)
+endif()
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/ui/Resources/image/power-orb-particle.svg")
+  list(APPEND genyconnect_image_assets ui/Resources/image/power-orb-particle.svg)
 endif()
 if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/images/map.png")
   list(APPEND genyconnect_image_assets images/map.png)
@@ -860,10 +1074,8 @@ if(GENYCONNECT_AUTO_DOWNLOAD_XRAY AND NOT GENYCONNECT_BUNDLED_XRAY_PATH)
       elseif(GENY_ARCH MATCHES "^(x86_64|amd64|x64)$")
         set(_geny_xray_arch "amd64")
       elseif(GENY_ARCH MATCHES "^(armv7|armv7a|armeabi-v7a|arm)$")
-        message(WARNING "Xray-core v26.3.27 has no Android arm32-v7a asset. Disabling bundled Xray for armeabi-v7a.")
         set(_geny_do_xray_download FALSE)
-      else()
-        message(FATAL_ERROR "Unsupported Android architecture for automatic Xray download: ${GENY_ARCH}")
+        message(STATUS "Skipping official Xray download for Android armeabi-v7a; using local built binary.")
       endif()
     else()
       set(_geny_xray_platform "linux")
@@ -894,7 +1106,7 @@ if(GENYCONNECT_AUTO_DOWNLOAD_XRAY AND NOT GENYCONNECT_BUNDLED_XRAY_PATH)
   if(DEFINED _geny_do_xray_download AND _geny_do_xray_download)
     set(_geny_xray_cache_dir   "${CMAKE_BINARY_DIR}/_deps/xray")
     file(MAKE_DIRECTORY        "${_geny_xray_cache_dir}")
-    set(_geny_xray_archive     "${_geny_xray_cache_dir}/${_geny_xray_asset}")
+    set(_geny_xray_archive     "${_geny_xray_cache_dir}/${_geny_xray_version}-${_geny_xray_asset}")
     set(_geny_xray_extract_dir "${_geny_xray_cache_dir}/extract-${_geny_xray_version}-${GENY_OS}-${GENY_ARCH}")
     set(_geny_xray_url         "https://github.com/XTLS/Xray-core/releases/download/${_geny_xray_version}/${_geny_xray_asset}")
 

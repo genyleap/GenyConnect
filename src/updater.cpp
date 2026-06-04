@@ -1427,16 +1427,25 @@ bool Updater::selectBestReleaseAsset(
         if (isWin && mentionsLinux) {
             continue;
         }
+        if (isWin && mentionsAndroid) {
+            continue;
+        }
         if (isMac && mentionsWin) {
             continue;
         }
         if (isMac && mentionsLinux) {
             continue;
         }
+        if (isMac && mentionsAndroid) {
+            continue;
+        }
         if (isLinux && mentionsWin) {
             continue;
         }
         if (isLinux && mentionsMac) {
+            continue;
+        }
+        if (isLinux && mentionsAndroid) {
             continue;
         }
 

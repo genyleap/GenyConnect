@@ -29,6 +29,7 @@ module;
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
 #include <QNetworkProxy>
+#include <QSet>
 #include <QStringList>
 #include <QTimer>
 #include <QUrl>
@@ -178,8 +179,8 @@ public:
     Q_PROPERTY(QString selectedUsageProfileId READ selectedUsageProfileId WRITE setSelectedUsageProfileId NOTIFY selectedUsageProfileIdChanged)
     Q_PROPERTY(QVariantList usageProfileOptions READ usageProfileOptions NOTIFY profileUsageChanged)
     Q_PROPERTY(bool processRoutingSupported READ processRoutingSupported NOTIFY processRoutingSupportChanged)
-    Q_PROPERTY(quint16 socksPort READ socksPort CONSTANT)
-    Q_PROPERTY(quint16 httpPort READ httpPort CONSTANT)
+    Q_PROPERTY(quint16 socksPort READ socksPort NOTIFY localPortsChanged)
+    Q_PROPERTY(quint16 httpPort READ httpPort NOTIFY localPortsChanged)
     Q_PROPERTY(bool isMobile READ isMobile NOTIFY runtimeCapabilitiesChanged)
     Q_PROPERTY(bool isDesktop READ isDesktop NOTIFY runtimeCapabilitiesChanged)
     Q_PROPERTY(bool supportsSystemProxy READ supportsSystemProxy NOTIFY runtimeCapabilitiesChanged)
@@ -715,11 +716,15 @@ public:
         const QString& groupName,
         const QString& configLink
     );
+    Q_INVOKABLE QString exportProfileLink(int row) const;
     /**
      * @brief Remove all stored profiles.
      * @return Number of removed profiles.
      */
     Q_INVOKABLE int removeAllProfiles();
+    Q_INVOKABLE int removeDeadProfiles();
+    Q_INVOKABLE bool removeSubscription(const QString& id);
+    Q_INVOKABLE int removeSubscriptionsByGroup(const QString& group = QString());
 
     /**
      * @brief Start endpoint ping for one profile row.
@@ -752,11 +757,14 @@ public:
      * @brief Toggle connected/disconnected state.
      */
     Q_INVOKABLE void toggleConnection();
+    Q_INVOKABLE bool shouldShowSecurityWarningForProfile(int row) const;
+    Q_INVOKABLE void setSecurityWarningDismissedForProfile(int row, bool dismissed);
 
     /**
      * @brief Explicitly clear OS proxy settings.
      */
     Q_INVOKABLE void cleanSystemProxy();
+    Q_INVOKABLE QVariantMap clearNetworkCache();
     Q_INVOKABLE void refreshPublicIp();
 
     /**
@@ -814,6 +822,12 @@ public:
     Q_INVOKABLE bool openUrlWithChooser(const QString& url, const QString& chooserTitle) const;
     Q_INVOKABLE bool openUrlInAndroidPackage(const QString& url, const QString& packageName) const;
     Q_INVOKABLE bool isAndroidPackageInstalled(const QString& packageName) const;
+    Q_INVOKABLE QVariantMap systemInfo() const;
+    Q_INVOKABLE QVariantMap systemSoftwareInfo() const;
+    Q_INVOKABLE QVariantMap systemHardwareInfo() const;
+    Q_INVOKABLE QString systemSoftwareInfoValue(const QString& key) const;
+    Q_INVOKABLE QString systemHardwareInfoValue(const QString& key) const;
+    Q_INVOKABLE QString systemInfoText() const;
     Q_INVOKABLE QVariantList donationWalletTargets(const QString& transferUrl, const QString& swapUrl) const;
     Q_INVOKABLE QVariantMap donationConfig() const;
     Q_INVOKABLE QVariantList donationTokenOptions() const;
@@ -914,6 +928,7 @@ signals:
     //! Emitted when system-proxy usage flag changes.
     void useSystemProxyChanged();
     void tunModeChanged();
+    void localPortsChanged();
     //! Emitted when auto-disable proxy flag changes.
     void autoDisableSystemProxyOnDisconnectChanged();
     //! Emitted when whitelist flag changes.
@@ -1189,6 +1204,8 @@ private:
     void saveProfiles() const;
     void loadSubscriptions();
     void saveSubscriptions() const;
+    int removeProfilesBySourceId(const QString& sourceId, bool preserveProtectedProfiles = true);
+    int pruneOrphanSubscriptions();
     int importLinks(
         const QStringList& links,
         const QString& sourceId = QString(),
@@ -1276,6 +1293,7 @@ private:
 
     int m_currentProfileIndex = -1;
     QString m_currentProfileId;
+    QSet<QString> m_securityWarningDismissedProfileIds;
     QString m_publicIpAddress;
     bool m_publicIpRefreshing = false;
     int m_publicIpRetryCount = 0;

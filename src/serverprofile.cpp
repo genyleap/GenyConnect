@@ -77,6 +77,32 @@ QJsonArray toJsonArray(const QStringList& values)
     }
     return out;
 }
+
+bool parseJsonBoolToken(const QJsonValue& value)
+{
+    if (value.isBool()) {
+        return value.toBool(false);
+    }
+    if (value.isDouble()) {
+        return value.toInt(0) != 0;
+    }
+    const QString token = value.toString().trimmed().toLower();
+    return token == QString::fromUtf8("1")
+        || token == QString::fromUtf8("true")
+        || token == QString::fromUtf8("yes")
+        || token == QString::fromUtf8("on");
+}
+
+QJsonValue firstJsonValue(const QJsonObject& json, const QStringList& keys)
+{
+    for (const QString& key : keys) {
+        const QJsonValue value = json.value(key);
+        if (!value.isUndefined() && !value.isNull()) {
+            return value;
+        }
+    }
+    return QJsonValue();
+}
 }
 
 bool ServerProfile::isValid() const
@@ -124,6 +150,7 @@ QJsonObject ServerProfile::toJson() const
     json[QString::fromUtf8("publicKey")] = publicKey;
     json[QString::fromUtf8("shortId")] = shortId;
     json[QString::fromUtf8("spiderX")] = spiderX;
+    json[QString::fromUtf8("pinnedPeerCertSha256")] = toJsonArray(pinnedPeerCertSha256);
 
     json[QString::fromUtf8("path")] = path;
     json[QString::fromUtf8("hostHeader")] = hostHeader;
@@ -176,6 +203,12 @@ std::optional<ServerProfile> ServerProfile::fromJson(const QJsonObject& json)
     profile.publicKey = json.value(QString::fromUtf8("publicKey")).toString().trimmed();
     profile.shortId = json.value(QString::fromUtf8("shortId")).toString().trimmed();
     profile.spiderX = json.value(QString::fromUtf8("spiderX")).toString().trimmed();
+    profile.pinnedPeerCertSha256 = parseStringListValue(firstJsonValue(json, {
+        QString::fromUtf8("pinnedPeerCertSha256"),
+        QString::fromUtf8("pinnedPeerCertificateChainSha256"),
+        QString::fromUtf8("peerCertSha256"),
+        QString::fromUtf8("certSha256")
+    }));
 
     profile.path = json.value(QString::fromUtf8("path")).toString().trimmed();
     profile.hostHeader = json.value(QString::fromUtf8("hostHeader")).toString().trimmed();
@@ -193,7 +226,14 @@ std::optional<ServerProfile> ServerProfile::fromJson(const QJsonObject& json)
     profile.wgReserved = parseStringListValue(json.value(QString::fromUtf8("wgReserved")));
     profile.wgDns = parseStringListValue(json.value(QString::fromUtf8("wgDns")));
 
-    profile.allowInsecure = json.value(QString::fromUtf8("allowInsecure")).toBool(false);
+    profile.allowInsecure = parseJsonBoolToken(firstJsonValue(json, {
+        QString::fromUtf8("allowInsecure"),
+        QString::fromUtf8("insecure"),
+        QString::fromUtf8("allow_insecure"),
+        QString::fromUtf8("tlsAllowInsecure"),
+        QString::fromUtf8("skipCertVerify"),
+        QString::fromUtf8("skipCertificateVerify")
+    }));
     profile.originalLink = json.value(QString::fromUtf8("originalLink")).toString().trimmed();
     profile.groupName = json.value(QString::fromUtf8("groupName")).toString().trimmed();
     profile.sourceName = json.value(QString::fromUtf8("sourceName")).toString().trimmed();

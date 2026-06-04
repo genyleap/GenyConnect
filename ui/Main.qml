@@ -1,3 +1,12 @@
+/*!
+ * @file        Main.qml
+ *
+ * @author      Kambiz Asadzadeh
+ * @since       09 Feb 2026
+ * @copyright   Copyright (c) 2026 Genyleap.
+ * @license     See LICENSE in repository root.
+ */
+
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
@@ -201,8 +210,11 @@ ApplicationWindow {
     property real lastTxBytesSample: 0
     property double lastRateSampleMs: 0
     property bool rateSampleInitialized: false
+    property string tunConflictPopupTitle: ""
     property string tunConflictPopupText: ""
     property string tunConflictPopupSignature: ""
+    property int securityWarningProfileRow: -1
+    property bool securityWarningDontShowAgain: false
     property string profileSearchQuery: ""
     property string notifiedUpdateVersion: ""
     property string subscriptionGroupDraft: "General"
@@ -308,6 +320,7 @@ ApplicationWindow {
     readonly property var updateNoticePopup: mainSurface.updateNoticePopup
     readonly property var donationSuggestPopup: mainSurface.donationSuggestPopup
     readonly property var tunConflictPopup: mainSurface.tunConflictPopup
+    readonly property var securityWarningPopup: mainSurface.securityWarningPopup
     readonly property var profilePopup: mainSurface.profilePopup
     readonly property var clearProfilesPopup: mainSurface.clearProfilesPopup
     readonly property var editProfilePopup: mainSurface.editProfilePopup
@@ -402,6 +415,7 @@ ApplicationWindow {
             editProfilePopup,
             clearProfilesPopup,
             profilePopup,
+            securityWarningPopup,
             tunConflictPopup,
             donationSuggestPopup,
             updateNoticePopup
@@ -2094,6 +2108,8 @@ ApplicationWindow {
             return "App Updates"
         if (settingsSection === "connection")
             return "Connection Mode"
+        if (settingsSection === "cache")
+            return "Cache Management"
         if (settingsSection === "power")
             return "Power Mode"
         if (settingsSection === "routing")
@@ -2294,7 +2310,11 @@ ApplicationWindow {
             "flow": params["flow"] || "",
             "path": params["path"] || "",
             "host": params["host"] || "",
-            "sni": ((params["sni"] || params["servername"] || params["host"] || "")),
+            "sni": ((params["sni"] || params["servername"] || params["host"] || "")
+                    || (((params["security"] || "none").toLowerCase() === "tls"
+                         || (params["security"] || "none").toLowerCase() === "reality")
+                        ? address
+                        : "")),
             "headerType": (params["headertype"] || "").toLowerCase(),
             "serviceName": params["servicename"] || "",
             "mode": (params["mode"] || "").toLowerCase(),
@@ -2344,7 +2364,7 @@ ApplicationWindow {
         const resolvedSni = (data.sni || "").toString().trim().length > 0
                             ? data.sni
                             : ((security === "tls" || security === "reality")
-                               ? (data.host || "")
+                               ? (data.host || data.address || "")
                                : "")
         appendParam("sni", resolvedSni)
         appendParam("alpn", data.alpn)
@@ -2352,9 +2372,6 @@ ApplicationWindow {
         appendParam("pbk", data.publicKey)
         appendParam("sid", data.shortId)
         appendParam("spx", data.spiderX)
-        if (data.allowInsecure === true)
-            appendParam("allowInsecure", "1")
-
         const unknownPairs = Array.isArray(data.unknownPairs) ? data.unknownPairs : []
         for (let i = 0; i < unknownPairs.length; i += 1) {
             const pair = unknownPairs[i]
@@ -2402,20 +2419,102 @@ ApplicationWindow {
         return Math.max(0, root.height - sheet)
     }
 
-    function tunConflictGuidance(errorText) {
+    function connectionIssueDescriptor(errorText) {
         const raw = (errorText || "").trim()
-        if (raw.length === 0 || !vpnController.tunMode)
-            return ""
+        if (raw.length === 0)
+            return { ok: false }
 
         const text = raw.toLowerCase()
         const gatewayIssue = text.indexOf("default gateway") >= 0 && text.indexOf("tun") >= 0
-        const routeIssue = text.indexOf("split default routes") >= 0 || text.indexOf("route validation") >= 0
-        const vpnConflictHint = text.indexOf("another vpn") >= 0 || text.indexOf("already active") >= 0
+        const routeIssue = text.indexOf("split default routes") >= 0
+                || text.indexOf("route validation") >= 0
+                || text.indexOf("split routes were not applied correctly") >= 0
+        const vpnConflictHint = text.indexOf("another vpn") >= 0
+                || text.indexOf("already active") >= 0
+                || text.indexOf("system tunnel appears to own") >= 0
+        const portConflict = text.indexOf("already in use") >= 0
+                || text.indexOf("address already in use") >= 0
+                || text.indexOf("occupied before startup") >= 0
+                || text.indexOf("bind/port conflict") >= 0
+                || text.indexOf("local mixed proxy port 127.0.0.1") >= 0
+        const permissionIssue = text.indexOf("vpn permission") >= 0 || (text.indexOf("permission") >= 0 && text.indexOf("vpn") >= 0)
+        const fakeDnsIssue = text.indexOf("fakedns") >= 0 || text.indexOf("fake dns") >= 0
+        const runtimeConfigIssue = text.indexOf("runtime config") >= 0
+                || text.indexOf("allowinsecure") >= 0
+                || text.indexOf("deprecated") >= 0
+        const startupIssue = text.indexOf("xray-core failed to start") >= 0
+                || text.indexOf("failed to start vpn runtime") >= 0
+                || text.indexOf("core startup failure") >= 0
 
-        if (!gatewayIssue && !routeIssue && !vpnConflictHint)
-            return ""
+        if ((vpnController.tunMode && (gatewayIssue || routeIssue || vpnConflictHint))) {
+            return {
+                ok: true,
+                title: "VPN Conflict Detected",
+                message: "Another VPN or system tunnel appears active, or macOS could not take ownership of the TUN routes. Disconnect the other tunnel first, then reconnect GenyConnect."
+            }
+        }
 
-        return "Another VPN or system tunnel appears active. Please disconnect it first, then reconnect GenyConnect in TUN mode."
+        if (portConflict) {
+            return {
+                ok: true,
+                title: "Local Port Conflict",
+                message: "Another VPN or proxy app is still holding a local proxy port that GenyConnect needs. If the next retry still fails, change or stop the conflicting app and then reconnect."
+            }
+        }
+
+        if (permissionIssue) {
+            return {
+                ok: true,
+                title: "VPN Permission Required",
+                message: "GenyConnect needs Android VPN permission before it can connect."
+            }
+        }
+
+        if (fakeDnsIssue) {
+            return {
+                ok: true,
+                title: "Android Runtime Issue",
+                message: "The current xray-core runtime failed inside FakeDNS. GenyConnect now keeps FakeDNS disabled for Android TUN mode; reconnect and try again."
+            }
+        }
+
+        if (runtimeConfigIssue) {
+            return {
+                ok: true,
+                title: "Runtime Config Issue",
+                message: "The generated Xray runtime configuration is not valid for the current core/runtime settings."
+            }
+        }
+
+        if (startupIssue) {
+            return {
+                ok: true,
+                title: "Runtime Startup Failed",
+                message: "xray-core could not start correctly. Open Logs for the exact runtime details."
+            }
+        }
+
+        return {
+            ok: vpnController.connectionState === ConnectionState.Error,
+            title: "Connection Failed",
+            message: "GenyConnect could not establish the connection. Review the details and logs, then try again."
+        }
+    }
+
+    function presentConnectionIssue(errorText) {
+        const issue = connectionIssueDescriptor(errorText)
+        if (!issue.ok)
+            return
+
+        const details = (errorText || "").trim()
+        const signature = String(issue.title || "") + "||" + String(issue.message || "") + "||" + details
+        if (signature === root.tunConflictPopupSignature)
+            return
+
+        root.tunConflictPopupSignature = signature
+        root.tunConflictPopupTitle = issue.title || "Connection Issue"
+        root.tunConflictPopupText = issue.message + (details.length > 0 ? "\n\nDetails: " + details : "")
+        tunConflictPopup.open()
     }
 
     function statePrimaryColor() {
@@ -2446,6 +2545,55 @@ ApplicationWindow {
         if (vpnController.connectionState === ConnectionState.Error)
             return Colors.mainHex_ef4444
         return Colors.mainHex_cfd5e3
+    }
+
+    function heroPowerRingColor() {
+        if (vpnController.connectionState === ConnectionState.Connected)
+            return root.themeColor("#16a34a", "#25f29a")
+        if (vpnController.connectionState === ConnectionState.Connecting)
+            return root.themeColor("#38bdf8", "#60a5fa")
+        if (vpnController.connectionState === ConnectionState.Error)
+            return root.themeColor("#ef4444", "#f87171")
+        return connectRingColor()
+    }
+
+    function heroPowerCoreColor() {
+        if (vpnController.connectionState === ConnectionState.Connecting)
+            return root.themeColor("#0ea5e9", "#2563eb")
+        if (vpnController.connectionState === ConnectionState.Connected)
+            return root.themeColor("#16a34a", "#10b981")
+        if (vpnController.connectionState === ConnectionState.Error)
+            return root.themeColor("#dc2626", "#ef4444")
+        return connectCoreColor()
+    }
+
+    function heroPowerStatusColor() {
+        if (vpnController.connectionState === ConnectionState.Connected)
+            return root.themeColor("#dcfce7", "#123b2b")
+        if (vpnController.connectionState === ConnectionState.Connecting)
+            return root.themeColor("#dbeafe", "#102f5f")
+        if (vpnController.connectionState === ConnectionState.Error)
+            return root.themeColor("#fee2e2", "#5f1d1d")
+        return root.themeColor("#eef2f7", "#233044")
+    }
+
+    function heroPowerStatusTextColor() {
+        if (vpnController.connectionState === ConnectionState.Connected)
+            return root.themeColor("#10b981", "#6fffc0")
+        if (vpnController.connectionState === ConnectionState.Connecting)
+            return root.themeColor("#2563eb", "#93c5fd")
+        if (vpnController.connectionState === ConnectionState.Error)
+            return root.themeColor("#ef4444", "#fca5a5")
+        return root.themeColor("#64748b", "#cbd5e1")
+    }
+
+    function heroParticleSpeedFactor() {
+        const liveMbps = Math.max(0, downRateBytesPerSec, upRateBytesPerSec) * 8.0 / 1000000.0
+        if (vpnController.powerMode === "High Performance")
+            return 1.45 + (clamp01(liveMbps / 160.0) * 0.75)
+        if (vpnController.powerMode === "Save")
+            return 0.42 + (clamp01(liveMbps / 120.0) * 0.25)
+        return 0.82 + (clamp01(liveMbps / 90.0) * 0.75)
     }
 
     function connectCoreColor() {
@@ -2805,6 +2953,13 @@ ApplicationWindow {
             }
             return
         }
+        if (!vpnController.connected && !vpnController.busy && vpnController.currentProfileIndex >= 0
+                && vpnController.shouldShowSecurityWarningForProfile(vpnController.currentProfileIndex)) {
+            securityWarningProfileRow = vpnController.currentProfileIndex
+            securityWarningDontShowAgain = false
+            securityWarningPopup.open()
+            return
+        }
         vpnController.toggleConnection()
     }
 
@@ -3028,6 +3183,9 @@ ApplicationWindow {
                 root.donationSuggestionShown = true
                 donationSuggestPopup.open()
             }
+
+            if (vpnController.connectionState === ConnectionState.Error)
+                root.presentConnectionIssue(vpnController.lastError)
         }
 
         function onCurrentProfileIndexChanged() {
@@ -3042,17 +3200,8 @@ ApplicationWindow {
         }
 
         function onLastErrorChanged() {
-            const guidance = root.tunConflictGuidance(vpnController.lastError)
-            if (guidance.length === 0)
-                return
-
-            const signature = guidance + "||" + (vpnController.lastError || "")
-            if (signature === root.tunConflictPopupSignature)
-                return
-
-            root.tunConflictPopupSignature = signature
-            root.tunConflictPopupText = guidance + "\n\nDetails: " + vpnController.lastError
-            tunConflictPopup.open()
+            if (vpnController.connectionState === ConnectionState.Error)
+                root.presentConnectionIssue(vpnController.lastError)
         }
 
         function onAvailableAppRuleItemsReady(items) {

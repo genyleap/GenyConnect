@@ -1,9 +1,14 @@
 ![genyconnect-cover](https://github.com/user-attachments/assets/a65daa50-b9ce-46e4-a23b-7886b1c41258)
 ---
 # GenyConnect
-GenyConnect is a modern, cross-platform secure tunneling client and VPN designed for high performance, privacy, and precise traffic control.
 
-It provides a robust orchestration layer for secure network engines, focusing on correctness, observability, and user experience rather than binding itself to any single protocol or implementation.
+[English](README.md) | [Persian - فارسی](readme/README.fa.md) | [Chinese - 中文](readme/README.zh-CN.md) | [Japanese - 日本語](readme/README.ja.md) | [Turkish - Türkçe](readme/README.tr.md) | [Russian - Русский](readme/README.ru.md) | [French - Français](readme/README.fr.md) | [Spanish - Español](readme/README.es.md) | [Korean - 한국어](readme/README.ko.md) | [Azerbaijani - Azərbaycanca](readme/README.az.md) | [Hindi - हिंदी](readme/README.hi.md) | [Portuguese - Português](readme/README.pt.md) | [Arabic - العربية](readme/README.ar.md) | [German - Deutsch](readme/README.de.md)
+
+GenyConnect is a modern, cross-platform secure connectivity client for private networks and encrypted communications, built with a strong focus on performance, privacy, and precise traffic management.
+
+It provides a powerful orchestration layer for secure networking and tunneling engines, emphasizing reliability, observability, operational transparency, and user experience, while remaining independent of any specific protocol, technology, or implementation.
+
+GenyConnect is being developed in two directions: a Community Edition for individual users and everyday connectivity needs, and a Commercial & Enterprise Edition designed for organizations that require centralized management, network policies, access control, and secure communications at scale.
 <p align="left">
   <a href="https://en.cppreference.com/w/cpp/23">
     <img
@@ -59,6 +64,12 @@ Runtime configurations are generated dynamically, connection lifecycles are supe
 
 The platform is intentionally engine-agnostic, allowing different tunneling backends to be integrated without altering user workflows or expected behavior.
 
+GenyConnect is not limited to a generic tunneling use case. Its long-term direction is an intelligent connectivity layer for managing access to services, private infrastructure, cloud resources, and distributed teams that require stable and reliable communication.
+
+By the 1.4 and 1.5 release range, GenyConnect is expected to mature for broader public use and cover a substantial set of needs for users who require dependable connections. Future releases are planned to add Persian and additional in-app languages.
+
+The second generation of GenyConnect will focus more deeply on commercial and organizational needs, including access management, communication infrastructure customization, network resilience, reduced dependence on external services, and stable connectivity under varying network conditions. Future versions are also planned to support the dedicated `gen.` format and GenyConnect's own communication architecture for defining and managing private networks and organizational access.
+
 ---
 
 ## Key Capabilities
@@ -88,6 +99,11 @@ The platform is intentionally engine-agnostic, allowing different tunneling back
   - application-level proxying
   - full system tunneling
   - consistent control surface
+
+- LAN Sharing
+  - share GenyConnect-managed traffic with other devices on the local network
+  - support devices such as game consoles, smart TVs, phones, tablets, laptops, and desktop computers
+  - advanced sharing controls for managed network environments
 
 - Cross-platform architecture
   - shared runtime core

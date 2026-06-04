@@ -46,6 +46,9 @@ public:
     virtual qint64 rxBytes() const = 0;
     virtual qint64 txBytes() const = 0;
     virtual QString lastError() const = 0;
+    virtual bool startupPending() const { return false; }
+    virtual bool runtimeProcessAlive() const { return isRunning(); }
+    virtual QString diagnosticSummary() const { return lastError(); }
 
 signals:
     void started();

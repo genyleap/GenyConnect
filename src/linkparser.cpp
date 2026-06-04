@@ -182,6 +182,88 @@ bool parseBoolToken(const QString& value)
         || lowered == QString::fromUtf8("on");
 }
 
+QString jsonValueTextInsensitive(const QJsonObject& object, const QStringList& keys)
+{
+    for (auto it = object.constBegin(); it != object.constEnd(); ++it) {
+        for (const QString& key : keys) {
+            if (it.key().compare(key, Qt::CaseInsensitive) != 0) {
+                continue;
+            }
+            if (it.value().isBool()) {
+                return it.value().toBool() ? QString::fromUtf8("true") : QString::fromUtf8("false");
+            }
+            if (it.value().isDouble()) {
+                return QString::number(it.value().toInt());
+            }
+            if (it.value().isArray()) {
+                QStringList values;
+                const QJsonArray array = it.value().toArray();
+                values.reserve(array.size());
+                for (const QJsonValue& value : array) {
+                    const QString token = value.toString().trimmed();
+                    if (!token.isEmpty()) {
+                        values.append(token);
+                    }
+                }
+                return values.join(',');
+            }
+            return it.value().toString().trimmed();
+        }
+    }
+    return QString();
+}
+
+QStringList certificatePinsFromValue(const QString& rawValue)
+{
+    QStringList out;
+    const QStringList tokens = rawValue.split(QRegularExpression(QString::fromUtf8("[,;\\s]+")), Qt::SkipEmptyParts);
+    out.reserve(tokens.size());
+    for (const QString& token : tokens) {
+        const QString clean = token.trimmed();
+        if (!clean.isEmpty()) {
+            out.append(clean);
+        }
+    }
+    out.removeDuplicates();
+    return out;
+}
+
+QString firstLegacyInsecureValue(const QUrlQuery& query)
+{
+    const QStringList keys {
+        QString::fromUtf8("allowInsecure"),
+        QString::fromUtf8("insecure"),
+        QString::fromUtf8("allow_insecure"),
+        QString::fromUtf8("tlsAllowInsecure"),
+        QString::fromUtf8("skipCertVerify"),
+        QString::fromUtf8("skipCertificateVerify")
+    };
+    for (const QString& key : keys) {
+        const QString value = queryValueInsensitive(query, key);
+        if (!value.trimmed().isEmpty()) {
+            return value.trimmed();
+        }
+    }
+    return QString();
+}
+
+QString firstPinnedCertValue(const QUrlQuery& query)
+{
+    const QStringList keys {
+        QString::fromUtf8("pinnedPeerCertSha256"),
+        QString::fromUtf8("pinnedPeerCertificateChainSha256"),
+        QString::fromUtf8("peerCertSha256"),
+        QString::fromUtf8("certSha256")
+    };
+    for (const QString& key : keys) {
+        const QString value = queryValueInsensitive(query, key);
+        if (!value.trimmed().isEmpty()) {
+            return value.trimmed();
+        }
+    }
+    return QString();
+}
+
 bool isSupportedVlessEncryptionToken(const QString& value)
 {
     const QString token = value.trimmed().toLower();
@@ -324,6 +406,9 @@ void applyTransportQueryFields(ServerProfile *profile, const QUrlQuery& query, c
             || profile->security == QString::fromUtf8("reality"))) {
         profile->sni = firstHostToken(profile->hostHeader);
     }
+    if (profile->sni.isEmpty() && profile->security == QString::fromUtf8("tls")) {
+        profile->sni = profile->address.trimmed();
+    }
 
     profile->alpn = query.queryItemValue(QString::fromUtf8("alpn")).trimmed();
     profile->fingerprint = query.queryItemValue(QString::fromUtf8("fp")).trimmed();
@@ -331,11 +416,8 @@ void applyTransportQueryFields(ServerProfile *profile, const QUrlQuery& query, c
     profile->shortId = query.queryItemValue(QString::fromUtf8("sid")).trimmed();
     profile->spiderX = query.queryItemValue(QString::fromUtf8("spx")).trimmed();
 
-    QString allowInsecure = query.queryItemValue(QString::fromUtf8("allowInsecure")).trimmed().toLower();
-    if (allowInsecure.isEmpty()) {
-        allowInsecure = query.queryItemValue(QString::fromUtf8("insecure")).trimmed().toLower();
-    }
-    profile->allowInsecure = parseBoolToken(allowInsecure);
+    profile->allowInsecure = parseBoolToken(firstLegacyInsecureValue(query));
+    profile->pinnedPeerCertSha256 = certificatePinsFromValue(firstPinnedCertValue(query));
 }
 
 bool decodeShadowsocksCredentials(const QString& rawCredential, QString *methodOut, QString *passwordOut)
@@ -516,8 +598,20 @@ std::optional<ServerProfile> LinkParser::parseVmess(const QString& rawLink, QStr
         profile.xhttpMode = QString::fromUtf8("auto");
     }
     profile.xhttpExtra = obj.value(QString::fromUtf8("extra")).toObject();
-    const QString allowInsecure = obj.value(QString::fromUtf8("allowInsecure")).toString().trimmed().toLower();
-    profile.allowInsecure = parseBoolToken(allowInsecure);
+    profile.allowInsecure = parseBoolToken(jsonValueTextInsensitive(obj, {
+        QString::fromUtf8("allowInsecure"),
+        QString::fromUtf8("insecure"),
+        QString::fromUtf8("allow_insecure"),
+        QString::fromUtf8("tlsAllowInsecure"),
+        QString::fromUtf8("skipCertVerify"),
+        QString::fromUtf8("skipCertificateVerify")
+    }));
+    profile.pinnedPeerCertSha256 = certificatePinsFromValue(jsonValueTextInsensitive(obj, {
+        QString::fromUtf8("pinnedPeerCertSha256"),
+        QString::fromUtf8("pinnedPeerCertificateChainSha256"),
+        QString::fromUtf8("peerCertSha256"),
+        QString::fromUtf8("certSha256")
+    }));
 
     profile.originalLink = rawLink;
     profile.extra = obj;
@@ -728,11 +822,8 @@ std::optional<ServerProfile> LinkParser::parseShadowsocks(const QString& rawLink
     profile.security = QString::fromUtf8("none");
 
     const QUrlQuery query(queryText);
-    QString allowInsecure = queryValueInsensitive(query, QString::fromUtf8("allowInsecure"));
-    if (allowInsecure.isEmpty()) {
-        allowInsecure = queryValueInsensitive(query, QString::fromUtf8("insecure"));
-    }
-    profile.allowInsecure = parseBoolToken(allowInsecure);
+    profile.allowInsecure = parseBoolToken(firstLegacyInsecureValue(query));
+    profile.pinnedPeerCertSha256 = certificatePinsFromValue(firstPinnedCertValue(query));
 
     const QString pluginRaw = queryValueInsensitive(query, QString::fromUtf8("plugin"));
     if (!pluginRaw.isEmpty()) {

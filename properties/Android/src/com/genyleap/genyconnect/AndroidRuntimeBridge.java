@@ -19,12 +19,12 @@ import android.os.SystemClock;
 import android.os.PowerManager;
 import android.provider.Settings;
 import android.content.SharedPreferences;
-import android.view.View;
 import android.view.Window;
-import android.view.WindowInsets;
-import android.view.WindowInsetsController;
 import android.view.WindowManager;
 import androidx.core.content.FileProvider;
+import androidx.core.view.WindowCompat;
+import androidx.core.view.WindowInsetsCompat;
+import androidx.core.view.WindowInsetsControllerCompat;
 
 import java.io.BufferedReader;
 import java.io.File;
@@ -78,6 +78,37 @@ public final class AndroidRuntimeBridge {
     private static volatile RuntimeState sCachedRuntimeState = new RuntimeState();
 
     private AndroidRuntimeBridge() {
+    }
+
+    private static void showSystemBars(Window window) {
+        if (window == null) {
+            return;
+        }
+
+        WindowCompat.setDecorFitsSystemWindows(window, true);
+        final WindowInsetsControllerCompat controller =
+            WindowCompat.getInsetsController(window, window.getDecorView());
+        if (controller != null) {
+            controller.show(WindowInsetsCompat.Type.systemBars());
+        }
+    }
+
+    private static void applySystemBarAppearance(Window window, boolean darkThemeEnabled) {
+        if (window == null) {
+            return;
+        }
+
+        WindowCompat.setDecorFitsSystemWindows(window, true);
+        final WindowInsetsControllerCompat controller =
+            WindowCompat.getInsetsController(window, window.getDecorView());
+        if (controller == null) {
+            return;
+        }
+
+        final boolean lightBarIcons = !darkThemeEnabled;
+        controller.setAppearanceLightStatusBars(lightBarIcons);
+        controller.setAppearanceLightNavigationBars(lightBarIcons);
+        controller.show(WindowInsetsCompat.Type.systemBars());
     }
 
     private static final class RuntimeState {
@@ -151,23 +182,7 @@ public final class AndroidRuntimeBridge {
                     return;
                 }
                 window.clearFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                    window.setDecorFitsSystemWindows(true);
-                    final WindowInsetsController controller = window.getInsetsController();
-                    if (controller != null) {
-                        controller.show(WindowInsets.Type.statusBars() | WindowInsets.Type.navigationBars());
-                    }
-                } else {
-                    final View decorView = window.getDecorView();
-                    if (decorView != null) {
-                        int visibility = decorView.getSystemUiVisibility();
-                        visibility &= ~View.SYSTEM_UI_FLAG_FULLSCREEN;
-                        visibility &= ~View.SYSTEM_UI_FLAG_HIDE_NAVIGATION;
-                        visibility &= ~View.SYSTEM_UI_FLAG_IMMERSIVE;
-                        visibility &= ~View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY;
-                        decorView.setSystemUiVisibility(visibility);
-                    }
-                }
+                showSystemBars(window);
             } catch (Exception ignored) {
             }
         });
@@ -347,6 +362,61 @@ public final class AndroidRuntimeBridge {
         return "";
     }
 
+    public static String clearNetworkCache() {
+        final JSONObject result = new JSONObject();
+        final JSONArray details = new JSONArray();
+        try {
+            final Context appContext = context();
+            if (appContext == null) {
+                result.put("ok", false);
+                result.put("message", "Android runtime context is unavailable.");
+                result.put("details", details);
+                return result.toString();
+            }
+
+            final ConnectivityManager manager =
+                (ConnectivityManager) appContext.getSystemService(Context.CONNECTIVITY_SERVICE);
+            if (manager != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                final Network activeNetwork = manager.getActiveNetwork();
+                manager.reportNetworkConnectivity(activeNetwork, false);
+                manager.reportNetworkConnectivity(activeNetwork, true);
+                manager.bindProcessToNetwork(null);
+                details.put("Framework connectivity state re-evaluated with ConnectivityManager.");
+            } else {
+                details.put("ConnectivityManager refresh is unavailable on this Android API level.");
+            }
+
+            final boolean runtimeActive = isRunning() || isRuntimeAlive() || isStartupPending();
+            if (runtimeActive) {
+                final Intent refreshIntent = new Intent(appContext, GenyConnectVpnService.class);
+                refreshIntent.setAction(GenyConnectVpnService.ACTION_REFRESH_NETWORK_CACHE);
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    appContext.startForegroundService(refreshIntent);
+                } else {
+                    appContext.startService(refreshIntent);
+                }
+                details.put("GenyConnect VPN service requested to rebuild its VPN network.");
+                result.put("ok", true);
+                result.put("message", "Android VPN network cache refresh started.");
+            } else {
+                GenyConnectVpnService.refreshAndroidNetworkState(appContext);
+                result.put("ok", true);
+                result.put("message", "Android framework network state was refreshed. Start the VPN to rebuild the GenyConnect tunnel network.");
+            }
+            result.put("details", details);
+            return result.toString();
+        } catch (Exception exception) {
+            try {
+                result.put("ok", false);
+                result.put("message", "Android network cache refresh failed: " + safeString(exception.getMessage()));
+                result.put("details", details);
+                return result.toString();
+            } catch (Exception ignored) {
+                return "{\"ok\":false,\"message\":\"Android network cache refresh failed.\",\"details\":[]}";
+            }
+        }
+    }
+
     public static boolean isRunning() {
         final RuntimeState state = queryLiveRuntimeState();
         return state.valid ? state.running : GenyConnectVpnService.isRunning();
@@ -380,9 +450,22 @@ public final class AndroidRuntimeBridge {
         return state.valid && state.startupPending;
     }
 
+    public static boolean isRuntimeAlive() {
+        final RuntimeState state = queryLiveRuntimeState();
+        return state.valid ? state.runtimeAlive : GenyConnectVpnService.runtimeProcessAliveInProcess();
+    }
+
     public static String lastError() {
         final RuntimeState state = queryLiveRuntimeState();
         return state.valid ? state.lastError : GenyConnectVpnService.lastError();
+    }
+
+    public static String runtimeDiagnostics() {
+        final String diagnostics = GenyConnectVpnService.lastDiagnosticsInProcess();
+        if (!safeString(diagnostics).isEmpty()) {
+            return diagnostics;
+        }
+        return lastError();
     }
 
     public static long rxBytes() {
@@ -1137,50 +1220,13 @@ public final class AndroidRuntimeBridge {
 
                 // Keep Android in standard non-immersive app chrome mode after choosers/intents.
                 window.clearFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                    window.setDecorFitsSystemWindows(true);
-                }
+                WindowCompat.setDecorFitsSystemWindows(window, true);
 
                 final int barColor = darkThemeEnabled ? 0xFF091A33 : 0xFFFFFFFF;
-                final boolean lightBarIcons = !darkThemeEnabled;
 
                 window.setStatusBarColor(barColor);
                 window.setNavigationBarColor(barColor);
-
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                    final WindowInsetsController controller = window.getInsetsController();
-                    if (controller != null) {
-                        final int appearanceMask =
-                            WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS
-                                | WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS;
-                        final int appearance = lightBarIcons ? appearanceMask : 0;
-                        controller.setSystemBarsAppearance(appearance, appearanceMask);
-                        controller.show(WindowInsets.Type.statusBars() | WindowInsets.Type.navigationBars());
-                    }
-                    return;
-                }
-
-                final View decorView = window.getDecorView();
-                if (decorView == null) {
-                    return;
-                }
-                int visibility = decorView.getSystemUiVisibility();
-                visibility &= ~View.SYSTEM_UI_FLAG_FULLSCREEN;
-                visibility &= ~View.SYSTEM_UI_FLAG_HIDE_NAVIGATION;
-                visibility &= ~View.SYSTEM_UI_FLAG_IMMERSIVE;
-                visibility &= ~View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY;
-                if (lightBarIcons) {
-                    visibility |= View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR;
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                        visibility |= View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR;
-                    }
-                } else {
-                    visibility &= ~View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR;
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                        visibility &= ~View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR;
-                    }
-                }
-                decorView.setSystemUiVisibility(visibility);
+                applySystemBarAppearance(window, darkThemeEnabled);
             } catch (Exception ignored) {
             }
         });

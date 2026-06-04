@@ -29,6 +29,15 @@ QString bridgeLastError()
     return errorObject.isValid() ? errorObject.toString().trimmed() : QString();
 }
 
+QString bridgeDiagnostics()
+{
+    QJniObject diagnosticsObject = QJniObject::callStaticObjectMethod(
+        kAndroidRuntimeBridgeClass,
+        "runtimeDiagnostics",
+        "()Ljava/lang/String;");
+    return diagnosticsObject.isValid() ? diagnosticsObject.toString().trimmed() : QString();
+}
+
 bool bridgeIsRunning()
 {
     if (!bridgeAvailable()) {
@@ -61,6 +70,14 @@ qint64 bridgeTxBytes()
     }
     const jlong value = QJniObject::callStaticMethod<jlong>(kAndroidRuntimeBridgeClass, "txBytes", "()J");
     return value > 0 ? static_cast<qint64>(value) : 0;
+}
+
+bool bridgeRuntimeAlive()
+{
+    if (!bridgeAvailable()) {
+        return false;
+    }
+    return QJniObject::callStaticMethod<jboolean>(kAndroidRuntimeBridgeClass, "isRuntimeAlive", "()Z");
 }
 
 QString bridgeConnect(const QString& executablePath, const QString& configPath, const QString& workingDirectory)
@@ -336,4 +353,33 @@ QString AndroidVpnRuntime::lastError() const
     }
 #endif
     return m_lastError;
+}
+
+bool AndroidVpnRuntime::startupPending() const
+{
+#if defined(Q_OS_ANDROID)
+    return bridgeIsStartupPending();
+#else
+    return false;
+#endif
+}
+
+bool AndroidVpnRuntime::runtimeProcessAlive() const
+{
+#if defined(Q_OS_ANDROID)
+    return bridgeRuntimeAlive();
+#else
+    return m_running;
+#endif
+}
+
+QString AndroidVpnRuntime::diagnosticSummary() const
+{
+#if defined(Q_OS_ANDROID)
+    const QString diagnostics = bridgeDiagnostics();
+    if (!diagnostics.isEmpty()) {
+        return diagnostics;
+    }
+#endif
+    return lastError();
 }

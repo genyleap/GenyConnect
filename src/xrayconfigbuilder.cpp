@@ -150,19 +150,23 @@ QString tunStack = QString::fromUtf8("system");
     tunStack = QString::fromUtf8("gvisor");
 #endif
 
+    const QJsonValue tunMtu = QJsonArray {
+        defaultTunMtu()
+    };
+
     QJsonObject settings {
         {QString::fromUtf8("address"), QJsonArray {
             QString::fromUtf8("172.19.0.1/30"),
             QString::fromUtf8("fd00:1234:5678::1/126")
         }},
-        {QString::fromUtf8("mtu"), defaultTunMtu()},
+        {QString::fromUtf8("mtu"), tunMtu},
         {QString::fromUtf8("stack"), tunStack},
         {QString::fromUtf8("autoRoute"), options.tunAutoRoute},
         {QString::fromUtf8("strictRoute"), options.tunStrictRoute},
         {QString::fromUtf8("sniff"), true}
     };
 
-#if defined(Q_OS_WIN) || defined(Q_OS_MACOS) || defined(Q_OS_LINUX)
+#if defined(Q_OS_WIN) || defined(Q_OS_MACOS) || (defined(Q_OS_LINUX) && !defined(Q_OS_ANDROID))
     // Keep direct/block outbounds on the physical NIC instead of re-entering
     // TUN. This avoids outbound traffic loops in full-tunnel mode.
     settings.insert(QString::fromUtf8("autoOutboundsInterface"), QString::fromUtf8("auto"));
@@ -661,7 +665,9 @@ QJsonObject buildTlsPeerSettings(const ServerProfile& profile)
     if (!profile.fingerprint.isEmpty()) {
         tlsSettings[QString::fromUtf8("fingerprint")] = profile.fingerprint;
     }
-    tlsSettings[QString::fromUtf8("allowInsecure")] = profile.allowInsecure;
+    if (!profile.pinnedPeerCertSha256.isEmpty()) {
+        tlsSettings[QString::fromUtf8("pinnedPeerCertSha256")] = toStringArray(profile.pinnedPeerCertSha256);
+    }
     return tlsSettings;
 }
 }

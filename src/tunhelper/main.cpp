@@ -108,6 +108,62 @@ bool runShell(const QString& shellCommand, int timeoutMs, QString* stderrText)
 #endif
 }
 
+bool clearNetworkCache(QString* errorOut)
+{
+#if defined(Q_OS_MACOS)
+    const QString command =
+        u"/usr/bin/dscacheutil -flushcache; "
+        "/usr/bin/killall -HUP mDNSResponder >/dev/null 2>&1 || true; "
+        "/usr/sbin/arp -a -d >/dev/null 2>&1 || true"_s;
+    QString error;
+    if (!runShell(command, 15000, &error)) {
+        if (errorOut != nullptr) {
+            *errorOut = error.trimmed().isEmpty()
+                ? u"Failed to clear macOS DNS and IP neighbor caches."_s
+                : error.trimmed();
+        }
+        return false;
+    }
+    return true;
+#elif defined(Q_OS_WIN)
+    QString error;
+    if (!runShell(u"ipconfig /flushdns; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; "
+                  "netsh interface ip delete arpcache; exit $LASTEXITCODE"_s,
+                  20000,
+                  &error)) {
+        if (errorOut != nullptr) {
+            *errorOut = error.trimmed().isEmpty()
+                ? u"Failed to clear Windows DNS and IP neighbor caches."_s
+                : error.trimmed();
+        }
+        return false;
+    }
+    return true;
+#elif defined(Q_OS_LINUX)
+    const QString command =
+        u"dns_done=0; "
+        "if command -v resolvectl >/dev/null 2>&1; then resolvectl flush-caches && dns_done=1; fi; "
+        "if [ \"$dns_done\" -eq 0 ] && command -v systemd-resolve >/dev/null 2>&1; then systemd-resolve --flush-caches && dns_done=1; fi; "
+        "if command -v nscd >/dev/null 2>&1; then nscd -i hosts >/dev/null 2>&1 || true; dns_done=1; fi; "
+        "if command -v ip >/dev/null 2>&1; then ip neigh flush all >/dev/null; else echo 'ip command not found' >&2; exit 1; fi"_s;
+    QString error;
+    if (!runShell(command, 20000, &error)) {
+        if (errorOut != nullptr) {
+            *errorOut = error.trimmed().isEmpty()
+                ? u"Failed to clear Linux DNS and IP neighbor caches."_s
+                : error.trimmed();
+        }
+        return false;
+    }
+    return true;
+#else
+    if (errorOut != nullptr) {
+        *errorOut = u"Network cache clearing is not implemented for this helper platform."_s;
+    }
+    return false;
+#endif
+}
+
 void appendLineToFile(const QString& path, const QString& line)
 {
     if (path.trimmed().isEmpty() || line.trimmed().isEmpty()) {
@@ -137,6 +193,18 @@ QString lastNonEmptyLogLine(const QString& logPath)
         }
     }
     return {};
+}
+
+qint64 readPidFromFile(const QString& pidPath)
+{
+    QFile pidFile(pidPath);
+    if (!pidFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        return -1;
+    }
+
+    bool ok = false;
+    const qint64 pid = QString::fromUtf8(pidFile.readAll()).trimmed().toLongLong(&ok);
+    return (ok && pid > 0) ? pid : -1;
 }
 
 bool isIpv4(const QString& address);
@@ -1046,11 +1114,24 @@ QString linuxRouteDeviceFor(const QString& destination, bool ipv6, QString* erro
     return match.captured(1).trimmed();
 }
 
-bool validateLinuxTunRouting(const QString& requestedTunIf, const QString& serverIp, QString* errorOut)
+bool validateLinuxTunRouting(
+    const QString& requestedTunIf,
+    const QString& serverIp,
+    qint64 runtimePid,
+    const QString& logPath,
+    QString* errorOut)
 {
     QString lastError;
     const QString requiredTun = requestedTunIf.trimmed();
-    for (int i = 0; i < 20; ++i) {
+    for (int i = 0; i < 80; ++i) {
+        if (runtimePid > 0 && !isProcessAlive(runtimePid)) {
+            const QString tailLine = lastNonEmptyLogLine(logPath);
+            lastError = tailLine.trimmed().isEmpty()
+                ? u"Xray exited before Linux TUN routes became active."_s
+                : tailLine.trimmed();
+            break;
+        }
+
         QString errA;
         QString errB;
         const QString devA = linuxRouteDeviceFor(u"1.1.1.1"_s, false, &errA);
@@ -1090,7 +1171,7 @@ bool validateLinuxTunRouting(const QString& requestedTunIf, const QString& serve
         } else {
             lastError = !errA.isEmpty() ? errA : errB;
         }
-        QThread::msleep(140);
+        QThread::msleep(150);
     }
 
     if (errorOut != nullptr) {
@@ -1193,6 +1274,67 @@ QString macRouteInterfaceFor6(const QString& destination)
     return match.captured(1).trimmed();
 }
 
+QString normalizeMacRouteDestination(const QString& destination)
+{
+    QString value = destination.trimmed().toLower();
+    if (value == u"default"_s) {
+        return value;
+    }
+
+    if (value.endsWith(u".0.0.0/1"_s)) {
+        value.chop(6);
+        value += u"/1"_s;
+    } else if (value.endsWith(u".0.0/1"_s)) {
+        value.chop(4);
+        value += u"/1"_s;
+    } else if (value.endsWith(u".0/1"_s)) {
+        value.chop(2);
+        value += u"/1"_s;
+    }
+    return value;
+}
+
+bool macHasSplitRouteOnInterface(const QString& tunIf, const QString& destination)
+{
+    const QString expectedIf = tunIf.trimmed();
+    const QString expectedDestination = normalizeMacRouteDestination(destination);
+    if (expectedIf.isEmpty() || expectedDestination.isEmpty()) {
+        return false;
+    }
+
+    QString stdoutText;
+    QString stderrText;
+    if (!runProcess(u"/usr/sbin/netstat"_s,
+                    {u"-rn"_s, u"-f"_s, u"inet"_s},
+                    3000,
+                    &stdoutText,
+                    &stderrText)) {
+        Q_UNUSED(stderrText)
+        return false;
+    }
+
+    const QStringList lines = stdoutText.split(u'\n', Qt::SkipEmptyParts);
+    for (const QString& rawLine : lines) {
+        const QString line = rawLine.simplified();
+        if (line.isEmpty()) {
+            continue;
+        }
+        const QStringList fields = line.split(u' ', Qt::SkipEmptyParts);
+        if (fields.size() < 4) {
+            continue;
+        }
+
+        const QString routeDestination = normalizeMacRouteDestination(fields.at(0));
+        const QString routeInterface = fields.constLast().trimmed();
+        if (routeDestination == expectedDestination
+            && routeInterface.compare(expectedIf, Qt::CaseInsensitive) == 0) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
 bool cleanupMacTunRoutes(const QString& tunIf, const QString& serverIp)
 {
     if (tunIf.trimmed().isEmpty()) {
@@ -1256,13 +1398,44 @@ bool applyMacTunRoutes(const QString& tunIf, const QString& serverIp, QString* e
         return false;
     }
 
-    // Validate split routes are really active on the target utun.
-    const QString ifA = macRouteInterfaceFor(u"1.1.1.1"_s);
-    const QString ifB = macRouteInterfaceFor(u"129.0.0.1"_s);
-    if (ifA.compare(tunIf, Qt::CaseInsensitive) != 0
-        || ifB.compare(tunIf, Qt::CaseInsensitive) != 0) {
+    QString validationDetails;
+    QString lastIfA;
+    QString lastIfB;
+    bool splitRoutesReady = false;
+    for (int attempt = 0; attempt < 8; ++attempt) {
+        const bool lowerHalfReady = macHasSplitRouteOnInterface(tunIf, u"0/1"_s);
+        const bool upperHalfReady = macHasSplitRouteOnInterface(tunIf, u"128/1"_s);
+        const QString ifA = macRouteInterfaceFor(u"1.1.1.1"_s);
+        const QString ifB = macRouteInterfaceFor(u"129.0.0.1"_s);
+        lastIfA = ifA;
+        lastIfB = ifB;
+        const bool routeGetReady = ifA.compare(tunIf, Qt::CaseInsensitive) == 0
+                                   && ifB.compare(tunIf, Qt::CaseInsensitive) == 0;
+        if ((lowerHalfReady && upperHalfReady) || routeGetReady) {
+            splitRoutesReady = true;
+            break;
+        }
+
+        validationDetails = u"route-get=1.1.1.1:"_s + ifA
+            + u", 129.0.0.1:"_s + ifB
+            + u", table 0/1="_s + (lowerHalfReady ? u"ok"_s : u"missing"_s)
+            + u", 128/1="_s + (upperHalfReady ? u"ok"_s : u"missing"_s);
+        QThread::msleep(180);
+    }
+
+    if (!splitRoutesReady) {
         if (errorOut != nullptr) {
-            *errorOut = u"macOS TUN split routes were not applied correctly."_s;
+            if ((!lastIfA.isEmpty() && lastIfA.compare(tunIf, Qt::CaseInsensitive) != 0)
+                || (!lastIfB.isEmpty() && lastIfB.compare(tunIf, Qt::CaseInsensitive) != 0)) {
+                *errorOut = validationDetails.trimmed().isEmpty()
+                    ? u"Another VPN or system tunnel appears to own the macOS public routes. Disconnect it, then retry GenyConnect."_s
+                    : u"Another VPN or system tunnel appears to own the macOS public routes. Disconnect it, then retry GenyConnect. "_s
+                        + validationDetails;
+            } else {
+                *errorOut = validationDetails.trimmed().isEmpty()
+                    ? u"macOS TUN split routes were not applied correctly."_s
+                    : u"macOS TUN split routes were not applied correctly. "_s + validationDetails;
+            }
         }
         return false;
     }
@@ -1469,6 +1642,11 @@ private:
             QString error;
             return stopTun(request, &error) ? makeResponse(true, u"TUN stopped."_s)
                                             : makeResponse(false, error);
+        }
+        if (action == u"clear_network_cache"_s) {
+            QString error;
+            return clearNetworkCache(&error) ? makeResponse(true, u"Network cache cleared."_s)
+                                             : makeResponse(false, error);
         }
 
         return makeResponse(false, u"Unsupported action."_s);
@@ -1712,8 +1890,25 @@ private:
         if (resolvedServerIp.isEmpty()) {
             resolvedServerIp = resolveIpForHost(serverHostRequested);
         }
+        qint64 runtimePid = -1;
+        for (int i = 0; i < 25 && runtimePid <= 0; ++i) {
+            runtimePid = readPidFromFile(pidPath);
+            if (runtimePid > 0) {
+                break;
+            }
+            QThread::msleep(80);
+        }
+        if (runtimePid <= 0) {
+            const QString startupLogLine = lastNonEmptyLogLine(logPath);
+            if (errorOut != nullptr) {
+                *errorOut = startupLogLine.trimmed().isEmpty()
+                    ? u"TUN start failed: pid file not created."_s
+                    : startupLogLine.trimmed();
+            }
+            return false;
+        }
         QString routeError;
-        if (!validateLinuxTunRouting(tunIf, resolvedServerIp, &routeError)) {
+        if (!validateLinuxTunRouting(tunIf, resolvedServerIp, runtimePid, logPath, &routeError)) {
             QString cleanupErr;
             Q_UNUSED(stopTun(QJsonObject{
                 {u"pid_path"_s, pidPath},

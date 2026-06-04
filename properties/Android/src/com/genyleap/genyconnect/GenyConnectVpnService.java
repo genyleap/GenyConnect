@@ -9,6 +9,8 @@ import android.content.Intent;
 import android.content.pm.ApplicationInfo;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
+import android.net.ConnectivityManager;
+import android.net.Network;
 import android.net.TrafficStats;
 import android.net.VpnService;
 import android.os.Build;
@@ -16,6 +18,7 @@ import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
 import android.os.ParcelFileDescriptor;
+import android.os.PowerManager;
 import android.os.SystemClock;
 import android.system.Os;
 import android.system.OsConstants;
@@ -29,19 +32,27 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.BufferedReader;
 import java.io.FileReader;
+import java.net.InetSocketAddress;
+import java.net.Socket;
+import java.util.ArrayDeque;
 import java.util.LinkedHashSet;
 import java.util.Locale;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
+import org.json.JSONArray;
+import org.json.JSONObject;
 
 public final class GenyConnectVpnService extends VpnService {
     public static final String ACTION_CONNECT = "com.genyleap.genyconnect.action.CONNECT";
     public static final String ACTION_DISCONNECT = "com.genyleap.genyconnect.action.DISCONNECT";
+    public static final String ACTION_RECONNECT = "com.genyleap.genyconnect.action.RECONNECT";
     public static final String ACTION_QUERY_STATE = "com.genyleap.genyconnect.action.QUERY_STATE";
+    public static final String ACTION_REFRESH_NETWORK_CACHE = "com.genyleap.genyconnect.action.REFRESH_NETWORK_CACHE";
     public static final String ACTION_START = ACTION_CONNECT;
     public static final String ACTION_STOP = ACTION_DISCONNECT;
+    public static final String ACTION_RESTART = ACTION_RECONNECT;
     public static final String EXTRA_EXECUTABLE_PATH = "executable_path";
     public static final String EXTRA_CONFIG_PATH = "config_path";
     public static final String EXTRA_WORKING_DIRECTORY = "working_directory";
@@ -64,19 +75,26 @@ public final class GenyConnectVpnService extends VpnService {
     private static final String PREF_UI_PROCESS_PID = "ui_process_pid";
     private static final String PREF_UI_PROCESS_UPDATED_AT_MS = "ui_process_updated_at_ms";
     private static final String UI_PROCESS_STATE_FILE = "ui_process_state.txt";
+    private static final String NOTIFICATION_ACTION_DISCONNECT_LABEL = "Disconnect";
+    private static final String NOTIFICATION_ACTION_RECONNECT_LABEL = "Reconnect";
     private static final long NOTIFICATION_UPDATE_INTERVAL_MS = 1000L;
     private static final long MIN_RATE_SAMPLE_INTERVAL_MS = 400L;
     private static final long MAIN_THREAD_WARNING_MS = 350L;
+    private static final int DIAGNOSTIC_HISTORY_LIMIT = 16;
 
     private static volatile boolean sRunning = false;
     private static volatile String sLastError = "";
+    private static volatile String sLastRuntimeDiagnostics = "";
     private static volatile Process sXrayProcess = null;
     private static volatile ParcelFileDescriptor sTunnelInterface = null;
     private static volatile Context sAppContext = null;
     private static volatile long sBaseUidRxBytes = 0L;
     private static volatile long sBaseUidTxBytes = 0L;
+    private static final Object sDiagnosticsLock = new Object();
+    private static final ArrayDeque<String> sRuntimeDiagnosticHistory = new ArrayDeque<>();
     private static final ExecutorService sRuntimeExecutor = Executors.newSingleThreadExecutor();
     private static final AtomicBoolean sStartQueued = new AtomicBoolean(false);
+    private static final AtomicBoolean sStartCanceled = new AtomicBoolean(false);
     private final Object mRuntimeLock = new Object();
     private final Handler mNotificationHandler = new Handler(Looper.getMainLooper());
     private final Runnable mNotificationUpdater = new Runnable() {
@@ -96,6 +114,14 @@ public final class GenyConnectVpnService extends VpnService {
     private long mNotificationLastUpBytesPerSec = 0L;
     private Bitmap mNotificationLargeIcon = null;
     private volatile boolean mForegroundActive = false;
+
+    private static final class RuntimeConfigProbe {
+        boolean valid = false;
+        boolean hasTunInbound = false;
+        String mixedListen = "";
+        int mixedPort = -1;
+        String error = "";
+    }
 
     @Override
     public void onCreate() {
@@ -120,6 +146,47 @@ public final class GenyConnectVpnService extends VpnService {
             stopSelf();
             logMainThreadDuration("onStartCommand/" + action, startedAt);
             return START_NOT_STICKY;
+        }
+        if (ACTION_RECONNECT.equals(action) || ACTION_RESTART.equals(action)) {
+            final String executablePath = safeString(readPreference(PREF_LAST_EXECUTABLE_PATH));
+            final String configPath = safeString(readPreference(PREF_LAST_CONFIG_PATH));
+            final String workingDirectory = safeString(readPreference(PREF_LAST_WORKING_DIRECTORY));
+            if (configPath.isEmpty()) {
+                sLastError = "No saved VPN session is available to reconnect.";
+                persistLastError(sLastError);
+                stopSelf(startId);
+                logMainThreadDuration("onStartCommand/" + action + "/missingConfig", startedAt);
+                return START_NOT_STICKY;
+            }
+
+            stopRuntime(true);
+            clearError();
+            saveRuntimeLaunchConfig(executablePath, configPath, workingDirectory);
+            ensureForegroundActive();
+            enqueueStartRuntime(executablePath, configPath, workingDirectory);
+            logMainThreadDuration("onStartCommand/" + action, startedAt);
+            return START_STICKY;
+        }
+        if (ACTION_REFRESH_NETWORK_CACHE.equals(action)) {
+            refreshAndroidNetworkState(getApplicationContext());
+            final String executablePath = safeString(readPreference(PREF_LAST_EXECUTABLE_PATH));
+            final String configPath = safeString(readPreference(PREF_LAST_CONFIG_PATH));
+            final String workingDirectory = safeString(readPreference(PREF_LAST_WORKING_DIRECTORY));
+            final boolean runtimeActive = isRuntimeProcessAlive() || sRunning || sStartQueued.get();
+            if (runtimeActive && !configPath.isEmpty()) {
+                appendRuntimeDiagnostic("Android network cache refresh: restarting VPN service network.");
+                stopRuntime(false);
+                clearError();
+                saveRuntimeLaunchConfig(executablePath, configPath, workingDirectory);
+                ensureForegroundActive();
+                enqueueStartRuntime(executablePath, configPath, workingDirectory);
+                logMainThreadDuration("onStartCommand/" + action + "/restart", startedAt);
+                return START_STICKY;
+            }
+
+            appendRuntimeDiagnostic("Android network cache refresh: framework connectivity state refreshed.");
+            logMainThreadDuration("onStartCommand/" + action, startedAt);
+            return runtimeActive ? START_STICKY : START_NOT_STICKY;
         }
         final boolean runtimeAlive = isRuntimeProcessAlive();
         if (ACTION_QUERY_STATE.equals(action)) {
@@ -255,6 +322,7 @@ public final class GenyConnectVpnService extends VpnService {
         synchronized (mRuntimeLock) {
             if (isRuntimeProcessAlive()) {
                 persistLastError("");
+                appendRuntimeDiagnostic("Android runtime start skipped: an existing xray-core process is still alive.");
                 return;
             }
             if (sRunning) {
@@ -266,6 +334,7 @@ public final class GenyConnectVpnService extends VpnService {
                 return;
             }
 
+            clearRuntimeDiagnostics();
             clearError();
             startForegroundInternal();
 
@@ -279,6 +348,38 @@ public final class GenyConnectVpnService extends VpnService {
                 return;
             }
             final boolean requiresTunInbound = configRequestsTun(normalizedConfigPath);
+            final RuntimeConfigProbe configProbe = inspectRuntimeConfig(normalizedConfigPath);
+            appendRuntimeDiagnostic("Android startup requested: sdk=" + Build.VERSION.SDK_INT
+                + ", abis=" + supportedAbiSummary()
+                + ", batteryOptimizationIgnored=" + isIgnoringBatteryOptimizations()
+                + ", config=" + normalizedConfigPath
+                + ", configExists=" + configFile.exists()
+                + ", configSize=" + configFile.length()
+                + ", tunRequested=" + requiresTunInbound);
+            if (!configProbe.valid) {
+                fail("Generated runtime config is invalid on Android: " + configProbe.error);
+                return;
+            }
+            appendRuntimeDiagnostic("Config diagnostics: mixedListen=" + safeString(configProbe.mixedListen)
+                + ", mixedPort=" + configProbe.mixedPort
+                + ", tunInbound=" + configProbe.hasTunInbound);
+            if (configProbe.mixedPort <= 0
+                || !"127.0.0.1".equals(safeString(configProbe.mixedListen))) {
+                fail("Generated runtime config must expose mixed inbound on 127.0.0.1 with a valid local port for Android TUN mode.");
+                return;
+            }
+            if (requiresTunInbound && !configProbe.hasTunInbound) {
+                fail("Generated runtime config is missing Android TUN inbound.");
+                return;
+            }
+            final StringBuilder preflightPortError = new StringBuilder();
+            if (isLocalPortReachable(configProbe.mixedPort, preflightPortError)) {
+                fail("Local mixed proxy port 127.0.0.1:" + configProbe.mixedPort
+                    + " is already occupied before startup. Clean up the previous runtime and retry.");
+                return;
+            }
+            appendRuntimeDiagnostic("Preflight port check: 127.0.0.1:" + configProbe.mixedPort
+                + " was free before launch.");
 
             final String resolvedExecutablePath = resolveExecutablePath(requestedExecutablePath);
             if (resolvedExecutablePath.isEmpty()) {
@@ -291,12 +392,18 @@ public final class GenyConnectVpnService extends VpnService {
                 fail("xray-core executable is missing: " + resolvedExecutablePath);
                 return;
             }
+            appendRuntimeDiagnostic("Core selection: requestedPath=" + requestedExecutablePath
+                + ", resolvedPath=" + resolvedExecutablePath
+                + ", exists=" + executableFile.exists()
+                + ", size=" + executableFile.length()
+                + ", canExecute=" + executableFile.canExecute());
 
             if (!executableFile.canExecute()) {
                 if (!resolvedExecutablePath.endsWith(XRAY_NATIVE_LIB_NAME) && !executableFile.setExecutable(true, false)) {
                     fail("xray-core binary is not executable: " + resolvedExecutablePath);
                     return;
                 }
+                appendRuntimeDiagnostic("Applied executable permission to " + resolvedExecutablePath);
             }
 
             int tunFd = -1;
@@ -333,6 +440,7 @@ public final class GenyConnectVpnService extends VpnService {
                     fail("Android VPN tunnel fd is invalid.");
                     return;
                 }
+                appendRuntimeDiagnostic("Android VPN interface established: tunFd=" + tunFd);
                 if (!prepareTunFdInheritance(sTunnelInterface.getFileDescriptor())) {
                     fail("Failed to prepare inheritable Android VPN tunnel fd for xray-core.");
                     return;
@@ -370,6 +478,9 @@ public final class GenyConnectVpnService extends VpnService {
                     processBuilder.redirectInput(ProcessBuilder.Redirect.INHERIT);
                 }
                 processBuilder.redirectErrorStream(true);
+                appendRuntimeDiagnostic("Launching xray-core: workDir=" + effectiveWorkingDirectory
+                    + ", mixedPort=" + configProbe.mixedPort
+                    + ", tunMode=" + requiresTunInbound);
                 sXrayProcess = processBuilder.start();
                 if (requiresTunInbound) {
                     Log.i(TAG, "Started xray-core from: " + resolvedExecutablePath
@@ -385,6 +496,22 @@ public final class GenyConnectVpnService extends VpnService {
                 restoreStdin(stdinBackup);
             }
 
+            try {
+                Thread.sleep(120L);
+            } catch (InterruptedException exception) {
+                Thread.currentThread().interrupt();
+            }
+            if (!isRuntimeProcessAlive()) {
+                final String earlyFailure = safeString(sLastError);
+                if (!earlyFailure.isEmpty()) {
+                    fail(earlyFailure);
+                } else {
+                    fail("xray-core exited before binding the Android local proxy listener. "
+                        + runtimeDiagnosticsSnapshot());
+                }
+                return;
+            }
+
             sBaseUidRxBytes = uidRxBytes();
             sBaseUidTxBytes = uidTxBytes();
             writeLongPreference(PREF_BASE_UID_RX_BYTES, Math.max(0L, sBaseUidRxBytes));
@@ -396,6 +523,7 @@ public final class GenyConnectVpnService extends VpnService {
     }
 
     private void enqueueStartRuntime(String executablePath, String configPath, String workingDirectory) {
+        sStartCanceled.set(false);
         if (!sStartQueued.compareAndSet(false, true)) {
             Log.i(TAG, "Runtime start already queued; skipping duplicate start request.");
             return;
@@ -406,6 +534,10 @@ public final class GenyConnectVpnService extends VpnService {
         final String queuedWorkingDirectory = safeString(workingDirectory);
         sRuntimeExecutor.execute(() -> {
             try {
+                if (sStartCanceled.get()) {
+                    Log.i(TAG, "Skipping canceled runtime start request.");
+                    return;
+                }
                 startRuntime(queuedExecutablePath, queuedConfigPath, queuedWorkingDirectory);
             } finally {
                 sStartQueued.set(false);
@@ -415,6 +547,7 @@ public final class GenyConnectVpnService extends VpnService {
 
     private void stopRuntime(boolean userRequested) {
         synchronized (mRuntimeLock) {
+            sStartCanceled.set(true);
             sRunning = false;
             stopNotificationUpdates();
 
@@ -625,6 +758,25 @@ public final class GenyConnectVpnService extends VpnService {
             builder.setContentIntent(contentIntent);
         }
 
+        final boolean runtimeActive = sRunning || isRuntimeProcessAlive();
+        final boolean restartAllowed = runtimeActive && !sStartQueued.get() && hasSavedRuntimeLaunchConfig();
+        final PendingIntent disconnectIntent = buildServiceActionPendingIntent(ACTION_DISCONNECT, 1001);
+        if (disconnectIntent != null) {
+            builder.addAction(
+                android.R.drawable.ic_media_pause,
+                NOTIFICATION_ACTION_DISCONNECT_LABEL,
+                disconnectIntent);
+        }
+        if (restartAllowed) {
+            final PendingIntent reconnectIntent = buildServiceActionPendingIntent(ACTION_RECONNECT, 1002);
+            if (reconnectIntent != null) {
+                builder.addAction(
+                    android.R.drawable.ic_popup_sync,
+                    NOTIFICATION_ACTION_RECONNECT_LABEL,
+                    reconnectIntent);
+            }
+        }
+
         final Notification notification = builder.build();
         if (forceStartForeground || !mForegroundActive) {
             startForeground(NOTIFICATION_ID, notification);
@@ -633,6 +785,20 @@ public final class GenyConnectVpnService extends VpnService {
             notificationManager.notify(NOTIFICATION_ID, notification);
         }
         logMainThreadDuration("refreshForegroundNotification(force=" + forceStartForeground + ")", startedAt);
+    }
+
+    private PendingIntent buildServiceActionPendingIntent(String action, int requestCode) {
+        final String normalizedAction = safeString(action);
+        if (normalizedAction.isEmpty()) {
+            return null;
+        }
+
+        final Intent intent = new Intent(this, GenyConnectVpnService.class);
+        intent.setAction(normalizedAction);
+        final int flags = Build.VERSION.SDK_INT >= Build.VERSION_CODES.M
+            ? PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
+            : PendingIntent.FLAG_UPDATE_CURRENT;
+        return PendingIntent.getService(this, requestCode, intent, flags);
     }
 
     private static String formatBytes(long bytes) {
@@ -658,6 +824,104 @@ public final class GenyConnectVpnService extends VpnService {
 
     private static String safeString(String value) {
         return value == null ? "" : value.trim();
+    }
+
+    static void refreshAndroidNetworkState(Context context) {
+        if (context == null) {
+            return;
+        }
+        try {
+            final ConnectivityManager manager =
+                (ConnectivityManager) context.getSystemService(Context.CONNECTIVITY_SERVICE);
+            if (manager == null || Build.VERSION.SDK_INT < Build.VERSION_CODES.M) {
+                return;
+            }
+
+            final Network activeNetwork = manager.getActiveNetwork();
+            manager.reportNetworkConnectivity(activeNetwork, false);
+            manager.reportNetworkConnectivity(activeNetwork, true);
+            manager.bindProcessToNetwork(null);
+        } catch (Exception exception) {
+            Log.w(TAG, "Android network state refresh failed: " + exception.getMessage());
+        }
+    }
+
+    private static void clearRuntimeDiagnostics() {
+        synchronized (sDiagnosticsLock) {
+            sRuntimeDiagnosticHistory.clear();
+            sLastRuntimeDiagnostics = "";
+        }
+    }
+
+    private static void appendRuntimeDiagnostic(String line) {
+        final String normalized = safeString(line);
+        if (normalized.isEmpty()) {
+            return;
+        }
+        synchronized (sDiagnosticsLock) {
+            sRuntimeDiagnosticHistory.addLast(normalized);
+            while (sRuntimeDiagnosticHistory.size() > DIAGNOSTIC_HISTORY_LIMIT) {
+                sRuntimeDiagnosticHistory.removeFirst();
+            }
+            sLastRuntimeDiagnostics = normalized;
+        }
+        Log.i(TAG, normalized);
+    }
+
+    private static String runtimeDiagnosticsSnapshot() {
+        synchronized (sDiagnosticsLock) {
+            if (sRuntimeDiagnosticHistory.isEmpty()) {
+                return safeString(sLastRuntimeDiagnostics);
+            }
+            final StringBuilder joined = new StringBuilder(256);
+            for (String item : sRuntimeDiagnosticHistory) {
+                if (joined.length() > 0) {
+                    joined.append(" | ");
+                }
+                joined.append(item);
+            }
+            return joined.toString();
+        }
+    }
+
+    private static String supportedAbiSummary() {
+        if (Build.SUPPORTED_ABIS == null || Build.SUPPORTED_ABIS.length == 0) {
+            return safeString(Build.CPU_ABI);
+        }
+        final StringBuilder joined = new StringBuilder(64);
+        for (String abi : Build.SUPPORTED_ABIS) {
+            final String normalized = safeString(abi);
+            if (normalized.isEmpty()) {
+                continue;
+            }
+            if (joined.length() > 0) {
+                joined.append(',');
+            }
+            joined.append(normalized);
+        }
+        return joined.toString();
+    }
+
+    private boolean isIgnoringBatteryOptimizations() {
+        try {
+            final PowerManager powerManager = (PowerManager) getSystemService(Context.POWER_SERVICE);
+            return powerManager != null && powerManager.isIgnoringBatteryOptimizations(getPackageName());
+        } catch (Exception ignored) {
+            return false;
+        }
+    }
+
+    private boolean isLocalPortReachable(int port, StringBuilder detailOut) {
+        try (Socket socket = new Socket()) {
+            socket.connect(new InetSocketAddress("127.0.0.1", port), 220);
+            return true;
+        } catch (Exception exception) {
+            if (detailOut != null) {
+                detailOut.setLength(0);
+                detailOut.append(safeString(exception.getMessage()));
+            }
+            return false;
+        }
     }
 
     private static android.content.SharedPreferences prefs() {
@@ -824,6 +1088,10 @@ public final class GenyConnectVpnService extends VpnService {
         writePreference(PREF_LAST_WORKING_DIRECTORY, workingDirectory);
     }
 
+    private static boolean hasSavedRuntimeLaunchConfig() {
+        return !safeString(readPreference(PREF_LAST_CONFIG_PATH)).isEmpty();
+    }
+
     private static void persistLastError(String errorText) {
         writePreference(PREF_LAST_ERROR, errorText);
     }
@@ -860,6 +1128,14 @@ public final class GenyConnectVpnService extends VpnService {
         return safeString(sLastError);
     }
 
+    static String lastDiagnosticsInProcess() {
+        final String diagnostics = runtimeDiagnosticsSnapshot();
+        if (!diagnostics.isEmpty()) {
+            return diagnostics;
+        }
+        return safeString(sLastError);
+    }
+
     private static boolean configRequestsTun(String configPath) {
         final String path = safeString(configPath);
         if (path.isEmpty()) {
@@ -883,25 +1159,70 @@ public final class GenyConnectVpnService extends VpnService {
             || normalized.contains("\"protocol\": \"tun\"");
     }
 
+    private RuntimeConfigProbe inspectRuntimeConfig(String configPath) {
+        final RuntimeConfigProbe probe = new RuntimeConfigProbe();
+        final String path = safeString(configPath);
+        if (path.isEmpty()) {
+            probe.error = "runtime config path is empty";
+            return probe;
+        }
+
+        final StringBuilder payload = new StringBuilder(32 * 1024);
+        try (BufferedReader reader = new BufferedReader(new FileReader(path))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                payload.append(line);
+            }
+        } catch (Exception exception) {
+            probe.error = "failed to read config: " + safeString(exception.getMessage());
+            return probe;
+        }
+
+        try {
+            final JSONObject root = new JSONObject(payload.toString());
+            final JSONArray inbounds = root.optJSONArray("inbounds");
+            if (inbounds != null) {
+                for (int i = 0; i < inbounds.length(); ++i) {
+                    final JSONObject inbound = inbounds.optJSONObject(i);
+                    if (inbound == null) {
+                        continue;
+                    }
+                    final String protocol = safeString(inbound.optString("protocol"));
+                    if ("mixed".equalsIgnoreCase(protocol) && probe.mixedPort <= 0) {
+                        probe.mixedListen = safeString(inbound.optString("listen"));
+                        probe.mixedPort = inbound.optInt("port", -1);
+                    } else if ("tun".equalsIgnoreCase(protocol)) {
+                        probe.hasTunInbound = true;
+                    }
+                }
+            }
+            probe.valid = true;
+            return probe;
+        } catch (Exception exception) {
+            probe.error = "invalid JSON: " + safeString(exception.getMessage());
+            return probe;
+        }
+    }
+
     private String resolveExecutablePath(String requestedExecutablePath) {
         final String nativeLibPath = resolveNativeLibraryExecutablePath();
         if (!nativeLibPath.isEmpty()) {
-            Log.i(TAG, "Using native library xray executable: " + nativeLibPath);
+            appendRuntimeDiagnostic("Using native library xray executable: " + nativeLibPath);
             return nativeLibPath;
         }
 
         if (!requestedExecutablePath.isEmpty()) {
             final File requestedFile = new File(requestedExecutablePath);
             if (requestedFile.exists()) {
-                Log.w(TAG, "Using requested xray executable fallback: " + requestedFile.getAbsolutePath());
+                appendRuntimeDiagnostic("Using requested xray executable fallback: " + requestedFile.getAbsolutePath());
                 return requestedFile.getAbsolutePath();
             }
-            Log.w(TAG, "Requested xray path is missing; falling back to bundled asset: " + requestedExecutablePath);
+            appendRuntimeDiagnostic("Requested xray path is missing; falling back to bundled asset: " + requestedExecutablePath);
         }
 
         final String extractedPath = extractBundledXrayAsset();
         if (!extractedPath.isEmpty()) {
-            Log.w(TAG, "Using extracted asset xray executable fallback: " + extractedPath);
+            appendRuntimeDiagnostic("Using extracted asset xray executable fallback: " + extractedPath);
             return extractedPath;
         }
 
@@ -941,11 +1262,11 @@ public final class GenyConnectVpnService extends VpnService {
         for (String assetPath : candidateAssets) {
             final String extracted = extractBundledXrayAssetFromPath(assetPath);
             if (!extracted.isEmpty()) {
-                Log.i(TAG, "Extracted xray-core asset from: " + assetPath);
+                appendRuntimeDiagnostic("Extracted xray-core asset from: " + assetPath);
                 return extracted;
             }
         }
-        Log.e(TAG, "No bundled xray-core asset candidate could be extracted.");
+        appendRuntimeDiagnostic("No bundled xray-core asset candidate could be extracted.");
         return "";
     }
 
@@ -981,6 +1302,10 @@ public final class GenyConnectVpnService extends VpnService {
             return "";
         }
 
+        appendRuntimeDiagnostic("Bundled asset extracted to " + outFile.getAbsolutePath()
+            + " size=" + outFile.length()
+            + " canExecute=" + outFile.canExecute());
+
         return outFile.getAbsolutePath();
     }
 
@@ -995,6 +1320,7 @@ public final class GenyConnectVpnService extends VpnService {
                 while ((line = reader.readLine()) != null) {
                     if (!line.trim().isEmpty()) {
                         lastLine = line.trim();
+                        appendRuntimeDiagnostic("xray-core: " + lastLine);
                     }
                     Log.i(TAG, "xray-core: " + line);
                 }
@@ -1015,7 +1341,10 @@ public final class GenyConnectVpnService extends VpnService {
                     return;
                 }
                 if (lastLine.isEmpty()) {
-                    sLastError = "xray-core exited unexpectedly with code " + exitCode + ".";
+                    final String diagnostics = runtimeDiagnosticsSnapshot();
+                    sLastError = diagnostics.isEmpty()
+                        ? "xray-core exited unexpectedly with code " + exitCode + "."
+                        : "xray-core exited unexpectedly with code " + exitCode + ": " + diagnostics;
                 } else {
                     sLastError = "xray-core exited unexpectedly with code " + exitCode + ": " + lastLine;
                 }
@@ -1033,7 +1362,14 @@ public final class GenyConnectVpnService extends VpnService {
     }
 
     private void fail(String message) {
-        sLastError = message == null ? "Unknown Android runtime failure." : message.trim();
+        final String normalized = message == null ? "Unknown Android runtime failure." : message.trim();
+        final String diagnostics = runtimeDiagnosticsSnapshot();
+        if (!diagnostics.isEmpty() && !diagnostics.contains(normalized)) {
+            sLastError = normalized + " | " + diagnostics;
+        } else {
+            sLastError = normalized;
+        }
+        appendRuntimeDiagnostic("Startup failure: " + normalized);
         Log.e(TAG, sLastError);
         stopRuntime(false);
         stopSelf();

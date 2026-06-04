@@ -26,6 +26,9 @@ public:
     qint64 rxBytes() const override;
     qint64 txBytes() const override;
     QString lastError() const override;
+    bool startupPending() const override;
+    bool runtimeProcessAlive() const override;
+    QString diagnosticSummary() const override;
 
 private:
     bool m_running = false;

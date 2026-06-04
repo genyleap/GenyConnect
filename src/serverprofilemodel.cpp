@@ -134,12 +134,15 @@ bool ServerProfileModel::addProfile(const ServerProfile& profile)
         return false;
     }
 
-    const int existingIdx = findEquivalentProfile(profile);
+    const int existingIdx = !profile.id.trimmed().isEmpty()
+        ? indexOfId(profile.id.trimmed())
+        : -1;
     if (existingIdx >= 0) {
         ServerProfile updated = profile;
         const ServerProfile& existing = m_profiles.at(existingIdx);
 
-        // Preserve stable identity and prior ping sample for equivalent profiles.
+        // Preserve stable identity and prior ping sample when the caller is
+        // explicitly replacing an existing profile by id.
         if (updated.id.trimmed().isEmpty() || updated.id != existing.id) {
             updated.id = existing.id;
         }
@@ -208,30 +211,9 @@ bool ServerProfileModel::setPingResult(int row, int pingMs)
 
 int ServerProfileModel::findEquivalentProfile(const ServerProfile& candidate) const
 {
-    const QString candidateProtocol = candidate.protocol.trimmed();
-    const QString candidateAddress = candidate.address.trimmed();
-    const QString candidateUserId = candidate.userId.trimmed();
-    const QString candidateLink = candidate.originalLink.trimmed();
-
     for (int i = 0; i < m_profiles.size(); ++i) {
         const auto &existing = m_profiles.at(i);
-        const QString existingProtocol = existing.protocol.trimmed();
-        const QString existingAddress = existing.address.trimmed();
-        const QString existingUserId = existing.userId.trimmed();
-        const QString existingLink = existing.originalLink.trimmed();
-
-        const bool sameIdentity =
-            existingProtocol.compare(candidateProtocol, Qt::CaseInsensitive) == 0
-            && existingAddress.compare(candidateAddress, Qt::CaseInsensitive) == 0
-            && existing.port == candidate.port
-            && existingUserId.compare(candidateUserId, Qt::CaseInsensitive) == 0;
-        const bool sameOriginalLink =
-            !candidateLink.isEmpty()
-            && existingLink.compare(candidateLink, Qt::CaseSensitive) == 0;
-
-        if (sameIdentity
-            || sameOriginalLink
-            || (!candidate.id.isEmpty() && existing.id == candidate.id)) {
+        if (!candidate.id.isEmpty() && existing.id == candidate.id) {
             return i;
         }
     }
