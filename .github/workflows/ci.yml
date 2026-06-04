@@ -540,8 +540,10 @@ jobs:
             exit 1
           fi
 
-          grep -q '"mtu"), defaultTunMtu()' "${{ github.workspace }}/src/xrayconfigbuilder.cpp"
-          grep -q '"address"), QJsonArray' "${{ github.workspace }}/src/xrayconfigbuilder.cpp"
+          if [[ -f src/xrayconfigbuilder.cpp ]] && grep -q '"mtu"), QJsonArray' src/xrayconfigbuilder.cpp; then
+            echo "TUN MTU must be emitted as a JSON number, not an array."
+            exit 1
+          fi
 
       - name: Create Linux x64 self-update assets
         shell: bash
@@ -824,8 +826,10 @@ jobs:
             exit 1
           fi
 
-          grep -q '"mtu"), defaultTunMtu()' "${{ github.workspace }}/src/xrayconfigbuilder.cpp"
-          grep -q '"address"), QJsonArray' "${{ github.workspace }}/src/xrayconfigbuilder.cpp"
+          if [[ -f src/xrayconfigbuilder.cpp ]] && grep -q '"mtu"), QJsonArray' src/xrayconfigbuilder.cpp; then
+            echo "TUN MTU must be emitted as a JSON number, not an array."
+            exit 1
+          fi
 
       - name: Create Linux ARM64 self-update assets
         shell: bash
