@@ -32,6 +32,7 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.BufferedReader;
 import java.io.FileReader;
+import java.lang.reflect.Method;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.util.ArrayDeque;
@@ -80,11 +81,12 @@ public final class GenyConnectVpnService extends VpnService {
     private static final long NOTIFICATION_UPDATE_INTERVAL_MS = 1000L;
     private static final long MIN_RATE_SAMPLE_INTERVAL_MS = 400L;
     private static final long MAIN_THREAD_WARNING_MS = 350L;
-    private static final int DIAGNOSTIC_HISTORY_LIMIT = 16;
+    private static final int DIAGNOSTIC_HISTORY_LIMIT = 48;
 
     private static volatile boolean sRunning = false;
     private static volatile String sLastError = "";
     private static volatile String sLastRuntimeDiagnostics = "";
+    private static volatile String sLastResolvedCoreAssetName = "";
     private static volatile Process sXrayProcess = null;
     private static volatile ParcelFileDescriptor sTunnelInterface = null;
     private static volatile Context sAppContext = null;
@@ -121,6 +123,11 @@ public final class GenyConnectVpnService extends VpnService {
         String mixedListen = "";
         int mixedPort = -1;
         String error = "";
+    }
+
+    private static final class PortOwnerInfo {
+        boolean occupied = false;
+        String detail = "";
     }
 
     @Override
@@ -373,38 +380,55 @@ public final class GenyConnectVpnService extends VpnService {
                 return;
             }
             final StringBuilder preflightPortError = new StringBuilder();
+            final PortOwnerInfo preflightPortOwner = inspectLocalTcpPortOwner(configProbe.mixedPort);
             if (isLocalPortReachable(configProbe.mixedPort, preflightPortError)) {
+                final String ownerDetail = safeString(preflightPortOwner.detail);
                 fail("Local mixed proxy port 127.0.0.1:" + configProbe.mixedPort
-                    + " is already occupied before startup. Clean up the previous runtime and retry.");
+                    + " is already occupied before xray-core launch"
+                    + (ownerDetail.isEmpty() ? "." : ": " + ownerDetail));
                 return;
             }
             appendRuntimeDiagnostic("Preflight port check: 127.0.0.1:" + configProbe.mixedPort
-                + " was free before launch.");
+                + " was free before launch"
+                + (safeString(preflightPortError.toString()).isEmpty() ? "." : " (" + preflightPortError + ")."));
 
             final String resolvedExecutablePath = resolveExecutablePath(requestedExecutablePath);
+            appendRuntimeDiagnostic("Android ABI/core asset: abi=" + supportedAbiSummary()
+                + ", resolvedAsset=" + safeString(sLastResolvedCoreAssetName));
             if (resolvedExecutablePath.isEmpty()) {
                 fail("xray-core executable is missing on Android. Rebuild APK with bundled xray-core.");
                 return;
             }
 
             final File executableFile = new File(resolvedExecutablePath);
+            final boolean executableExists = executableFile.exists();
+            final long executableSize = executableExists ? executableFile.length() : -1L;
+            final boolean executableCanExecuteBefore = executableExists && executableFile.canExecute();
             if (!executableFile.exists()) {
                 fail("xray-core executable is missing: " + resolvedExecutablePath);
                 return;
             }
             appendRuntimeDiagnostic("Core selection: requestedPath=" + requestedExecutablePath
                 + ", resolvedPath=" + resolvedExecutablePath
-                + ", exists=" + executableFile.exists()
-                + ", size=" + executableFile.length()
-                + ", canExecute=" + executableFile.canExecute());
+                + ", exists=" + executableExists
+                + ", size=" + executableSize
+                + ", canExecuteBeforeChmod=" + executableCanExecuteBefore);
 
-            if (!executableFile.canExecute()) {
-                if (!resolvedExecutablePath.endsWith(XRAY_NATIVE_LIB_NAME) && !executableFile.setExecutable(true, false)) {
+            boolean chmodApplied = false;
+            boolean chmodSucceeded = executableCanExecuteBefore;
+            if (!executableCanExecuteBefore) {
+                chmodApplied = !resolvedExecutablePath.endsWith(XRAY_NATIVE_LIB_NAME);
+                chmodSucceeded = chmodApplied && executableFile.setExecutable(true, false);
+                if (!chmodSucceeded) {
+                    appendRuntimeDiagnostic("Core permission repair: chmodApplied=" + chmodApplied
+                        + ", chmodSucceeded=false");
                     fail("xray-core binary is not executable: " + resolvedExecutablePath);
                     return;
                 }
-                appendRuntimeDiagnostic("Applied executable permission to " + resolvedExecutablePath);
             }
+            appendRuntimeDiagnostic("Core permission state: chmodApplied=" + chmodApplied
+                + ", chmodSucceeded=" + chmodSucceeded
+                + ", canExecuteAfterChmod=" + executableFile.canExecute());
 
             int tunFd = -1;
             int tunFdForXray = -1;
@@ -482,6 +506,7 @@ public final class GenyConnectVpnService extends VpnService {
                     + ", mixedPort=" + configProbe.mixedPort
                     + ", tunMode=" + requiresTunInbound);
                 sXrayProcess = processBuilder.start();
+                appendRuntimeDiagnostic("xray-core process started: pid=" + processPid(sXrayProcess));
                 if (requiresTunInbound) {
                     Log.i(TAG, "Started xray-core from: " + resolvedExecutablePath
                         + " (vpnFd=" + tunFd + ",xrayTunFd=" + tunFdForXray + ")");
@@ -490,7 +515,10 @@ public final class GenyConnectVpnService extends VpnService {
                 }
                 startProcessMonitor(sXrayProcess);
             } catch (IOException exception) {
-                fail("Failed to start xray-core on Android: " + exception.getMessage());
+                final String startError = safeString(exception.getMessage());
+                appendRuntimeDiagnostic("xray-core process start error: " + startError);
+                fail("Failed to start xray-core on Android"
+                    + (startError.isEmpty() ? "." : ": " + startError));
                 return;
             } finally {
                 restoreStdin(stdinBackup);
@@ -924,6 +952,120 @@ public final class GenyConnectVpnService extends VpnService {
         }
     }
 
+    private static long processPid(Process process) {
+        if (process == null) {
+            return -1L;
+        }
+        try {
+            final Method pidMethod = Process.class.getMethod("pid");
+            final Object value = pidMethod.invoke(process);
+            if (value instanceof Number) {
+                return ((Number) value).longValue();
+            }
+        } catch (Exception ignored) {
+        }
+        return -1L;
+    }
+
+    private static PortOwnerInfo inspectLocalTcpPortOwner(int port) {
+        final PortOwnerInfo info = new PortOwnerInfo();
+        if (port <= 0 || port > 65535) {
+            return info;
+        }
+        final String inode = findListeningTcpInode(port);
+        if (inode.isEmpty()) {
+            info.detail = "no /proc TCP listener inode was visible for port " + port;
+            return info;
+        }
+
+        info.occupied = true;
+        final String processDetail = findProcessForSocketInode(inode);
+        info.detail = processDetail.isEmpty()
+            ? "listener inode=" + inode + " (process owner unavailable; Android /proc access may be restricted)"
+            : "listener inode=" + inode + ", " + processDetail;
+        return info;
+    }
+
+    private static String findListeningTcpInode(int port) {
+        final String tcp4 = findListeningTcpInodeInFile("/proc/net/tcp", port);
+        if (!tcp4.isEmpty()) {
+            return tcp4;
+        }
+        return findListeningTcpInodeInFile("/proc/net/tcp6", port);
+    }
+
+    private static String findListeningTcpInodeInFile(String path, int port) {
+        try (BufferedReader reader = new BufferedReader(new FileReader(path))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                final String trimmed = safeString(line);
+                if (trimmed.isEmpty() || trimmed.startsWith("sl")) {
+                    continue;
+                }
+                final String[] parts = trimmed.split("\\s+");
+                if (parts.length <= 9) {
+                    continue;
+                }
+                final String[] addressParts = parts[1].split(":");
+                if (addressParts.length != 2) {
+                    continue;
+                }
+                int parsedPort = -1;
+                try {
+                    parsedPort = Integer.parseInt(addressParts[1], 16);
+                } catch (Exception ignored) {
+                }
+                if (parsedPort != port) {
+                    continue;
+                }
+                final String state = parts[3];
+                if (!"0A".equalsIgnoreCase(state)) {
+                    continue;
+                }
+                return safeString(parts[9]);
+            }
+        } catch (Exception ignored) {
+        }
+        return "";
+    }
+
+    private static String findProcessForSocketInode(String inode) {
+        final String socketNeedle = "socket:[" + safeString(inode) + "]";
+        if (socketNeedle.length() <= "socket:[]".length()) {
+            return "";
+        }
+        final File procDir = new File("/proc");
+        final File[] entries = procDir.listFiles();
+        if (entries == null) {
+            return "";
+        }
+        for (File entry : entries) {
+            final String pidText = entry.getName();
+            int pid = -1;
+            try {
+                pid = Integer.parseInt(pidText);
+            } catch (Exception ignored) {
+                continue;
+            }
+            final File fdDir = new File(entry, "fd");
+            final File[] fds = fdDir.listFiles();
+            if (fds == null) {
+                continue;
+            }
+            for (File fd : fds) {
+                try {
+                    final String target = Os.readlink(fd.getAbsolutePath());
+                    if (socketNeedle.equals(target)) {
+                        final String cmdline = readProcessCmdline(pid);
+                        return "pid=" + pid + (cmdline.isEmpty() ? "" : ", cmdline=" + cmdline);
+                    }
+                } catch (Exception ignored) {
+                }
+            }
+        }
+        return "";
+    }
+
     private static android.content.SharedPreferences prefs() {
         Context appContext = sAppContext;
         if (appContext == null) {
@@ -1205,8 +1347,10 @@ public final class GenyConnectVpnService extends VpnService {
     }
 
     private String resolveExecutablePath(String requestedExecutablePath) {
+        sLastResolvedCoreAssetName = "";
         final String nativeLibPath = resolveNativeLibraryExecutablePath();
         if (!nativeLibPath.isEmpty()) {
+            sLastResolvedCoreAssetName = XRAY_NATIVE_LIB_NAME;
             appendRuntimeDiagnostic("Using native library xray executable: " + nativeLibPath);
             return nativeLibPath;
         }
@@ -1214,6 +1358,7 @@ public final class GenyConnectVpnService extends VpnService {
         if (!requestedExecutablePath.isEmpty()) {
             final File requestedFile = new File(requestedExecutablePath);
             if (requestedFile.exists()) {
+                sLastResolvedCoreAssetName = "requested:" + requestedFile.getName();
                 appendRuntimeDiagnostic("Using requested xray executable fallback: " + requestedFile.getAbsolutePath());
                 return requestedFile.getAbsolutePath();
             }
@@ -1262,6 +1407,7 @@ public final class GenyConnectVpnService extends VpnService {
         for (String assetPath : candidateAssets) {
             final String extracted = extractBundledXrayAssetFromPath(assetPath);
             if (!extracted.isEmpty()) {
+                sLastResolvedCoreAssetName = assetPath;
                 appendRuntimeDiagnostic("Extracted xray-core asset from: " + assetPath);
                 return extracted;
             }
@@ -1320,7 +1466,7 @@ public final class GenyConnectVpnService extends VpnService {
                 while ((line = reader.readLine()) != null) {
                     if (!line.trim().isEmpty()) {
                         lastLine = line.trim();
-                        appendRuntimeDiagnostic("xray-core: " + lastLine);
+                        appendRuntimeDiagnostic("xray-core stdout/stderr: " + lastLine);
                     }
                     Log.i(TAG, "xray-core: " + line);
                 }
@@ -1337,20 +1483,36 @@ public final class GenyConnectVpnService extends VpnService {
             }
 
             synchronized (mRuntimeLock) {
-                if (!sRunning || sXrayProcess != process) {
+                if (sXrayProcess != process) {
                     return;
                 }
+                final boolean exitedDuringStartup = !sRunning;
+                final String exitStatus = "normal";
+                appendRuntimeDiagnostic("xray-core exited: exitCode=" + exitCode
+                    + ", exitStatus=" + exitStatus
+                    + (lastLine.isEmpty() ? "" : ", lastOutput=" + lastLine));
                 if (lastLine.isEmpty()) {
                     final String diagnostics = runtimeDiagnosticsSnapshot();
                     sLastError = diagnostics.isEmpty()
-                        ? "xray-core exited unexpectedly with code " + exitCode + "."
-                        : "xray-core exited unexpectedly with code " + exitCode + ": " + diagnostics;
+                        ? "xray-core exited "
+                            + (exitedDuringStartup ? "before listener readiness" : "unexpectedly")
+                            + " with code " + exitCode + "."
+                        : "xray-core exited "
+                            + (exitedDuringStartup ? "before listener readiness" : "unexpectedly")
+                            + " with code " + exitCode + ": " + diagnostics;
                 } else {
-                    sLastError = "xray-core exited unexpectedly with code " + exitCode + ": " + lastLine;
+                    sLastError = "xray-core exited "
+                        + (exitedDuringStartup ? "before listener readiness" : "unexpectedly")
+                        + " with code " + exitCode + ": " + lastLine;
                 }
                 Log.e(TAG, sLastError);
-                stopRuntime(false);
-                stopSelf();
+                if (sRunning) {
+                    stopRuntime(false);
+                    stopSelf();
+                } else {
+                    sXrayProcess = null;
+                    persistLastError(sLastError);
+                }
             }
         }, "genyconnect-xray-monitor");
         monitor.setDaemon(true);

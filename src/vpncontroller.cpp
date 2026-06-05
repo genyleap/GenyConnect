@@ -807,9 +807,24 @@ QString validateGeneratedRuntimeConfig(const QJsonObject& config,
                 return QString::fromUtf8("Generated Xray TUN config is invalid: tun-in settings.address must be an array.");
             }
             const QJsonValue mtu = settings.value(QString::fromUtf8("mtu"));
+#if defined(Q_OS_ANDROID)
+            if (!mtu.isArray()) {
+                return QString::fromUtf8("Generated Xray TUN config is invalid: tun-in settings.mtu must be an array of numeric JSON values on Android.");
+            }
+            const QJsonArray mtuArray = mtu.toArray();
+            if (mtuArray.isEmpty()) {
+                return QString::fromUtf8("Generated Xray TUN config is invalid: tun-in settings.mtu must not be empty on Android.");
+            }
+            for (const QJsonValue& mtuValue : mtuArray) {
+                if (!mtuValue.isDouble()) {
+                    return QString::fromUtf8("Generated Xray TUN config is invalid: tun-in settings.mtu must contain only numeric JSON values on Android.");
+                }
+            }
+#else
             if (!mtu.isDouble()) {
                 return QString::fromUtf8("Generated Xray TUN config is invalid: tun-in settings.mtu must be a numeric JSON value, not an array.");
             }
+#endif
             break;
         }
         if (!foundTunIn) {
@@ -6555,7 +6570,8 @@ void VpnController::gateRuntimeStartupUntilProxyReady(quint64 connectAttempt)
                 if (guard->m_runtimeBackend->startupPending()) {
                     backendSeenStartupPending = true;
                 }
-                if (guard->m_runtimeBackend->runtimeProcessAlive()) {
+                const bool processAlive = guard->m_runtimeBackend->runtimeProcessAlive();
+                if (processAlive) {
                     backendSeenProcessAlive = true;
                 }
                 const QString diagnostics = guard->m_runtimeBackend->diagnosticSummary().trimmed();
@@ -6564,6 +6580,21 @@ void VpnController::gateRuntimeStartupUntilProxyReady(quint64 connectAttempt)
                     if (runtimeStartupError.isEmpty()) {
                         runtimeStartupError = diagnostics;
                     }
+                }
+
+                if (mobileRuntime && backendSeenProcessAlive && !processAlive) {
+                    if (runtimeStartupError.isEmpty()) {
+                        runtimeStartupError = QString::fromUtf8("xray-core exited before listener readiness.");
+                    }
+                    break;
+                }
+                if (mobileRuntime && !processAlive) {
+                    if (!runtimeStartupError.isEmpty() && !guard->m_runtimeBackend->startupPending()) {
+                        break;
+                    }
+                    QThread::msleep(static_cast<unsigned long>(qMax(80, sleepMs)));
+                    sleepMs = qMin(420, sleepMs + 30);
+                    continue;
                 }
             }
 
@@ -6637,28 +6668,43 @@ void VpnController::gateRuntimeStartupUntilProxyReady(quint64 connectAttempt)
                 || lowered.contains(QString::fromUtf8("interfacebyindex"))
                 || lowered.contains(QString::fromUtf8("net.interfaces"))) {
                 diagnosis = QString::fromUtf8("android interface probe failure");
-            } else if (lowered.contains(QString::fromUtf8("permission"))
-                || lowered.contains(QString::fromUtf8("vpn"))) {
+            } else if (lowered.contains(QString::fromUtf8("vpn permission"))) {
                 diagnosis = QString::fromUtf8("vpn permission missing");
+            } else if (lowered.contains(QString::fromUtf8("permission denied"))
+                       || lowered.contains(QString::fromUtf8("not executable"))
+                       || lowered.contains(QString::fromUtf8("chmod"))) {
+                diagnosis = QString::fromUtf8("permission denied");
+            } else if (lowered.contains(QString::fromUtf8("config validation"))
+                       || lowered.contains(QString::fromUtf8("generated runtime config is invalid"))
+                       || lowered.contains(QString::fromUtf8("invalid json"))
+                       || lowered.contains(QString::fromUtf8("invalid config"))
+                       || lowered.contains(QString::fromUtf8("failed to load config"))
+                       || lowered.contains(QString::fromUtf8("failed to load config files"))
+                       || lowered.contains(QString::fromUtf8("failed to start with the generated runtime configuration"))) {
+                diagnosis = QString::fromUtf8("config validation failed");
+            } else if (lowered.contains(QString::fromUtf8("exited before"))
+                       || lowered.contains(QString::fromUtf8("exited unexpectedly"))
+                       || lowered.contains(QString::fromUtf8("exitcode"))
+                       || lowered.contains(QString::fromUtf8("exit code"))) {
+                diagnosis = QString::fromUtf8("core exited early");
+            } else if (lowered.contains(QString::fromUtf8("occupied before startup"))
+                       || lowered.contains(QString::fromUtf8("already occupied"))
+                       || lowered.contains(QString::fromUtf8("address already in use"))) {
+                diagnosis = QString::fromUtf8("port already in use");
             } else if (lowered.contains(QString::fromUtf8("bind"))
-                       || lowered.contains(QString::fromUtf8("address already in use"))
                        || lowered.contains(QString::fromUtf8("port"))) {
-                diagnosis = QString::fromUtf8("listener bind/port conflict");
+                diagnosis = QString::fromUtf8("listener bind failed");
             } else if (lowered.contains(QString::fromUtf8("executable"))
                        || lowered.contains(QString::fromUtf8("asset"))
-                       || lowered.contains(QString::fromUtf8("missing"))
-                       || lowered.contains(QString::fromUtf8("not executable"))) {
-                diagnosis = QString::fromUtf8("core startup failure");
-            } else if (lowered.contains(QString::fromUtf8("occupied before startup"))
-                       || lowered.contains(QString::fromUtf8("already occupied"))) {
-                diagnosis = QString::fromUtf8("listener bind/port conflict");
+                       || lowered.contains(QString::fromUtf8("missing"))) {
+                diagnosis = QString::fromUtf8("core executable missing");
             } else if (lowered.contains(QString::fromUtf8("foreground service"))
                        || lowered.contains(QString::fromUtf8("batteryoptimization"))
                        || lowered.contains(QString::fromUtf8("battery optimization"))
                        || lowered.contains(QString::fromUtf8("stayed queued"))) {
-                diagnosis = QString::fromUtf8("android background restriction");
+                diagnosis = QString::fromUtf8("ROM/background restriction suspected");
             } else if (mobileRuntime && !backendSeenRunning) {
-                diagnosis = QString::fromUtf8("core process did not stay running");
+                diagnosis = QString::fromUtf8("core exited early");
             }
 
             guard->appendSystemLog(
@@ -6677,12 +6723,14 @@ void VpnController::gateRuntimeStartupUntilProxyReady(quint64 connectAttempt)
                 userFacingError = QString::fromUtf8(
                     "Android TUN startup failed because FakeDNS crashed inside xray-core. "
                     "GenyConnect now keeps FakeDNS disabled for Android TUN; reconnect and try again.");
-            } else if (diagnosis == QString::fromUtf8("listener bind/port conflict")) {
+            } else if (diagnosis == QString::fromUtf8("listener bind/port conflict")
+                       || diagnosis == QString::fromUtf8("port already in use")
+                       || diagnosis == QString::fromUtf8("listener bind failed")) {
                 userFacingError = localProxyPortConflictMessage(socksPort);
             } else if (diagnosis == QString::fromUtf8("vpn permission missing")) {
                 userFacingError = QString::fromUtf8(
                     "Android VPN permission is required before GenyConnect can connect.");
-            } else if (diagnosis == QString::fromUtf8("android background restriction")) {
+            } else if (diagnosis == QString::fromUtf8("ROM/background restriction suspected")) {
                 userFacingError = QString::fromUtf8(
                     "Android blocked or delayed the VPN foreground service. "
                     "Allow background activity/battery exemption, then try again.");
@@ -6690,7 +6738,11 @@ void VpnController::gateRuntimeStartupUntilProxyReady(quint64 connectAttempt)
                 userFacingError = QString::fromUtf8(
                     "Android TUN started, but the network stack could not prepare its local interfaces correctly. "
                     "Retry once; if it persists, check ROM VPN/background restrictions.");
-            } else if (diagnosis == QString::fromUtf8("core startup failure")) {
+            } else if (diagnosis == QString::fromUtf8("core startup failure")
+                       || diagnosis == QString::fromUtf8("core executable missing")
+                       || diagnosis == QString::fromUtf8("permission denied")
+                       || diagnosis == QString::fromUtf8("core exited early")
+                       || diagnosis == QString::fromUtf8("config validation failed")) {
                 userFacingError = QString::fromUtf8(
                     "xray-core failed to start with the generated runtime configuration. Open Logs for details.");
             } else {
@@ -11257,7 +11309,7 @@ bool VpnController::writeRuntimeConfig(const ServerProfile& profile, QString *er
         ensureTunNoiseBlockRules(&config);
 #if defined(Q_OS_LINUX)
         const QString tunSettings = tunInboundSettingsPreview(config);
-        appendSystemLog(QString::fromUtf8("[System] Generated Linux tun-in settings: %1")
+        appendSystemLog(QString::fromUtf8("[System] Generated tun-in settings: %1")
                             .arg(tunSettings.isEmpty() ? QString::fromUtf8("missing") : tunSettings));
 #endif
     }

@@ -1166,11 +1166,21 @@ jobs:
           set -euo pipefail
           find release-artifacts -type f | sort
 
+      - name: Delete existing manual release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release delete "${GITHUB_REF_NAME}" --cleanup-tag=false --yes || true
+
       - name: Publish release
         uses: softprops/action-gh-release@v2
         env:
           GITHUB_TOKEN: ${{ github.token }}
         with:
+          tag_name: ${{ github.ref_name }}
+          name: GenyConnect ${{ github.ref_name }}
           files: release-artifacts/*
           fail_on_unmatched_files: true
           generate_release_notes: true

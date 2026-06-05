@@ -155,12 +155,16 @@ QString tunStack = QString::fromUtf8("system");
             QString::fromUtf8("172.19.0.1/30"),
             QString::fromUtf8("fd00:1234:5678::1/126")
         }},
-        {QString::fromUtf8("mtu"), defaultTunMtu()},
         {QString::fromUtf8("stack"), tunStack},
         {QString::fromUtf8("autoRoute"), options.tunAutoRoute},
         {QString::fromUtf8("strictRoute"), options.tunStrictRoute},
         {QString::fromUtf8("sniff"), true}
     };
+#if defined(Q_OS_ANDROID)
+    settings.insert(QString::fromUtf8("mtu"), QJsonArray {defaultTunMtu()});
+#else
+    settings.insert(QString::fromUtf8("mtu"), defaultTunMtu());
+#endif
 
 #if defined(Q_OS_WIN) || defined(Q_OS_MACOS) || (defined(Q_OS_LINUX) && !defined(Q_OS_ANDROID))
     // Keep direct/block outbounds on the physical NIC instead of re-entering

@@ -16,6 +16,7 @@ module;
 #include <QJsonValue>
 #include <QNetworkReply>
 #include <QNetworkRequest>
+#include <QDebug>
 #include <QRegularExpression>
 #include <QStringList>
 #include <QStandardPaths>
@@ -1413,22 +1414,22 @@ bool Updater::selectBestReleaseAsset(
     };
     const QString currentArch = normalizedArchForPlatform(rawArch);
 
+    const QString displayArch = currentArch.isEmpty() ? rawArch : currentArch;
     if (diagnostics != nullptr) {
         diagnostics->clear();
         diagnostics->append(QString::fromUtf8("[Updater] Current platform: %1").arg(currentPlatform));
-        diagnostics->append(QString::fromUtf8("[Updater] Current arch: %1").arg(currentArch.isEmpty() ? rawArch : currentArch));
+        diagnostics->append(QString::fromUtf8("[Updater] Current arch: %1").arg(displayArch));
     }
 
     int bestScore = std::numeric_limits<int>::min();
     QString bestUrl;
     QString bestName;
     QString bestDigest;
-    QStringList candidateNames;
+    QStringList relevantCandidateNames;
+    int relevantCandidateCount = 0;
 
-    auto reject = [diagnostics](const QString& name, const QString& reason) {
-        if (diagnostics != nullptr) {
-            diagnostics->append(QString::fromUtf8("[Updater] Rejected asset: %1 (%2)").arg(name, reason));
-        }
+    auto debugReject = [](const QString& name, const QString& reason) {
+        qDebug().noquote() << QString::fromUtf8("[Updater] Rejected asset: %1 (%2)").arg(name, reason);
     };
 
     auto hasAny = [](const QString& text, const QStringList& tokens) {
@@ -1480,7 +1481,33 @@ bool Updater::selectBestReleaseAsset(
         if (currentPlatform == QString::fromUtf8("macos")) {
             return lower.endsWith(QString::fromUtf8(".dmg"));
         }
-        return lower.endsWith(QString::fromUtf8(".exe"));
+        return lower.endsWith(QString::fromUtf8(".exe")) || lower.endsWith(QString::fromUtf8(".zip"));
+    };
+
+    auto expectedExtensionText = [&currentPlatform]() {
+        if (currentPlatform == QString::fromUtf8("linux")) {
+            return QString::fromUtf8(".AppImage");
+        }
+        if (currentPlatform == QString::fromUtf8("android")) {
+            return QString::fromUtf8(".apk");
+        }
+        if (currentPlatform == QString::fromUtf8("macos")) {
+            return QString::fromUtf8(".dmg");
+        }
+        return QString::fromUtf8(".exe or .zip");
+    };
+
+    auto relevantCandidateLabel = [&currentPlatform]() {
+        if (currentPlatform == QString::fromUtf8("linux")) {
+            return QString::fromUtf8("linux AppImage asset(s)");
+        }
+        if (currentPlatform == QString::fromUtf8("android")) {
+            return QString::fromUtf8("android APK asset(s)");
+        }
+        if (currentPlatform == QString::fromUtf8("macos")) {
+            return QString::fromUtf8("macOS DMG asset(s)");
+        }
+        return QString::fromUtf8("windows installer/archive asset(s)");
     };
 
     auto hasRequiredArch = [&currentPlatform, &currentArch](const QString& lower) {
@@ -1507,7 +1534,10 @@ bool Updater::selectBestReleaseAsset(
                 return lower.contains(QString::fromUtf8("windows-arm64")) || lower.contains(QString::fromUtf8("win-arm64"));
             }
             if (currentArch == QString::fromUtf8("x64")) {
-                return lower.contains(QString::fromUtf8("windows-x64")) || lower.contains(QString::fromUtf8("win-x64"));
+                return lower.contains(QString::fromUtf8("windows-x64"))
+                    || lower.contains(QString::fromUtf8("win-x64"))
+                    || lower.contains(QString::fromUtf8("windows-x86_64"))
+                    || lower.contains(QString::fromUtf8("win-x86_64"));
             }
             return false;
         }
@@ -1532,26 +1562,26 @@ bool Updater::selectBestReleaseAsset(
         }
 
         const QString lower = name.toLower();
-        candidateNames.append(name);
-
         if (isLikelyChecksumAsset(lower)) {
-            reject(name, QString::fromUtf8("checksum manifest"));
+            debugReject(name, QString::fromUtf8("checksum manifest"));
             continue;
         }
         if (!hasRequiredExtension(lower)) {
-            reject(name, QString::fromUtf8("wrong file type for %1").arg(currentPlatform));
+            debugReject(name, QString::fromUtf8("wrong file type for %1").arg(currentPlatform));
             continue;
         }
+        ++relevantCandidateCount;
+        relevantCandidateNames.append(name);
         if (hasWrongPlatform(lower)) {
-            reject(name, QString::fromUtf8("wrong platform"));
+            debugReject(name, QString::fromUtf8("wrong platform"));
             continue;
         }
         if (!hasRequiredPlatform(lower)) {
-            reject(name, QString::fromUtf8("missing %1 platform marker").arg(currentPlatform));
+            debugReject(name, QString::fromUtf8("missing %1 platform marker").arg(currentPlatform));
             continue;
         }
         if (!hasRequiredArch(lower)) {
-            reject(name, QString::fromUtf8("wrong architecture for %1").arg(currentArch));
+            debugReject(name, QString::fromUtf8("wrong architecture for %1").arg(currentArch));
             continue;
         }
 
@@ -1575,9 +1605,7 @@ bool Updater::selectBestReleaseAsset(
         }
         score += 50;
 
-        if (diagnostics != nullptr) {
-            diagnostics->append(QString::fromUtf8("[Updater] Candidate asset: %1 (score %2)").arg(name).arg(score));
-        }
+        qDebug().noquote() << QString::fromUtf8("[Updater] Candidate asset: %1 (score %2)").arg(name).arg(score);
 
         if (score > bestScore) {
             bestScore = score;
@@ -1588,12 +1616,21 @@ bool Updater::selectBestReleaseAsset(
     }
 
     if (diagnostics != nullptr) {
-        diagnostics->append(QString::fromUtf8("[Updater] Release assets: %1").arg(candidateNames.join(QString::fromUtf8(", "))));
+        diagnostics->append(QString::fromUtf8("[Updater] Relevant candidates: %1 %2")
+                                .arg(relevantCandidateCount)
+                                .arg(relevantCandidateLabel()));
     }
 
     if (bestUrl.isEmpty()) {
         if (diagnostics != nullptr) {
-            diagnostics->append(QString::fromUtf8("[Updater] No asset matched platform %1 arch %2.").arg(currentPlatform, currentArch));
+            diagnostics->append(QString::fromUtf8(
+                                    "[Updater] No asset matched platform=%1 arch=%2 expected=%3 relevant=%4.")
+                                    .arg(currentPlatform,
+                                         displayArch,
+                                         expectedExtensionText(),
+                                         relevantCandidateNames.isEmpty()
+                                             ? QString::fromUtf8("none")
+                                             : relevantCandidateNames.join(QString::fromUtf8(", "))));
         }
         return false;
     }
