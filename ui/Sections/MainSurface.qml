@@ -2124,18 +2124,26 @@ Item {
                                     Layout.preferredWidth: 100
                                     Layout.preferredHeight: 38
                                     readOnly: true
-                                    text: "vless"
+                                    text: (root.editProfileVlessForm.protocol || "vless")
                                     selectByMouse: true
                                 }
                                 Controls.TextField {
                                     id: editProfileUuidFieldDesktop
                                     Layout.fillWidth: true
                                     Layout.preferredHeight: 38
-                                    readOnly: true
+                                    readOnly: false
                                     text: root.editProfileVlessForm.uuid || ""
-                                    placeholderText: "UUID (read only)"
+                                    placeholderText: (root.editProfileVlessForm.protocol || "vless") === "wireguard"
+                                                     ? "Private key"
+                                                     : ((root.editProfileVlessForm.protocol || "vless") === "trojan"
+                                                        || (root.editProfileVlessForm.protocol || "vless") === "shadowsocks"
+                                                        ? "Password"
+                                                        : "UUID")
                                     selectByMouse: true
-                                    onTextChanged: cursorPosition = 0
+                                    onTextChanged: {
+                                        root.editProfileVlessForm.uuid = text
+                                        root.editProfileError = ""
+                                    }
                                 }
                             }
 
@@ -2148,18 +2156,26 @@ Item {
                                     Layout.fillWidth: true
                                     Layout.preferredHeight: 38
                                     readOnly: true
-                                    text: "vless"
+                                    text: (root.editProfileVlessForm.protocol || "vless")
                                     selectByMouse: true
                                 }
                                 Controls.TextField {
                                     id: editProfileUuidFieldCompact
                                     Layout.fillWidth: true
                                     Layout.preferredHeight: 38
-                                    readOnly: true
+                                    readOnly: false
                                     text: root.editProfileVlessForm.uuid || ""
-                                    placeholderText: "UUID (read only)"
+                                    placeholderText: (root.editProfileVlessForm.protocol || "vless") === "wireguard"
+                                                     ? "Private key"
+                                                     : ((root.editProfileVlessForm.protocol || "vless") === "trojan"
+                                                        || (root.editProfileVlessForm.protocol || "vless") === "shadowsocks"
+                                                        ? "Password"
+                                                        : "UUID")
                                     selectByMouse: true
-                                    onTextChanged: cursorPosition = 0
+                                    onTextChanged: {
+                                        root.editProfileVlessForm.uuid = text
+                                        root.editProfileError = ""
+                                    }
                                 }
                             }
 
@@ -2199,7 +2215,9 @@ Item {
                                 Controls.ComboBox {
                                     Layout.fillWidth: true
                                     Layout.preferredHeight: 38
-                                    model: ["tcp", "ws", "xhttp", "grpc"]
+                                    model: (root.editProfileVlessForm.protocol || "vless") === "wireguard"
+                                           ? ["wireguard"]
+                                           : ["tcp", "ws", "xhttp", "grpc"]
                                     currentIndex: Math.max(0, model.indexOf(root.editProfileVlessForm.network || "tcp"))
                                     onActivated: function(activatedIndex) {
                                         root.editProfileVlessForm.network = model[activatedIndex]
@@ -2209,7 +2227,9 @@ Item {
                                 Controls.ComboBox {
                                     Layout.fillWidth: true
                                     Layout.preferredHeight: 38
-                                    model: ["none", "tls", "reality"]
+                                    model: (root.editProfileVlessForm.protocol || "vless") === "wireguard"
+                                           ? ["none"]
+                                           : ["none", "tls", "reality"]
                                     currentIndex: Math.max(0, model.indexOf(root.editProfileVlessForm.security || "none"))
                                     onActivated: function(activatedIndex) {
                                         root.editProfileVlessForm.security = model[activatedIndex]
@@ -2226,7 +2246,9 @@ Item {
                                     Layout.fillWidth: true
                                     Layout.preferredHeight: 38
                                     text: root.editProfileVlessForm.encryption || "none"
-                                    placeholderText: "Encryption (none/zero/...)"
+                                    placeholderText: (root.editProfileVlessForm.protocol || "vless") === "wireguard"
+                                                     ? "Encryption"
+                                                     : "Encryption (none/auto/...)"
                                     selectByMouse: true
                                     onTextChanged: {
                                         root.editProfileVlessForm.encryption = text
@@ -2238,7 +2260,9 @@ Item {
                                     Layout.fillWidth: true
                                     Layout.preferredHeight: 38
                                     text: root.editProfileVlessForm.flow || ""
-                                    placeholderText: "Flow (optional)"
+                                    placeholderText: (root.editProfileVlessForm.protocol || "vless") === "wireguard"
+                                                     ? "MTU"
+                                                     : "Flow (optional)"
                                     selectByMouse: true
                                     onTextChanged: {
                                         root.editProfileVlessForm.flow = text
@@ -2254,7 +2278,9 @@ Item {
                                     Layout.fillWidth: true
                                     Layout.preferredHeight: 38
                                     text: root.editProfileVlessForm.sni || ""
-                                    placeholderText: "SNI"
+                                    placeholderText: (root.editProfileVlessForm.protocol || "vless") === "wireguard"
+                                                     ? "DNS"
+                                                     : "SNI"
                                     selectByMouse: true
                                     onTextChanged: {
                                         root.editProfileVlessForm.sni = text
@@ -2265,7 +2291,9 @@ Item {
                                     Layout.fillWidth: true
                                     Layout.preferredHeight: 38
                                     text: root.editProfileVlessForm.host || ""
-                                    placeholderText: "Host header"
+                                    placeholderText: (root.editProfileVlessForm.protocol || "vless") === "wireguard"
+                                                     ? "Public key"
+                                                     : "Host header"
                                     selectByMouse: true
                                     onTextChanged: {
                                         root.editProfileVlessForm.host = text
@@ -2278,7 +2306,9 @@ Item {
                                 Layout.fillWidth: true
                                 Layout.preferredHeight: 38
                                 text: root.editProfileVlessForm.path || ""
-                                placeholderText: "Path (for ws/xhttp)"
+                                placeholderText: (root.editProfileVlessForm.protocol || "vless") === "wireguard"
+                                                 ? "Client address"
+                                                 : "Path (for ws/xhttp)"
                                 selectByMouse: true
                                 onTextChanged: {
                                     root.editProfileVlessForm.path = text
@@ -2294,6 +2324,8 @@ Item {
                         Layout.preferredHeight: root.editProfileVlessSupported ? 120 : 140
                         placeholderText: "Paste or edit full profile link/config"
                         text: root.editProfileConfigLink
+                        wrapMode: TextEdit.WrapAnywhere
+                        selectByMouse: true
                         onTextChanged: {
                             root.editProfileConfigLink = text
                             root.editProfileError = ""
@@ -2303,8 +2335,8 @@ Item {
                     Text {
                         Layout.fillWidth: true
                         text: root.editProfileVlessSupported
-                              ? "You can edit VLESS fields above or directly edit the full config text below."
-                              : "Non-VLESS profiles can be edited using the full config text field."
+                              ? "You can edit common profile fields above or directly edit the full config text below."
+                              : "This profile can be edited using the full config text field."
                         color: root.themeColorToken("mainHex_7c8697", "mainHex_9bb0cb")
                         font.family: FontSystem.contentFontFamily
                         font.pixelSize: 12
@@ -2343,7 +2375,7 @@ Item {
                         const rawConfigText = (editProfileConfigArea.text || "").trim()
                         const originalConfigText = (root.editProfileOriginalConfigLink || "").trim()
                         if (root.editProfileVlessSupported) {
-                            const built = root.buildVlessLinkFromForm(root.editProfileVlessForm, editProfileNameField.text)
+                            const built = root.buildEditableProfileLinkFromForm(root.editProfileVlessForm, editProfileNameField.text)
                             if (!built.ok) {
                                 root.editProfileError = built.error || "Invalid config fields."
                                 return

@@ -49,6 +49,7 @@ module;
 #include <QVariantList>
 #include <QVariantMap>
 #include <QtConcurrent/QtConcurrentRun>
+#include <QtEndian>
 
 #include <algorithm>
 #include <array>
@@ -221,6 +222,369 @@ QString bundledXrayVersionDisplay()
         .arg(major)
         .arg(minor)
         .arg(patch);
+}
+
+bool hostIsIpAddress(const QString& host)
+{
+    QHostAddress address;
+    return address.setAddress(host.trimmed());
+}
+
+QStringList deduplicatedDnsResolvers(const QStringList& primary, const QStringList& secondary)
+{
+    const QStringList fallback {
+        QString::fromUtf8("1.1.1.1"),
+        QString::fromUtf8("8.8.8.8"),
+        QString::fromUtf8("9.9.9.9")
+    };
+
+    QStringList resolvers;
+    QSet<QString> seen;
+    auto appendResolver = [&resolvers, &seen](const QString& raw) {
+        const QString trimmed = raw.trimmed();
+        if (trimmed.isEmpty()) {
+            return;
+        }
+        QHostAddress address;
+        if (!address.setAddress(trimmed)) {
+            return;
+        }
+        const QString normalized = address.toString();
+        const QString key = normalized.toLower();
+        if (seen.contains(key)) {
+            return;
+        }
+        seen.insert(key);
+        resolvers.append(normalized);
+    };
+
+    for (const QString& resolver : primary) {
+        appendResolver(resolver);
+    }
+    for (const QString& resolver : secondary) {
+        appendResolver(resolver);
+    }
+    for (const QString& resolver : fallback) {
+        appendResolver(resolver);
+    }
+    return resolvers;
+}
+
+quint16 dnsReadU16(const QByteArray& data, int offset)
+{
+    if (offset < 0 || offset + 1 >= data.size()) {
+        return 0;
+    }
+    return static_cast<quint16>((static_cast<unsigned char>(data.at(offset)) << 8)
+                                | static_cast<unsigned char>(data.at(offset + 1)));
+}
+
+quint32 dnsReadU32(const QByteArray& data, int offset)
+{
+    return (static_cast<quint32>(dnsReadU16(data, offset)) << 16)
+           | static_cast<quint32>(dnsReadU16(data, offset + 2));
+}
+
+void dnsAppendU16(QByteArray *data, quint16 value)
+{
+    data->append(static_cast<char>((value >> 8) & 0xff));
+    data->append(static_cast<char>(value & 0xff));
+}
+
+bool dnsSkipName(const QByteArray& data, int *offset)
+{
+    if (offset == nullptr) {
+        return false;
+    }
+
+    int pos = *offset;
+    int jumps = 0;
+    while (pos >= 0 && pos < data.size()) {
+        const quint8 length = static_cast<quint8>(data.at(pos));
+        if (length == 0) {
+            *offset = pos + 1;
+            return *offset <= data.size();
+        }
+        if ((length & 0xc0) == 0xc0) {
+            if (pos + 1 >= data.size()) {
+                return false;
+            }
+            *offset = pos + 2;
+            return ++jumps < 16;
+        }
+        if ((length & 0xc0) != 0) {
+            return false;
+        }
+        pos += 1 + length;
+    }
+
+    return false;
+}
+
+QByteArray buildDnsQuery(const QString& host, quint16 queryId)
+{
+    QByteArray query;
+    query.reserve(64 + host.size());
+    dnsAppendU16(&query, queryId);
+    dnsAppendU16(&query, 0x0100); // recursion desired
+    dnsAppendU16(&query, 1);
+    dnsAppendU16(&query, 0);
+    dnsAppendU16(&query, 0);
+    dnsAppendU16(&query, 0);
+
+    const QStringList labels = host.trimmed().split('.', Qt::SkipEmptyParts);
+    for (const QString& label : labels) {
+        const QByteArray encoded = label.toUtf8();
+        if (encoded.isEmpty() || encoded.size() > 63) {
+            return QByteArray();
+        }
+        query.append(static_cast<char>(encoded.size()));
+        query.append(encoded);
+    }
+    query.append('\0');
+    dnsAppendU16(&query, 1); // A
+    dnsAppendU16(&query, 1); // IN
+    return query;
+}
+
+QStringList lookupHostAddresses(const QString& host,
+                                const QString& resolver,
+                                QStringList *diagnostics)
+{
+    QStringList addresses;
+    QHostAddress nameserver;
+    if (!nameserver.setAddress(resolver.trimmed())) {
+        return addresses;
+    }
+
+    const quint16 queryId = static_cast<quint16>(QRandomGenerator::global()->bounded(1, 0xffff));
+    const QByteArray query = buildDnsQuery(host, queryId);
+    if (query.isEmpty()) {
+        if (diagnostics != nullptr) {
+            diagnostics->append(QString::fromUtf8("%1: invalid DNS name").arg(nameserver.toString()));
+        }
+        return addresses;
+    }
+
+    QUdpSocket socket;
+    if (socket.writeDatagram(query, nameserver, 53) != query.size()) {
+        if (diagnostics != nullptr) {
+            diagnostics->append(QString::fromUtf8("%1: failed to send DNS query").arg(nameserver.toString()));
+        }
+        return addresses;
+    }
+
+    QElapsedTimer elapsed;
+    elapsed.start();
+    while (elapsed.elapsed() < 2200) {
+        if (!socket.waitForReadyRead(2200 - static_cast<int>(elapsed.elapsed()))) {
+            break;
+        }
+
+        while (socket.hasPendingDatagrams()) {
+            QByteArray response;
+            response.resize(static_cast<int>(socket.pendingDatagramSize()));
+            QHostAddress sender;
+            quint16 senderPort = 0;
+            socket.readDatagram(response.data(), response.size(), &sender, &senderPort);
+            Q_UNUSED(senderPort)
+
+            if (response.size() < 12 || dnsReadU16(response, 0) != queryId) {
+                continue;
+            }
+
+            const quint16 flags = dnsReadU16(response, 2);
+            const quint16 rcode = flags & 0x000f;
+            if (rcode != 0) {
+                if (diagnostics != nullptr) {
+                    diagnostics->append(QString::fromUtf8("%1: DNS rcode %2").arg(nameserver.toString()).arg(rcode));
+                }
+                return addresses;
+            }
+
+            const quint16 qdCount = dnsReadU16(response, 4);
+            const quint16 anCount = dnsReadU16(response, 6);
+            int offset = 12;
+            for (quint16 i = 0; i < qdCount; ++i) {
+                if (!dnsSkipName(response, &offset) || offset + 4 > response.size()) {
+                    return addresses;
+                }
+                offset += 4;
+            }
+
+            for (quint16 i = 0; i < anCount; ++i) {
+                if (!dnsSkipName(response, &offset) || offset + 10 > response.size()) {
+                    return addresses;
+                }
+                const quint16 type = dnsReadU16(response, offset);
+                const quint16 recordClass = dnsReadU16(response, offset + 2);
+                Q_UNUSED(dnsReadU32(response, offset + 4))
+                const quint16 rdLength = dnsReadU16(response, offset + 8);
+                offset += 10;
+                if (offset + rdLength > response.size()) {
+                    return addresses;
+                }
+                if (type == 1 && recordClass == 1 && rdLength == 4) {
+                    const QHostAddress address(qFromBigEndian<quint32>(
+                        reinterpret_cast<const uchar*>(response.constData() + offset)));
+                    const QString text = address.toString();
+                    if (!text.isEmpty() && !addresses.contains(text)) {
+                        addresses.append(text);
+                    }
+                }
+                offset += rdLength;
+            }
+
+            if (!addresses.isEmpty()) {
+                return addresses;
+            }
+        }
+    }
+
+    if (diagnostics != nullptr) {
+        diagnostics->append(QString::fromUtf8("%1 timed out").arg(nameserver.toString()));
+    }
+    return addresses;
+}
+
+QStringList lookupHostAddressesOverHttps(const QString& host, QStringList *diagnostics)
+{
+    QStringList addresses;
+    const QList<QUrl> endpoints {
+        QUrl(QString::fromUtf8("https://cloudflare-dns.com/dns-query?name=%1&type=A").arg(QString::fromUtf8(QUrl::toPercentEncoding(host.trimmed())))),
+        QUrl(QString::fromUtf8("https://dns.google/resolve?name=%1&type=A").arg(QString::fromUtf8(QUrl::toPercentEncoding(host.trimmed()))))
+    };
+
+    for (const QUrl& endpoint : endpoints) {
+        QNetworkRequest request(endpoint);
+        request.setHeader(QNetworkRequest::UserAgentHeader, QString::fromUtf8("GenyConnect"));
+        request.setRawHeader("Accept", "application/dns-json");
+
+        QNetworkAccessManager manager;
+        QNetworkReply *reply = manager.get(request);
+        QEventLoop loop;
+        QTimer timer;
+        timer.setSingleShot(true);
+        bool timedOut = false;
+        QObject::connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
+        QObject::connect(&timer, &QTimer::timeout, &loop, [&]() {
+            timedOut = true;
+            reply->abort();
+            loop.quit();
+        });
+
+        timer.start(3200);
+        loop.exec();
+
+        const QString endpointHost = endpoint.host();
+        if (timedOut) {
+            if (diagnostics != nullptr) {
+                diagnostics->append(QString::fromUtf8("%1 DoH timed out").arg(endpointHost));
+            }
+            reply->deleteLater();
+            continue;
+        }
+
+        if (reply->error() != QNetworkReply::NoError) {
+            if (diagnostics != nullptr) {
+                diagnostics->append(QString::fromUtf8("%1 DoH: %2").arg(endpointHost, reply->errorString()));
+            }
+            reply->deleteLater();
+            continue;
+        }
+
+        QJsonParseError parseError;
+        const QJsonDocument document = QJsonDocument::fromJson(reply->readAll(), &parseError);
+        reply->deleteLater();
+        if (parseError.error != QJsonParseError::NoError || !document.isObject()) {
+            if (diagnostics != nullptr) {
+                diagnostics->append(QString::fromUtf8("%1 DoH: invalid response").arg(endpointHost));
+            }
+            continue;
+        }
+
+        const QJsonArray answers = document.object().value(QString::fromUtf8("Answer")).toArray();
+        for (const QJsonValue& value : answers) {
+            const QJsonObject answer = value.toObject();
+            if (answer.value(QString::fromUtf8("type")).toInt() != 1) {
+                continue;
+            }
+            const QString data = answer.value(QString::fromUtf8("data")).toString().trimmed();
+            QHostAddress address;
+            if (address.setAddress(data) && address.protocol() == QAbstractSocket::IPv4Protocol) {
+                const QString text = address.toString();
+                if (!addresses.contains(text)) {
+                    addresses.append(text);
+                }
+            }
+        }
+
+        if (!addresses.isEmpty()) {
+            return addresses;
+        }
+
+        if (diagnostics != nullptr) {
+            const int status = document.object().value(QString::fromUtf8("Status")).toInt(-1);
+            diagnostics->append(QString::fromUtf8("%1 DoH: no A records (status %2)").arg(endpointHost).arg(status));
+        }
+    }
+
+    return addresses;
+}
+
+bool resolveWireGuardEndpointForRuntime(ServerProfile *profile,
+                                        const QStringList& configuredDnsServers,
+                                        QString *logMessage)
+{
+    if (profile == nullptr
+        || profile->protocol.trimmed().compare(QString::fromUtf8("wireguard"), Qt::CaseInsensitive) != 0) {
+        return true;
+    }
+
+    const QString host = profile->address.trimmed();
+    if (host.isEmpty() || hostIsIpAddress(host)) {
+        return true;
+    }
+
+    const QStringList resolvers = deduplicatedDnsResolvers(profile->wgDns, configuredDnsServers);
+    QStringList diagnostics;
+    for (const QString& resolver : resolvers) {
+        const QStringList addresses = lookupHostAddresses(host, resolver, &diagnostics);
+        if (addresses.isEmpty()) {
+            continue;
+        }
+
+        const QString resolved = addresses.first();
+        profile->address = resolved;
+        if (logMessage != nullptr) {
+            *logMessage = QString::fromUtf8("[System] WireGuard endpoint resolved before xray startup: %1:%2 -> %3:%2 via DNS %4.")
+                              .arg(host)
+                              .arg(profile->port)
+                              .arg(resolved)
+                              .arg(resolver);
+        }
+        return true;
+    }
+
+    const QStringList dohAddresses = lookupHostAddressesOverHttps(host, &diagnostics);
+    if (!dohAddresses.isEmpty()) {
+        const QString resolved = dohAddresses.first();
+        profile->address = resolved;
+        if (logMessage != nullptr) {
+            *logMessage = QString::fromUtf8("[System] WireGuard endpoint resolved before xray startup: %1:%2 -> %3:%2 via DNS-over-HTTPS.")
+                              .arg(host)
+                              .arg(profile->port)
+                              .arg(resolved);
+        }
+        return true;
+    }
+
+    if (logMessage != nullptr) {
+        *logMessage = QString::fromUtf8(
+            "[System] WireGuard endpoint pre-resolution failed for %1; continuing with the original endpoint so xray-core can try its own resolver. DNS attempts: %2")
+            .arg(host, diagnostics.isEmpty() ? QString::fromUtf8("no usable resolver response") : diagnostics.join(QString::fromUtf8("; ")));
+    }
+    return true;
 }
 
 #if defined(Q_OS_ANDROID)
@@ -11419,7 +11783,14 @@ bool VpnController::writeRuntimeConfig(const ServerProfile& profile, QString *er
             ));
     }
 
-    QJsonObject config = XrayConfigBuilder::build(profile, options);
+    ServerProfile runtimeProfile = profile;
+    QString wireGuardResolveLog;
+    resolveWireGuardEndpointForRuntime(&runtimeProfile, options.dnsServers, &wireGuardResolveLog);
+    if (!wireGuardResolveLog.isEmpty()) {
+        appendSystemLog(wireGuardResolveLog);
+    }
+
+    QJsonObject config = XrayConfigBuilder::build(runtimeProfile, options);
     if (jsonContainsForbiddenAllowInsecure(config)) {
         if (errorMessage) {
             *errorMessage = QString::fromUtf8("Generated Xray config contains deprecated allowInsecure and was blocked before startup.");

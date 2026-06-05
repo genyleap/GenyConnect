@@ -2223,30 +2223,18 @@ ApplicationWindow {
         return encodeURIComponent(value || "")
     }
 
-    function parseVlessForm(linkText) {
-        const link = (linkText || "").trim()
-        if (!link.toLowerCase().startsWith("vless://"))
-            return { "ok": false, "error": "Only VLESS profiles are editable with form mode." }
-
-        const body = link.slice(8)
-        const hashIndex = body.indexOf("#")
-        const mainPart = hashIndex >= 0 ? body.slice(0, hashIndex) : body
-        const fragment = hashIndex >= 0 ? body.slice(hashIndex + 1) : ""
-        const queryIndex = mainPart.indexOf("?")
-        const authorityPart = queryIndex >= 0 ? mainPart.slice(0, queryIndex) : mainPart
-        const queryPart = queryIndex >= 0 ? mainPart.slice(queryIndex + 1) : ""
-
+    function parseAuthorityUserHostPort(authorityPart, defaultPort) {
         const atIndex = authorityPart.lastIndexOf("@")
         if (atIndex <= 0 || atIndex >= authorityPart.length - 1)
-            return { "ok": false, "error": "Invalid VLESS link format." }
+            return { "ok": false, "error": "Invalid endpoint format." }
 
-        const uuid = authorityPart.slice(0, atIndex).trim()
+        const user = authorityPart.slice(0, atIndex).trim()
         const hostPort = authorityPart.slice(atIndex + 1).trim()
-        if (uuid.length === 0 || hostPort.length === 0)
-            return { "ok": false, "error": "Invalid VLESS endpoint fields." }
+        if (user.length === 0 || hostPort.length === 0)
+            return { "ok": false, "error": "Invalid endpoint fields." }
 
         let address = hostPort
-        let portText = "443"
+        let portText = String(defaultPort || "443")
         if (hostPort.startsWith("[")) {
             const closing = hostPort.indexOf("]")
             if (closing <= 1)
@@ -2265,17 +2253,18 @@ ApplicationWindow {
             }
         }
 
-        const knownKeys = {
-            "type": true, "security": true, "encryption": true, "flow": true,
-            "path": true, "host": true, "sni": true, "servername": true,
-            "headertype": true, "servicename": true, "mode": true, "extra": true,
-            "fp": true, "alpn": true, "pbk": true, "sid": true, "spx": true,
-            "allowinsecure": true, "insecure": true
+        return {
+            "ok": true,
+            "user": safeDecodeUriPart(user),
+            "address": address,
+            "port": portText.length > 0 ? portText : String(defaultPort || "443")
         }
+    }
 
+    function parseShareQuery(queryPart, knownKeys) {
         const params = {}
         const unknownPairs = []
-        if (queryPart.length > 0) {
+        if ((queryPart || "").length > 0) {
             const pairs = queryPart.split("&")
             for (let i = 0; i < pairs.length; i += 1) {
                 const pair = pairs[i]
@@ -2294,6 +2283,133 @@ ApplicationWindow {
                 }
             }
         }
+        return { "params": params, "unknownPairs": unknownPairs }
+    }
+
+    function base64AlphabetUrlSafe() {
+        return "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
+    }
+
+    function utf8Bytes(value) {
+        const text = String(value || "")
+        const out = []
+        for (let i = 0; i < text.length; i += 1) {
+            let code = text.charCodeAt(i)
+            if (code >= 0xd800 && code <= 0xdbff && i + 1 < text.length) {
+                const low = text.charCodeAt(i + 1)
+                if (low >= 0xdc00 && low <= 0xdfff) {
+                    code = 0x10000 + ((code - 0xd800) << 10) + (low - 0xdc00)
+                    i += 1
+                }
+            }
+            if (code < 0x80) {
+                out.push(code)
+            } else if (code < 0x800) {
+                out.push(0xc0 | (code >> 6), 0x80 | (code & 0x3f))
+            } else if (code < 0x10000) {
+                out.push(0xe0 | (code >> 12), 0x80 | ((code >> 6) & 0x3f), 0x80 | (code & 0x3f))
+            } else {
+                out.push(0xf0 | (code >> 18), 0x80 | ((code >> 12) & 0x3f), 0x80 | ((code >> 6) & 0x3f), 0x80 | (code & 0x3f))
+            }
+        }
+        return out
+    }
+
+    function bytesToUtf8(bytes) {
+        let out = ""
+        for (let i = 0; i < bytes.length;) {
+            const b0 = bytes[i++]
+            if (b0 < 0x80) {
+                out += String.fromCharCode(b0)
+            } else if ((b0 & 0xe0) === 0xc0 && i < bytes.length) {
+                const b1 = bytes[i++]
+                out += String.fromCharCode(((b0 & 0x1f) << 6) | (b1 & 0x3f))
+            } else if ((b0 & 0xf0) === 0xe0 && i + 1 < bytes.length) {
+                const b1 = bytes[i++]
+                const b2 = bytes[i++]
+                out += String.fromCharCode(((b0 & 0x0f) << 12) | ((b1 & 0x3f) << 6) | (b2 & 0x3f))
+            } else if ((b0 & 0xf8) === 0xf0 && i + 2 < bytes.length) {
+                const b1 = bytes[i++]
+                const b2 = bytes[i++]
+                const b3 = bytes[i++]
+                let code = ((b0 & 0x07) << 18) | ((b1 & 0x3f) << 12) | ((b2 & 0x3f) << 6) | (b3 & 0x3f)
+                code -= 0x10000
+                out += String.fromCharCode(0xd800 + (code >> 10), 0xdc00 + (code & 0x3ff))
+            }
+        }
+        return out
+    }
+
+    function base64UrlEncodeUtf8(value) {
+        const bytes = utf8Bytes(value)
+        const alphabet = base64AlphabetUrlSafe()
+        let out = ""
+        for (let i = 0; i < bytes.length; i += 3) {
+            const b0 = bytes[i]
+            const b1 = i + 1 < bytes.length ? bytes[i + 1] : 0
+            const b2 = i + 2 < bytes.length ? bytes[i + 2] : 0
+            out += alphabet[(b0 >> 2) & 0x3f]
+            out += alphabet[((b0 & 0x03) << 4) | ((b1 >> 4) & 0x0f)]
+            if (i + 1 < bytes.length)
+                out += alphabet[((b1 & 0x0f) << 2) | ((b2 >> 6) & 0x03)]
+            if (i + 2 < bytes.length)
+                out += alphabet[b2 & 0x3f]
+        }
+        return out
+    }
+
+    function base64DecodeUtf8(value) {
+        let text = String(value || "").trim().replace(/-/g, "+").replace(/_/g, "/")
+        while (text.length % 4 !== 0)
+            text += "="
+        const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+        const bytes = []
+        for (let i = 0; i < text.length;) {
+            const c0 = alphabet.indexOf(text.charAt(i++))
+            const c1 = alphabet.indexOf(text.charAt(i++))
+            const c2c = text.charAt(i++)
+            const c3c = text.charAt(i++)
+            const c2 = c2c === "=" ? -1 : alphabet.indexOf(c2c)
+            const c3 = c3c === "=" ? -1 : alphabet.indexOf(c3c)
+            if (c0 < 0 || c1 < 0)
+                return ""
+            bytes.push((c0 << 2) | (c1 >> 4))
+            if (c2 >= 0)
+                bytes.push(((c1 & 0x0f) << 4) | (c2 >> 2))
+            if (c2 >= 0 && c3 >= 0)
+                bytes.push(((c2 & 0x03) << 6) | c3)
+        }
+        return bytesToUtf8(bytes)
+    }
+
+    function parseVlessForm(linkText) {
+        const link = (linkText || "").trim()
+        if (!link.toLowerCase().startsWith("vless://"))
+            return { "ok": false, "error": "Only VLESS profiles are editable with form mode." }
+
+        const body = link.slice(8)
+        const hashIndex = body.indexOf("#")
+        const mainPart = hashIndex >= 0 ? body.slice(0, hashIndex) : body
+        const fragment = hashIndex >= 0 ? body.slice(hashIndex + 1) : ""
+        const queryIndex = mainPart.indexOf("?")
+        const authorityPart = queryIndex >= 0 ? mainPart.slice(0, queryIndex) : mainPart
+        const queryPart = queryIndex >= 0 ? mainPart.slice(queryIndex + 1) : ""
+
+        const endpoint = parseAuthorityUserHostPort(authorityPart, "443")
+        if (!endpoint.ok)
+            return { "ok": false, "error": "Invalid VLESS link format." }
+
+        const knownKeys = {
+            "type": true, "security": true, "encryption": true, "flow": true,
+            "path": true, "host": true, "sni": true, "servername": true,
+            "headertype": true, "servicename": true, "mode": true, "extra": true,
+            "fp": true, "alpn": true, "pbk": true, "sid": true, "spx": true,
+            "allowinsecure": true, "insecure": true
+        }
+
+        const parsedQuery = parseShareQuery(queryPart, knownKeys)
+        const params = parsedQuery.params
+        const unknownPairs = parsedQuery.unknownPairs
 
         let allowInsecureValue = params["allowinsecure"] || params["insecure"] || ""
         allowInsecureValue = allowInsecureValue.toString().trim().toLowerCase()
@@ -2301,9 +2417,10 @@ ApplicationWindow {
 
         return {
             "ok": true,
-            "uuid": uuid,
-            "address": address,
-            "port": portText.length > 0 ? portText : "443",
+            "protocol": "vless",
+            "uuid": endpoint.user,
+            "address": endpoint.address,
+            "port": endpoint.port,
             "network": (params["type"] || "tcp").toLowerCase(),
             "security": (params["security"] || "none").toLowerCase(),
             "encryption": (params["encryption"] || "none").toLowerCase(),
@@ -2313,7 +2430,7 @@ ApplicationWindow {
             "sni": ((params["sni"] || params["servername"] || params["host"] || "")
                     || (((params["security"] || "none").toLowerCase() === "tls"
                          || (params["security"] || "none").toLowerCase() === "reality")
-                        ? address
+                        ? endpoint.address
                         : "")),
             "headerType": (params["headertype"] || "").toLowerCase(),
             "serviceName": params["servicename"] || "",
@@ -2328,6 +2445,206 @@ ApplicationWindow {
             "unknownPairs": unknownPairs,
             "fragment": safeDecodeUriPart(fragment)
         }
+    }
+
+    function parseWireguardForm(linkText) {
+        let link = (linkText || "").trim()
+        if (link.toLowerCase().startsWith("wg://"))
+            link = "wireguard://" + link.slice(5)
+        if (!link.toLowerCase().startsWith("wireguard://"))
+            return { "ok": false, "error": "Only WireGuard links are supported here." }
+
+        const body = link.slice(12)
+        const hashIndex = body.indexOf("#")
+        const mainPart = hashIndex >= 0 ? body.slice(0, hashIndex) : body
+        const fragment = hashIndex >= 0 ? body.slice(hashIndex + 1) : ""
+        const queryIndex = mainPart.indexOf("?")
+        const authorityPart = queryIndex >= 0 ? mainPart.slice(0, queryIndex) : mainPart
+        const queryPart = queryIndex >= 0 ? mainPart.slice(queryIndex + 1) : ""
+        const endpoint = parseAuthorityUserHostPort(authorityPart, "51820")
+        if (!endpoint.ok)
+            return { "ok": false, "error": "Invalid WireGuard link format." }
+
+        const knownKeys = {
+            "address": true, "addresses": true, "clientip": true, "mtu": true,
+            "dns": true, "dnss": true, "publickey": true, "presharedkey": true,
+            "allowedips": true, "allowedip": true, "reserved": true,
+            "persistentkeepalive": true, "keepalive": true
+        }
+        const parsedQuery = parseShareQuery(queryPart, knownKeys)
+        const params = parsedQuery.params
+        return {
+            "ok": true,
+            "protocol": "wireguard",
+            "uuid": endpoint.user,
+            "address": endpoint.address,
+            "port": endpoint.port,
+            "network": "wireguard",
+            "security": "none",
+            "encryption": "none",
+            "path": params["address"] || params["addresses"] || params["clientip"] || "",
+            "host": params["publickey"] || "",
+            "sni": params["dns"] || params["dnss"] || "",
+            "headerType": params["allowedips"] || params["allowedip"] || "",
+            "serviceName": params["reserved"] || "",
+            "mode": params["persistentkeepalive"] || params["keepalive"] || "",
+            "extra": params["presharedkey"] || "",
+            "flow": params["mtu"] || "",
+            "unknownPairs": parsedQuery.unknownPairs,
+            "fragment": safeDecodeUriPart(fragment)
+        }
+    }
+
+    function parseVmessForm(linkText) {
+        const link = (linkText || "").trim()
+        if (!link.toLowerCase().startsWith("vmess://"))
+            return { "ok": false, "error": "Only VMess links are supported here." }
+        let payload = link.slice(8)
+        const hashIndex = payload.indexOf("#")
+        if (hashIndex >= 0)
+            payload = payload.slice(0, hashIndex)
+        const decoded = base64DecodeUtf8(payload)
+        if (decoded.length === 0)
+            return { "ok": false, "error": "VMess payload could not be decoded." }
+        let obj = null
+        try {
+            obj = JSON.parse(decoded)
+        } catch (e) {
+            return { "ok": false, "error": "VMess payload is not valid JSON." }
+        }
+        return {
+            "ok": true,
+            "protocol": "vmess",
+            "uuid": String(obj.id || "").trim(),
+            "address": String(obj.add || "").trim(),
+            "port": String(obj.port || "443").trim(),
+            "network": String(obj.net || "tcp").trim().toLowerCase(),
+            "security": String(obj.tls || "none").trim().toLowerCase(),
+            "encryption": String(obj.scy || "auto").trim(),
+            "flow": String(obj.flow || "").trim(),
+            "path": String(obj.path || "").trim(),
+            "host": String(obj.host || "").trim(),
+            "sni": String(obj.sni || obj.serverName || "").trim(),
+            "headerType": String(obj.type || "").trim(),
+            "serviceName": String(obj.serviceName || "").trim(),
+            "mode": String(obj.mode || "").trim(),
+            "extra": "",
+            "fingerprint": String(obj.fp || "").trim(),
+            "alpn": String(obj.alpn || "").trim(),
+            "publicKey": String(obj.pbk || "").trim(),
+            "shortId": String(obj.sid || "").trim(),
+            "spiderX": String(obj.spx || "").trim(),
+            "vmessExtra": obj,
+            "fragment": String(obj.ps || "").trim()
+        }
+    }
+
+    function parseTrojanForm(linkText) {
+        const link = (linkText || "").trim()
+        if (!link.toLowerCase().startsWith("trojan://"))
+            return { "ok": false, "error": "Only Trojan links are supported here." }
+        const body = link.slice(9)
+        const hashIndex = body.indexOf("#")
+        const mainPart = hashIndex >= 0 ? body.slice(0, hashIndex) : body
+        const fragment = hashIndex >= 0 ? body.slice(hashIndex + 1) : ""
+        const queryIndex = mainPart.indexOf("?")
+        const authorityPart = queryIndex >= 0 ? mainPart.slice(0, queryIndex) : mainPart
+        const queryPart = queryIndex >= 0 ? mainPart.slice(queryIndex + 1) : ""
+        const endpoint = parseAuthorityUserHostPort(authorityPart, "443")
+        if (!endpoint.ok)
+            return { "ok": false, "error": "Invalid Trojan link format." }
+        const knownKeys = {
+            "type": true, "security": true, "path": true, "host": true,
+            "sni": true, "servername": true, "headertype": true,
+            "servicename": true, "mode": true, "flow": true
+        }
+        const parsedQuery = parseShareQuery(queryPart, knownKeys)
+        const params = parsedQuery.params
+        return {
+            "ok": true,
+            "protocol": "trojan",
+            "uuid": endpoint.user,
+            "address": endpoint.address,
+            "port": endpoint.port,
+            "network": (params["type"] || "tcp").toLowerCase(),
+            "security": (params["security"] || "tls").toLowerCase(),
+            "encryption": "none",
+            "flow": params["flow"] || "",
+            "path": params["path"] || "",
+            "host": params["host"] || "",
+            "sni": params["sni"] || params["servername"] || "",
+            "headerType": (params["headertype"] || "").toLowerCase(),
+            "serviceName": params["servicename"] || "",
+            "mode": (params["mode"] || "").toLowerCase(),
+            "extra": "",
+            "unknownPairs": parsedQuery.unknownPairs,
+            "fragment": safeDecodeUriPart(fragment)
+        }
+    }
+
+    function parseShadowsocksForm(linkText) {
+        const link = (linkText || "").trim()
+        if (!link.toLowerCase().startsWith("ss://"))
+            return { "ok": false, "error": "Only Shadowsocks links are supported here." }
+        let payload = link.slice(5)
+        const hashIndex = payload.indexOf("#")
+        const fragment = hashIndex >= 0 ? payload.slice(hashIndex + 1) : ""
+        if (hashIndex >= 0)
+            payload = payload.slice(0, hashIndex)
+        const queryIndex = payload.indexOf("?")
+        if (queryIndex >= 0)
+            payload = payload.slice(0, queryIndex)
+        const atIndex = payload.lastIndexOf("@")
+        if (atIndex <= 0 || atIndex >= payload.length - 1)
+            return { "ok": false, "error": "Unsupported Shadowsocks link layout." }
+        let credentials = payload.slice(0, atIndex)
+        try {
+            credentials = decodeURIComponent(credentials)
+        } catch (e) {
+        }
+        const endpoint = parseAuthorityUserHostPort("x@" + payload.slice(atIndex + 1), "8388")
+        if (!endpoint.ok)
+            return { "ok": false, "error": "Invalid Shadowsocks endpoint." }
+        if (credentials.indexOf(":") < 0)
+            credentials = base64DecodeUtf8(credentials)
+        const sep = credentials.indexOf(":")
+        if (sep <= 0)
+            return { "ok": false, "error": "Invalid Shadowsocks credentials." }
+        return {
+            "ok": true,
+            "protocol": "shadowsocks",
+            "uuid": credentials.slice(sep + 1),
+            "address": endpoint.address,
+            "port": endpoint.port,
+            "network": "tcp",
+            "security": "none",
+            "encryption": credentials.slice(0, sep),
+            "flow": "",
+            "path": "",
+            "host": "",
+            "sni": "",
+            "headerType": "",
+            "serviceName": "",
+            "mode": "",
+            "extra": "",
+            "fragment": safeDecodeUriPart(fragment)
+        }
+    }
+
+    function parseEditableProfileForm(linkText) {
+        const link = (linkText || "").trim()
+        const lowered = link.toLowerCase()
+        if (lowered.startsWith("vless://"))
+            return parseVlessForm(link)
+        if (lowered.startsWith("vmess://"))
+            return parseVmessForm(link)
+        if (lowered.startsWith("wireguard://") || lowered.startsWith("wg://"))
+            return parseWireguardForm(link)
+        if (lowered.startsWith("trojan://"))
+            return parseTrojanForm(link)
+        if (lowered.startsWith("ss://"))
+            return parseShadowsocksForm(link)
+        return { "ok": false, "error": "This profile type can be edited using the full config text field." }
     }
 
     function buildVlessLinkFromForm(form, profileName) {
@@ -2391,6 +2708,156 @@ ApplicationWindow {
         }
     }
 
+    function buildWireguardLinkFromForm(form, profileName) {
+        const data = form || {}
+        const secretKey = (data.uuid || "").trim()
+        const address = (data.address || "").trim()
+        const portText = (data.port || "").toString().trim()
+        const portValue = Number(portText)
+        if (secretKey.length === 0)
+            return { "ok": false, "error": "WireGuard private key is missing." }
+        if (address.length === 0)
+            return { "ok": false, "error": "Address is required." }
+        if (!Number.isFinite(portValue) || portValue < 1 || portValue > 65535 || Math.floor(portValue) !== portValue)
+            return { "ok": false, "error": "Port must be a number between 1 and 65535." }
+
+        const params = []
+        function appendParam(key, value) {
+            if ((value || "").toString().trim().length === 0)
+                return
+            params.push(safeEncodeUriPart(key) + "=" + safeEncodeUriPart((value || "").toString().trim()))
+        }
+        appendParam("address", data.path)
+        appendParam("mtu", data.flow)
+        appendParam("dns", data.sni)
+        appendParam("publickey", data.host)
+        appendParam("allowedips", data.headerType)
+        appendParam("presharedkey", data.extra)
+        appendParam("persistentkeepalive", data.mode)
+        appendParam("reserved", data.serviceName)
+        const unknownPairs = Array.isArray(data.unknownPairs) ? data.unknownPairs : []
+        for (let i = 0; i < unknownPairs.length; i += 1) {
+            const pair = unknownPairs[i]
+            if (pair && pair.key)
+                params.push(pair.value ? String(pair.key) + "=" + String(pair.value) : String(pair.key))
+        }
+        const encodedName = safeEncodeUriPart((profileName || "").trim())
+        return {
+            "ok": true,
+            "link": "wireguard://" + safeEncodeUriPart(secretKey) + "@" + address + ":" + String(portValue)
+                    + (params.length > 0 ? ("?" + params.join("&")) : "")
+                    + (encodedName.length > 0 ? ("#" + encodedName) : "")
+        }
+    }
+
+    function buildVmessLinkFromForm(form, profileName) {
+        const data = form || {}
+        const uuid = (data.uuid || "").trim()
+        const address = (data.address || "").trim()
+        const portText = (data.port || "").toString().trim()
+        const portValue = Number(portText)
+        if (uuid.length === 0)
+            return { "ok": false, "error": "VMess UUID is missing." }
+        if (address.length === 0)
+            return { "ok": false, "error": "Address is required." }
+        if (!Number.isFinite(portValue) || portValue < 1 || portValue > 65535 || Math.floor(portValue) !== portValue)
+            return { "ok": false, "error": "Port must be a number between 1 and 65535." }
+
+        const obj = data.vmessExtra && typeof data.vmessExtra === "object" ? data.vmessExtra : {}
+        obj.v = String(obj.v || "2")
+        obj.ps = (profileName || "").trim()
+        obj.add = address
+        obj.port = String(portValue)
+        obj.id = uuid
+        obj.net = (data.network || "tcp").toLowerCase()
+        obj.type = data.headerType || "none"
+        obj.host = data.host || ""
+        obj.path = data.path || ""
+        obj.tls = (data.security || "none").toLowerCase()
+        obj.scy = data.encryption || "auto"
+        obj.sni = data.sni || ""
+        obj.alpn = data.alpn || ""
+        obj.fp = data.fingerprint || ""
+        obj.flow = data.flow || ""
+        obj.serviceName = data.serviceName || ""
+        obj.mode = data.mode || ""
+        return { "ok": true, "link": "vmess://" + base64UrlEncodeUtf8(JSON.stringify(obj)) }
+    }
+
+    function buildTrojanLinkFromForm(form, profileName) {
+        const data = form || {}
+        const password = (data.uuid || "").trim()
+        const address = (data.address || "").trim()
+        const portText = (data.port || "").toString().trim()
+        const portValue = Number(portText)
+        if (password.length === 0)
+            return { "ok": false, "error": "Trojan password is missing." }
+        if (address.length === 0)
+            return { "ok": false, "error": "Address is required." }
+        if (!Number.isFinite(portValue) || portValue < 1 || portValue > 65535 || Math.floor(portValue) !== portValue)
+            return { "ok": false, "error": "Port must be a number between 1 and 65535." }
+        const params = []
+        function appendParam(key, value) {
+            if ((value || "").toString().trim().length === 0)
+                return
+            params.push(safeEncodeUriPart(key) + "=" + safeEncodeUriPart((value || "").toString().trim()))
+        }
+        appendParam("type", data.network || "tcp")
+        appendParam("security", data.security || "tls")
+        appendParam("path", data.path)
+        appendParam("host", data.host)
+        appendParam("sni", data.sni)
+        appendParam("headerType", data.headerType)
+        appendParam("serviceName", data.serviceName)
+        appendParam("mode", data.mode)
+        appendParam("flow", data.flow)
+        const encodedName = safeEncodeUriPart((profileName || "").trim())
+        return {
+            "ok": true,
+            "link": "trojan://" + safeEncodeUriPart(password) + "@" + address + ":" + String(portValue)
+                    + (params.length > 0 ? ("?" + params.join("&")) : "")
+                    + (encodedName.length > 0 ? ("#" + encodedName) : "")
+        }
+    }
+
+    function buildShadowsocksLinkFromForm(form, profileName) {
+        const data = form || {}
+        const password = (data.uuid || "").trim()
+        const method = (data.encryption || "").trim()
+        const address = (data.address || "").trim()
+        const portText = (data.port || "").toString().trim()
+        const portValue = Number(portText)
+        if (method.length === 0)
+            return { "ok": false, "error": "Shadowsocks method is missing." }
+        if (password.length === 0)
+            return { "ok": false, "error": "Shadowsocks password is missing." }
+        if (address.length === 0)
+            return { "ok": false, "error": "Address is required." }
+        if (!Number.isFinite(portValue) || portValue < 1 || portValue > 65535 || Math.floor(portValue) !== portValue)
+            return { "ok": false, "error": "Port must be a number between 1 and 65535." }
+        const encodedName = safeEncodeUriPart((profileName || "").trim())
+        return {
+            "ok": true,
+            "link": "ss://" + base64UrlEncodeUtf8(method + ":" + password) + "@" + address + ":" + String(portValue)
+                    + (encodedName.length > 0 ? ("#" + encodedName) : "")
+        }
+    }
+
+    function buildEditableProfileLinkFromForm(form, profileName) {
+        const protocol = String((form || {}).protocol || "vless").toLowerCase()
+        if (protocol === "vless")
+            return buildVlessLinkFromForm(form, profileName)
+        if (protocol === "vmess")
+            return buildVmessLinkFromForm(form, profileName)
+        if (protocol === "wireguard")
+            return buildWireguardLinkFromForm(form, profileName)
+        if (protocol === "trojan")
+            return buildTrojanLinkFromForm(form, profileName)
+        if (protocol === "shadowsocks")
+            return buildShadowsocksLinkFromForm(form, profileName)
+        return { "ok": false, "error": "This profile type can be edited using the full config text field." }
+    }
+
     function openEditProfile(row, displayName, groupName, originalLink) {
         editProfileRow = row
         editProfileName = (displayName || "").trim()
@@ -2398,7 +2865,7 @@ ApplicationWindow {
         editProfileConfigLink = (originalLink || "").trim()
         editProfileOriginalConfigLink = editProfileConfigLink
         editProfileError = ""
-        const parsed = parseVlessForm(editProfileConfigLink)
+        const parsed = parseEditableProfileForm(editProfileConfigLink)
         editProfileVlessSupported = parsed.ok === true
         editProfileVlessForm = parsed.ok ? parsed : ({})
         if (!parsed.ok)
