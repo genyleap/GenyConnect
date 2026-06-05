@@ -164,6 +164,65 @@ constexpr const char kDonationWhitePaperUrl[] = "https://github.com/genyleap/whi
 constexpr const char kDonationTokenRepoUrl[] = "https://github.com/genyleap/geny-token";
 constexpr const char kUint256MaxDec[] =
     "115792089237316195423570985008687907853269984665640564039457584007913129639935";
+
+QString configuredBundledXrayVersion()
+{
+#ifdef GENYCONNECT_BUNDLED_XRAY_VERSION
+    return QString::fromUtf8(GENYCONNECT_BUNDLED_XRAY_VERSION);
+#else
+    return QString();
+#endif
+}
+
+std::optional<std::array<int, 3>> parseXrayVersionTriplet(const QString& version)
+{
+    const QRegularExpression regex(QString::fromUtf8("(?i)\\bv?(\\d+)\\.(\\d+)\\.(\\d+)\\b"));
+    const QRegularExpressionMatch match = regex.match(version.trimmed());
+    if (!match.hasMatch()) {
+        return std::nullopt;
+    }
+
+    return std::array<int, 3> {
+        match.captured(1).toInt(),
+        match.captured(2).toInt(),
+        match.captured(3).toInt()
+    };
+}
+
+bool xrayTunMtuRequiresArrayForVersion(const QString& version)
+{
+    const auto parsed = parseXrayVersionTriplet(version);
+    if (!parsed.has_value()) {
+        return false;
+    }
+
+    const auto [major, minor, patch] = parsed.value();
+    return major == 26 && minor == 4 && patch == 13;
+}
+
+bool xrayTunMtuRequiresArray(const QString& runtimeVersion)
+{
+    if (parseXrayVersionTriplet(runtimeVersion).has_value()) {
+        return xrayTunMtuRequiresArrayForVersion(runtimeVersion);
+    }
+
+    return xrayTunMtuRequiresArrayForVersion(configuredBundledXrayVersion());
+}
+
+QString bundledXrayVersionDisplay()
+{
+    const auto parsed = parseXrayVersionTriplet(configuredBundledXrayVersion());
+    if (!parsed.has_value()) {
+        return QString();
+    }
+
+    const auto [major, minor, patch] = parsed.value();
+    return QString::fromUtf8("%1.%2.%3 (bundled)")
+        .arg(major)
+        .arg(minor)
+        .arg(patch);
+}
+
 #if defined(Q_OS_ANDROID)
 constexpr const char kAndroidRuntimeBridgeClass[] = "com/genyleap/genyconnect/AndroidRuntimeBridge";
 
@@ -761,6 +820,7 @@ bool jsonContainsForbiddenAllowInsecure(const QJsonValue& value)
 QString validateGeneratedRuntimeConfig(const QJsonObject& config,
                                        quint16 expectedMixedPort,
                                        bool expectTunInbound,
+                                       bool expectTunMtuArray,
                                        QString *summaryOut)
 {
     QString mixedListen;
@@ -780,10 +840,13 @@ QString validateGeneratedRuntimeConfig(const QJsonObject& config,
     }
 
     if (summaryOut != nullptr) {
-        *summaryOut = QString::fromUtf8("mixed=%1:%2 tunInbound=%3")
+        *summaryOut = QString::fromUtf8("mixed=%1:%2 tunInbound=%3 tunMtu=%4")
                           .arg(mixedListen.isEmpty() ? QString::fromUtf8("missing") : mixedListen)
                           .arg(mixedPort)
-                          .arg(hasTunInbound ? QString::fromUtf8("yes") : QString::fromUtf8("no"));
+                          .arg(hasTunInbound ? QString::fromUtf8("yes") : QString::fromUtf8("no"))
+                          .arg(expectTunInbound
+                                   ? (expectTunMtuArray ? QString::fromUtf8("array") : QString::fromUtf8("number"))
+                                   : QString::fromUtf8("n/a"));
     }
 
     if (mixedPort != static_cast<int>(expectedMixedPort)
@@ -807,24 +870,24 @@ QString validateGeneratedRuntimeConfig(const QJsonObject& config,
                 return QString::fromUtf8("Generated Xray TUN config is invalid: tun-in settings.address must be an array.");
             }
             const QJsonValue mtu = settings.value(QString::fromUtf8("mtu"));
-#if defined(Q_OS_ANDROID)
-            if (!mtu.isArray()) {
-                return QString::fromUtf8("Generated Xray TUN config is invalid: tun-in settings.mtu must be an array of numeric JSON values on Android.");
-            }
-            const QJsonArray mtuArray = mtu.toArray();
-            if (mtuArray.isEmpty()) {
-                return QString::fromUtf8("Generated Xray TUN config is invalid: tun-in settings.mtu must not be empty on Android.");
-            }
-            for (const QJsonValue& mtuValue : mtuArray) {
-                if (!mtuValue.isDouble()) {
-                    return QString::fromUtf8("Generated Xray TUN config is invalid: tun-in settings.mtu must contain only numeric JSON values on Android.");
+            if (expectTunMtuArray) {
+                if (!mtu.isArray()) {
+                    return QString::fromUtf8("Generated Xray TUN config is invalid: tun-in settings.mtu must be an array of numeric JSON values for the selected xray-core schema.");
+                }
+                const QJsonArray mtuArray = mtu.toArray();
+                if (mtuArray.isEmpty()) {
+                    return QString::fromUtf8("Generated Xray TUN config is invalid: tun-in settings.mtu must not be empty for the selected xray-core schema.");
+                }
+                for (const QJsonValue& mtuValue : mtuArray) {
+                    if (!mtuValue.isDouble()) {
+                        return QString::fromUtf8("Generated Xray TUN config is invalid: tun-in settings.mtu must contain only numeric JSON values for the selected xray-core schema.");
+                    }
+                }
+            } else {
+                if (!mtu.isDouble()) {
+                    return QString::fromUtf8("Generated Xray TUN config is invalid: tun-in settings.mtu must be a numeric JSON value for the selected xray-core schema.");
                 }
             }
-#else
-            if (!mtu.isDouble()) {
-                return QString::fromUtf8("Generated Xray TUN config is invalid: tun-in settings.mtu must be a numeric JSON value, not an array.");
-            }
-#endif
             break;
         }
         if (!foundTunIn) {
@@ -898,6 +961,59 @@ QStringList extractSubscriptionLinks(const QByteArray& payload)
         return {};
     }
     return extractShareLinks(QString::fromUtf8(decoded));
+}
+
+QStringList detectUnsupportedShareProtocols(const QByteArray& payload)
+{
+    const QString plain = QString::fromUtf8(payload).trimmed();
+    QStringList protocols;
+    auto collectProtocols = [&protocols](const QString& text) {
+        const QRegularExpression protocolPattern(QString::fromUtf8("(?i)\\b([a-z][a-z0-9+.-]*)://"));
+        QRegularExpressionMatchIterator it = protocolPattern.globalMatch(text);
+        while (it.hasNext()) {
+            const QString protocol = it.next().captured(1).trimmed().toLower();
+            if (protocol.isEmpty()
+                || protocol == QString::fromUtf8("vmess")
+                || protocol == QString::fromUtf8("vless")
+                || protocol == QString::fromUtf8("trojan")
+                || protocol == QString::fromUtf8("ss")
+                || protocol == QString::fromUtf8("wireguard")
+                || protocol == QString::fromUtf8("wg")
+                || protocol == QString::fromUtf8("http")
+                || protocol == QString::fromUtf8("https")) {
+                continue;
+            }
+            protocols.append(protocol);
+        }
+    };
+
+    collectProtocols(plain);
+    const QByteArray decoded = decodeFlexibleBase64(payload);
+    if (!decoded.isEmpty()) {
+        collectProtocols(QString::fromUtf8(decoded));
+    }
+    protocols.removeDuplicates();
+    return protocols;
+}
+
+QString unsupportedProtocolMessage(const QStringList& protocols)
+{
+    if (protocols.isEmpty()) {
+        return QString();
+    }
+
+    QStringList displayProtocols;
+    displayProtocols.reserve(protocols.size());
+    for (const QString& protocol : protocols) {
+        if (protocol == QString::fromUtf8("hysteria2") || protocol == QString::fromUtf8("hy2")) {
+            displayProtocols.append(QString::fromUtf8("Hysteria2"));
+        } else {
+            displayProtocols.append(protocol);
+        }
+    }
+    displayProtocols.removeDuplicates();
+    return QString::fromUtf8("Subscription contains unsupported profile protocol(s): %1.")
+        .arg(displayProtocols.join(QString::fromUtf8(", ")));
 }
 
 QString createSubscriptionId()
@@ -4063,7 +4179,10 @@ int VpnController::importProfileBatch(const QString& text)
 
     const QStringList links = extractSubscriptionLinks(text.toUtf8());
     if (links.isEmpty()) {
-        setLastError(QString::fromUtf8("No supported profile links/config found in input."));
+        const QString unsupportedMessage = unsupportedProtocolMessage(detectUnsupportedShareProtocols(text.toUtf8()));
+        setLastError(unsupportedMessage.isEmpty()
+                         ? QString::fromUtf8("No supported profile links/config found in input.")
+                         : unsupportedMessage);
         return 0;
     }
 
@@ -4335,13 +4454,16 @@ void VpnController::startSubscriptionFetch(const SubscriptionEntry& entry, bool 
             return;
         }
 
+        const QString unsupportedMessage = hadError ? QString() : unsupportedProtocolMessage(detectUnsupportedShareProtocols(payload));
         const QString message = hadError
                                     ? (timedOut
                                            ? QString::fromUtf8("Subscription fetch timed out.")
                                            : (netError.isEmpty()
                                                   ? QString::fromUtf8("Failed to fetch subscription URL.")
                                                   : QString::fromUtf8("Subscription fetch failed: %1").arg(netError)))
-                                    : QString::fromUtf8("Subscription payload has no supported profile links.");
+                                    : (unsupportedMessage.isEmpty()
+                                           ? QString::fromUtf8("Subscription payload has no supported profile links.")
+                                           : unsupportedMessage);
         appendSystemLog(QString::fromUtf8("[Subscription] %1 (%2): %3")
                             .arg(entry.name, entry.group, message));
         setLastError(message);
@@ -5343,7 +5465,6 @@ void VpnController::connectToProfile(int row)
                 QString stopError;
                 Q_UNUSED(guard->stopPrivilegedTunProcess(&stopError));
                 guard->stopPrivilegedTunRuntimeByPidPath();
-                guard->shutdownPrivilegedTunHelper();
                 guard->m_privilegedTunRuntimePid = -1;
                 ok = false;
                 elevateError = QString::fromUtf8("Connection attempt was cancelled.");
@@ -5472,7 +5593,6 @@ void VpnController::disconnect()
                     guard->appendSystemLog(QString::fromUtf8("[System] %1").arg(stopError));
                     guard->stopPrivilegedTunRuntimeByPidPath();
                 }
-                guard->shutdownPrivilegedTunHelper();
                 guard->m_disconnectRequested.store(false);
                 guard->setConnectionState(ConnectionState::Disconnected);
                 guard->maybeReconnectToPendingProfile();
@@ -7726,7 +7846,14 @@ bool VpnController::detectProcessRoutingSupport()
     return false;
 #else
     if (m_xrayExecutablePath.trimmed().isEmpty()) {
+#if defined(Q_OS_ANDROID)
+        const QString bundledVersion = bundledXrayVersionDisplay();
+        m_xrayVersion = bundledVersion.isEmpty()
+            ? QString::fromUtf8("Bundled Android runtime")
+            : bundledVersion;
+#else
         m_xrayVersion = QString::fromUtf8("Not detected");
+#endif
 
         if (previousVersion != m_xrayVersion) {
             emit xrayVersionChanged();
@@ -11285,6 +11412,7 @@ bool VpnController::writeRuntimeConfig(const ServerProfile& profile, QString *er
                              || !options.blockProcesses.isEmpty();
 
     options.enableProcessRouting = detectProcessRoutingSupport();
+    options.tunMtuArray = xrayTunMtuRequiresArray(m_xrayVersion);
     if (hasAppRules && !options.enableProcessRouting) {
         appendSystemLog(QString::fromUtf8(
             "[System] App rules ignored: current xray-core does not support process routing (requires Xray 26.1.23+)."
@@ -11318,6 +11446,7 @@ bool VpnController::writeRuntimeConfig(const ServerProfile& profile, QString *er
         config,
         options.socksPort,
         options.enableTun,
+        options.tunMtuArray,
         &runtimeConfigSummary);
     appendSystemLog(QString::fromUtf8("[System] Runtime config validated: %1").arg(runtimeConfigSummary));
     if (!runtimeConfigValidationError.isEmpty()) {

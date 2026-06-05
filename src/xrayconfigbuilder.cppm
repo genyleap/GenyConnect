@@ -45,6 +45,7 @@ public:
         bool enableTun = false;                 //!< Enable system-level TUN inbound.
         bool tunAutoRoute = true;               //!< Auto-manage host routes for TUN.
         bool tunStrictRoute = true;             //!< Prevent route bypass leaks when possible.
+        bool tunMtuArray = false;               //!< Use xray-core TUN mtu []uint32 schema when required.
         QString tunInterfaceName;               //!< Optional explicit interface name (macOS: utunN).
         QStringList dnsServers;                 //!< DNS servers used for built-in DNS / TUN DNS.
         bool whitelistMode = false;             //!< Enable whitelist-first routing mode.

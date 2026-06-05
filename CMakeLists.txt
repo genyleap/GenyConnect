@@ -839,7 +839,11 @@ if(GENYCONNECT_BUILD_DESKTOP)
   target_link_libraries(${PROJECT_NAME} PRIVATE Qt6::Widgets)
 endif()
 
-target_compile_definitions(${PROJECT_NAME} PRIVATE APP_VERSION="${PROJECT_VERSION}")
+target_compile_definitions(${PROJECT_NAME}
+  PRIVATE
+    APP_VERSION="${PROJECT_VERSION}"
+    GENYCONNECT_BUNDLED_XRAY_VERSION="${GENYCONNECT_XRAY_VERSION}"
+)
 
 # -------------------------
 # macOS bundle props + icon
