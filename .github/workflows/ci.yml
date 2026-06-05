@@ -1181,6 +1181,6 @@ jobs:
         with:
           tag_name: ${{ github.ref_name }}
           name: GenyConnect ${{ github.ref_name }}
+          body_path: release-notes/${{ github.ref_name }}.md
           files: release-artifacts/*
           fail_on_unmatched_files: true
-          generate_release_notes: true
