@@ -5462,8 +5462,8 @@ bool VpnController::sortProfiles(const QString& mode, const QString& groupName)
     const QString normalizedMode = mode.trimmed().toLower();
     std::stable_sort(targetProfiles.begin(), targetProfiles.end(), [normalizedMode](const ServerProfile& a, const ServerProfile& b) {
         if (normalizedMode == QString::fromUtf8("ping")) {
-            const int aPing = a.lastPingMs >= 0 ? a.lastPingMs : std::numeric_limits<int>::max();
-            const int bPing = b.lastPingMs >= 0 ? b.lastPingMs : std::numeric_limits<int>::max();
+            const int aPing = a.lastPingMs >= 0 ? a.lastPingMs : (std::numeric_limits<int>::max)();
+            const int bPing = b.lastPingMs >= 0 ? b.lastPingMs : (std::numeric_limits<int>::max)();
             if (aPing != bPing) {
                 return aPing < bPing;
             }
@@ -6313,9 +6313,9 @@ int VpnController::chooseBestProfileInGroup(const QString& groupName) const
     const bool allGroups = requestedGroup.compare(QString::fromUtf8("All"), Qt::CaseInsensitive) == 0;
 
     int bestRow = -1;
-    double bestLoss = std::numeric_limits<double>::max();
-    int bestPing = std::numeric_limits<int>::max();
-    int bestFailures = std::numeric_limits<int>::max();
+    double bestLoss = (std::numeric_limits<double>::max)();
+    int bestPing = (std::numeric_limits<int>::max)();
+    int bestFailures = (std::numeric_limits<int>::max)();
     qint64 bestLastSuccess = -1;
     QString bestLabel;
 
@@ -6336,7 +6336,7 @@ int VpnController::chooseBestProfileInGroup(const QString& groupName) const
         const double lossScore = profile->lastPacketLossPct >= 0.0
             ? profile->lastPacketLossPct
             : 100.0;
-        const int pingScore = profile->lastPingMs >= 0 ? profile->lastPingMs : std::numeric_limits<int>::max() / 2;
+        const int pingScore = profile->lastPingMs >= 0 ? profile->lastPingMs : (std::numeric_limits<int>::max)() / 2;
         const int failures = qMax(0, profile->failureCount);
         const qint64 lastSuccess = qMax<qint64>(0, profile->lastSuccessfulConnectionMs);
         const QString label = profile->displayLabel().toLower();

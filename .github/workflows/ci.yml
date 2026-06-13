@@ -480,11 +480,22 @@ jobs:
 
           QT_PREFIX="$("${QMAKE_BIN}" -query QT_INSTALL_PREFIX)"
           QT_LIB_DIR="$("${QMAKE_BIN}" -query QT_INSTALL_LIBS)"
+          QT_PLUGIN_DIR="$("${QMAKE_BIN}" -query QT_INSTALL_PLUGINS)"
           export LD_LIBRARY_PATH="${QT_LIB_DIR}:${QT_PREFIX}/lib:${LD_LIBRARY_PATH:-}"
+
+          mkdir -p AppDir/usr/plugins/platforms AppDir/usr/plugins/imageformats
+          cp -av "${QT_PLUGIN_DIR}/platforms/libqxcb.so" AppDir/usr/plugins/platforms/ || true
+          cp -av "${QT_PLUGIN_DIR}"/platforms/libqwayland*.so AppDir/usr/plugins/platforms/ || true
+          cp -av "${QT_PLUGIN_DIR}/imageformats/libqsvg.so" AppDir/usr/plugins/imageformats/ || true
+          if ! compgen -G "AppDir/usr/plugins/platforms/libqwayland*.so" >/dev/null; then
+            echo "Qt Wayland platform plugins were not found under ${QT_PLUGIN_DIR}/platforms."
+            find "${QT_PLUGIN_DIR}/platforms" -maxdepth 1 -type f -print || true
+            exit 1
+          fi
 
           export QMAKE="${QMAKE_BIN}"
           export QML_SOURCES_PATHS="${PWD}/ui"
-          export EXTRA_QT_PLUGINS="platforms/libqxcb.so;platforms/libqwayland-egl.so;platforms/libqwayland-generic.so;imageformats/libqsvg.so"
+          export EXTRA_QT_PLUGINS="platforms/libqxcb.so,platforms/libqwayland-egl.so,platforms/libqwayland-generic.so,imageformats/libqsvg.so"
           export OUTPUT="GenyConnect-${VERSION}-linux-${TARGET_ARCH}.AppImage"
           export APPIMAGE_EXTRACT_AND_RUN=1
 
@@ -659,7 +670,7 @@ jobs:
 
           aqt list-qt linux_arm64 desktop || true
 
-          aqt install-qt linux_arm64 desktop "${QT_VERSION}" linux_gcc_arm64 -O "${HOME}/Qt"
+          aqt install-qt linux_arm64 desktop "${QT_VERSION}" linux_gcc_arm64 -O "${HOME}/Qt" -m qtwayland
 
           QT_CONFIG="$(find "${HOME}/Qt" -type f -path "*/lib/cmake/Qt6/Qt6Config.cmake" | head -n 1)"
 
@@ -768,11 +779,22 @@ jobs:
 
           QT_PREFIX="$("${QMAKE_BIN}" -query QT_INSTALL_PREFIX)"
           QT_LIB_DIR="$("${QMAKE_BIN}" -query QT_INSTALL_LIBS)"
+          QT_PLUGIN_DIR="$("${QMAKE_BIN}" -query QT_INSTALL_PLUGINS)"
           export LD_LIBRARY_PATH="${QT_LIB_DIR}:${QT_PREFIX}/lib:${LD_LIBRARY_PATH:-}"
+
+          mkdir -p AppDir/usr/plugins/platforms AppDir/usr/plugins/imageformats
+          cp -av "${QT_PLUGIN_DIR}/platforms/libqxcb.so" AppDir/usr/plugins/platforms/ || true
+          cp -av "${QT_PLUGIN_DIR}"/platforms/libqwayland*.so AppDir/usr/plugins/platforms/ || true
+          cp -av "${QT_PLUGIN_DIR}/imageformats/libqsvg.so" AppDir/usr/plugins/imageformats/ || true
+          if ! compgen -G "AppDir/usr/plugins/platforms/libqwayland*.so" >/dev/null; then
+            echo "Qt Wayland platform plugins were not found under ${QT_PLUGIN_DIR}/platforms."
+            find "${QT_PLUGIN_DIR}/platforms" -maxdepth 1 -type f -print || true
+            exit 1
+          fi
 
           export QMAKE="${QMAKE_BIN}"
           export QML_SOURCES_PATHS="${PWD}/ui"
-          export EXTRA_QT_PLUGINS="platforms/libqxcb.so;platforms/libqwayland-egl.so;platforms/libqwayland-generic.so;imageformats/libqsvg.so"
+          export EXTRA_QT_PLUGINS="platforms/libqxcb.so,platforms/libqwayland-egl.so,platforms/libqwayland-generic.so,imageformats/libqsvg.so"
           export OUTPUT="GenyConnect-${VERSION}-linux-${TARGET_ARCH}.AppImage"
           export APPIMAGE_EXTRACT_AND_RUN=1
 
