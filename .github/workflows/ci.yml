@@ -487,10 +487,17 @@ jobs:
           cp -av "${QT_PLUGIN_DIR}/platforms/libqxcb.so" AppDir/usr/plugins/platforms/ || true
           cp -av "${QT_PLUGIN_DIR}"/platforms/libqwayland*.so AppDir/usr/plugins/platforms/ || true
           cp -av "${QT_PLUGIN_DIR}/imageformats/libqsvg.so" AppDir/usr/plugins/imageformats/ || true
-          if ! compgen -G "AppDir/usr/plugins/platforms/libqwayland*.so" >/dev/null; then
-            echo "Qt Wayland platform plugins were not found under ${QT_PLUGIN_DIR}/platforms."
+
+          if [[ ! -f "AppDir/usr/plugins/platforms/libqxcb.so" ]]; then
+            echo "ERROR: Qt xcb platform plugin is required but was not found under ${QT_PLUGIN_DIR}/platforms."
             find "${QT_PLUGIN_DIR}/platforms" -maxdepth 1 -type f -print || true
             exit 1
+          fi
+
+          if ! compgen -G "AppDir/usr/plugins/platforms/libqwayland*.so" >/dev/null; then
+            echo "WARNING: Qt Wayland platform plugins were not found under ${QT_PLUGIN_DIR}/platforms."
+            echo "Continuing with xcb-only AppImage for this architecture."
+            find "${QT_PLUGIN_DIR}/platforms" -maxdepth 1 -type f -print || true
           fi
 
           export QMAKE="${QMAKE_BIN}"
@@ -669,8 +676,9 @@ jobs:
           export PATH="${HOME}/.local/bin:${PATH}"
 
           aqt list-qt linux_arm64 desktop || true
+          aqt list-qt linux_arm64 desktop --modules "${QT_VERSION}" linux_gcc_arm64 || true
 
-          aqt install-qt linux_arm64 desktop "${QT_VERSION}" linux_gcc_arm64 -O "${HOME}/Qt" -m qtwayland
+          aqt install-qt linux_arm64 desktop "${QT_VERSION}" linux_gcc_arm64 -O "${HOME}/Qt"
 
           QT_CONFIG="$(find "${HOME}/Qt" -type f -path "*/lib/cmake/Qt6/Qt6Config.cmake" | head -n 1)"
 
@@ -786,10 +794,17 @@ jobs:
           cp -av "${QT_PLUGIN_DIR}/platforms/libqxcb.so" AppDir/usr/plugins/platforms/ || true
           cp -av "${QT_PLUGIN_DIR}"/platforms/libqwayland*.so AppDir/usr/plugins/platforms/ || true
           cp -av "${QT_PLUGIN_DIR}/imageformats/libqsvg.so" AppDir/usr/plugins/imageformats/ || true
-          if ! compgen -G "AppDir/usr/plugins/platforms/libqwayland*.so" >/dev/null; then
-            echo "Qt Wayland platform plugins were not found under ${QT_PLUGIN_DIR}/platforms."
+
+          if [[ ! -f "AppDir/usr/plugins/platforms/libqxcb.so" ]]; then
+            echo "ERROR: Qt xcb platform plugin is required but was not found under ${QT_PLUGIN_DIR}/platforms."
             find "${QT_PLUGIN_DIR}/platforms" -maxdepth 1 -type f -print || true
             exit 1
+          fi
+
+          if ! compgen -G "AppDir/usr/plugins/platforms/libqwayland*.so" >/dev/null; then
+            echo "WARNING: Qt Wayland platform plugins were not found under ${QT_PLUGIN_DIR}/platforms."
+            echo "Continuing with xcb-only AppImage for this architecture."
+            find "${QT_PLUGIN_DIR}/platforms" -maxdepth 1 -type f -print || true
           fi
 
           export QMAKE="${QMAKE_BIN}"

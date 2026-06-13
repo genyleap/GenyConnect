@@ -30,7 +30,9 @@ require_dir_glob() {
 }
 
 require_file_glob "Qt xcb platform plugin" "*/plugins/platforms/libqxcb.so"
-require_file_glob "Qt Wayland platform plugin" "*/plugins/platforms/libqwayland*.so"
+if ! find "${APPDIR}" -path "*/plugins/platforms/libqwayland*.so" -type f | grep -q .; then
+  echo "WARNING: Qt Wayland platform plugin not bundled; continuing with xcb-only AppImage."
+fi
 require_file_glob "Qt SVG image plugin" "*/plugins/imageformats/libqsvg.so"
 
 require_dir_glob "QtQuick QML import" "*/qml/QtQuick"
