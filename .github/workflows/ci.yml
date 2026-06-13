@@ -678,7 +678,7 @@ jobs:
           aqt list-qt linux_arm64 desktop || true
           aqt list-qt linux_arm64 desktop --modules "${QT_VERSION}" linux_gcc_arm64 || true
 
-          aqt install-qt linux_arm64 desktop "${QT_VERSION}" linux_gcc_arm64 -O "${HOME}/Qt"
+          aqt install-qt linux_arm64 desktop "${QT_VERSION}" linux_gcc_arm64 -O "${HOME}/Qt" -m qt5compat
 
           QT_CONFIG="$(find "${HOME}/Qt" -type f -path "*/lib/cmake/Qt6/Qt6Config.cmake" | head -n 1)"
 
