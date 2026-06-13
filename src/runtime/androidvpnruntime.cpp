@@ -259,6 +259,15 @@ bool AndroidVpnRuntime::disconnectRuntime(QString *errorMessage, int timeoutMs)
 {
     Q_UNUSED(timeoutMs)
 
+#if defined(Q_OS_ANDROID)
+    if (!isRunning() && !startupPending() && !runtimeProcessAlive()) {
+        m_running = false;
+        if (errorMessage) {
+            errorMessage->clear();
+        }
+        return true;
+    }
+#else
     if (!isRunning()) {
         m_running = false;
         if (errorMessage) {
@@ -267,7 +276,6 @@ bool AndroidVpnRuntime::disconnectRuntime(QString *errorMessage, int timeoutMs)
         return true;
     }
 
-#if !defined(Q_OS_ANDROID)
     m_running = false;
     if (errorMessage) {
         errorMessage->clear();
@@ -275,7 +283,9 @@ bool AndroidVpnRuntime::disconnectRuntime(QString *errorMessage, int timeoutMs)
     emit stopped(0, VpnRuntimeBackend::ExitStatus::NormalExit);
     emit trafficChanged();
     return true;
-#else
+#endif
+
+#if defined(Q_OS_ANDROID)
     const QString stopError = bridgeDisconnect();
     if (!stopError.isEmpty()) {
         m_lastError = stopError;
@@ -290,7 +300,7 @@ bool AndroidVpnRuntime::disconnectRuntime(QString *errorMessage, int timeoutMs)
     QElapsedTimer waitTimer;
     waitTimer.start();
     while (waitTimer.elapsed() < 4000) {
-        if (!bridgeIsRunning()) {
+        if (!bridgeIsRunning() && !bridgeIsStartupPending() && !bridgeRuntimeAlive()) {
             m_running = false;
             if (errorMessage) {
                 errorMessage->clear();

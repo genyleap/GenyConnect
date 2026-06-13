@@ -76,7 +76,11 @@ export struct ServerProfile {
     QString sourceName;       //!< Human-readable source/subscription name.
     QString sourceId;         //!< Stable source identifier.
     QJsonObject extra;        //!< Extensible free-form metadata.
+    int manualOrder = 0;      //!< Persisted user-defined order for manual sorting.
+    qint64 lastSuccessfulConnectionMs = 0; //!< Last successful connection timestamp (UTC ms).
+    int failureCount = 0;     //!< Consecutive/recorded connection failures for selection.
     int lastPingMs = -1;      //!< Latest measured endpoint TCP latency in milliseconds.
+    double lastPacketLossPct = -1.0; //!< Latest endpoint probe packet-loss/reachability percentage.
     bool pingInProgress = false; //!< True while profile endpoint ping is in progress.
 
     /**

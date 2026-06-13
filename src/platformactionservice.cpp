@@ -29,6 +29,32 @@ bool PlatformActionService::openSystemProxySettings()
     return false;
 }
 
+bool PlatformActionService::openBatteryOptimizationSettings()
+{
+#if defined(Q_OS_ANDROID)
+    if (QJniObject::isClassAvailable(kAndroidRuntimeBridgeClass)) {
+        return QJniObject::callStaticMethod<jboolean>(
+            kAndroidRuntimeBridgeClass,
+            "openBatteryOptimizationSettings",
+            "()Z");
+    }
+#endif
+    return false;
+}
+
+bool PlatformActionService::isIgnoringBatteryOptimizations()
+{
+#if defined(Q_OS_ANDROID)
+    if (QJniObject::isClassAvailable(kAndroidRuntimeBridgeClass)) {
+        return QJniObject::callStaticMethod<jboolean>(
+            kAndroidRuntimeBridgeClass,
+            "isIgnoringBatteryOptimizations",
+            "()Z");
+    }
+#endif
+    return true;
+}
+
 bool PlatformActionService::openUrlWithChooser(const QString& url, const QString& chooserTitle)
 {
     const QUrl parsedUrl = QUrl::fromUserInput(url.trimmed());

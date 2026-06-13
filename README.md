@@ -151,6 +151,57 @@ iOS support is under active development.
 
 ---
 
+## Linux AppImage Notes
+
+The Linux AppImage is intended to run without relying on host Qt libraries. The release packaging pipeline validates the bundled Qt platform plugins and QML imports, including the xcb and Wayland platform plugins, QtQuick modules, QtQuick Controls, QtQuick Dialogs, QtQuick Effects, and Qt5Compat GraphicalEffects.
+
+GenyConnect does not require KDE Breeze QML modules at runtime. On KDE desktops where Qt may try to select Breeze automatically from the host environment, the app falls back to the bundled Qt Quick Controls Basic style so startup does not fail on systems where `org.kde.breeze` is not installed.
+
+When troubleshooting AppImage startup, check the first Qt diagnostics printed by the app. They include the selected platform plugin, Qt library paths, QML import paths, `QT_PLUGIN_PATH`, `QML2_IMPORT_PATH`, `LD_LIBRARY_PATH`, `QT_QPA_PLATFORM`, and `QT_QUICK_CONTROLS_STYLE`.
+
+---
+
+## Proxy Groups, Sorting, and Selection
+
+Profiles can be organized into user-defined groups. Imported subscriptions keep their source group when available, and ungrouped profiles remain available under the default group.
+
+Supported group operations include:
+
+- manual ordering with persisted order
+- sorting by name
+- sorting by measured ping
+- sorting by last successful connection
+- choosing the best profile in the current group
+- group modes: Manual, Best Latency, and Fallback
+
+Manual mode keeps the selected profile behavior unchanged. Best Latency selects the lowest-latency healthy profile known for the group before connecting. Fallback keeps the current selection when it is healthy and only chooses an alternative when the selected profile has no recent successful health signal.
+
+Ping and selection data are stored with the profile list so ordering and recent reliability signals survive restart.
+
+---
+
+## Windows Network Recovery
+
+Before installing or opening an update on Windows, GenyConnect runs a safe network shutdown path. It stops the runtime, stops managed TUN state, removes tracked runtime state, disables system proxy changes made by the app, and writes logs for each cleanup step.
+
+If Windows networking remains broken after a crash, failed update, forced quit, or stale TUN session, run the emergency reset command from a Command Prompt or PowerShell window:
+
+```powershell
+GenyConnect.exe --safe-network-reset
+```
+
+The command is idempotent. Running it more than once is safe. If administrative approval is needed for TUN cleanup, Windows may ask for permission.
+
+---
+
+## Connection Diagnostics
+
+Connection startup and runtime supervision now report more detail in the system log. Relevant fields include local proxy readiness, TUN readiness, runtime process state, stats API reachability, selected profile, bytes transferred before failure, and safe cleanup results.
+
+In TUN mode, GenyConnect validates TUN/runtime readiness separately and does not fail the session only because the local mixed proxy port is not meant to be used directly by desktop apps. In proxy/system-proxy modes, the local mixed proxy readiness check remains active and reports port conflicts or startup races clearly.
+
+---
+
 ## Technology Stack
 
 - C++23

@@ -154,6 +154,7 @@ public:
     Q_PROPERTY(double profileScore READ profileScore NOTIFY profileStatsChanged)
     Q_PROPERTY(bool useSystemProxy READ useSystemProxy WRITE setUseSystemProxy NOTIFY useSystemProxyChanged)
     Q_PROPERTY(bool tunMode READ tunMode WRITE setTunMode NOTIFY tunModeChanged)
+    Q_PROPERTY(QString latencyMeasurementMode READ latencyMeasurementMode WRITE setLatencyMeasurementMode NOTIFY latencyMeasurementModeChanged)
     Q_PROPERTY(bool runtimeTunActive READ runtimeTunActive NOTIFY connectionStateChanged)
     Q_PROPERTY(bool killSwitchEnabled READ killSwitchEnabled WRITE setKillSwitchEnabled NOTIFY killSwitchEnabledChanged)
     Q_PROPERTY(bool autoDisableSystemProxyOnDisconnect READ autoDisableSystemProxyOnDisconnect WRITE setAutoDisableSystemProxyOnDisconnect NOTIFY autoDisableSystemProxyOnDisconnectChanged)
@@ -401,6 +402,7 @@ public:
      * @return Auto-ping flag.
      */
     bool autoPingProfiles() const;
+    QString latencyMeasurementMode() const;
 
     /**
      * @brief Saved subscription URLs (legacy-compatible list).
@@ -441,9 +443,11 @@ public:
     Q_INVOKABLE bool isProfileGroupEnabled(const QString& groupName) const;
     Q_INVOKABLE bool isProfileGroupExclusive(const QString& groupName) const;
     Q_INVOKABLE QString profileGroupBadge(const QString& groupName) const;
+    Q_INVOKABLE QString profileGroupMode(const QString& groupName) const;
     Q_INVOKABLE void setProfileGroupEnabled(const QString& groupName, bool enabled);
     Q_INVOKABLE void setProfileGroupExclusive(const QString& groupName, bool exclusive);
     Q_INVOKABLE void setProfileGroupBadge(const QString& groupName, const QString& badge);
+    Q_INVOKABLE void setProfileGroupMode(const QString& groupName, const QString& mode);
     Q_INVOKABLE bool ensureProfileGroup(const QString& groupName);
     Q_INVOKABLE bool renameProfileGroup(const QString& oldName, const QString& newName);
     Q_INVOKABLE bool removeProfileGroup(const QString& groupName);
@@ -466,6 +470,7 @@ public:
      * @param enabled New auto-ping state.
      */
     void setAutoPingProfiles(bool enabled);
+    void setLatencyMeasurementMode(const QString& mode);
 
     /**
      * @brief Set active group filter for profiles/subscription actions.
@@ -736,6 +741,14 @@ public:
      * @brief Start endpoint ping for all profiles.
      */
     Q_INVOKABLE void pingAllProfiles();
+    Q_INVOKABLE void pingCurrentGroup();
+    Q_INVOKABLE bool moveProfile(int fromRow, int toRow);
+    Q_INVOKABLE bool sortProfilesByName(const QString& groupName = QString());
+    Q_INVOKABLE bool sortProfilesByPing(const QString& groupName = QString());
+    Q_INVOKABLE bool sortProfilesByLastSuccess(const QString& groupName = QString());
+    Q_INVOKABLE bool sortProfilesByFailureCount(const QString& groupName = QString());
+    Q_INVOKABLE int chooseBestProfileInGroup(const QString& groupName = QString()) const;
+    Q_INVOKABLE void connectBestProfileInCurrentGroup();
 
     /**
      * @brief Connect to profile row.
@@ -764,6 +777,7 @@ public:
      * @brief Explicitly clear OS proxy settings.
      */
     Q_INVOKABLE void cleanSystemProxy();
+    Q_INVOKABLE QVariantMap safeNetworkReset();
     Q_INVOKABLE QVariantMap clearNetworkCache();
     Q_INVOKABLE void refreshPublicIp();
 
@@ -809,6 +823,7 @@ public:
     Q_INVOKABLE QString currentProfileSubtitle() const;
     Q_INVOKABLE QString currentProfileGroupLabel() const;
     Q_INVOKABLE int currentProfilePingMs() const;
+    Q_INVOKABLE double currentProfilePacketLossPct() const;
 
     /**
      * @brief Copy buffered logs to clipboard.
@@ -819,6 +834,8 @@ public:
     Q_INVOKABLE QVariantMap qrCodeMatrix(const QString& text) const;
     Q_INVOKABLE QString licenseText() const;
     Q_INVOKABLE bool openSystemProxySettings() const;
+    Q_INVOKABLE bool openBatteryOptimizationSettings() const;
+    Q_INVOKABLE bool isIgnoringBatteryOptimizations() const;
     Q_INVOKABLE bool openUrlWithChooser(const QString& url, const QString& chooserTitle) const;
     Q_INVOKABLE bool openUrlInAndroidPackage(const QString& url, const QString& packageName) const;
     Q_INVOKABLE bool isAndroidPackageInstalled(const QString& packageName) const;
@@ -919,11 +936,13 @@ signals:
     void loggingEnabledChanged();
     //! Emitted when profile auto-ping flag changes.
     void autoPingProfilesChanged();
+    void latencyMeasurementModeChanged();
     void subscriptionsChanged();
     void subscriptionStateChanged();
     void profileStatsChanged();
     void profileGroupsChanged();
     void profileGroupOptionsChanged();
+    void profileOrderingChanged();
     void currentProfileGroupChanged();
     //! Emitted when system-proxy usage flag changes.
     void useSystemProxyChanged();
@@ -994,6 +1013,7 @@ private:
         bool enabled = true;
         bool exclusive = false;
         QString badge;
+        QString mode = QString::fromUtf8("Manual");
     };
 
     struct RoutingRule {
@@ -1142,6 +1162,7 @@ private:
     void saveProfileUsage() const;
     void scheduleProfileUsageSave();
     void cleanupDetachedHelpers();
+    bool performSafeNetworkReset(const QString& reason, QString *errorMessage);
     void stopPrivilegedTunRuntimeByPidPath();
     void killProcessByPid(qint64 pid) const;
     QList<qint64> managedRuntimePidsByConfig() const;
@@ -1218,6 +1239,8 @@ private:
     void startSubscriptionFetch(const SubscriptionEntry& entry, bool fromRefresh);
     void finishRefreshSubscriptions();
     void refreshProfileGroups();
+    bool sortProfiles(const QString& mode, const QString& groupName);
+    void scheduleProfileMetadataSave();
     static QString normalizeGroupName(const QString& groupName);
     static QString normalizeGroupKey(const QString& groupName);
     static QString deriveSubscriptionName(const QString& url);
@@ -1284,7 +1307,6 @@ private:
     qint64 m_speedTestLastProgressElapsedMs = 0;
     qint64 m_speedTestWarmupUntilMs = 0;
     bool m_speedTestCancelledByUser = false;
-    bool m_speedTestUsingDirectFallback = false;
     int m_speedTestSelectedSizeMb = 10;
     QString m_speedTestDownloadEndpointTemplate = QString::fromUtf8("https://speed.cloudflare.com/__down?bytes=%1");
     QElapsedTimer m_speedTestRequestTimer;
@@ -1303,6 +1325,7 @@ private:
     QString m_xrayVersion = QString::fromUtf8("Unknown");
     bool m_loggingEnabled = true;
     bool m_autoPingProfiles = false;
+    QString m_latencyMeasurementMode = QString::fromUtf8("Auto");
     QList<SubscriptionEntry> m_subscriptionEntries;
     QList<ProfileGroupOptions> m_profileGroupOptions;
     bool m_subscriptionBusy = false;
@@ -1384,6 +1407,7 @@ private:
     QNetworkAccessManager m_subscriptionNetworkManager;
     QNetworkAccessManager m_publicIpNetworkManager;
     QNetworkReply *m_speedTestReply = nullptr;
+    QNetworkReply *m_speedTestLatencyReply = nullptr;
     QNetworkReply *m_publicIpReply = nullptr;
     QTimer m_publicIpRetryTimer;
     bool m_statsPolling = false;
@@ -1391,6 +1415,7 @@ private:
     int m_statsQueryFailureCount = 0;
     bool m_stoppingProcess = false;
     int m_pendingReconnectProfileIndex = -1;
+    int m_startupPortRecoveryAttempts = 0;
     bool m_startedWithTunElevationRequest = false;
     bool m_privilegedTunManaged = false;
     bool m_privilegedTunHelperReady = false;
@@ -1403,6 +1428,7 @@ private:
     QByteArray m_privilegedTunLogBuffer;
     QTimer m_privilegedTunLogTimer;
     QTimer m_profileUsageSaveTimer;
+    QTimer m_profileMetadataSaveTimer;
     QString m_managedRuntimeRecordPath;
     qint64 m_privilegedTunRuntimePid = -1;
     std::atomic<quint64> m_connectAttemptCounter {0};

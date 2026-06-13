@@ -174,6 +174,11 @@ QJsonObject ServerProfile::toJson() const
     json[QString::fromUtf8("sourceName")] = sourceName;
     json[QString::fromUtf8("sourceId")] = sourceId;
     json[QString::fromUtf8("extra")] = extra;
+    json[QString::fromUtf8("manualOrder")] = manualOrder;
+    json[QString::fromUtf8("lastSuccessfulConnectionMs")] = lastSuccessfulConnectionMs;
+    json[QString::fromUtf8("failureCount")] = failureCount;
+    json[QString::fromUtf8("lastPingMs")] = lastPingMs;
+    json[QString::fromUtf8("lastPacketLossPct")] = lastPacketLossPct;
 
     return json;
 }
@@ -239,6 +244,16 @@ std::optional<ServerProfile> ServerProfile::fromJson(const QJsonObject& json)
     profile.sourceName = json.value(QString::fromUtf8("sourceName")).toString().trimmed();
     profile.sourceId = json.value(QString::fromUtf8("sourceId")).toString().trimmed();
     profile.extra = json.value(QString::fromUtf8("extra")).toObject();
+    profile.manualOrder = qMax(0, json.value(QString::fromUtf8("manualOrder")).toVariant().toInt());
+    profile.lastSuccessfulConnectionMs = qMax<qint64>(
+        0,
+        json.value(QString::fromUtf8("lastSuccessfulConnectionMs")).toVariant().toLongLong());
+    profile.failureCount = qMax(0, json.value(QString::fromUtf8("failureCount")).toVariant().toInt());
+    profile.lastPingMs = qMax(-1, json.value(QString::fromUtf8("lastPingMs")).toVariant().toInt());
+    const double packetLoss = json.value(QString::fromUtf8("lastPacketLossPct")).toVariant().toDouble();
+    profile.lastPacketLossPct = json.contains(QString::fromUtf8("lastPacketLossPct"))
+                                    ? qBound(0.0, packetLoss, 100.0)
+                                    : -1.0;
 
     if (profile.id.isEmpty()) {
         profile.id = createProfileId();

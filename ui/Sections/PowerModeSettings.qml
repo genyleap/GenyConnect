@@ -473,6 +473,41 @@ ColumnLayout {
 
         PowerSectionCard {
             root: surface.root
+            visible: vpnController.isMobile
+            title: "Android Battery"
+            subtitle: "Keep Android from suspending the VPN foreground service during long sessions."
+            glyph: "\uf5df"
+            accentColor: ((vpnController.powerDiagnostics || {}).batteryOptimizationIgnored !== false) ? Colors.dsSuccess : Colors.dsWarning
+            animated: root.powerVisualAnimationsEnabled
+
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 10
+
+                PowerMetricChip {
+                    Layout.fillWidth: true
+                    label: "Optimization"
+                    value: ((vpnController.powerDiagnostics || {}).batteryOptimizationIgnored !== false) ? "Exempt" : "Restricted"
+                    glyph: "\uf3ed"
+                    accentColor: ((vpnController.powerDiagnostics || {}).batteryOptimizationIgnored !== false) ? Colors.dsSuccess : Colors.dsWarning
+                }
+
+                Controls.OutlineButton {
+                    Layout.preferredWidth: root.compact ? 96 : 128
+                    compact: true
+                    strokeColor: Colors.dsWarning
+                    textColor: Colors.dsWarning
+                    text: "Open"
+                    onClicked: {
+                        const opened = vpnController.openBatteryOptimizationSettings()
+                        root.settingsFeedbackText = opened ? "Opened Android battery settings." : "Battery settings are unavailable."
+                    }
+                }
+            }
+        }
+
+        PowerSectionCard {
+            root: surface.root
             visible: root.powerAdaptiveInputsAvailable()
             title: "Adaptive Inputs"
             subtitle: "Signals that can tune intervals at runtime without reconnecting."

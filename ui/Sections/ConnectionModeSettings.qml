@@ -265,7 +265,7 @@ ColumnLayout {
 
         Text {
             Layout.fillWidth: true
-            text: "Auto ping profile endpoints"
+            text: "Auto measure profile latency"
             color: root.themeColorToken("mainHex_334155", "mainHex_d7e4f6")
             font.family: FontSystem.contentFontFamily
             font.pixelSize: 14
@@ -273,11 +273,73 @@ ColumnLayout {
         }
     }
 
+    ColumnLayout {
+        Layout.fillWidth: true
+        visible: root.settingsSection === "connection"
+        spacing: 8
+
+        RowLayout {
+            Layout.fillWidth: true
+            spacing: 10
+
+            ColumnLayout {
+                Layout.fillWidth: true
+                spacing: 2
+
+                Text {
+                    Layout.fillWidth: true
+                    text: "Latency Measurement Mode"
+                    color: root.themeColorToken("mainHex_334155", "mainHex_d7e4f6")
+                    font.family: FontSystem.getContentFontBold.name
+                    font.pixelSize: 14
+                    font.bold: true
+                }
+
+                Text {
+                    Layout.fillWidth: true
+                    text: vpnController.latencyMeasurementMode === "Endpoint Latency"
+                          ? "Diagnostic mode: measures only the raw server endpoint and does not represent VPN route latency."
+                          : (vpnController.latencyMeasurementMode === "Route Latency"
+                             ? "Measures through the selected VPN/proxy path and represents real user experience."
+                             : "Recommended: uses route latency when available, with endpoint latency only as a fallback.")
+                    color: vpnController.latencyMeasurementMode === "Endpoint Latency"
+                           ? root.themeColorToken("mainHex_a0682a", "mainHex_f4c56a")
+                           : root.themeColorToken("mainHex_7c8697", "mainHex_9bb0cb")
+                    font.family: FontSystem.contentFontFamily
+                    font.pixelSize: 12
+                    wrapMode: Text.WordWrap
+                }
+            }
+
+            Controls.ComboBox {
+                id: latencyModeCombo
+                Layout.preferredWidth: root.compact ? 156 : 190
+                Layout.preferredHeight: 40
+                model: ["Auto (Recommended)", "Route Latency", "Endpoint Latency"]
+                currentIndex: vpnController.latencyMeasurementMode === "Route Latency"
+                              ? 1
+                              : (vpnController.latencyMeasurementMode === "Endpoint Latency" ? 2 : 0)
+                onActivated: function(activatedIndex) {
+                    vpnController.latencyMeasurementMode = model[activatedIndex]
+                }
+            }
+        }
+
+        Text {
+            Layout.fillWidth: true
+            text: "Auto: route first, endpoint fallback. Route Latency: real VPN/proxy path and Best Proxy ranking. Endpoint Latency: raw server troubleshooting only."
+            color: root.themeColorToken("mainHex_8a95a8", "mainHex_8ea0b8")
+            font.family: FontSystem.contentFontFamily
+            font.pixelSize: 12
+            wrapMode: Text.WordWrap
+        }
+    }
+
     Controls.Button {
         visible: root.settingsSection === "connection"
         text: (vpnController.currentProfileGroup || "All").toLowerCase() === "all"
-              ? "Ping Profiles Now"
-              : "Ping Current Group"
+              ? "Measure Profiles Now"
+              : "Measure Current Group"
         Layout.fillWidth: true
         onClicked: vpnController.pingAllProfiles()
     }

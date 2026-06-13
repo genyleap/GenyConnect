@@ -935,6 +935,24 @@ Item {
 
                     ProfileActionChip {
                         compactStyle: true
+                        enabled: listView.count > 0 && !vpnController.busy
+                        label: "Best"
+                        glyph: "\uf521"
+                        accentColor: Colors.dsSuccess
+                        onClicked: vpnController.connectBestProfileInCurrentGroup()
+                    }
+
+                    ProfileActionChip {
+                        compactStyle: true
+                        enabled: listView.count > 1
+                        label: "Sort Ping"
+                        glyph: "\uf160"
+                        accentColor: Colors.dsPrimarySolid
+                        onClicked: vpnController.sortProfilesByPing(vpnController.currentProfileGroup || "All")
+                    }
+
+                    ProfileActionChip {
+                        compactStyle: true
                         enabled: vpnController.subscriptions.length > 0 && !vpnController.subscriptionBusy
                         label: (vpnController.currentProfileGroup || "All") === "All" ? "Refresh" : "Refresh Group"
                         glyph: "\uf021"
@@ -1049,6 +1067,38 @@ Item {
                         glyph: root.iconPing
                         accentColor: Colors.dsPrimarySolid
                         onClicked: vpnController.pingAllProfiles()
+                    }
+
+                    ProfileActionChip {
+                        enabled: listView.count > 0 && !vpnController.busy
+                        label: "Best in Group"
+                        glyph: "\uf521"
+                        accentColor: Colors.dsSuccess
+                        onClicked: vpnController.connectBestProfileInCurrentGroup()
+                    }
+
+                    ProfileActionChip {
+                        enabled: listView.count > 1
+                        label: "Sort by Ping"
+                        glyph: "\uf160"
+                        accentColor: Colors.dsPrimarySolid
+                        onClicked: vpnController.sortProfilesByPing(vpnController.currentProfileGroup || "All")
+                    }
+
+                    ProfileActionChip {
+                        enabled: listView.count > 1
+                        label: "Sort by Name"
+                        glyph: "\uf15d"
+                        accentColor: Colors.dsTextMuted
+                        onClicked: vpnController.sortProfilesByName(vpnController.currentProfileGroup || "All")
+                    }
+
+                    ProfileActionChip {
+                        enabled: listView.count > 1
+                        label: "Sort Stable"
+                        glyph: "\uf0ae"
+                        accentColor: Colors.dsTextMuted
+                        onClicked: vpnController.sortProfilesByLastSuccess(vpnController.currentProfileGroup || "All")
                     }
 
                     ProfileActionChip {
@@ -1367,6 +1417,46 @@ Item {
                                 onToggled: vpnController.setProfileGroupExclusive(groupFilterCombo.groupNameAt(groupFilterCombo.currentIndex), checked)
                             }
 
+                            Text {
+                                text: "Mode"
+                                color: root.themeColorToken("mainHex_5f6f86", "mainHex_9bb0cb")
+                                font.family: FontSystem.contentFontFamily
+                                font.pixelSize: 12
+                            }
+
+                            Controls.ComboBox {
+                                id: groupModeCombo
+                                Layout.preferredWidth: 134
+                                Layout.preferredHeight: 30
+                                model: ["Manual", "Best Latency", "Fallback"]
+                                font.pixelSize: 11
+                                leftPadding: 8
+                                rightPadding: 24
+
+                                function syncMode() {
+                                    const mode = vpnController.profileGroupMode(groupFilterCombo.groupNameAt(groupFilterCombo.currentIndex)) || "Manual"
+                                    for (let i = 0; i < model.length; ++i) {
+                                        if (String(model[i]).toLowerCase() === String(mode).toLowerCase()) {
+                                            if (currentIndex !== i)
+                                                currentIndex = i
+                                            return
+                                        }
+                                    }
+                                    currentIndex = 0
+                                }
+
+                                onActivated: function(activatedIndex) {
+                                    vpnController.setProfileGroupMode(groupFilterCombo.groupNameAt(groupFilterCombo.currentIndex), model[activatedIndex])
+                                }
+                                Component.onCompleted: syncMode()
+
+                                Connections {
+                                    target: vpnController
+                                    function onProfileGroupOptionsChanged() { groupModeCombo.syncMode() }
+                                    function onCurrentProfileGroupChanged() { groupModeCombo.syncMode() }
+                                }
+                            }
+
                             Rectangle {
                                 Layout.preferredWidth: 132
                                 Layout.preferredHeight: 28
@@ -1582,6 +1672,8 @@ Item {
                             required property string pingText
                             required property bool pinging
                             required property int pingMs
+                            required property real packetLossPct
+                            required property string packetLossText
 
                             readonly property bool selected: index === vpnController.currentProfileIndex
                             readonly property string normalizedGroup: root.normalizeProfileGroup(groupName)
@@ -1686,7 +1778,7 @@ Item {
                                         }
 
                                         Text {
-                                            text: pinging ? "..." : (pingMs >= 0 ? (pingMs + " ms") : "--")
+                                            text: pinging ? "..." : (pingMs >= 0 ? (pingMs + " ms" + (packetLossPct > 0 ? (" / " + packetLossText) : "")) : "--")
                                             color: pingMs >= 0 ? (pingMs < 250 ? Colors.mainHex_36d984 : (pingMs < 500 ? Colors.mainHex_d0ad19 : Colors.mainHex_ef4444)) : Colors.mainHex_9aa4b6
                                             font.family: FontSystem.getContentFontBold.name
                                             font.pixelSize: root.compact ? 11 : 12
@@ -1772,9 +1864,49 @@ Item {
                                 }
 
                                 RowLayout {
-                                    Layout.preferredWidth: root.compact ? 88 : 132
+                                    Layout.preferredWidth: root.compact ? 122 : 172
                                     Layout.alignment: Qt.AlignVCenter
                                     spacing: root.compact ? 2 : 10
+
+                                    Text {
+                                        Layout.preferredWidth: root.compact ? 17 : 20
+                                        text: "\uf062"
+                                        color: index > 0
+                                               ? root.themeColorToken("mainHex_5b6f8e", "mainHex_a5bbd8")
+                                               : root.themeColorToken("mainHex_c9d1dc", "mainHex_4a5b72")
+                                        opacity: index > 0 ? 1.0 : 0.45
+                                        font.family: root.faSolid
+                                        font.pixelSize: root.compact ? 12 : 14
+                                        horizontalAlignment: Text.AlignHCenter
+                                        verticalAlignment: Text.AlignVCenter
+
+                                        MouseArea {
+                                            anchors.fill: parent
+                                            enabled: index > 0
+                                            cursorShape: Qt.PointingHandCursor
+                                            onClicked: vpnController.moveProfile(index, index - 1)
+                                        }
+                                    }
+
+                                    Text {
+                                        Layout.preferredWidth: root.compact ? 17 : 20
+                                        text: "\uf063"
+                                        color: index < listView.count - 1
+                                               ? root.themeColorToken("mainHex_5b6f8e", "mainHex_a5bbd8")
+                                               : root.themeColorToken("mainHex_c9d1dc", "mainHex_4a5b72")
+                                        opacity: index < listView.count - 1 ? 1.0 : 0.45
+                                        font.family: root.faSolid
+                                        font.pixelSize: root.compact ? 12 : 14
+                                        horizontalAlignment: Text.AlignHCenter
+                                        verticalAlignment: Text.AlignVCenter
+
+                                        MouseArea {
+                                            anchors.fill: parent
+                                            enabled: index < listView.count - 1
+                                            cursorShape: Qt.PointingHandCursor
+                                            onClicked: vpnController.moveProfile(index, index + 1)
+                                        }
+                                    }
 
                                     Text {
                                         Layout.preferredWidth: root.compact ? 17 : 20

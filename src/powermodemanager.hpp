@@ -127,6 +127,7 @@ private:
     bool m_screenOn = true;
     bool m_charging = false;
     bool m_batterySaver = false;
+    bool m_batteryOptimizationIgnored = true;
     int m_batteryLevel = -1;
     QString m_networkType = QString::fromUtf8("unknown");
     QString m_batteryStatus = QString::fromUtf8("Unknown");

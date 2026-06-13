@@ -199,6 +199,7 @@ QVariantMap PowerModeManager::diagnosticsVariant() const
         {QString::fromUtf8("screenOn"), m_screenOn},
         {QString::fromUtf8("charging"), m_charging},
         {QString::fromUtf8("batterySaver"), m_batterySaver},
+        {QString::fromUtf8("batteryOptimizationIgnored"), m_batteryOptimizationIgnored},
         {QString::fromUtf8("batteryLevel"), m_batteryLevel},
         {QString::fromUtf8("batteryStatus"), m_batteryStatus},
         {QString::fromUtf8("networkType"), m_networkType},
@@ -439,12 +440,19 @@ void PowerModeManager::refreshPlatformState()
             kAndroidRuntimeBridgeClass, "isCharging", "()Z");
         const bool batterySaver = QJniObject::callStaticMethod<jboolean>(
             kAndroidRuntimeBridgeClass, "isBatterySaverEnabled", "()Z");
+        const bool batteryOptimizationIgnored = QJniObject::callStaticMethod<jboolean>(
+            kAndroidRuntimeBridgeClass, "isIgnoringBatteryOptimizations", "()Z");
         const bool screenOn = QJniObject::callStaticMethod<jboolean>(
             kAndroidRuntimeBridgeClass, "isScreenOn", "()Z");
         const QJniObject networkObject = QJniObject::callStaticObjectMethod(
             kAndroidRuntimeBridgeClass, "networkType", "()Ljava/lang/String;");
         const QString network = networkObject.isValid() ? networkObject.toString() : QString();
+        const bool optimizationChanged = m_batteryOptimizationIgnored != batteryOptimizationIgnored;
+        m_batteryOptimizationIgnored = batteryOptimizationIgnored;
         setAdaptiveState(screenOn, charging, batterySaver, static_cast<int>(batteryLevel), network);
+        if (optimizationChanged) {
+            emit diagnosticsChanged();
+        }
         return;
     }
 #endif

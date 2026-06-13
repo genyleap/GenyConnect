@@ -5,6 +5,7 @@ module;
 #include <QString>
 #include <QVariant>
 #include <Qt>
+#include <QtGlobal>
 
 #include <optional>
 
@@ -64,8 +65,20 @@ QVariant ServerProfileModel::data(const QModelIndex& index, int role) const
         return profile.lastPingMs >= 0
             ? QString::fromUtf8("%1 ms").arg(profile.lastPingMs)
             : QString::fromUtf8("--");
+    case PacketLossPctRole:
+        return profile.lastPacketLossPct;
+    case PacketLossTextRole:
+        return profile.lastPacketLossPct >= 0.0
+            ? QString::fromUtf8("%1%").arg(QString::number(profile.lastPacketLossPct, 'f', profile.lastPacketLossPct < 1.0 ? 1 : 0))
+            : QString::fromUtf8("--");
     case PingingRole:
         return profile.pingInProgress;
+    case ManualOrderRole:
+        return profile.manualOrder;
+    case LastSuccessfulConnectionRole:
+        return profile.lastSuccessfulConnectionMs;
+    case FailureCountRole:
+        return profile.failureCount;
     default:
         return {};
     }
@@ -86,7 +99,12 @@ QHash<int, QByteArray> ServerProfileModel::roleNames() const
         {OriginalLinkRole, "originalLink"},
         {PingMsRole, "pingMs"},
         {PingTextRole, "pingText"},
+        {PacketLossPctRole, "packetLossPct"},
+        {PacketLossTextRole, "packetLossText"},
         {PingingRole, "pinging"},
+        {ManualOrderRole, "manualOrder"},
+        {LastSuccessfulConnectionRole, "lastSuccessfulConnectionMs"},
+        {FailureCountRole, "failureCount"},
     };
 }
 
@@ -147,6 +165,10 @@ bool ServerProfileModel::addProfile(const ServerProfile& profile)
             updated.id = existing.id;
         }
         updated.lastPingMs = existing.lastPingMs;
+        updated.lastPacketLossPct = existing.lastPacketLossPct;
+        updated.manualOrder = existing.manualOrder;
+        updated.lastSuccessfulConnectionMs = existing.lastSuccessfulConnectionMs;
+        updated.failureCount = existing.failureCount;
         updated.pingInProgress = false;
 
         m_profiles[existingIdx] = updated;
@@ -155,8 +177,10 @@ bool ServerProfileModel::addProfile(const ServerProfile& profile)
     }
 
     const int row = m_profiles.size();
+    ServerProfile inserted = profile;
+    inserted.manualOrder = row;
     beginInsertRows(QModelIndex(), row, row);
-    m_profiles.append(profile);
+    m_profiles.append(inserted);
     endInsertRows();
     return true;
 }
@@ -190,7 +214,7 @@ bool ServerProfileModel::setPinging(int row, bool pinging)
     return true;
 }
 
-bool ServerProfileModel::setPingResult(int row, int pingMs)
+bool ServerProfileModel::setPingResult(int row, int pingMs, double packetLossPct)
 {
     if (row < 0 || row >= m_profiles.size()) {
         return false;
@@ -198,14 +222,62 @@ bool ServerProfileModel::setPingResult(int row, int pingMs)
 
     auto& profile = m_profiles[row];
     const int normalizedPing = pingMs >= 0 ? pingMs : -1;
-    if (profile.lastPingMs == normalizedPing && !profile.pingInProgress) {
+    const double normalizedLoss = packetLossPct >= 0.0
+        ? qBound(0.0, packetLossPct, 100.0)
+        : -1.0;
+    if (profile.lastPingMs == normalizedPing
+        && qFuzzyCompare(profile.lastPacketLossPct + 1.0, normalizedLoss + 1.0)
+        && !profile.pingInProgress) {
         return true;
     }
 
     profile.lastPingMs = normalizedPing;
+    profile.lastPacketLossPct = normalizedLoss;
     profile.pingInProgress = false;
     const QModelIndex modelIndex = index(row, 0);
-    emit dataChanged(modelIndex, modelIndex, {PingMsRole, PingTextRole, PingingRole});
+    emit dataChanged(modelIndex, modelIndex, {PingMsRole, PingTextRole, PacketLossPctRole, PacketLossTextRole, PingingRole});
+    return true;
+}
+
+bool ServerProfileModel::moveProfile(int fromRow, int toRow)
+{
+    if (fromRow < 0 || fromRow >= m_profiles.size()
+        || toRow < 0 || toRow >= m_profiles.size()
+        || fromRow == toRow) {
+        return false;
+    }
+
+    const int destination = toRow > fromRow ? toRow + 1 : toRow;
+    beginMoveRows(QModelIndex(), fromRow, fromRow, QModelIndex(), destination);
+    m_profiles.move(fromRow, toRow);
+    endMoveRows();
+
+    for (int i = 0; i < m_profiles.size(); ++i) {
+        m_profiles[i].manualOrder = i;
+    }
+    emit dataChanged(index(qMin(fromRow, toRow)), index(qMax(fromRow, toRow)), {ManualOrderRole});
+    return true;
+}
+
+bool ServerProfileModel::setRuntimeStats(const QString& profileId, qint64 lastSuccessfulConnectionMs, int failureCount)
+{
+    const int row = indexOfId(profileId);
+    if (row < 0) {
+        return false;
+    }
+
+    auto& profile = m_profiles[row];
+    const qint64 normalizedSuccess = qMax<qint64>(0, lastSuccessfulConnectionMs);
+    const int normalizedFailures = qMax(0, failureCount);
+    if (profile.lastSuccessfulConnectionMs == normalizedSuccess
+        && profile.failureCount == normalizedFailures) {
+        return true;
+    }
+
+    profile.lastSuccessfulConnectionMs = normalizedSuccess;
+    profile.failureCount = normalizedFailures;
+    const QModelIndex modelIndex = index(row, 0);
+    emit dataChanged(modelIndex, modelIndex, {LastSuccessfulConnectionRole, FailureCountRole});
     return true;
 }
 

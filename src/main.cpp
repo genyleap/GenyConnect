@@ -1,4 +1,5 @@
 #include <QDir>
+#include <QFileInfo>
 #include <QIcon>
 #include <QLocalServer>
 #include <QLocalSocket>
@@ -6,7 +7,10 @@
 #include <QGuiApplication>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
+#include <QDebug>
+#include <QLibraryInfo>
 #include <QQuickWindow>
+#include <QQuickStyle>
 #include <QStandardPaths>
 #include <QTimer>
 #include <initializer_list>
@@ -25,6 +29,94 @@
 #endif
 
 import genyconnect.backend.vpncontroller;
+
+namespace {
+QStringList qmlImportRoots()
+{
+    QStringList roots;
+    const QString envImports = qEnvironmentVariable("QML2_IMPORT_PATH").trimmed();
+    if (!envImports.isEmpty()) {
+        roots.append(envImports.split(QDir::listSeparator(), Qt::SkipEmptyParts));
+    }
+    roots.append(QLibraryInfo::path(QLibraryInfo::QmlImportsPath));
+    const QString appDir = QCoreApplication::applicationDirPath();
+    if (!appDir.isEmpty()) {
+        roots.append(QDir(appDir).filePath(QString::fromUtf8("qml")));
+        roots.append(QDir(appDir).filePath(QString::fromUtf8("../qml")));
+    }
+    roots.removeAll(QString());
+    roots.removeDuplicates();
+    return roots;
+}
+
+bool qmlModuleAvailable(const QString& moduleName)
+{
+    QString modulePath = moduleName.trimmed();
+    modulePath.replace(QLatin1Char('.'), QLatin1Char('/'));
+    if (modulePath.isEmpty()) {
+        return false;
+    }
+    for (const QString& root : qmlImportRoots()) {
+        const QDir rootDir(root);
+        if (QFileInfo::exists(rootDir.filePath(modulePath + QString::fromUtf8("/qmldir")))) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool quickControlsStyleAvailable(const QString& style)
+{
+    const QString trimmed = style.trimmed();
+    if (trimmed.isEmpty()) {
+        return false;
+    }
+    const QString lowered = trimmed.toLower();
+    if (lowered.contains(QString::fromUtf8("org.kde"))) {
+        return qmlModuleAvailable(trimmed);
+    }
+    return qmlModuleAvailable(QString::fromUtf8("QtQuick.Controls.%1").arg(trimmed))
+           || qmlModuleAvailable(trimmed)
+           || (lowered.contains(QString::fromUtf8("breeze"))
+               && qmlModuleAvailable(QString::fromUtf8("org.kde.breeze")));
+}
+
+void configureQuickControlsFallback()
+{
+    const QString requestedStyle = qEnvironmentVariable("QT_QUICK_CONTROLS_STYLE").trimmed();
+
+    QQuickStyle::setFallbackStyle(QString::fromUtf8("Basic"));
+
+#if defined(Q_OS_LINUX) && !defined(Q_OS_ANDROID)
+    if (requestedStyle.isEmpty()) {
+        QQuickStyle::setStyle(QString::fromUtf8("Basic"));
+        qInfo().noquote() << "[Qt] Quick Controls style forced to Basic on Linux to avoid host KDE/Breeze QML dependencies.";
+        return;
+    }
+#endif
+
+    if (!requestedStyle.isEmpty() && !quickControlsStyleAvailable(requestedStyle)) {
+        QQuickStyle::setStyle(QString::fromUtf8("Basic"));
+        qInfo().noquote() << "[Qt] Quick Controls style forced to Basic because requested style is not bundled:" << requestedStyle;
+    }
+}
+
+void logQtRuntimeDiagnostics(const QQmlApplicationEngine *engine = nullptr)
+{
+    qInfo().noquote() << "[Qt] Platform plugin:" << QGuiApplication::platformName();
+    qInfo().noquote() << "[Qt] Library paths:" << QCoreApplication::libraryPaths().join(QString::fromUtf8(":"));
+    qInfo().noquote() << "[Qt] Qt plugin install path:" << QLibraryInfo::path(QLibraryInfo::PluginsPath);
+    qInfo().noquote() << "[Qt] Qt QML install path:" << QLibraryInfo::path(QLibraryInfo::QmlImportsPath);
+    qInfo().noquote() << "[Qt] QT_PLUGIN_PATH:" << qEnvironmentVariable("QT_PLUGIN_PATH");
+    qInfo().noquote() << "[Qt] QML2_IMPORT_PATH:" << qEnvironmentVariable("QML2_IMPORT_PATH");
+    qInfo().noquote() << "[Qt] LD_LIBRARY_PATH:" << qEnvironmentVariable("LD_LIBRARY_PATH");
+    qInfo().noquote() << "[Qt] QT_QPA_PLATFORM:" << qEnvironmentVariable("QT_QPA_PLATFORM");
+    qInfo().noquote() << "[Qt] QT_QUICK_CONTROLS_STYLE:" << qEnvironmentVariable("QT_QUICK_CONTROLS_STYLE");
+    if (engine != nullptr) {
+        qInfo().noquote() << "[Qt] QQmlApplicationEngine import paths:" << engine->importPathList().join(QString::fromUtf8(":"));
+    }
+}
+}
 
 auto main(int argc, char *argv[]) -> int
 {
@@ -49,6 +141,18 @@ auto main(int argc, char *argv[]) -> int
 #else
     QCoreApplication::setApplicationVersion(QString::fromUtf8("0.0.0"));
 #endif
+
+    configureQuickControlsFallback();
+    logQtRuntimeDiagnostics();
+
+    if (QCoreApplication::arguments().contains(QString::fromUtf8("--safe-network-reset"))) {
+        VpnController vpnController;
+        const QVariantMap result = vpnController.safeNetworkReset();
+        const bool ok = result.value(QString::fromUtf8("ok")).toBool();
+        const QString message = result.value(QString::fromUtf8("message")).toString();
+        qInfo().noquote() << "[System]" << message;
+        return ok ? 0 : 2;
+    }
 
     const auto loadFirstAvailableIcon = [](std::initializer_list<const char *> candidates) {
         for (const char *candidate : candidates) {
@@ -111,6 +215,7 @@ auto main(int argc, char *argv[]) -> int
     QQmlApplicationEngine engine;
     engine.rootContext()->setContextProperty(QString::fromUtf8("vpnController"), &vpnController);
     engine.rootContext()->setContextProperty(QString::fromUtf8("updater"), vpnController.updater());
+    logQtRuntimeDiagnostics(&engine);
 
     QObject::connect(
         &engine,

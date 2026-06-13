@@ -484,7 +484,7 @@ jobs:
 
           export QMAKE="${QMAKE_BIN}"
           export QML_SOURCES_PATHS="${PWD}/ui"
-          export EXTRA_QT_PLUGINS="platforms/libqxcb.so;imageformats/libqsvg.so"
+          export EXTRA_QT_PLUGINS="platforms/libqxcb.so;platforms/libqwayland-egl.so;platforms/libqwayland-generic.so;imageformats/libqsvg.so"
           export OUTPUT="GenyConnect-${VERSION}-linux-${TARGET_ARCH}.AppImage"
           export APPIMAGE_EXTRACT_AND_RUN=1
 
@@ -539,6 +539,8 @@ jobs:
             grep "not found" /tmp/genyconnect-linux-x64-ldd.txt
             exit 1
           fi
+
+          "${GITHUB_WORKSPACE}/scripts/validate_appimage_contents.sh" squashfs-root "${GITHUB_WORKSPACE}"
 
           if [[ -f src/xrayconfigbuilder.cpp ]] && grep -q '"mtu"), QJsonArray' src/xrayconfigbuilder.cpp; then
             echo "TUN MTU must be emitted as a JSON number, not an array."
@@ -770,7 +772,7 @@ jobs:
 
           export QMAKE="${QMAKE_BIN}"
           export QML_SOURCES_PATHS="${PWD}/ui"
-          export EXTRA_QT_PLUGINS="platforms/libqxcb.so;imageformats/libqsvg.so"
+          export EXTRA_QT_PLUGINS="platforms/libqxcb.so;platforms/libqwayland-egl.so;platforms/libqwayland-generic.so;imageformats/libqsvg.so"
           export OUTPUT="GenyConnect-${VERSION}-linux-${TARGET_ARCH}.AppImage"
           export APPIMAGE_EXTRACT_AND_RUN=1
 
@@ -825,6 +827,8 @@ jobs:
             grep "not found" /tmp/genyconnect-linux-arm64-ldd.txt
             exit 1
           fi
+
+          "${GITHUB_WORKSPACE}/scripts/validate_appimage_contents.sh" squashfs-root "${GITHUB_WORKSPACE}"
 
           if [[ -f src/xrayconfigbuilder.cpp ]] && grep -q '"mtu"), QJsonArray' src/xrayconfigbuilder.cpp; then
             echo "TUN MTU must be emitted as a JSON number, not an array."

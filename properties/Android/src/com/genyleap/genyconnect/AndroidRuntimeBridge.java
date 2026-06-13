@@ -803,6 +803,68 @@ public final class AndroidRuntimeBridge {
         return false;
     }
 
+    public static boolean isIgnoringBatteryOptimizations() {
+        final Context appContext = context();
+        if (appContext == null || Build.VERSION.SDK_INT < Build.VERSION_CODES.M) {
+            return true;
+        }
+        try {
+            final PowerManager powerManager = (PowerManager) appContext.getSystemService(Context.POWER_SERVICE);
+            return powerManager == null || powerManager.isIgnoringBatteryOptimizations(appContext.getPackageName());
+        } catch (Exception ignored) {
+            return false;
+        }
+    }
+
+    public static boolean openBatteryOptimizationSettings() {
+        final Activity currentActivity = activity();
+        final Context appContext = context();
+        final Context launchContext = currentActivity != null ? currentActivity : appContext;
+        if (launchContext == null) {
+            return false;
+        }
+        ensureStandardSystemUi(currentActivity);
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !isIgnoringBatteryOptimizations()) {
+            final Intent requestIntent = new Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS);
+            requestIntent.setData(Uri.parse("package:" + launchContext.getPackageName()));
+            if (launchSettingsIntent(currentActivity, launchContext, requestIntent)) {
+                return true;
+            }
+        }
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            final Intent listIntent = new Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS);
+            if (launchSettingsIntent(currentActivity, launchContext, listIntent)) {
+                return true;
+            }
+        }
+
+        final Intent detailsIntent = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
+        detailsIntent.setData(Uri.parse("package:" + launchContext.getPackageName()));
+        if (launchSettingsIntent(currentActivity, launchContext, detailsIntent)) {
+            return true;
+        }
+
+        return launchSettingsIntent(currentActivity, launchContext, new Intent(Settings.ACTION_SETTINGS));
+    }
+
+    private static boolean launchSettingsIntent(Activity currentActivity, Context launchContext, Intent intent) {
+        try {
+            if (currentActivity == null) {
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            }
+            if (currentActivity != null) {
+                currentActivity.startActivity(intent);
+            } else {
+                launchContext.startActivity(intent);
+            }
+            return true;
+        } catch (Exception ignored) {
+            return false;
+        }
+    }
+
     public static boolean shareText(String subject, String text) {
         final String body = safeString(text);
         if (body.isEmpty()) {

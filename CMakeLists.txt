@@ -32,7 +32,7 @@ if(APPLE AND NOT IOS)
   set(CMAKE_OSX_DEPLOYMENT_TARGET "${GENYCONNECT_MACOS_DEPLOYMENT_TARGET}" CACHE STRING "Minimum macOS version" FORCE)
 endif()
 
-project(${PROJECT_NAME} VERSION 1.4.768 LANGUAGES CXX)
+project(${PROJECT_NAME} VERSION 1.4.800 LANGUAGES CXX)
 
 # -------------------------
 # Detect Android generator architecture

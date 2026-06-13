@@ -31,6 +31,18 @@ public:
     static bool openSystemProxySettings();
 
     /**
+     * @brief Open Android battery optimization exemption/settings when supported.
+     * @return True when the request was handed to the platform.
+     */
+    static bool openBatteryOptimizationSettings();
+
+    /**
+     * @brief Check whether Android battery optimizations ignore this app.
+     * @return True when exempt or when the platform has no such restriction.
+     */
+    static bool isIgnoringBatteryOptimizations();
+
+    /**
      * @brief Open a URL through the platform chooser/default handler.
      * @param url URL to open.
      * @param chooserTitle Android chooser title when applicable.

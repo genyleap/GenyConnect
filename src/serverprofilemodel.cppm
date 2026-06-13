@@ -20,6 +20,7 @@ module;
 #include <QList>
 #include <QString>
 #include <QVariant>
+#include <QtTypes>
 
 #include <optional>
 
@@ -59,7 +60,12 @@ public:
         OriginalLinkRole,          //!< Original imported share/config link.
         PingMsRole,                //!< Last ping in milliseconds.
         PingTextRole,              //!< Formatted ping label.
-        PingingRole                //!< True while ping is in progress.
+        PacketLossPctRole,         //!< Last endpoint probe loss percentage.
+        PacketLossTextRole,        //!< Formatted packet-loss label.
+        PingingRole,               //!< True while ping is in progress.
+        ManualOrderRole,           //!< Persisted manual order value.
+        LastSuccessfulConnectionRole, //!< Last successful connection UTC ms.
+        FailureCountRole           //!< Recorded connection failure count.
     };
 
     /**
@@ -143,7 +149,9 @@ public:
      * @param pingMs Measured ping in ms, or negative if unavailable.
      * @return True on success.
      */
-    bool setPingResult(int row, int pingMs);
+    bool setPingResult(int row, int pingMs, double packetLossPct = -1.0);
+    bool moveProfile(int fromRow, int toRow);
+    bool setRuntimeStats(const QString& profileId, qint64 lastSuccessfulConnectionMs, int failureCount);
 
 private:
     /**

@@ -287,7 +287,7 @@ public final class GenyConnectVpnService extends VpnService {
     }
 
     public static boolean isRunning() {
-        return runtimeActiveInProcess();
+        return sRunning;
     }
 
     public static String lastError() {
@@ -1240,6 +1240,10 @@ public final class GenyConnectVpnService extends VpnService {
 
     static boolean runtimeActiveInProcess() {
         return isRuntimeProcessAlive() || sRunning;
+    }
+
+    static boolean sessionRunningInProcess() {
+        return sRunning;
     }
 
     static boolean startupPendingInProcess() {

@@ -289,6 +289,7 @@ ApplicationWindow {
     property var upRateHistoryMbps: []
     property int rateHistoryMaxPoints: 24
     property int homeProfilePingMs: -1
+    property real homeProfilePacketLossPct: -1
     readonly property int powerUiStatsIntervalMs: Math.max(500, Number((vpnController.powerPolicy || {}).uiStatsRefreshIntervalMs || 1000))
     readonly property int powerGaugeRefreshIntervalMs: Math.max(16, Number((vpnController.powerPolicy || {}).uiGaugeRefreshIntervalMs || 40))
     readonly property bool powerVisualAnimationsEnabled: (vpnController.visualPowerPolicy || {}).animationsEnabled !== false
@@ -1939,13 +1940,18 @@ ApplicationWindow {
 
         const group = (vpnController.currentProfileGroupLabel() || "General").trim()
         const pingMs = vpnController.currentProfilePingMs()
+        const lossPct = vpnController.currentProfilePacketLossPct()
         const pingText = pingMs >= 0 ? (pingMs + " ms") : "--"
-        return "Group: " + group + "  •  Ping: " + pingText
+        const lossText = lossPct >= 0 ? ("  •  Loss: " + lossPct.toFixed(lossPct < 1 ? 1 : 0) + "%") : ""
+        return "Group: " + group + "  •  Ping: " + pingText + lossText
     }
 
     function currentProfilePingText() {
         const pingMs = root.homeProfilePingMs
-        return pingMs >= 0 ? (pingMs + " ms") : "--"
+        const lossPct = root.homeProfilePacketLossPct
+        if (pingMs < 0)
+            return "--"
+        return pingMs + " ms" + (lossPct > 0 ? (" / " + lossPct.toFixed(lossPct < 1 ? 1 : 0) + "%") : "")
     }
 
     function currentProfileSignalLevel() {
@@ -1977,6 +1983,7 @@ ApplicationWindow {
     function refreshCurrentProfilePing() {
         const pingMs = vpnController.currentProfilePingMs()
         root.homeProfilePingMs = pingMs
+        root.homeProfilePacketLossPct = vpnController.currentProfilePacketLossPct()
     }
 
     function downloadUsageText() {

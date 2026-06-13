@@ -27,6 +27,7 @@ module;
 #include <QObject>
 #include <QString>
 #include <QStringList>
+#include <functional>
 
 export module genyconnect.backend.updater;
 
@@ -123,6 +124,7 @@ public:
      */
     QString downloadedFilePath() const;
     bool canInstallDownloadedUpdate() const;
+    void setPreInstallCleanupCallback(std::function<bool(QString*)> callback);
 
     /**
      * @brief Check latest release metadata.
@@ -193,6 +195,7 @@ private:
     static QString fileSha256Hex(const QString& path);
     static bool isSelfInstallSupportedAsset(const QString& path);
     void consumePendingUpdateStatus();
+    bool runPreInstallCleanup(QString *errorMessage);
 
     QString m_appVersion = QString::fromUtf8("0.0.0");
     bool m_checking = false;
@@ -214,6 +217,7 @@ private:
     QNetworkReply *m_checkReply = nullptr;
     QNetworkReply *m_downloadReply = nullptr;
     QFile *m_downloadFile = nullptr;
+    std::function<bool(QString*)> m_preInstallCleanup;
 };
 
 #include "updater.moc"

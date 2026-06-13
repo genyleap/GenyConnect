@@ -44,7 +44,7 @@ public final class GenyConnectVpnStateProvider extends ContentProvider {
         }
 
         final MatrixCursor cursor = new MatrixCursor(COLUMNS, 1);
-        final boolean running = GenyConnectVpnService.runtimeActiveInProcess();
+        final boolean running = GenyConnectVpnService.sessionRunningInProcess();
         cursor.addRow(new Object[] {
             running ? 1 : 0,
             running ? GenyConnectVpnService.rxBytesInProcess() : 0L,

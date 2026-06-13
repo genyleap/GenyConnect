@@ -29,6 +29,7 @@ module;
 #include <QtConcurrent/QtConcurrentRun>
 
 #include <limits>
+#include <utility>
 
 #if defined(Q_OS_ANDROID)
 #include <QJniObject>
@@ -528,6 +529,38 @@ bool Updater::canInstallDownloadedUpdate() const
 #endif
 }
 
+void Updater::setPreInstallCleanupCallback(std::function<bool(QString*)> callback)
+{
+    m_preInstallCleanup = std::move(callback);
+}
+
+bool Updater::runPreInstallCleanup(QString *errorMessage)
+{
+    if (!m_preInstallCleanup) {
+        if (errorMessage) {
+            errorMessage->clear();
+        }
+        return true;
+    }
+
+    QString cleanupError;
+    emit systemLog(QString::fromUtf8("[Updater] Preparing safe network shutdown before install."));
+    const bool ok = m_preInstallCleanup(&cleanupError);
+    if (!ok) {
+        if (errorMessage) {
+            *errorMessage = cleanupError.trimmed().isEmpty()
+                ? QString::fromUtf8("Safe network shutdown failed.")
+                : cleanupError.trimmed();
+        }
+        return false;
+    }
+    if (errorMessage) {
+        errorMessage->clear();
+    }
+    emit systemLog(QString::fromUtf8("[Updater] Safe network shutdown completed."));
+    return true;
+}
+
 void Updater::checkForUpdates(bool userInitiated)
 {
     consumePendingUpdateStatus();
@@ -887,6 +920,15 @@ bool Updater::openDownloadedUpdate()
 
 #if defined(Q_OS_WIN)
     if (looksLikeManualInstaller(path)) {
+        QString cleanupError;
+        if (!runPreInstallCleanup(&cleanupError)) {
+            m_error = cleanupError;
+            m_status = QString::fromUtf8("Open installer blocked.");
+            emit systemLog(QString::fromUtf8("[Updater] %1").arg(m_error));
+            emit changed();
+            return false;
+        }
+
         const QString nativePath = QDir::toNativeSeparators(path);
         const QString delayedLaunchCommand = QString::fromUtf8(
             "ping 127.0.0.1 -n 2 > NUL && start \"\" \"%1\"").arg(nativePath);
@@ -965,6 +1007,15 @@ bool Updater::installDownloadedUpdate()
             emit changed();
             return false;
         }
+    }
+
+    QString cleanupError;
+    if (!runPreInstallCleanup(&cleanupError)) {
+        m_error = cleanupError;
+        m_status = QString::fromUtf8("Install blocked.");
+        emit systemLog(QString::fromUtf8("[Updater] %1").arg(m_error));
+        emit changed();
+        return false;
     }
 
 #if defined(Q_OS_ANDROID)
