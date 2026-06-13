@@ -1,11 +1,15 @@
 package com.genyleap.genyconnect;
 
 import android.app.Activity;
+import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.content.pm.ApplicationInfo;
+import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
+import android.content.pm.Signature;
 import android.database.Cursor;
 import android.net.ConnectivityManager;
 import android.net.Network;
@@ -37,6 +41,7 @@ import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -1294,23 +1299,82 @@ public final class AndroidRuntimeBridge {
         });
     }
 
+    public static String validateDownloadedApk(String apkPath) {
+        return prepareDownloadedApk(apkPath, false);
+    }
+
     public static String installDownloadedApk(String apkPath) {
+        return prepareDownloadedApk(apkPath, true);
+    }
+
+    private static String prepareDownloadedApk(String apkPath, boolean launchInstaller) {
+        final JSONObject result = new JSONObject();
+        final JSONArray logs = new JSONArray();
+        boolean ok = false;
+        String error = "";
+
         final String path = safeString(apkPath);
+        logs.put("downloaded file path: " + path);
         if (path.isEmpty()) {
-            return "Downloaded APK path is empty.";
+            return apkUpdateResult(result, false, "Downloaded APK path is empty.", logs);
         }
 
         final Context appContext = context();
         final Activity currentActivity = activity();
         final Context launchContext = currentActivity != null ? currentActivity : appContext;
         if (launchContext == null) {
-            return "Android runtime context is unavailable.";
+            return apkUpdateResult(result, false, "Android runtime context is unavailable.", logs);
         }
         ensureStandardSystemUi(currentActivity);
 
         final File apkFile = new File(path);
         if (!apkFile.exists()) {
-            return "Downloaded APK was not found.";
+            return apkUpdateResult(result, false, "Downloaded APK was not found.", logs);
+        }
+        final long fileSize = apkFile.length();
+        logs.put("downloaded file size: " + fileSize);
+        putJson(result, "fileSize", fileSize);
+        if (fileSize <= 0L) {
+            return apkUpdateResult(result, false, "Downloaded APK is empty.", logs);
+        }
+        if (!apkFile.getName().toLowerCase().endsWith(".apk")) {
+            return apkUpdateResult(result, false, "Downloaded update is not an APK file.", logs);
+        }
+
+        final PackageManager pm = launchContext.getPackageManager();
+        final PackageInfo archiveInfo = packageArchiveInfo(pm, path);
+        if (archiveInfo == null) {
+            return apkUpdateResult(result, false, "Downloaded file is not a valid installable APK.", logs);
+        }
+        final String currentPackage = launchContext.getPackageName();
+        final String archivePackage = safeString(archiveInfo.packageName);
+        logs.put("APK package name: " + archivePackage);
+        putJson(result, "packageName", archivePackage);
+        if (!currentPackage.equals(archivePackage)) {
+            return apkUpdateResult(result, false, "Downloaded APK package does not match GenyConnect.", logs);
+        }
+        if (!hasMatchingApkSignature(pm, currentPackage, archiveInfo, path)) {
+            return apkUpdateResult(result, false, "Downloaded APK is not signed with the installed GenyConnect signing key.", logs);
+        }
+        logs.put("APK signature matches installed app.");
+
+        boolean installPermissionGranted = true;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            installPermissionGranted = pm.canRequestPackageInstalls();
+        }
+        logs.put("install permission granted: " + installPermissionGranted);
+        putJson(result, "installPermissionGranted", installPermissionGranted);
+        if (!installPermissionGranted) {
+            if (!launchInstaller) {
+                logs.put("install permission will be requested when user taps Install Update.");
+            } else {
+                openUnknownAppSourcesSettings(launchContext, currentActivity, currentPackage, logs);
+                return apkUpdateResult(
+                    result,
+                    false,
+                    "Allow GenyConnect to install updates, then return and tap Install again.",
+                    logs);
+            }
         }
 
         final String authority = launchContext.getPackageName() + ".qtprovider";
@@ -1318,8 +1382,11 @@ public final class AndroidRuntimeBridge {
         try {
             apkUri = FileProvider.getUriForFile(launchContext, authority, apkFile);
         } catch (Exception exception) {
-            return "Failed to create install URI for APK: " + exception.getMessage();
+            return apkUpdateResult(result, false, "Failed to create install URI for APK: " + exception.getMessage(), logs);
         }
+        logs.put("content URI: " + apkUri);
+        logs.put("MIME type: application/vnd.android.package-archive");
+        putJson(result, "contentUri", apkUri.toString());
 
         final Intent installIntent = new Intent(Intent.ACTION_VIEW);
         installIntent.setDataAndType(apkUri, "application/vnd.android.package-archive");
@@ -1328,16 +1395,200 @@ public final class AndroidRuntimeBridge {
             installIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
         }
 
+        final ResolveInfo installer = resolveNativePackageInstaller(pm, installIntent);
+        final boolean resolves = installer != null;
+        logs.put("package installer intent resolves: " + resolves);
+        putJson(result, "intentResolves", resolves);
+        if (!resolves) {
+            return apkUpdateResult(result, false, "No Android package installer is available for APK updates.", logs);
+        }
+        if (installer.activityInfo != null) {
+            final ComponentName component = new ComponentName(
+                installer.activityInfo.packageName,
+                installer.activityInfo.name);
+            installIntent.setComponent(component);
+            logs.put("selected installer component: " + component.flattenToShortString());
+            grantUriPermission(launchContext, installer.activityInfo.packageName, apkUri);
+        }
+
+        if (!launchInstaller) {
+            return apkUpdateResult(result, true, "", logs);
+        }
         try {
             if (currentActivity != null) {
                 currentActivity.startActivity(installIntent);
             } else {
                 launchContext.startActivity(installIntent);
             }
-            return "";
+            logs.put("installer launch result: started");
+            ok = true;
         } catch (Exception exception) {
-            return "Failed to open Android package installer: " + exception.getMessage();
+            error = "Failed to open Android package installer: " + exception.getMessage();
+            logs.put("installer launch failure: " + safeString(exception.getMessage()));
         }
+        return apkUpdateResult(result, ok, error, logs);
+    }
+
+    private static PackageInfo packageArchiveInfo(PackageManager pm, String path) {
+        if (pm == null || safeString(path).isEmpty()) {
+            return null;
+        }
+        try {
+            final int flags = Build.VERSION.SDK_INT >= Build.VERSION_CODES.P
+                ? PackageManager.GET_SIGNING_CERTIFICATES
+                : PackageManager.GET_SIGNATURES;
+            final PackageInfo info = pm.getPackageArchiveInfo(path, flags);
+            if (info != null && info.applicationInfo != null) {
+                info.applicationInfo.sourceDir = path;
+                info.applicationInfo.publicSourceDir = path;
+            }
+            return info;
+        } catch (Exception ignored) {
+            return null;
+        }
+    }
+
+    private static boolean hasMatchingApkSignature(PackageManager pm,
+                                                   String currentPackage,
+                                                   PackageInfo archiveInfo,
+                                                   String archivePath) {
+        if (pm == null || archiveInfo == null) {
+            return false;
+        }
+        try {
+            final int flags = Build.VERSION.SDK_INT >= Build.VERSION_CODES.P
+                ? PackageManager.GET_SIGNING_CERTIFICATES
+                : PackageManager.GET_SIGNATURES;
+            final PackageInfo currentInfo;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                currentInfo = pm.getPackageInfo(
+                    currentPackage,
+                    PackageManager.PackageInfoFlags.of(flags));
+            } else {
+                currentInfo = pm.getPackageInfo(currentPackage, flags);
+            }
+            List<byte[]> archiveSignatures = packageSignatures(archiveInfo);
+            if (archiveSignatures.isEmpty() && !safeString(archivePath).isEmpty()) {
+                final PackageInfo legacyArchiveInfo =
+                    pm.getPackageArchiveInfo(archivePath, PackageManager.GET_SIGNATURES);
+                archiveSignatures = packageSignatures(legacyArchiveInfo);
+            }
+            return signaturesOverlap(packageSignatures(currentInfo), archiveSignatures);
+        } catch (Exception ignored) {
+            return false;
+        }
+    }
+
+    private static List<byte[]> packageSignatures(PackageInfo info) {
+        final List<byte[]> signatures = new ArrayList<>();
+        if (info == null) {
+            return signatures;
+        }
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P && info.signingInfo != null) {
+                final Signature[] apkSigners = info.signingInfo.hasMultipleSigners()
+                    ? info.signingInfo.getApkContentsSigners()
+                    : info.signingInfo.getSigningCertificateHistory();
+                if (apkSigners != null) {
+                    for (Signature signature : apkSigners) {
+                        if (signature != null) {
+                            signatures.add(signature.toByteArray());
+                        }
+                    }
+                }
+            } else if (info.signatures != null) {
+                for (Signature signature : info.signatures) {
+                    if (signature != null) {
+                        signatures.add(signature.toByteArray());
+                    }
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        return signatures;
+    }
+
+    private static boolean signaturesOverlap(List<byte[]> current, List<byte[]> candidate) {
+        if (current == null || candidate == null || current.isEmpty() || candidate.isEmpty()) {
+            return false;
+        }
+        for (byte[] currentSignature : current) {
+            for (byte[] candidateSignature : candidate) {
+                if (Arrays.equals(currentSignature, candidateSignature)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    private static ResolveInfo resolveNativePackageInstaller(PackageManager pm, Intent installIntent) {
+        ResolveInfo fallback = null;
+        final List<ResolveInfo> handlers = queryIntentHandlers(pm, installIntent);
+        for (ResolveInfo handler : handlers) {
+            if (handler == null || handler.activityInfo == null || handler.activityInfo.applicationInfo == null) {
+                continue;
+            }
+            final String packageName = safeString(handler.activityInfo.packageName).toLowerCase();
+            final boolean systemApp = (handler.activityInfo.applicationInfo.flags
+                & (ApplicationInfo.FLAG_SYSTEM | ApplicationInfo.FLAG_UPDATED_SYSTEM_APP)) != 0;
+            if (!systemApp) {
+                continue;
+            }
+            if (packageName.contains("packageinstaller")) {
+                return handler;
+            }
+            if (fallback == null) {
+                fallback = handler;
+            }
+        }
+        return fallback;
+    }
+
+    private static void grantUriPermission(Context context, String packageName, Uri uri) {
+        try {
+            context.grantUriPermission(packageName, uri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        } catch (Exception ignored) {
+        }
+    }
+
+    private static void openUnknownAppSourcesSettings(Context launchContext,
+                                                      Activity currentActivity,
+                                                      String currentPackage,
+                                                      JSONArray logs) {
+        final Intent settingsIntent = new Intent(
+            Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+            Uri.parse("package:" + currentPackage));
+        if (currentActivity == null) {
+            settingsIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        }
+        try {
+            if (currentActivity != null) {
+                currentActivity.startActivity(settingsIntent);
+            } else {
+                launchContext.startActivity(settingsIntent);
+            }
+            logs.put("opened unknown-app-sources settings.");
+        } catch (Exception exception) {
+            logs.put("failed to open unknown-app-sources settings: " + safeString(exception.getMessage()));
+        }
+    }
+
+    private static void putJson(JSONObject result, String key, Object value) {
+        try {
+            result.put(key, value);
+        } catch (Exception ignored) {
+        }
+    }
+
+    private static String apkUpdateResult(JSONObject result, boolean ok, String error, JSONArray logs) {
+        try {
+            result.put("ok", ok);
+            result.put("error", safeString(error));
+            result.put("logs", logs == null ? new JSONArray() : logs);
+        } catch (Exception ignored) {
+        }
+        return result.toString();
     }
 
     private static String safeString(String value) {

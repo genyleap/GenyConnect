@@ -139,6 +139,32 @@ QVariantMap downloadFileViaAndroidBridge(const QUrl& url, const QString& outputP
         jsonObject,
         QString::fromUtf8("Android bridge returned an empty download response."));
 }
+
+QVariantMap validateDownloadedApkViaBridge(const QString& path)
+{
+    QVariantMap result;
+    result.insert(QString::fromUtf8("ok"), false);
+    result.insert(QString::fromUtf8("error"), QString::fromUtf8("APK validation failed."));
+
+    if (path.trimmed().isEmpty()) {
+        result.insert(QString::fromUtf8("error"), QString::fromUtf8("Downloaded APK path is empty."));
+        return result;
+    }
+    if (!QJniObject::isClassAvailable(kAndroidRuntimeBridgeClass)) {
+        result.insert(QString::fromUtf8("error"), QString::fromUtf8("Android runtime bridge is unavailable."));
+        return result;
+    }
+
+    const QJniObject pathObject = QJniObject::fromString(path);
+    const QJniObject jsonObject = QJniObject::callStaticObjectMethod(
+        kAndroidRuntimeBridgeClass,
+        "validateDownloadedApk",
+        "(Ljava/lang/String;)Ljava/lang/String;",
+        pathObject.object<jstring>());
+    return parseAndroidBridgeResult(
+        jsonObject,
+        QString::fromUtf8("Android bridge returned an empty APK validation response."));
+}
 #endif
 
 QString normalizeVersionToken(const QString& version)
@@ -167,6 +193,36 @@ bool isLikelyChecksumAsset(const QString& lowerAssetName)
         || lowerAssetName.endsWith(QString::fromUtf8(".sha256"))
         || lowerAssetName.endsWith(QString::fromUtf8(".sha256.txt"))
         || lowerAssetName.endsWith(QString::fromUtf8("checksums.txt"));
+}
+
+QStringList bridgeLogLines(const QVariantMap& result)
+{
+    QStringList lines;
+    const QVariant logsValue = result.value(QString::fromUtf8("logs"));
+    const QVariantList logs = logsValue.toList();
+    for (const QVariant& entry : logs) {
+        const QString line = entry.toString().trimmed();
+        if (!line.isEmpty()) {
+            lines.append(line);
+        }
+    }
+    return lines;
+}
+
+bool isAndroidInstallableApkAssetName(const QString& lowerAssetName)
+{
+    if (!lowerAssetName.endsWith(QString::fromUtf8(".apk"))) {
+        return false;
+    }
+    if (lowerAssetName.endsWith(QString::fromUtf8(".apks"))
+        || lowerAssetName.endsWith(QString::fromUtf8(".xapk"))
+        || lowerAssetName.endsWith(QString::fromUtf8(".zip"))
+        || lowerAssetName.endsWith(QString::fromUtf8(".aab"))) {
+        return false;
+    }
+    return !lowerAssetName.contains(QString::fromUtf8("split"))
+        && !lowerAssetName.contains(QString::fromUtf8("bundle"))
+        && !lowerAssetName.contains(QString::fromUtf8("config."));
 }
 
 QString extractSha256FromManifest(const QByteArray& content, const QString& targetAssetName)
@@ -393,29 +449,26 @@ bool startUpdaterHelperDetached(const QString& helperPath, const QString& jobPat
 }
 
 #if defined(Q_OS_ANDROID)
-bool installDownloadedApkViaBridge(const QString& path, QString *errorOut)
+QVariantMap installDownloadedApkViaBridge(const QString& path)
 {
+    QVariantMap result;
+    result.insert(QString::fromUtf8("ok"), false);
+    result.insert(QString::fromUtf8("error"), QString::fromUtf8("Failed to open Android package installer."));
+
     if (!QJniObject::isClassAvailable(kAndroidRuntimeBridgeClass)) {
-        if (errorOut != nullptr) {
-            *errorOut = QString::fromUtf8("Android runtime bridge is not packaged into the APK.");
-        }
-        return false;
+        result.insert(QString::fromUtf8("error"), QString::fromUtf8("Android runtime bridge is not packaged into the APK."));
+        return result;
     }
 
     const QJniObject sourcePath = QJniObject::fromString(path);
-    const QJniObject errorObject = QJniObject::callStaticObjectMethod(
+    const QJniObject jsonObject = QJniObject::callStaticObjectMethod(
         kAndroidRuntimeBridgeClass,
         "installDownloadedApk",
         "(Ljava/lang/String;)Ljava/lang/String;",
         sourcePath.object<jstring>());
-    const QString bridgeError = errorObject.isValid() ? errorObject.toString().trimmed() : QString();
-    if (!bridgeError.isEmpty()) {
-        if (errorOut != nullptr) {
-            *errorOut = bridgeError;
-        }
-        return false;
-    }
-    return true;
+    return parseAndroidBridgeResult(
+        jsonObject,
+        QString::fromUtf8("Android bridge returned an empty installer response."));
 }
 #endif
 }
@@ -775,10 +828,20 @@ bool Updater::downloadUpdate()
         return false;
     }
 
+#if defined(Q_OS_ANDROID)
+    QString baseDir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
+    if (!baseDir.isEmpty()) {
+        baseDir = QDir(baseDir).filePath(QString::fromUtf8("updates"));
+    }
+    if (baseDir.isEmpty()) {
+        baseDir = QStandardPaths::writableLocation(QStandardPaths::TempLocation);
+    }
+#else
     const QString downloadsDir = QStandardPaths::writableLocation(QStandardPaths::DownloadLocation);
     const QString baseDir = downloadsDir.isEmpty()
         ? QStandardPaths::writableLocation(QStandardPaths::TempLocation)
         : downloadsDir;
+#endif
     if (baseDir.isEmpty()) {
         m_error = QString::fromUtf8("Could not resolve download directory.");
         m_status = QString::fromUtf8("Download failed.");
@@ -809,7 +872,8 @@ bool Updater::downloadUpdate()
 
 #if defined(Q_OS_ANDROID)
     if (QJniObject::isClassAvailable(kAndroidRuntimeBridgeClass)) {
-        emit systemLog(QString::fromUtf8("[Updater] Downloading %1").arg(fileName));
+        emit systemLog(QString::fromUtf8("[Updater] Selected Android asset: %1").arg(fileName));
+        emit systemLog(QString::fromUtf8("[Updater] Downloading update to %1").arg(m_downloadedFilePath));
 
         const QString assetUrl = m_assetUrl;
         const QString outputPath = m_downloadedFilePath;
@@ -821,11 +885,30 @@ bool Updater::downloadUpdate()
 
             const bool ok = result.value(QString::fromUtf8("ok")).toBool();
             const QString errorText = result.value(QString::fromUtf8("error")).toString().trimmed();
-            if (!ok || !QFileInfo::exists(outputPath)) {
+            const QFileInfo downloadedInfo(outputPath);
+            if (!ok || !downloadedInfo.exists()) {
                 QFile::remove(outputPath);
                 m_error = errorText.isEmpty()
                     ? QString::fromUtf8("Update download failed.")
                     : errorText;
+                m_status = QString::fromUtf8("Download failed.");
+                emit systemLog(QString::fromUtf8("[Updater] %1").arg(m_error));
+                emit changed();
+                return;
+            }
+            emit systemLog(QString::fromUtf8("[Updater] Downloaded file path: %1").arg(outputPath));
+            emit systemLog(QString::fromUtf8("[Updater] Downloaded file size: %1").arg(downloadedInfo.size()));
+            if (downloadedInfo.size() <= 0) {
+                QFile::remove(outputPath);
+                m_error = QString::fromUtf8("Downloaded update file is empty.");
+                m_status = QString::fromUtf8("Download failed.");
+                emit systemLog(QString::fromUtf8("[Updater] %1").arg(m_error));
+                emit changed();
+                return;
+            }
+            if (!downloadedInfo.fileName().toLower().endsWith(QString::fromUtf8(".apk"))) {
+                QFile::remove(outputPath);
+                m_error = QString::fromUtf8("Android update asset is not an APK file.");
                 m_status = QString::fromUtf8("Download failed.");
                 emit systemLog(QString::fromUtf8("[Updater] %1").arg(m_error));
                 emit changed();
@@ -863,6 +946,22 @@ bool Updater::downloadUpdate()
                     return;
                 }
                 emit systemLog(QString::fromUtf8("[Updater] Downloaded file hash verified."));
+            }
+
+            const QVariantMap validation = validateDownloadedApkViaBridge(outputPath);
+            for (const QString& line : bridgeLogLines(validation)) {
+                emit systemLog(QString::fromUtf8("[Updater][Android] %1").arg(line));
+            }
+            if (!validation.value(QString::fromUtf8("ok")).toBool()) {
+                QFile::remove(outputPath);
+                m_error = validation.value(QString::fromUtf8("error")).toString().trimmed();
+                if (m_error.isEmpty()) {
+                    m_error = QString::fromUtf8("Downloaded APK failed Android install validation.");
+                }
+                m_status = QString::fromUtf8("Download failed.");
+                emit systemLog(QString::fromUtf8("[Updater] %1").arg(m_error));
+                emit changed();
+                return;
             }
 
             m_error.clear();
@@ -917,6 +1016,10 @@ bool Updater::openDownloadedUpdate()
         emit changed();
         return false;
     }
+
+#if defined(Q_OS_ANDROID)
+    return installDownloadedUpdate();
+#endif
 
 #if defined(Q_OS_WIN)
     if (looksLikeManualInstaller(path)) {
@@ -1019,12 +1122,19 @@ bool Updater::installDownloadedUpdate()
     }
 
 #if defined(Q_OS_ANDROID)
-    QString installError;
-    if (!installDownloadedApkViaBridge(sourcePath, &installError)) {
-        m_error = installError.isEmpty()
+    const QVariantMap installResult = installDownloadedApkViaBridge(sourcePath);
+    for (const QString& line : bridgeLogLines(installResult)) {
+        emit systemLog(QString::fromUtf8("[Updater][Android] %1").arg(line));
+    }
+    if (!installResult.value(QString::fromUtf8("ok")).toBool()) {
+        m_error = installResult.value(QString::fromUtf8("error")).toString().trimmed();
+        m_error = m_error.isEmpty()
             ? QString::fromUtf8("Failed to open Android package installer.")
-            : installError;
-        m_status = QString::fromUtf8("Install failed.");
+            : m_error;
+        const bool permissionGranted = installResult.value(QString::fromUtf8("installPermissionGranted"), true).toBool();
+        m_status = permissionGranted
+            ? QString::fromUtf8("Install failed.")
+            : QString::fromUtf8("Install permission required.");
         emit systemLog(QString::fromUtf8("[Updater] %1").arg(m_error));
         emit changed();
         return false;
@@ -1621,6 +1731,12 @@ bool Updater::selectBestReleaseAsset(
             debugReject(name, QString::fromUtf8("wrong file type for %1").arg(currentPlatform));
             continue;
         }
+#if defined(Q_OS_ANDROID)
+        if (!isAndroidInstallableApkAssetName(lower)) {
+            debugReject(name, QString::fromUtf8("not a normal installable APK"));
+            continue;
+        }
+#endif
         ++relevantCandidateCount;
         relevantCandidateNames.append(name);
         if (hasWrongPlatform(lower)) {

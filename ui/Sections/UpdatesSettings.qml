@@ -155,7 +155,9 @@ ColumnLayout {
 
                 Controls.Button {
                     text: updater.downloadedFilePath.length > 0
-                          ? (updater.canInstallDownloadedUpdate ? "Install & Restart" : "Open Installer")
+                          ? (root.mobilePlatform
+                             ? (updater.canInstallDownloadedUpdate ? "Install Update" : "Open Installer")
+                             : (updater.canInstallDownloadedUpdate ? "Install & Restart" : "Open Installer"))
                           : "Download"
                     enabled: updater.updateAvailable && !updater.checking
                     Layout.fillWidth: true
