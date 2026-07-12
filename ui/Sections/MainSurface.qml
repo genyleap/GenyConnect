@@ -233,48 +233,75 @@ Item {
 
     Popup {
         id: updateNoticePopup
-        modal: true
-        focus: true
+        modal: !root.desktopMode
+        focus: !root.desktopMode
+        dim: !root.desktopMode
         closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
         padding: 0
-        width: root.sheetWidth(420)
-        height: root.desktopMode ? root.height : 172
-        x: root.sheetX(width)
-        y: root.sheetY(height)
+        width: root.desktopMode ? Math.min(420, Math.max(360, root.width * 0.28)) : root.sheetWidth(420)
+        height: updateNoticeContent.implicitHeight
+                + (root.desktopMode ? 32 : 28 + (root.mobilePlatform ? Math.max(12, root.safeBottomInset) : 0))
+        x: root.desktopMode ? root.width - width - 24 : root.sheetX(width)
+        y: root.desktopMode
+           ? Math.max(24, root.height - height - 24)
+           : root.sheetY(height)
         z: 200
 
         enter: Transition {
-            NumberAnimation {
-                property: root.sheetAnimationProperty()
-                from: root.sheetEnterFrom(updateNoticePopup.width, updateNoticePopup.height)
-                to: root.sheetEnterTo(updateNoticePopup.width, updateNoticePopup.height)
-                duration: Animations.fast * 1.15
-                easing.type: Easing.OutCubic
+            ParallelAnimation {
+                NumberAnimation {
+                    property: "y"
+                    from: root.desktopMode
+                          ? updateNoticePopup.y + 12
+                          : root.sheetEnterFrom(updateNoticePopup.width, updateNoticePopup.height)
+                    to: updateNoticePopup.y
+                    duration: Animations.fast * 1.15
+                    easing.type: Easing.OutCubic
+                }
+                NumberAnimation {
+                    property: "opacity"
+                    from: 0
+                    to: 1
+                    duration: Animations.fast
+                }
             }
         }
 
         exit: Transition {
-            NumberAnimation {
-                property: root.sheetAnimationProperty()
-                to: root.sheetExitTo(updateNoticePopup.width, updateNoticePopup.height)
-                duration: Animations.fast * 0.9
-                easing.type: Easing.InCubic
+            ParallelAnimation {
+                NumberAnimation {
+                    property: "y"
+                    to: root.desktopMode
+                        ? updateNoticePopup.y + 10
+                        : root.sheetExitTo(updateNoticePopup.width, updateNoticePopup.height)
+                    duration: Animations.fast * 0.9
+                    easing.type: Easing.InCubic
+                }
+                NumberAnimation {
+                    property: "opacity"
+                    to: 0
+                    duration: Animations.fast * 0.7
+                }
             }
         }
 
         background: Rectangle {
             topLeftRadius: 16
-            topRightRadius: root.desktopMode ? 0 : 16
+            topRightRadius: 16
             bottomLeftRadius: root.desktopMode ? 16 : 0
-            bottomRightRadius: 0
+            bottomRightRadius: root.desktopMode ? 16 : 0
             color: root.themeColorToken("mainHex_ffffff", "mainHex_090b14")
-            border.width: 0
+            border.width: root.desktopMode ? 1 : 0
             border.color: root.themeColorToken("mainHex_d6dfec", "mainHex_30435d")
         }
 
         contentItem: ColumnLayout {
+            id: updateNoticeContent
             anchors.fill: parent
-            anchors.margins: 14
+            anchors.leftMargin: root.desktopMode ? 16 : 14
+            anchors.rightMargin: root.desktopMode ? 16 : 14
+            anchors.topMargin: root.desktopMode ? 16 : 14
+            anchors.bottomMargin: root.desktopMode ? 16 : 14 + (root.mobilePlatform ? Math.max(12, root.safeBottomInset) : 0)
             spacing: 10
 
             Rectangle {
@@ -283,7 +310,7 @@ Item {
                 Layout.preferredHeight: 4
                 radius: 2
                 color: root.themeColorToken("mainHex_d6dde8", "mainHex_151c32")
-                visible: !root.compact
+                visible: !root.desktopMode && !root.compact
             }
 
             RowLayout {

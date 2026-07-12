@@ -39,6 +39,10 @@ Item {
     readonly property bool connected: vpnController.connectionState === ConnectionState.Connected
     readonly property bool connecting: vpnController.connectionState === ConnectionState.Connecting
     readonly property bool errorState: vpnController.connectionState === ConnectionState.Error
+    // The full dashboard needs enough room for the sidebar, the hero and the
+    // session inspector.  Collapse secondary panels before layouts can overlap.
+    readonly property bool narrowLayout: width < 1160
+    readonly property bool shortLayout: height < 720
 
     function statusColor() {
         if (connecting)
@@ -727,7 +731,7 @@ Item {
             spacing: 0
 
             Rectangle {
-                Layout.preferredWidth: 224
+                Layout.preferredWidth: desktop.narrowLayout ? 176 : 224
                 Layout.fillHeight: true
                 color: root.themeColorToken("mainHex_f7f9fc", "mainHex_111425")
                 border.width: 0
@@ -744,7 +748,7 @@ Item {
                     anchors.fill: parent
                     anchors.topMargin: 14
                     anchors.leftMargin: 0
-                    anchors.rightMargin: 14
+                    anchors.rightMargin: desktop.narrowLayout ? 10 : 14
                     anchors.bottomMargin: 22
                     spacing: 8
 
@@ -769,12 +773,12 @@ Item {
 
                         RowLayout {
                             anchors.fill: parent
-                            anchors.margins: 16
-                            spacing: 12
+                            anchors.margins: desktop.narrowLayout ? 10 : 16
+                            spacing: desktop.narrowLayout ? 8 : 12
 
                             IconBubble {
-                                Layout.preferredWidth: 34
-                                Layout.preferredHeight: 34
+                                Layout.preferredWidth: desktop.narrowLayout ? 30 : 34
+                                Layout.preferredHeight: desktop.narrowLayout ? 30 : 34
                                 glyph: root.iconShield
                                 accent: accentGreen
                                 fill: Qt.rgba(accentGreen.r, accentGreen.g, accentGreen.b, 0.14)
@@ -811,6 +815,7 @@ Item {
                             }
 
                             Rectangle {
+                                visible: !desktop.narrowLayout
                                 Layout.preferredWidth: 7
                                 Layout.preferredHeight: 7
                                 radius: 4
@@ -1113,8 +1118,9 @@ Item {
                     }
 
                     RowLayout {
+                        visible: !desktop.shortLayout
                         Layout.fillWidth: true
-                        Layout.preferredHeight: 218
+                        Layout.preferredHeight: visible ? 218 : 0
                         spacing: 12
 
                         Rectangle {
@@ -1258,6 +1264,7 @@ Item {
                 }
 
                 Rectangle {
+                    visible: !desktop.narrowLayout && !desktop.shortLayout
                     Layout.preferredWidth: 318
                     Layout.fillHeight: true
                     radius: 14
