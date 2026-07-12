@@ -67,6 +67,7 @@ module;
 #include "runtime/runtimefactory.hpp"
 #include "runtime/vpnruntimebackend.hpp"
 #include "powermodemanager.hpp"
+#include "securitystatus.hpp"
 #include "thirdparty/qrcodegen/qrcodegen.h"
 
 #if defined(Q_OS_ANDROID)
@@ -1805,6 +1806,23 @@ void ensureTunDnsSupport(QJsonObject* config, const QStringList& dnsServers)
     }
 }
 
+bool runtimeConfigCapturesTunDns(const QJsonObject& config)
+{
+    const QJsonObject dns = config.value(QString::fromUtf8("dns")).toObject();
+    if (dns.value(QString::fromUtf8("servers")).toArray().isEmpty()) {
+        return false;
+    }
+
+    const QJsonObject routing = config.value(QString::fromUtf8("routing")).toObject();
+    const QJsonArray rules = routing.value(QString::fromUtf8("rules")).toArray();
+    for (const QJsonValue& value : rules) {
+        if (hasRulePort53ToDnsOutForTun(value.toObject())) {
+            return true;
+        }
+    }
+    return false;
+}
+
 QList<QUrl> speedTestPingUrls()
 {
     return {
@@ -2891,6 +2909,7 @@ VpnController::VpnController(QObject *parent)
         emit runtimeCapabilitiesChanged();
     }
     m_updater = new Updater(this);
+    m_securityStatus = new SecurityStatus(this);
     m_powerModeManager = new PowerModeManager(this);
     m_profileModel = new ServerProfileModel(this);
     m_systemProxyManager = new SystemProxyManager();
@@ -3054,6 +3073,7 @@ VpnController::VpnController(QObject *parent)
     m_currentProfileId = startupProfile.has_value() ? startupProfile->id.trimmed() : QString();
     m_activeProfileAddress = startupProfile.has_value() ? startupProfile->address.trimmed() : QString();
     recomputeProfileStats();
+    refreshSecurityStatus();
 
     if (m_runtimeIsMobile) {
         if (auto *guiApp = qobject_cast<QGuiApplication *>(QCoreApplication::instance())) {
@@ -3085,6 +3105,7 @@ VpnController::VpnController(QObject *parent)
     }
     QTimer::singleShot(900, this, [this]() {
         applyKillSwitchState();
+        refreshSecurityStatus();
     });
 
     connect(qApp, &QCoreApplication::aboutToQuit, this, [this]() {
@@ -3200,6 +3221,11 @@ QString VpnController::latestLogLine() const
 QStringList VpnController::recentLogs() const
 {
     return m_recentLogs;
+}
+
+QStringList VpnController::connectionHistory() const
+{
+    return m_connectionHistory;
 }
 
 qint64 VpnController::rxBytes() const
@@ -3385,6 +3411,7 @@ void VpnController::setCurrentProfileIndex(int index)
     m_currentProfileId = profile.has_value() ? profile->id.trimmed() : QString();
     emit currentProfileIndexChanged();
     emit profileUsageChanged();
+    refreshSecurityStatus();
     saveSettings();
 
     if (m_currentProfileIndex < 0) {
@@ -3413,6 +3440,11 @@ QObject *VpnController::profileModel()
 QObject *VpnController::updater()
 {
     return m_updater;
+}
+
+SecurityStatus *VpnController::securityStatus()
+{
+    return m_securityStatus;
 }
 
 QObject *VpnController::powerModeManager()
@@ -4224,6 +4256,7 @@ void VpnController::setUseSystemProxy(bool enabled)
 
     m_useSystemProxy = enabled;
     emit useSystemProxyChanged();
+    refreshSecurityStatus();
     saveSettings();
     QSettings settings;
     settings.setValue(QString::fromUtf8("network/modeExplicitlyChosen"), true);
@@ -4247,10 +4280,12 @@ void VpnController::setTunMode(bool enabled)
 
     m_tunMode = enabled;
     emit tunModeChanged();
+    refreshSecurityStatus();
 
     if (m_tunMode && m_useSystemProxy) {
         m_useSystemProxy = false;
         emit useSystemProxyChanged();
+        refreshSecurityStatus();
     }
 
     saveSettings();
@@ -4276,6 +4311,7 @@ void VpnController::setKillSwitchEnabled(bool enabled)
     applyKillSwitchState(enabled
                              ? QString::fromUtf8("Kill Switch enabled.")
                              : QString::fromUtf8("Kill Switch disabled."));
+    refreshSecurityStatus();
 }
 
 bool VpnController::autoDisableSystemProxyOnDisconnect() const
@@ -4403,6 +4439,7 @@ void VpnController::setCustomDnsServers(const QString& value)
 
     m_customDnsServers = normalized;
     emit customDnsServersChanged();
+    refreshSecurityStatus();
     saveSettings();
 }
 
@@ -8892,9 +8929,21 @@ void VpnController::setConnectionState(ConnectionState state)
         return;
     }
 
+    const ConnectionState previousState = m_connectionState;
     m_connectionState = state;
+    if (state == ConnectionState::Connected) {
+        appendConnectionHistoryEvent(state);
+        appendSystemLog(QString::fromUtf8("[Connection] Connected."));
+    } else if (state == ConnectionState::Disconnected && previousState != ConnectionState::Disconnected) {
+        appendConnectionHistoryEvent(state);
+        appendSystemLog(QString::fromUtf8("[Connection] Disconnected."));
+    } else if (state == ConnectionState::Error) {
+        appendConnectionHistoryEvent(state);
+        appendSystemLog(QString::fromUtf8("[Connection] Connection error."));
+    }
     emit connectionStateChanged();
     applyKillSwitchState();
+    refreshSecurityStatus();
     if (state == ConnectionState::Connected) {
         m_disconnectRequested.store(false);
         m_publicIpRetryCount = 0;
@@ -8955,6 +9004,43 @@ void VpnController::appendSystemLog(const QString& message)
         m_recentLogs.removeFirst();
     }
     scheduleLogsChanged();
+}
+
+void VpnController::appendConnectionHistoryEvent(ConnectionState state)
+{
+    QString action;
+    if (state == ConnectionState::Connected) {
+        action = QString::fromUtf8("Connected");
+    } else if (state == ConnectionState::Disconnected) {
+        action = QString::fromUtf8("Disconnected");
+    } else if (state == ConnectionState::Error) {
+        action = QString::fromUtf8("Connection error");
+    } else {
+        return;
+    }
+
+    QString profileLabel;
+    if (m_profileModel != nullptr) {
+        const auto profile = m_profileModel->profileAt(m_currentProfileIndex);
+        if (profile.has_value()) {
+            profileLabel = profile->displayLabel().trimmed();
+            if (profileLabel.isEmpty()) {
+                profileLabel = profile->name.trimmed();
+            }
+        }
+    }
+
+    QString line = QString::fromUtf8("%1  %2")
+                       .arg(QDateTime::currentDateTime().toString(QString::fromUtf8("HH:mm:ss")), action);
+    if (!profileLabel.isEmpty()) {
+        line += QString::fromUtf8("  %1").arg(profileLabel);
+    }
+
+    m_connectionHistory.prepend(line);
+    while (m_connectionHistory.size() > 24) {
+        m_connectionHistory.removeLast();
+    }
+    emit connectionHistoryChanged();
 }
 
 void VpnController::resetSpeedTestState(bool emitSignal)
@@ -12004,6 +12090,8 @@ void VpnController::applySystemProxy(bool enable, bool force)
             }
         }
 
+        refreshSecurityStatus();
+
         if (m_pendingProxyApplyState >= 0) {
             const bool pendingEnable = (m_pendingProxyApplyState == 1);
             const bool pendingForce = m_pendingProxyApplyForce;
@@ -12067,6 +12155,47 @@ void VpnController::applyKillSwitchState(const QString& reason)
     if (!busy()) {
         applySystemProxy(true, true);
     }
+}
+
+void VpnController::refreshSecurityStatus()
+{
+    if (m_securityStatus == nullptr) {
+        return;
+    }
+
+    SecurityStatus::Inputs inputs;
+    const bool runtimeProcessActive =
+        (m_runtimeBackend
+         && (m_runtimeBackend->isRunning()
+             || m_runtimeBackend->startupPending()
+             || m_runtimeBackend->runtimeProcessAlive()))
+        || m_privilegedTunManaged;
+
+    inputs.platformSupportsKillSwitch = m_runtimeSupportsSystemProxy;
+    inputs.killSwitchEnabled = m_killSwitchEnabled;
+    inputs.killSwitchEnforcementKnown = m_killSwitchEnabled
+        && m_runtimeSupportsSystemProxy
+        && !m_proxyApplyInFlight;
+    inputs.killSwitchEnforced = inputs.killSwitchEnforcementKnown && m_systemProxyApplied;
+
+    inputs.connected = connected();
+    inputs.runtimeActive = runtimeProcessActive;
+
+    inputs.dnsRoutingKnown = connected()
+        && runtimeTunActive()
+        && m_runtimeTunDnsCaptureConfigured;
+    inputs.dnsRoutedThroughTunnel = inputs.dnsRoutingKnown;
+
+    // GenyConnect does not currently expose a platform IPv6 leak probe.
+    // Keep this unknown until a real route/firewall diagnostic is available.
+    inputs.ipv6RoutingKnown = false;
+
+    const auto profile = m_profileModel ? m_profileModel->profileAt(m_currentProfileIndex) : std::nullopt;
+    if (profile.has_value()) {
+        inputs.activeProtocol = profile->protocol;
+    }
+
+    m_securityStatus->update(inputs);
 }
 
 bool VpnController::queryTrafficStatsFromApi(qint64 *uplinkBytes, qint64 *downlinkBytes, QString *errorMessage)
@@ -12861,6 +12990,7 @@ void VpnController::clearMacTunRoutes()
 
 bool VpnController::writeRuntimeConfig(const ServerProfile& profile, QString *errorMessage)
 {
+    m_runtimeTunDnsCaptureConfigured = false;
     XrayConfigBuilder::BuildOptions options = m_buildOptions;
     if (m_powerModeManager) {
         const auto policy = m_powerModeManager->effectivePolicy();
@@ -13154,6 +13284,9 @@ bool VpnController::writeRuntimeConfig(const ServerProfile& profile, QString *er
         }
         return false;
     }
+
+    m_runtimeTunDnsCaptureConfigured = options.enableTun && runtimeConfigCapturesTunDns(config);
+    refreshSecurityStatus();
 
     return true;
 }

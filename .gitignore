@@ -50,3 +50,4 @@ publish/
 CMakeLists.txt.user
 .qtcreator
 TODO.txt
+/result

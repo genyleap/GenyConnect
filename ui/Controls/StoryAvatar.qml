@@ -5,7 +5,6 @@
 import QtQuick
 import QtQuick.Layouts
 import QtQuick.Controls.Basic
-import Qt5Compat.GraphicalEffects
 
 import "../Pages" as Pages
 

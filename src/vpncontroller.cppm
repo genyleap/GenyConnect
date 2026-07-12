@@ -37,6 +37,7 @@ module;
 #include <QVariantList>
 #include <QVariantMap>
 #include <atomic>
+#include "securitystatus.hpp"
 #include "runtime/vpnruntimebackend.hpp"
 #if !defined(Q_OS_IOS)
 #include <QProcess>
@@ -102,6 +103,7 @@ public:
     Q_PROPERTY(QString lastError READ lastError NOTIFY lastErrorChanged)
     Q_PROPERTY(QString latestLogLine READ latestLogLine NOTIFY latestLogLineChanged)
     Q_PROPERTY(QStringList recentLogs READ recentLogs NOTIFY logsChanged)
+    Q_PROPERTY(QStringList connectionHistory READ connectionHistory NOTIFY connectionHistoryChanged)
 
     Q_PROPERTY(qint64 rxBytes READ rxBytes NOTIFY trafficChanged)
     Q_PROPERTY(qint64 txBytes READ txBytes NOTIFY trafficChanged)
@@ -135,6 +137,7 @@ public:
     Q_PROPERTY(QString currentProfileAddressValue READ currentProfileAddress NOTIFY currentProfileIndexChanged)
     Q_PROPERTY(QObject *profileModel READ profileModel CONSTANT)
     Q_PROPERTY(QObject *updater READ updater CONSTANT)
+    Q_PROPERTY(SecurityStatus *securityStatus READ securityStatus CONSTANT)
 
     Q_PROPERTY(QString xrayExecutablePath READ xrayExecutablePath WRITE setXrayExecutablePath NOTIFY xrayExecutablePathChanged)
     Q_PROPERTY(QString xrayVersion READ xrayVersion NOTIFY xrayVersionChanged)
@@ -249,6 +252,7 @@ public:
      * @return Recent log list.
      */
     QStringList recentLogs() const;
+    QStringList connectionHistory() const;
 
     /**
      * @brief Total received bytes from runtime stats.
@@ -371,6 +375,7 @@ public:
      * @return Pointer to updater service.
      */
     QObject *updater();
+    SecurityStatus *securityStatus();
     QObject *powerModeManager();
     QString powerMode() const;
     void setPowerMode(const QString& mode);
@@ -920,6 +925,7 @@ signals:
     void latestLogLineChanged();
     //! Emitted when recent log list changes.
     void logsChanged();
+    void connectionHistoryChanged();
     //! Emitted when traffic counters change.
     void trafficChanged();
     //! Emitted when process memory usage snapshot changes.
@@ -1077,12 +1083,14 @@ private:
      */
     void applySystemProxy(bool enable, bool force = false);
     void applyKillSwitchState(const QString& reason = QString());
+    void refreshSecurityStatus();
 
     /**
      * @brief Append system-tagged line to recent logs.
      * @param message Log text.
      */
     void appendSystemLog(const QString& message);
+    void appendConnectionHistoryEvent(ConnectionState state);
     void completeRuntimeConnectedStartup(bool restoredExistingMobileRuntime = false);
     void syncMobileRuntimeState(const QString& reason);
     void gateRuntimeStartupUntilProxyReady(quint64 connectAttempt);
@@ -1266,6 +1274,7 @@ private:
     QString m_lastError;
     QString m_latestLogLine;
     QStringList m_recentLogs;
+    QStringList m_connectionHistory;
     qint64 m_rxBytes = 0;
     qint64 m_txBytes = 0;
     qint64 m_memoryUsageBytes = 0;
@@ -1347,6 +1356,7 @@ private:
     bool m_pendingProxyApplyForce = false;
     bool m_tunMode = false;
     bool m_effectiveTunMode = false;
+    bool m_runtimeTunDnsCaptureConfigured = false;
     bool m_killSwitchEnabled = false;
     bool m_autoDisableSystemProxyOnDisconnect = false;
     bool m_whitelistMode = false;
@@ -1387,6 +1397,7 @@ private:
 
     ServerProfileModel *m_profileModel = nullptr;
     Updater *m_updater = nullptr;
+    SecurityStatus *m_securityStatus = nullptr;
     PowerModeManager *m_powerModeManager = nullptr;
     SystemProxyManager *m_systemProxyManager = nullptr;
     VpnRuntimeBackend *m_runtimeBackend = nullptr;

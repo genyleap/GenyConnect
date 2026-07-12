@@ -153,11 +153,37 @@ iOS support is under active development.
 
 ## Linux AppImage Notes
 
-The Linux AppImage is intended to run without relying on host Qt libraries. The release packaging pipeline validates the bundled Qt platform plugins and QML imports, including the xcb and Wayland platform plugins, QtQuick modules, QtQuick Controls, QtQuick Dialogs, QtQuick Effects, and Qt5Compat GraphicalEffects.
+The Linux AppImage is intended to run without relying on host Qt libraries. The release packaging pipeline validates the bundled Qt platform plugins and QML imports, including the xcb and Wayland platform plugins, QtQuick modules, QtQuick Controls, QtQuick Dialogs, and QtQuick Effects.
 
-GenyConnect does not require KDE Breeze QML modules at runtime. On KDE desktops where Qt may try to select Breeze automatically from the host environment, the app falls back to the bundled Qt Quick Controls Basic style so startup does not fail on systems where `org.kde.breeze` is not installed.
+GenyConnect does not require KDE Breeze QML modules at runtime. On KDE desktops where Qt may try to select Breeze automatically from the host environment, the app falls back to the bundled Qt Quick Controls Basic style so startup does not depend on host KDE QML modules.
 
 When troubleshooting AppImage startup, check the first Qt diagnostics printed by the app. They include the selected platform plugin, Qt library paths, QML import paths, `QT_PLUGIN_PATH`, `QML2_IMPORT_PATH`, `LD_LIBRARY_PATH`, `QT_QPA_PLATFORM`, and `QT_QUICK_CONTROLS_STYLE`.
+
+### RPM packages
+
+Release builds publish native RPM packages for both `x86_64` and `aarch64`. On Fedora or another RPM-based distribution, install the downloaded package with:
+
+```shell
+sudo dnf install ./genyconnect-*.rpm
+```
+
+The RPM contains GenyConnect, its updater and TUN helper, the matching Xray runtime, the desktop entry, and application icons. Qt 6 runtime dependencies are resolved through the distribution package manager.
+
+### Nix and NixOS
+
+The repository is a Nix flake supporting `x86_64-linux` and `aarch64-linux`. Run GenyConnect directly from a checkout with:
+
+```shell
+nix run .
+```
+
+Install it into the current user profile with:
+
+```shell
+nix profile install .#genyconnect
+```
+
+The Nix package builds GenyConnect from source and uses the packaged `xray` runtime from nixpkgs.
 
 ---
 

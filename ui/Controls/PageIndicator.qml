@@ -4,7 +4,6 @@
 
 import QtQuick
 import QtQuick.Controls.Basic as T
-import Qt5Compat.GraphicalEffects
 import QtQuick.Layouts
 
 T.PageIndicator {

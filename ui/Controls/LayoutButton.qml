@@ -5,7 +5,6 @@
 import QtQuick
 import QtQuick.Controls.Basic as T
 import QtQuick.Layouts
-import Qt5Compat.GraphicalEffects
 
 import "../Controls" as Controls
 

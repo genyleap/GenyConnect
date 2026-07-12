@@ -30,7 +30,7 @@ require_dir_glob() {
 }
 
 require_file_glob "Qt xcb platform plugin" "*/plugins/platforms/libqxcb.so"
-if ! find "${1}" -path "*/plugins/platforms/libqwayland*.so" -type f | grep -q .; then
+if ! find "${ROOT}" -path "*/plugins/platforms/libqwayland*.so" -type f | grep -q .; then
   echo "WARNING: Qt Wayland platform plugin not bundled; continuing with xcb-only AppImage."
 fi
 require_file_glob "Qt SVG image plugin" "*/plugins/imageformats/libqsvg.so"
@@ -41,17 +41,26 @@ require_dir_glob "QtQuick.Controls.Basic QML import" "*/qml/QtQuick/Controls/Bas
 require_dir_glob "QtQuick.Layouts QML import" "*/qml/QtQuick/Layouts"
 require_dir_glob "QtQuick.Dialogs QML import" "*/qml/QtQuick/Dialogs"
 require_dir_glob "QtQuick.Effects QML import" "*/qml/QtQuick/Effects"
-require_dir_glob "Qt5Compat.GraphicalEffects QML import" "*/qml/Qt5Compat/GraphicalEffects"
 
 if [[ -n "${SOURCE_ROOT}" && -d "${SOURCE_ROOT}" ]]; then
   if command -v rg >/dev/null 2>&1; then
-    source_dirs=()
-    [[ -d "${SOURCE_ROOT}/ui" ]] && source_dirs+=("${SOURCE_ROOT}/ui")
-    [[ -d "${SOURCE_ROOT}/qml" ]] && source_dirs+=("${SOURCE_ROOT}/qml")
-    if [[ "${#source_dirs[@]}" -gt 0 ]] \
-      && rg -n 'org\.kde\.breeze|import\s+org\.kde' "${source_dirs[@]}" >/tmp/genyconnect-kde-qml-imports.txt 2>/dev/null; then
-      echo "KDE-only QML import found in source. Make it optional or bundle it:" >&2
-      cat /tmp/genyconnect-kde-qml-imports.txt >&2
+    forbidden_patterns=(
+      'Rectangular''Shadow'
+      'Rectangular''Glow'
+      'Drop''Shadow'
+      'Qt5''Compat[.]Graphical''Effects'
+      'Qt''Graphical''Effects'
+      'org[.]kde[.]''breeze'
+    )
+    forbidden_regex="$(IFS='|'; printf '%s' "${forbidden_patterns[*]}")"
+    if rg --hidden -n \
+      --glob '!.git/**' \
+      --glob '!build/**' \
+      --glob '!cmake-build-*/**' \
+      --glob '!*.AppDir/**' \
+      "${forbidden_regex}" "${SOURCE_ROOT}" >/tmp/genyconnect-forbidden-qml-effects.txt 2>/dev/null; then
+      echo "Forbidden legacy or host-specific QML effect/style dependency found:" >&2
+      cat /tmp/genyconnect-forbidden-qml-effects.txt >&2
       fail=1
     fi
   fi

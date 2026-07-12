@@ -32,7 +32,7 @@ if(APPLE AND NOT IOS)
   set(CMAKE_OSX_DEPLOYMENT_TARGET "${GENYCONNECT_MACOS_DEPLOYMENT_TARGET}" CACHE STRING "Minimum macOS version" FORCE)
 endif()
 
-project(${PROJECT_NAME} VERSION 1.4.800 LANGUAGES CXX)
+project(${PROJECT_NAME} VERSION 1.4.880 LANGUAGES CXX)
 
 # -------------------------
 # Detect Android generator architecture
@@ -606,6 +606,11 @@ endif()
 
 find_package(Qt6 6.8 REQUIRED COMPONENTS ${GENYCONNECT_QT_COMPONENTS})
 
+include(CTest)
+if(BUILD_TESTING AND NOT ANDROID AND NOT IOS)
+  find_package(Qt6 6.8 REQUIRED COMPONENTS Test)
+endif()
+
 if(ANDROID)
   if(NOT QT_HOST_PATH AND NOT DEFINED ENV{QT_HOST_PATH})
     message(WARNING
@@ -653,6 +658,8 @@ set(GENYCONNECT_MODULE_IFS
 
 
 set(GENYCONNECT_IMPL_SOURCES
+  src/securitystatus.hpp
+  src/securitystatus.cpp
   src/serverprofile.cpp
   src/serverprofilemodel.cpp
   src/linkparser.cpp
@@ -890,6 +897,7 @@ set(qml_controls
   ui/Controls/CircleIconButton.qml
   ui/Controls/PrimaryActionButton.qml
   ui/Controls/SignalBars.qml
+  ui/Controls/SoftShadow.qml
   ui/Controls/SpeedTestGauge.qml
   ui/Controls/PowerModeParticleEffect.qml
   ui/Controls/AppPage.qml
@@ -919,6 +927,7 @@ set(qml_sections
   ui/Sections/CustomDnsSettings.qml
   ui/Sections/InterfaceSettings.qml
   ui/Sections/LanSharingSettings.qml
+  ui/Sections/DesktopMainSurface.qml
   ui/Sections/LogsSettings.qml
   ui/Sections/MainSurface.qml
   ui/Sections/PowerModeSettings.qml
@@ -948,6 +957,12 @@ set(genyconnect_image_assets
 
 if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/ui/Resources/image/GenyConnect.ico")
   list(APPEND genyconnect_image_assets ui/Resources/image/GenyConnect.ico)
+endif()
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/ui/Resources/image/GenyConnect-Circle.png")
+  list(APPEND genyconnect_image_assets ui/Resources/image/GenyConnect-Circle.png)
+endif()
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/ui/Resources/image/GenyConnect.png")
+  list(APPEND genyconnect_image_assets ui/Resources/image/GenyConnect.png)
 endif()
 
 if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/ui/Resources/image/map.png")
@@ -1043,6 +1058,17 @@ endif()
 # -------------------------
 # Xray auto-download
 # -------------------------
+if(BUILD_TESTING AND NOT ANDROID AND NOT IOS)
+  add_executable(genyconnect_securitystatus_tests
+    tests/securitystatus_tests.cpp
+    src/securitystatus.hpp
+    src/securitystatus.cpp
+  )
+  target_include_directories(genyconnect_securitystatus_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+  target_link_libraries(genyconnect_securitystatus_tests PRIVATE Qt6::Core Qt6::Test)
+  add_test(NAME genyconnect_securitystatus_tests COMMAND genyconnect_securitystatus_tests)
+endif()
+
 if(GENYCONNECT_AUTO_DOWNLOAD_XRAY AND NOT GENYCONNECT_BUNDLED_XRAY_PATH)
 
   set(_geny_xray_version "${GENYCONNECT_XRAY_VERSION}")
@@ -1701,6 +1727,12 @@ endif()
 # -----------------------------------------------------------------------------
 set(CPACK_MONOLITHIC_INSTALL ON)
 
+if(UNIX AND NOT APPLE)
+  set(_GENY_DOC_INSTALL_DEST "${CMAKE_INSTALL_DOCDIR}")
+else()
+  set(_GENY_DOC_INSTALL_DEST ".")
+endif()
+
 set(_GENY_DOC_README_SRC "")
 set(_GENY_DOC_LICENSE_SRC "")
 
@@ -1732,7 +1764,7 @@ if(GENYCONNECT_BUNDLE_DOCS)
   if(_GENY_DOC_README_SRC)
     set(_GENY_DOC_README_TXT "${CMAKE_BINARY_DIR}/NSIS_README.txt")
     configure_file("${_GENY_DOC_README_SRC}" "${_GENY_DOC_README_TXT}" COPYONLY)
-    install(FILES "${_GENY_DOC_README_TXT}" DESTINATION "." RENAME "README.txt")
+    install(FILES "${_GENY_DOC_README_TXT}" DESTINATION "${_GENY_DOC_INSTALL_DEST}" RENAME "README.txt")
   else()
     message(WARNING "No README file found to bundle.")
   endif()
@@ -1740,7 +1772,7 @@ if(GENYCONNECT_BUNDLE_DOCS)
   if(_GENY_DOC_LICENSE_SRC)
     set(_GENY_DOC_LICENSE_TXT "${CMAKE_BINARY_DIR}/NSIS_LICENSE.txt")
     configure_file("${_GENY_DOC_LICENSE_SRC}" "${_GENY_DOC_LICENSE_TXT}" COPYONLY)
-    install(FILES "${_GENY_DOC_LICENSE_TXT}" DESTINATION "." RENAME "LICENSE.txt")
+    install(FILES "${_GENY_DOC_LICENSE_TXT}" DESTINATION "${_GENY_DOC_INSTALL_DEST}" RENAME "LICENSE.txt")
   else()
     message(WARNING "No LICENSE file found to bundle.")
   endif()
@@ -1808,7 +1840,25 @@ if(WIN32)
 elseif(APPLE)
   set(CPACK_GENERATOR "DragNDrop")
 else()
-  set(CPACK_GENERATOR "TGZ")
+  set(CPACK_GENERATOR "TGZ;RPM")
+  set(CPACK_RPM_PACKAGE_NAME "genyconnect")
+  set(CPACK_RPM_PACKAGE_RELEASE "1")
+  set(CPACK_RPM_PACKAGE_RELEASE_DIST ON)
+  set(CPACK_RPM_PACKAGE_LICENSE "GPL-3.0-or-later")
+  set(CPACK_RPM_PACKAGE_GROUP "Applications/Internet")
+  set(CPACK_RPM_PACKAGE_URL "https://github.com/genyleap/GenyConnect")
+  set(CPACK_RPM_PACKAGE_REQUIRES "qt6-qtbase-gui, qt6-qtdeclarative, qt6-qtsvg")
+  set(CPACK_RPM_PACKAGE_AUTOREQPROV ON)
+  set(CPACK_RPM_FILE_NAME "RPM-DEFAULT")
+  set(CPACK_RPM_EXCLUDE_FROM_AUTO_FILELIST_ADDITION
+    "/usr/share/applications"
+    "/usr/share/doc"
+    "/usr/share/icons"
+    "/usr/share/icons/hicolor"
+    "/usr/share/icons/hicolor/512x512"
+    "/usr/share/icons/hicolor/512x512/apps"
+    "/usr/share/pixmaps"
+  )
 endif()
 
 include(CPack)

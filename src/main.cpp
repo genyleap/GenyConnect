@@ -72,13 +72,12 @@ bool quickControlsStyleAvailable(const QString& style)
         return false;
     }
     const QString lowered = trimmed.toLower();
-    if (lowered.contains(QString::fromUtf8("org.kde"))) {
-        return qmlModuleAvailable(trimmed);
+    if (lowered.contains(QString::fromUtf8("org.kde")) || lowered.contains(QString::fromUtf8("breeze"))) {
+        return false;
     }
     return qmlModuleAvailable(QString::fromUtf8("QtQuick.Controls.%1").arg(trimmed))
            || qmlModuleAvailable(trimmed)
-           || (lowered.contains(QString::fromUtf8("breeze"))
-               && qmlModuleAvailable(QString::fromUtf8("org.kde.breeze")));
+           || qmlModuleAvailable(QString::fromUtf8("QtQuick.Controls.%1.Style").arg(trimmed));
 }
 
 void configureQuickControlsFallback()

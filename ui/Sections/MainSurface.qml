@@ -10,7 +10,6 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
-import QtQuick.Effects
 import QtCore
 
 import GenyConnect 1.0
@@ -239,16 +238,16 @@ Item {
         closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
         padding: 0
         width: root.sheetWidth(420)
-        height: 172
-        x: (root.width - width) * 0.5
-        y: root.drawerY(height)
+        height: root.desktopMode ? root.height : 172
+        x: root.sheetX(width)
+        y: root.sheetY(height)
         z: 200
 
         enter: Transition {
             NumberAnimation {
-                property: "y"
-                from: root.height
-                to: root.drawerY(updateNoticePopup.height)
+                property: root.sheetAnimationProperty()
+                from: root.sheetEnterFrom(updateNoticePopup.width, updateNoticePopup.height)
+                to: root.sheetEnterTo(updateNoticePopup.width, updateNoticePopup.height)
                 duration: Animations.fast * 1.15
                 easing.type: Easing.OutCubic
             }
@@ -256,8 +255,8 @@ Item {
 
         exit: Transition {
             NumberAnimation {
-                property: "y"
-                to: root.height
+                property: root.sheetAnimationProperty()
+                to: root.sheetExitTo(updateNoticePopup.width, updateNoticePopup.height)
                 duration: Animations.fast * 0.9
                 easing.type: Easing.InCubic
             }
@@ -265,8 +264,8 @@ Item {
 
         background: Rectangle {
             topLeftRadius: 16
-            topRightRadius: 16
-            bottomLeftRadius: 0
+            topRightRadius: root.desktopMode ? 0 : 16
+            bottomLeftRadius: root.desktopMode ? 16 : 0
             bottomRightRadius: 0
             color: root.themeColorToken("mainHex_ffffff", "mainHex_090b14")
             border.width: 0
@@ -357,23 +356,25 @@ Item {
 
     Popup {
         id: donationSuggestPopup
-        modal: true
-        focus: true
+        modal: !root.desktopMode
+        focus: !root.desktopMode
+        dim: !root.desktopMode
         closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
         padding: 0
-        width: root.sheetWidth(400)
-        height: donationSuggestContent.implicitHeight + 28 + (root.mobilePlatform ? Math.max(20, root.safeBottomInset + 20) : 0)
-        x: (root.width - width) * 0.5
-        y: root.compact
-           ? root.height - height
-           : root.drawerY(height)
+        width: root.desktopMode ? Math.min(430, Math.max(360, root.width * 0.28)) : root.sheetWidth(400)
+        height: donationSuggestContent.implicitHeight
+                + (root.desktopMode ? 32 : 28 + (root.mobilePlatform ? Math.max(20, root.safeBottomInset + 20) : 0))
+        x: root.desktopMode ? root.width - width - 24 : root.sheetX(width)
+        y: root.desktopMode
+           ? Math.max(24, root.height - height - 24)
+           : (root.compact ? root.height - height : root.drawerY(height))
         z: 210
 
         enter: Transition {
             ParallelAnimation {
                 NumberAnimation {
                     property: "y"
-                    from: donationSuggestPopup.y + 26
+                    from: donationSuggestPopup.y + (root.desktopMode ? 12 : 26)
                     to: donationSuggestPopup.y
                     duration: Animations.fast
                     easing.type: Easing.OutCubic
@@ -391,7 +392,7 @@ Item {
             ParallelAnimation {
                 NumberAnimation {
                     property: "y"
-                    to: donationSuggestPopup.y + 18
+                    to: donationSuggestPopup.y + (root.desktopMode ? 10 : 18)
                     duration: Animations.fast * 0.75
                     easing.type: Easing.InCubic
                 }
@@ -406,10 +407,10 @@ Item {
         background: Rectangle {
             topLeftRadius: 16
             topRightRadius: 16
-            bottomLeftRadius: 0
-            bottomRightRadius: 0
+            bottomLeftRadius: root.desktopMode ? 16 : 0
+            bottomRightRadius: root.desktopMode ? 16 : 0
             color: root.themeColorToken("mainHex_ffffff", "mainHex_090b14")
-            border.width: 0
+            border.width: root.desktopMode ? 1 : 0
             border.color: root.themeColorToken("mainHex_d6dfec", "mainHex_30435d")
         }
 
@@ -419,11 +420,11 @@ Item {
             anchors.right: parent.right
             anchors.top: parent.top
             anchors.bottom: parent.bottom
-            anchors.leftMargin: 14
-            anchors.rightMargin: 14
-            anchors.topMargin: 14
-            anchors.bottomMargin: 14 + (root.mobilePlatform ? Math.max(12, root.safeBottomInset) : 0)
-            spacing: 10
+            anchors.leftMargin: root.desktopMode ? 16 : 14
+            anchors.rightMargin: root.desktopMode ? 16 : 14
+            anchors.topMargin: root.desktopMode ? 16 : 14
+            anchors.bottomMargin: root.desktopMode ? 16 : 14 + (root.mobilePlatform ? Math.max(12, root.safeBottomInset) : 0)
+            spacing: root.desktopMode ? 12 : 10
 
             RowLayout {
                 Layout.fillWidth: true
@@ -501,15 +502,15 @@ Item {
         closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
         width: root.sheetWidth(430)
         height: root.sheetHeight(280)
-        x: (root.width - width) * 0.5
-        y: root.drawerY(height)
+        x: root.sheetX(width)
+        y: root.sheetY(height)
         padding: 0
 
         enter: Transition {
             NumberAnimation {
-                property: "y"
-                from: root.height
-                to: root.drawerY(tunConflictPopup.height)
+                property: root.sheetAnimationProperty()
+                from: root.sheetEnterFrom(tunConflictPopup.width, tunConflictPopup.height)
+                to: root.sheetEnterTo(tunConflictPopup.width, tunConflictPopup.height)
                 duration: Animations.fast * 1.15
                 easing.type: Easing.OutCubic
             }
@@ -517,8 +518,8 @@ Item {
 
         exit: Transition {
             NumberAnimation {
-                property: "y"
-                to: root.height
+                property: root.sheetAnimationProperty()
+                to: root.sheetExitTo(tunConflictPopup.width, tunConflictPopup.height)
                 duration: Animations.fast * 0.9
                 easing.type: Easing.InCubic
             }
@@ -526,8 +527,8 @@ Item {
 
         background: Rectangle {
             topLeftRadius: 24
-            topRightRadius: 24
-            bottomLeftRadius: 0
+            topRightRadius: root.desktopMode ? 0 : 24
+            bottomLeftRadius: root.desktopMode ? 24 : 0
             bottomRightRadius: 0
             color: root.themeColorToken("mainHex_ffffff", "mainHex_090b14")
             border.width: 0
@@ -600,15 +601,15 @@ Item {
         closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
         width: root.sheetWidth(430)
         height: root.sheetHeight(330)
-        x: (root.width - width) * 0.5
-        y: root.drawerY(height)
+        x: root.sheetX(width)
+        y: root.sheetY(height)
         padding: 0
 
         enter: Transition {
             NumberAnimation {
-                property: "y"
-                from: root.height
-                to: root.drawerY(securityWarningPopup.height)
+                property: root.sheetAnimationProperty()
+                from: root.sheetEnterFrom(securityWarningPopup.width, securityWarningPopup.height)
+                to: root.sheetEnterTo(securityWarningPopup.width, securityWarningPopup.height)
                 duration: Animations.fast * 1.15
                 easing.type: Easing.OutCubic
             }
@@ -616,8 +617,8 @@ Item {
 
         exit: Transition {
             NumberAnimation {
-                property: "y"
-                to: root.height
+                property: root.sheetAnimationProperty()
+                to: root.sheetExitTo(securityWarningPopup.width, securityWarningPopup.height)
                 duration: Animations.fast * 0.9
                 easing.type: Easing.InCubic
             }
@@ -625,7 +626,9 @@ Item {
 
         background: Rectangle {
             topLeftRadius: 24
-            topRightRadius: 24
+            topRightRadius: root.desktopMode ? 0 : 24
+            bottomLeftRadius: root.desktopMode ? 24 : 0
+            bottomRightRadius: 0
             color: root.themeColorToken("mainHex_ffffff", "mainHex_090b14")
             border.width: 0
         }
@@ -734,15 +737,15 @@ Item {
         }
         width: root.sheetWidth(430)
         height: root.compact ? root.height : root.sheetHeight(640)
-        x: (root.width - width) * 0.5
-        y: root.compact ? 0 : root.drawerY(height)
+        x: root.sheetX(width)
+        y: root.desktopMode ? 0 : (root.compact ? 0 : root.drawerY(height))
         padding: 0
 
         enter: Transition {
             NumberAnimation {
-                property: "y"
-                from: root.height
-                to: root.compact ? 0 : root.drawerY(profilePopup.height)
+                property: root.sheetAnimationProperty()
+                from: root.sheetEnterFrom(profilePopup.width, profilePopup.height)
+                to: root.sheetEnterTo(profilePopup.width, profilePopup.height)
                 duration: Animations.fast * 1.15
                 easing.type: Easing.OutCubic
             }
@@ -750,8 +753,8 @@ Item {
 
         exit: Transition {
             NumberAnimation {
-                property: "y"
-                to: root.height
+                property: root.sheetAnimationProperty()
+                to: root.sheetExitTo(profilePopup.width, profilePopup.height)
                 duration: Animations.fast * 0.9
                 easing.type: Easing.InCubic
             }
@@ -759,8 +762,8 @@ Item {
 
         background: Rectangle {
             topLeftRadius: root.compact ? 0 : 22
-            topRightRadius: root.compact ? 0 : 22
-            bottomLeftRadius: 0
+            topRightRadius: (root.compact || root.desktopMode) ? 0 : 22
+            bottomLeftRadius: root.desktopMode ? 22 : 0
             bottomRightRadius: 0
             color: root.themeColorToken("mainHex_ffffff", "mainHex_090b14")
             border.width: 0
@@ -2023,16 +2026,16 @@ Item {
         focus: true
         closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
         width: root.sheetWidth(420)
-        height: Math.min(root.height - 58, 232)
-        x: (root.width - width) * 0.5
-        y: root.drawerY(height)
+        height: root.desktopMode ? root.height : Math.min(root.height - 58, 232)
+        x: root.sheetX(width)
+        y: root.sheetY(height)
         padding: 0
 
         enter: Transition {
             NumberAnimation {
-                property: "y"
-                from: root.height
-                to: root.drawerY(clearProfilesPopup.height)
+                property: root.sheetAnimationProperty()
+                from: root.sheetEnterFrom(clearProfilesPopup.width, clearProfilesPopup.height)
+                to: root.sheetEnterTo(clearProfilesPopup.width, clearProfilesPopup.height)
                 duration: Animations.fast * 1.15
                 easing.type: Easing.OutCubic
             }
@@ -2040,8 +2043,8 @@ Item {
 
         exit: Transition {
             NumberAnimation {
-                property: "y"
-                to: root.height
+                property: root.sheetAnimationProperty()
+                to: root.sheetExitTo(clearProfilesPopup.width, clearProfilesPopup.height)
                 duration: Animations.fast * 0.9
                 easing.type: Easing.InCubic
             }
@@ -2049,8 +2052,8 @@ Item {
 
         background: Rectangle {
             topLeftRadius: 20
-            topRightRadius: 20
-            bottomLeftRadius: 0
+            topRightRadius: root.desktopMode ? 0 : 20
+            bottomLeftRadius: root.desktopMode ? 20 : 0
             bottomRightRadius: 0
             color: root.themeColorToken("mainHex_ffffff", "mainHex_090b14")
             border.width: 0
@@ -2122,6 +2125,8 @@ Item {
         closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
         width: root.sheetWidth(420)
         height: {
+            if (root.desktopMode)
+                return root.height
             if (root.compact) {
                 const topGap = root.safeTopInset + 14
                 return Math.max(420, root.height - topGap)
@@ -2129,15 +2134,15 @@ Item {
             const target = editProfileContent.implicitHeight + 22
             return Math.min(root.height - 58, target)
         }
-        x: (root.width - width) * 0.5
-        y: root.compact ? (root.safeTopInset + 6) : root.drawerY(height)
+        x: root.sheetX(width)
+        y: root.desktopMode ? 0 : (root.compact ? (root.safeTopInset + 6) : root.drawerY(height))
         padding: 0
 
         enter: Transition {
             NumberAnimation {
-                property: "y"
-                from: root.height
-                to: root.drawerY(editProfilePopup.height)
+                property: root.sheetAnimationProperty()
+                from: root.sheetEnterFrom(editProfilePopup.width, editProfilePopup.height)
+                to: root.desktopMode ? root.sheetX(editProfilePopup.width) : editProfilePopup.y
                 duration: Animations.fast * 1.15
                 easing.type: Easing.OutCubic
             }
@@ -2145,16 +2150,18 @@ Item {
 
         exit: Transition {
             NumberAnimation {
-                property: "y"
-                to: root.height
+                property: root.sheetAnimationProperty()
+                to: root.sheetExitTo(editProfilePopup.width, editProfilePopup.height)
                 duration: Animations.fast * 0.9
                 easing.type: Easing.InCubic
             }
         }
 
         background: Rectangle {
-            topRightRadius: 24
             topLeftRadius: 24
+            topRightRadius: root.desktopMode ? 0 : 24
+            bottomLeftRadius: root.desktopMode ? 24 : 0
+            bottomRightRadius: 0
             color: root.themeColorToken("mainHex_ffffff", "mainHex_090b14")
             border.width: 0
             border.color: root.themeColorToken("mainHex_d8dde8", "mainHex_151c32")
@@ -2587,15 +2594,15 @@ Item {
         }
         width: root.sheetWidth(430)
         height: root.compact ? root.height : root.sheetHeight(620)
-        x: (root.width - width) * 0.5
-        y: root.compact ? 0 : root.drawerY(height)
+        x: root.sheetX(width)
+        y: root.desktopMode ? 0 : (root.compact ? 0 : root.drawerY(height))
         padding: 0
 
         enter: Transition {
             NumberAnimation {
-                property: "y"
-                from: root.height
-                to: root.compact ? 0 : root.drawerY(settingsPopup.height)
+                property: root.sheetAnimationProperty()
+                from: root.sheetEnterFrom(settingsPopup.width, settingsPopup.height)
+                to: root.sheetEnterTo(settingsPopup.width, settingsPopup.height)
                 duration: Animations.fast * 1.15
                 easing.type: Easing.OutCubic
             }
@@ -2603,8 +2610,8 @@ Item {
 
         exit: Transition {
             NumberAnimation {
-                property: "y"
-                to: root.height
+                property: root.sheetAnimationProperty()
+                to: root.sheetExitTo(settingsPopup.width, settingsPopup.height)
                 duration: Animations.fast * 0.9
                 easing.type: Easing.InCubic
             }
@@ -2612,8 +2619,8 @@ Item {
 
         background: Rectangle {
             topLeftRadius: root.compact ? 0 : 24
-            topRightRadius: root.compact ? 0 : 24
-            bottomLeftRadius: 0
+            topRightRadius: (root.compact || root.desktopMode) ? 0 : 24
+            bottomLeftRadius: root.desktopMode ? 24 : 0
             bottomRightRadius: 0
             color: Colors.dsWindow
             border.width: 0
@@ -3799,20 +3806,41 @@ Item {
         onOpened: profileQrCanvas.requestPaint()
         width: root.sheetWidth(400)
         height: {
+            if (root.desktopMode)
+                return root.height
             const targetHeight = profileQrPopupContent.implicitHeight + (root.compact ? (12 + Math.max(4, root.safeBottomInset)) : 16)
             const maxHeight = root.compact
                     ? Math.max(300, root.height - Math.max(4, root.safeBottomInset))
                     : root.sheetHeight(620)
             return Math.min(maxHeight, targetHeight)
         }
-        x: (root.width - width) * 0.5
-        y: root.compact ? Math.max(0, root.height - height) : root.drawerY(height)
+        x: root.sheetX(width)
+        y: root.desktopMode ? 0 : (root.compact ? Math.max(0, root.height - height) : root.drawerY(height))
         padding: 0
+
+        enter: Transition {
+            NumberAnimation {
+                property: root.sheetAnimationProperty()
+                from: root.sheetEnterFrom(profileQrPopup.width, profileQrPopup.height)
+                to: root.desktopMode ? root.sheetX(profileQrPopup.width) : profileQrPopup.y
+                duration: Animations.fast * 1.15
+                easing.type: Easing.OutCubic
+            }
+        }
+
+        exit: Transition {
+            NumberAnimation {
+                property: root.sheetAnimationProperty()
+                to: root.sheetExitTo(profileQrPopup.width, profileQrPopup.height)
+                duration: Animations.fast * 0.9
+                easing.type: Easing.InCubic
+            }
+        }
 
         background: Rectangle {
             topLeftRadius: root.compact ? 20 : 24
-            topRightRadius: root.compact ? 20 : 24
-            bottomLeftRadius: 0
+            topRightRadius: root.desktopMode ? 0 : (root.compact ? 20 : 24)
+            bottomLeftRadius: root.desktopMode ? 24 : 0
             bottomRightRadius: 0
             color: root.themeColorToken("mainHex_f8fbff", "mainHex_090b14")
             border.width: 1
@@ -3983,17 +4011,38 @@ Item {
         focus: true
         closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
         width: root.sheetWidth(420)
-        height: root.compact
+        height: root.desktopMode
+                ? root.height
+                : root.compact
                 ? Math.min(root.height, walletPickerColumn.implicitHeight + 52 + Math.max(10, root.safeBottomInset))
                 : walletPickerColumn.implicitHeight + 52
-        x: (root.width - width) * 0.5
-        y: root.compact ? Math.max(0, root.height - height - Math.max(6, root.safeBottomInset * 0.4)) : root.drawerY(height)
+        x: root.sheetX(width)
+        y: root.desktopMode ? 0 : (root.compact ? Math.max(0, root.height - height - Math.max(6, root.safeBottomInset * 0.4)) : root.drawerY(height))
         padding: 0
+
+        enter: Transition {
+            NumberAnimation {
+                property: root.sheetAnimationProperty()
+                from: root.sheetEnterFrom(walletPickerPopup.width, walletPickerPopup.height)
+                to: root.desktopMode ? root.sheetX(walletPickerPopup.width) : walletPickerPopup.y
+                duration: Animations.fast * 1.15
+                easing.type: Easing.OutCubic
+            }
+        }
+
+        exit: Transition {
+            NumberAnimation {
+                property: root.sheetAnimationProperty()
+                to: root.sheetExitTo(walletPickerPopup.width, walletPickerPopup.height)
+                duration: Animations.fast * 0.9
+                easing.type: Easing.InCubic
+            }
+        }
 
         background: Rectangle {
             topLeftRadius: root.compact ? 20 : 24
-            topRightRadius: root.compact ? 20 : 24
-            bottomLeftRadius: 0
+            topRightRadius: root.desktopMode ? 0 : (root.compact ? 20 : 24)
+            bottomLeftRadius: root.desktopMode ? 24 : 0
             bottomRightRadius: 0
             color: root.themeColorToken("mainHex_f8fbff", "mainHex_090b14")
             border.width: 1
@@ -4061,8 +4110,8 @@ Item {
         property var aboutHardwareInfo: ({})
         width: root.sheetWidth(430)
         height: root.compact ? root.height : root.sheetHeight(700)
-        x: (root.width - width) * 0.5
-        y: root.drawerY(height)
+        x: root.sheetX(width)
+        y: root.sheetY(height)
         padding: 0
 
         function aboutValue(map, key) {
@@ -4193,9 +4242,9 @@ Item {
 
         enter: Transition {
             NumberAnimation {
-                property: "y"
-                from: root.height
-                to: root.drawerY(aboutPopup.height)
+                property: root.sheetAnimationProperty()
+                from: root.sheetEnterFrom(aboutPopup.width, aboutPopup.height)
+                to: root.sheetEnterTo(aboutPopup.width, aboutPopup.height)
                 duration: Animations.fast * 1.15
                 easing.type: Easing.OutCubic
             }
@@ -4203,8 +4252,8 @@ Item {
 
         exit: Transition {
             NumberAnimation {
-                property: "y"
-                to: root.height
+                property: root.sheetAnimationProperty()
+                to: root.sheetExitTo(aboutPopup.width, aboutPopup.height)
                 duration: Animations.fast * 0.9
                 easing.type: Easing.InCubic
             }
@@ -4212,8 +4261,8 @@ Item {
 
         background: Rectangle {
             topLeftRadius: 24
-            topRightRadius: 24
-            bottomLeftRadius: 0
+            topRightRadius: root.desktopMode ? 0 : 24
+            bottomLeftRadius: root.desktopMode ? 24 : 0
             bottomRightRadius: 0
             color: root.themeColorToken("mainHex_ffffff", "mainHex_090b14")
             border.width: 0
@@ -4522,15 +4571,15 @@ Item {
         }
         width: root.sheetWidth(430)
         height: root.compact ? root.height : root.sheetHeight(650)
-        x: (root.width - width) * 0.5
-        y: root.compact ? 0 : root.drawerY(height)
+        x: root.sheetX(width)
+        y: root.desktopMode ? 0 : (root.compact ? 0 : root.drawerY(height))
         padding: 0
 
         enter: Transition {
             NumberAnimation {
-                property: "y"
-                from: root.height
-                to: root.compact ? 0 : root.drawerY(dataUsagePopup.height)
+                property: root.sheetAnimationProperty()
+                from: root.sheetEnterFrom(dataUsagePopup.width, dataUsagePopup.height)
+                to: root.sheetEnterTo(dataUsagePopup.width, dataUsagePopup.height)
                 duration: Animations.fast * 1.15
                 easing.type: Easing.OutCubic
             }
@@ -4538,8 +4587,8 @@ Item {
 
         exit: Transition {
             NumberAnimation {
-                property: "y"
-                to: root.height
+                property: root.sheetAnimationProperty()
+                to: root.sheetExitTo(dataUsagePopup.width, dataUsagePopup.height)
                 duration: Animations.fast * 0.9
                 easing.type: Easing.InCubic
             }
@@ -4547,8 +4596,8 @@ Item {
 
         background: Rectangle {
             topLeftRadius: root.compact ? 0 : 24
-            topRightRadius: root.compact ? 0 : 24
-            bottomLeftRadius: 0
+            topRightRadius: (root.compact || root.desktopMode) ? 0 : 24
+            bottomLeftRadius: root.desktopMode ? 24 : 0
             bottomRightRadius: 0
             color: root.themeColorToken("mainHex_ffffff", "mainHex_090b14")
             border.width: 0
@@ -5011,15 +5060,15 @@ Item {
         closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
         width: root.sheetWidth(430)
         height: root.sheetHeight(520)
-        x: (root.width - width) * 0.5
-        y: root.drawerY(height)
+        x: root.sheetX(width)
+        y: root.sheetY(height)
         padding: 0
 
         enter: Transition {
             NumberAnimation {
-                property: "y"
-                from: root.height
-                to: root.drawerY(logsPopup.height)
+                property: root.sheetAnimationProperty()
+                from: root.sheetEnterFrom(logsPopup.width, logsPopup.height)
+                to: root.sheetEnterTo(logsPopup.width, logsPopup.height)
                 duration: Animations.fast * 1.15
                 easing.type: Easing.OutCubic
             }
@@ -5027,16 +5076,18 @@ Item {
 
         exit: Transition {
             NumberAnimation {
-                property: "y"
-                to: root.height
+                property: root.sheetAnimationProperty()
+                to: root.sheetExitTo(logsPopup.width, logsPopup.height)
                 duration: Animations.fast * 0.9
                 easing.type: Easing.InCubic
             }
         }
 
         background: Rectangle {
-            topRightRadius: 24
             topLeftRadius: 24
+            topRightRadius: root.desktopMode ? 0 : 24
+            bottomLeftRadius: root.desktopMode ? 24 : 0
+            bottomRightRadius: 0
             color: root.themeColorToken("mainHex_ffffff", "mainHex_090b14")
             border.width: 0
             border.color: root.themeColorToken("mainHex_d8dde8", "mainHex_151c32")
@@ -5208,15 +5259,15 @@ Item {
         closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
         width: root.sheetWidth(430)
         height: root.compact ? root.height : root.sheetHeight(650)
-        x: (root.width - width) * 0.5
-        y: root.compact ? 0 : root.drawerY(height)
+        x: root.sheetX(width)
+        y: root.desktopMode ? 0 : (root.compact ? 0 : root.drawerY(height))
         padding: 0
 
         enter: Transition {
             NumberAnimation {
-                property: "y"
-                from: root.height
-                to: root.compact ? 0 : root.drawerY(speedTestPopup.height)
+                property: root.sheetAnimationProperty()
+                from: root.sheetEnterFrom(speedTestPopup.width, speedTestPopup.height)
+                to: root.sheetEnterTo(speedTestPopup.width, speedTestPopup.height)
                 duration: Animations.fast * 1.15
                 easing.type: Easing.OutCubic
             }
@@ -5224,8 +5275,8 @@ Item {
 
         exit: Transition {
             NumberAnimation {
-                property: "y"
-                to: root.height
+                property: root.sheetAnimationProperty()
+                to: root.sheetExitTo(speedTestPopup.width, speedTestPopup.height)
                 duration: Animations.fast * 0.9
                 easing.type: Easing.InCubic
             }
@@ -5233,8 +5284,8 @@ Item {
 
         background: Rectangle {
             topLeftRadius: root.compact ? 0 : 24
-            topRightRadius: root.compact ? 0 : 24
-            bottomLeftRadius: 0
+            topRightRadius: (root.compact || root.desktopMode) ? 0 : 24
+            bottomLeftRadius: root.desktopMode ? 24 : 0
             bottomRightRadius: 0
             color: root.themeColorToken("mainHex_ffffff", "mainHex_090b14")
             border.width: 0
@@ -5247,18 +5298,20 @@ Item {
             anchors.fill: parent
             clip: true
             contentWidth: width
-            readonly property int panelPadding: root.compact ? 10 : 14
+            readonly property int panelPadding: root.desktopMode ? 20 : (root.compact ? 10 : 14)
             readonly property int topInsetPadding: root.compact ? (root.safeTopInset + panelPadding) : panelPadding
             readonly property int bottomInsetPadding: root.compact ? (root.safeBottomInset + 12) : panelPadding
+            readonly property real contentAvailableWidth: Math.max(0, width - (panelPadding * 2))
+            readonly property real contentTargetWidth: root.desktopMode ? Math.min(contentAvailableWidth, 720) : contentAvailableWidth
             contentHeight: speedTestPopupContent.implicitHeight + topInsetPadding + bottomInsetPadding
             boundsBehavior: Flickable.StopAtBounds
 
             ColumnLayout {
                 id: speedTestPopupContent
-                x: speedTestPopupFlick.panelPadding
+                x: speedTestPopupFlick.panelPadding + Math.max(0, (speedTestPopupFlick.contentAvailableWidth - width) * 0.5)
                 y: speedTestPopupFlick.topInsetPadding
-                width: speedTestPopupFlick.width - (speedTestPopupFlick.panelPadding * 2)
-                spacing: 8
+                width: speedTestPopupFlick.contentTargetWidth
+                spacing: root.desktopMode ? 6 : 8
 
             Rectangle {
                 Layout.alignment: Qt.AlignHCenter
@@ -5325,14 +5378,16 @@ Item {
                 id: speedTestCenterArea
                 Layout.fillWidth: true
                 Layout.fillHeight: false
-                Layout.preferredHeight: 200
+                Layout.preferredHeight: root.desktopMode ? 154 : 200
                 Layout.minimumHeight: 32
 
                 Controls.SpeedTestGauge {
                     id: speedDial
                     anchors.centerIn: parent
-                    width: Math.min(speedTestCenterArea.width - 18, 420)
-                    height: Math.max(248, width * 0.66)
+                    width: root.desktopMode ? Math.min(speedTestCenterArea.width - 18, 260)
+                                            : Math.min(speedTestCenterArea.width - 18, 420)
+                    height: root.desktopMode ? Math.min(speedTestCenterArea.height, Math.max(146, width * 0.58))
+                                             : Math.max(248, width * 0.66)
                     value: root.speedGaugeValue()
                     minimumValue: 0.0
                     maximumValue: root.speedGaugeMaxMbps()
@@ -5428,7 +5483,7 @@ Item {
 
             ColumnLayout {
                 Layout.fillWidth: true
-                spacing: 6
+                spacing: root.desktopMode ? 4 : 6
 
                 Text {
                     Layout.alignment: Qt.AlignHCenter
@@ -5496,7 +5551,7 @@ Item {
                         required property int index
                         Layout.fillWidth: true
                         Layout.preferredWidth: 1
-                        Layout.preferredHeight: index < 2 ? 72 : 60
+                        Layout.preferredHeight: root.desktopMode ? 52 : (index < 2 ? 72 : 60)
                         radius: 16
                         color: (vpnController.speedTestState === "Completed" || vpnController.speedTestRunning)
                                ? root.themeColorToken("mainHex_f3f8ff", "mainHex_151c32")
@@ -5518,7 +5573,7 @@ Item {
                                 text: root.speedMetricValue(index)
                                 color: root.themeColorToken("mainHex_16365c", "mainHex_f2f7ff")
                                 font.family: FontSystem.contentFontFamily
-                                font.pixelSize: index < 2 ? 19 : 17
+                                font.pixelSize: root.desktopMode ? 16 : (index < 2 ? 19 : 17)
                                 font.bold: true
                             }
                         }
@@ -5556,8 +5611,8 @@ Item {
 
             Item {
                 Layout.fillWidth: true
-                Layout.preferredHeight: 72
-                implicitHeight: 72
+                Layout.preferredHeight: root.desktopMode ? 54 : 72
+                implicitHeight: root.desktopMode ? 54 : 72
 
                 Column {
                     anchors.centerIn: parent
@@ -5617,7 +5672,7 @@ Item {
             Controls.PrimaryActionButton {
                 Layout.alignment: Qt.AlignHCenter
                 width: 166
-                height: 44
+                height: root.desktopMode ? 40 : 44
                 text: vpnController.speedTestRunning ? "Cancel" : "Start Test"
                 enabled: vpnController.speedTestRunning || vpnController.connectionState === ConnectionState.Connected
                 onClicked: {
@@ -5632,7 +5687,7 @@ Item {
             RowLayout {
                 Layout.alignment: Qt.AlignHCenter
                 spacing: 14
-                visible: speedTestPopup.width >= 560
+                visible: !root.desktopMode && speedTestPopup.width >= 560
 
                 Text {
                     text: root.infoIpLabel() + ":"
@@ -5698,10 +5753,10 @@ Item {
             }
 
             Rectangle {
-                visible: true
+                visible: !root.desktopMode || vpnController.speedTestHistory.length > 0
                 Layout.fillWidth: true
-                Layout.preferredHeight: 82
-                Layout.minimumHeight: 82
+                Layout.preferredHeight: root.desktopMode ? 70 : 82
+                Layout.minimumHeight: root.desktopMode ? 70 : 82
                 radius: 16
                 color: root.themeColorToken("mainHex_f7f9fc", "mainHex_151c32")
                 border.width: 0
@@ -5781,8 +5836,8 @@ Item {
                      : (Popup.CloseOnEscape | Popup.CloseOnPressOutside)
         width: root.sheetWidth(430)
         height: root.compact ? root.height : root.sheetHeight(660)
-        x: (root.width - width) * 0.5
-        y: root.compact ? 0 : root.drawerY(height)
+        x: root.sheetX(width)
+        y: root.desktopMode ? 0 : (root.compact ? 0 : root.drawerY(height))
         padding: 0
 
         onAboutToShow: {
@@ -5801,9 +5856,9 @@ Item {
 
         enter: Transition {
             NumberAnimation {
-                property: "y"
-                from: root.height
-                to: root.compact ? 0 : root.drawerY(importPopup.height)
+                property: root.sheetAnimationProperty()
+                from: root.sheetEnterFrom(importPopup.width, importPopup.height)
+                to: root.sheetEnterTo(importPopup.width, importPopup.height)
                 duration: Animations.fast * 1.15
                 easing.type: Easing.OutCubic
             }
@@ -5811,16 +5866,18 @@ Item {
 
         exit: Transition {
             NumberAnimation {
-                property: "y"
-                to: root.height
+                property: root.sheetAnimationProperty()
+                to: root.sheetExitTo(importPopup.width, importPopup.height)
                 duration: Animations.fast * 0.9
                 easing.type: Easing.InCubic
             }
         }
 
         background: Rectangle {
-            topRightRadius: 24
             topLeftRadius: 24
+            topRightRadius: root.desktopMode ? 0 : 24
+            bottomLeftRadius: root.desktopMode ? 24 : 0
+            bottomRightRadius: 0
             color: root.themeColorToken("mainHex_ffffff", "mainHex_090b14")
             border.width: 0
             border.color: root.themeColorToken("mainHex_d8dde8", "mainHex_151c32")
@@ -6746,14 +6803,13 @@ Item {
             width: 720
             height: 84
 
-            RectangularShadow {
-                anchors.fill: connectControlCard
-                offset.x: 0
-                offset.y: 0
-                radius: connectControlCard.radius
-                blur: 64
-                spread: 3
-                color: Colors.lightShadow
+            Controls.SoftShadow {
+                source: connectControlCard
+                shadowColor: Colors.lightShadow
+                shadowBlur: 0.8
+                shadowScale: 1.02
+                shadowOpacity: 1
+                z: 1
             }
 
             Rectangle {
@@ -6920,14 +6976,13 @@ Item {
             width: 720
             height: 94
 
-            RectangularShadow {
-                anchors.fill: statusCard
-                offset.x: 0
-                offset.y: 0
-                radius: statusCard.radius
-                blur: 64
-                spread: 3
-                color: Colors.lightShadow
+            Controls.SoftShadow {
+                source: statusCard
+                shadowColor: Colors.lightShadow
+                shadowBlur: 0.8
+                shadowScale: 1.02
+                shadowOpacity: 1
+                z: 1
             }
 
             Rectangle {
@@ -8085,5 +8140,22 @@ Item {
                 }
             }
         }
+    }
+
+    DesktopMainSurface {
+        anchors.fill: parent
+        visible: root.desktopMode
+        enabled: visible
+        z: 1000
+        root: surface.root
+        vpnController: surface.vpnController
+        updater: surface.updater
+        dashboardStatsSettings: surface.dashboardStatsSettings
+        profilePopup: surface.profilePopup
+        settingsPopup: surface.settingsPopup
+        logsPopup: surface.logsPopup
+        speedTestPopup: surface.speedTestPopup
+        dataUsagePopup: surface.dataUsagePopup
+        importPopup: surface.importPopup
     }
 }

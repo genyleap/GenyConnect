@@ -335,10 +335,13 @@ jobs:
     runs-on: ubuntu-latest
 
     container:
-      image: a12e/docker-qt:6.8-linux
+      # Keep x86_64 on the same Qt release as ARM64. Installing the official
+      # Qt archive below avoids silently packaging the older Qt from a build image.
+      image: ubuntu:22.04
       options: --user 0
 
     env:
+      QT_VERSION: "6.11.0"
       TARGET_ARCH: x86_64
       APPIMAGE_ARCH: x86_64
       SELFUPDATE_ARCH: x64
@@ -356,7 +359,7 @@ jobs:
 
           apt-get update
           apt-get install -y \
-            locales \
+            locales python3 python3-pip rpm \
             wget curl gnupg lsb-release software-properties-common ca-certificates \
             unzip zip file tar gzip patchelf desktop-file-utils fakeroot fuse libfuse2 imagemagick \
             libgl1 libgl1-mesa-dev libegl1 libegl1-mesa-dev \
@@ -388,6 +391,42 @@ jobs:
           echo "CLANG_SCAN_DEPS=/usr/bin/clang-scan-deps-18" >> "$GITHUB_ENV"
           echo "APPIMAGE_EXTRACT_AND_RUN=1" >> "$GITHUB_ENV"
 
+      - name: Install Qt Linux x64
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          python3 -m pip install --user --upgrade pip
+          python3 -m pip install --user aqtinstall
+
+          export PATH="${HOME}/.local/bin:${PATH}"
+          aqt install-qt linux desktop "${QT_VERSION}" linux_gcc_64 -O "${HOME}/Qt"
+
+          QT_CONFIG="$(find "${HOME}/Qt" -type f -path "*/lib/cmake/Qt6/Qt6Config.cmake" | head -n 1)"
+          if [[ -z "${QT_CONFIG}" || ! -f "${QT_CONFIG}" ]]; then
+            echo "Qt x64 install failed."
+            exit 1
+          fi
+
+          QT_ROOT="$(dirname "$(dirname "$(dirname "$(dirname "${QT_CONFIG}")")")")"
+          echo "QT_ROOT_DIR=${QT_ROOT}" >> "$GITHUB_ENV"
+          echo "${QT_ROOT}/bin" >> "$GITHUB_PATH"
+
+          QMAKE_VERIFY="${QT_ROOT}/bin/qmake6"
+          if [[ ! -x "${QMAKE_VERIFY}" ]]; then
+            QMAKE_VERIFY="${QT_ROOT}/bin/qmake"
+          fi
+          if [[ ! -x "${QMAKE_VERIFY}" ]]; then
+            echo "qmake was not installed with Qt ${QT_VERSION}."
+            exit 1
+          fi
+
+          ACTUAL_QT_VERSION="$("${QMAKE_VERIFY}" -query QT_VERSION)"
+          if [[ "${ACTUAL_QT_VERSION}" != "${QT_VERSION}" ]]; then
+            echo "Expected Qt ${QT_VERSION}, found ${ACTUAL_QT_VERSION}."
+            exit 1
+          fi
+
       - name: Configure Linux x64
         shell: bash
         run: |
@@ -395,6 +434,8 @@ jobs:
 
           cmake -S . -B build -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_PREFIX_PATH="${QT_ROOT_DIR}" \
+            -DQt6_DIR="${QT_ROOT_DIR}/lib/cmake/Qt6" \
             -DCMAKE_C_COMPILER="${CC}" \
             -DCMAKE_CXX_COMPILER="${CXX}" \
             -DCMAKE_CXX_STANDARD=23 \
@@ -412,6 +453,28 @@ jobs:
         run: |
           set -euo pipefail
           cmake --build build --config Release --parallel
+
+      - name: Create and verify Linux x64 RPM
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          cpack --config build/CPackConfig.cmake -G RPM
+          RPM_PACKAGE="$(find "build/final/linux-${TARGET_ARCH}" -maxdepth 1 -type f -name '*.rpm' -print -quit)"
+          test -n "${RPM_PACKAGE}"
+          test -f "${RPM_PACKAGE}"
+
+          rpm -qip "${RPM_PACKAGE}"
+          rpm -qpl "${RPM_PACKAGE}" | tee /tmp/genyconnect-rpm-files.txt
+          for required_path in \
+            /usr/bin/GenyConnect \
+            /usr/bin/GenyConnectUpdater \
+            /usr/bin/GenyConnectTunHelper \
+            /usr/bin/xray-core \
+            /usr/share/applications/genyconnect.desktop \
+            /usr/share/icons/hicolor/512x512/apps/genyconnect.png; do
+            grep -Fqx "${required_path}" /tmp/genyconnect-rpm-files.txt
+          done
 
       - name: Create Linux x64 AppImage
         shell: bash
@@ -466,12 +529,9 @@ jobs:
 
           chmod +x tools/linuxdeploy.AppImage tools/linuxdeploy-plugin-qt.AppImage
 
-          QMAKE_BIN="$(command -v qmake6 || true)"
-          if [[ -z "${QMAKE_BIN}" ]]; then
-            QMAKE_BIN="$(command -v qmake || true)"
-          fi
-          if [[ -z "${QMAKE_BIN}" ]]; then
-            QMAKE_BIN="$(find /opt /usr /root -type f \( -name qmake6 -o -name qmake \) 2>/dev/null | head -n 1 || true)"
+          QMAKE_BIN="${QT_ROOT_DIR}/bin/qmake6"
+          if [[ ! -x "${QMAKE_BIN}" ]]; then
+            QMAKE_BIN="${QT_ROOT_DIR}/bin/qmake"
           fi
           if [[ -z "${QMAKE_BIN}" || ! -x "${QMAKE_BIN}" ]]; then
             echo "qmake/qmake6 not found."
@@ -594,6 +654,7 @@ jobs:
 
           find build/final -type f -name "*.AppImage" -exec cp {} artifacts/ \; || true
           find build/final -type f -name "*.AppImage.sha256" -exec cp {} artifacts/ \; || true
+          find build/final -type f -name "*.rpm" -exec cp {} artifacts/ \; || true
           find build/selfupdate -type f -name "GenyConnect-selfupdate-*" -exec cp {} artifacts/ \; || true
 
           if [ -z "$(find artifacts -type f -print -quit)" ]; then
@@ -638,7 +699,7 @@ jobs:
 
           sudo apt-get update
           sudo apt-get install -y \
-            locales \
+            locales rpm \
             python3 python3-pip python3-venv imagemagick \
             wget curl gnupg lsb-release software-properties-common ca-certificates \
             unzip zip p7zip-full file tar gzip patchelf desktop-file-utils fakeroot fuse libfuse2 \
@@ -678,7 +739,7 @@ jobs:
           aqt list-qt linux_arm64 desktop || true
           aqt list-qt linux_arm64 desktop --modules "${QT_VERSION}" linux_gcc_arm64 || true
 
-          aqt install-qt linux_arm64 desktop "${QT_VERSION}" linux_gcc_arm64 -O "${HOME}/Qt" -m qt5compat
+          aqt install-qt linux_arm64 desktop "${QT_VERSION}" linux_gcc_arm64 -O "${HOME}/Qt"
 
           QT_CONFIG="$(find "${HOME}/Qt" -type f -path "*/lib/cmake/Qt6/Qt6Config.cmake" | head -n 1)"
 
@@ -721,6 +782,28 @@ jobs:
         run: |
           set -euo pipefail
           cmake --build build --config Release --parallel
+
+      - name: Create and verify Linux ARM64 RPM
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          cpack --config build/CPackConfig.cmake -G RPM
+          RPM_PACKAGE="$(find "build/final/linux-${TARGET_ARCH}" -maxdepth 1 -type f -name '*.rpm' -print -quit)"
+          test -n "${RPM_PACKAGE}"
+          test -f "${RPM_PACKAGE}"
+
+          rpm -qip "${RPM_PACKAGE}"
+          rpm -qpl "${RPM_PACKAGE}" | tee /tmp/genyconnect-rpm-files.txt
+          for required_path in \
+            /usr/bin/GenyConnect \
+            /usr/bin/GenyConnectUpdater \
+            /usr/bin/GenyConnectTunHelper \
+            /usr/bin/xray-core \
+            /usr/share/applications/genyconnect.desktop \
+            /usr/share/icons/hicolor/512x512/apps/genyconnect.png; do
+            grep -Fqx "${required_path}" /tmp/genyconnect-rpm-files.txt
+          done
 
       - name: Create Linux ARM64 AppImage
         shell: bash
@@ -901,6 +984,7 @@ jobs:
 
           find build/final -type f -name "*.AppImage" -exec cp {} artifacts/ \; || true
           find build/final -type f -name "*.AppImage.sha256" -exec cp {} artifacts/ \; || true
+          find build/final -type f -name "*.rpm" -exec cp {} artifacts/ \; || true
           find build/selfupdate -type f -name "GenyConnect-selfupdate-*" -exec cp {} artifacts/ \; || true
 
           if [ -z "$(find artifacts -type f -print -quit)" ]; then
@@ -916,6 +1000,45 @@ jobs:
         with:
           name: GenyConnect-linux-arm64
           path: artifacts/*
+
+  nix:
+    name: Build GenyConnect Nix (${{ matrix.system }})
+    runs-on: ${{ matrix.runner }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - system: x86_64-linux
+            runner: ubuntu-24.04
+          - system: aarch64-linux
+            runner: ubuntu-24.04-arm
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@v31
+        with:
+          github_access_token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Evaluate flake
+        shell: bash
+        run: |
+          set -euo pipefail
+          nix flake check --no-build --print-build-logs
+
+      - name: Build Nix package
+        shell: bash
+        run: |
+          set -euo pipefail
+          nix build ".#packages.${{ matrix.system }}.default" --print-build-logs
+          test -x result/bin/GenyConnect
+          test -x result/bin/GenyConnectUpdater
+          test -x result/bin/GenyConnectTunHelper
+          test -x result/bin/xray-core
+          result/bin/xray-core version
 
   android:
     name: Build GenyConnect-android-${{ matrix.android_output_arch }}
@@ -1188,6 +1311,7 @@ jobs:
       - desktop
       - linux-x64
       - linux-arm64
+      - nix
       - android
     runs-on: ubuntu-latest
 

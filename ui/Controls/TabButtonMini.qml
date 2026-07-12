@@ -5,7 +5,6 @@
 import QtQuick
 import QtQuick.Layouts
 import QtQuick.Controls.Basic as T
-import QtQuick.Effects
 
 import GenyConnect 1.0
 
@@ -57,21 +56,45 @@ T.TabButton {
         anchors.fill: parent
         spacing: 0
         VerticalSpacer { }
-        Rectangle {
+        Item {
             Layout.minimumWidth: 86
             implicitHeight: 64
-            radius: 5
 
-            RectangularShadow {
+            SoftShadow {
+                source: tabButtonBackground
+                shadowColor: Colors.primaryBack
+                shadowBlur: 0.75
+                shadowScale: 1.18
+                shadowOpacity: control.checked ? 0.35 : 0
+                horizontalOffset: 5
+                verticalOffset: -5
+                z: 0
+
+                Behavior on shadowOpacity {
+                    NumberAnimation {
+                        duration: Animations.normal
+                        easing.type: Easing.InOutQuad
+                    }
+                }
+            }
+
+            Rectangle {
+                id: tabButtonBackground
                 width: 64
                 height: 64
-                blur: 64
-                spread: 24
-                offset.x: 5
-                offset.y: -5
+                radius: 5
                 anchors.centerIn: parent
-                color: control.checked ? Colors.primaryBack : "transparent"
-                opacity: 0.5
+                z: 1
+
+                color: control.checked
+                       ? Colors.primaryBack
+                       : Colors.lightMode ? Qt.lighter(Colors.backgroundHovered, 1.6) : Qt.darker(Colors.backgroundHovered, 1.6)
+
+                opacity: control.checked
+                         ? 1
+                         : control.hovered
+                           ? 1
+                           : 0
 
                 Behavior on color {
                     ColorAnimation {
@@ -85,30 +108,6 @@ T.TabButton {
                         duration: Animations.normal
                         easing.type: Easing.InOutQuad
                     }
-                }
-            }
-
-            color: control.checked
-                   ? Colors.primaryBack
-                   : Colors.lightMode ? Qt.lighter(Colors.backgroundHovered, 1.6) : Qt.darker(Colors.backgroundHovered, 1.6)
-
-            opacity: control.checked
-                     ? 1
-                     : control.hovered
-                       ? 1
-                       : 0
-
-            Behavior on color {
-                ColorAnimation {
-                    duration: Animations.normal
-                    easing.type: Easing.InOutQuad
-                }
-            }
-
-            Behavior on opacity {
-                NumberAnimation {
-                    duration: Animations.normal
-                    easing.type: Easing.InOutQuad
                 }
             }
         }

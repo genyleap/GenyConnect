@@ -4,7 +4,6 @@
 
 import QtQuick
 import QtQuick.Layouts
-import Qt5Compat.GraphicalEffects
 
 import GenyConnect 1.0
 

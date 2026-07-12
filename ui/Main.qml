@@ -27,41 +27,25 @@ ApplicationWindow {
     readonly property bool mobileLandscape: mobilePlatform && root.width > root.height
 
     readonly property bool compact: mobilePlatform || root.width < 620
+    readonly property bool desktopMode: !mobilePlatform && root.width >= 900
+    readonly property real desktopAvailableWidth: Math.max(1, Screen.desktopAvailableWidth || Screen.width)
+    readonly property real desktopAvailableHeight: Math.max(1, Screen.desktopAvailableHeight || Screen.height)
 
     readonly property real reportedSafeTopInset: Number((SafeArea.margins && SafeArea.margins.top) || 0)
     readonly property real reportedSafeBottomInset: Number((SafeArea.margins && SafeArea.margins.bottom) || 0)
     readonly property real androidDensityScale: Math.max(1.0, (Screen.pixelDensity * 25.4) / 160.0)
     readonly property real androidFallbackSafeTopInset: 0
-    readonly property real androidFallbackSafeBottomInset: (mobilePlatform && Qt.platform.os === "android" && reportedSafeBottomInset <= 0.5)
-        ? Math.round(40 * androidDensityScale)
-        : 0
-    readonly property real safeTopInset: mobilePlatform
-        ? Math.max((Qt.platform.os === "ios" ? 14 : androidFallbackSafeTopInset), reportedSafeTopInset)
-        : 0
-    readonly property real safeBottomInset: mobilePlatform
-        ? Math.max((Qt.platform.os === "ios" ? 22 : androidFallbackSafeBottomInset), reportedSafeBottomInset)
-        : 0
-
-    readonly property real compactBottomNavVisualHeight: mobilePlatform
-        ? (mobileLandscape ? 44 : 48)
-        : 60
+    readonly property real androidFallbackSafeBottomInset: (mobilePlatform && Qt.platform.os === "android" && reportedSafeBottomInset <= 0.5) ? Math.round(40 * androidDensityScale) : 0
+    readonly property real safeTopInset: mobilePlatform ? Math.max((Qt.platform.os === "ios" ? 14 : androidFallbackSafeTopInset), reportedSafeTopInset) : 0
+    readonly property real safeBottomInset: mobilePlatform ? Math.max((Qt.platform.os === "ios" ? 22 : androidFallbackSafeBottomInset), reportedSafeBottomInset) : 0
+    readonly property real compactBottomNavVisualHeight: mobilePlatform ? (mobileLandscape ? 44 : 48) : 60
     readonly property real compactBottomNavInset: safeBottomInset
     readonly property real compactBottomNavHeight: compactBottomNavVisualHeight + compactBottomNavInset
-    readonly property real compactBottomNavSafeFillHeight: mobilePlatform
-        ? Math.max(mobileLandscape ? 4 : 8, compactBottomNavInset + (mobileLandscape ? 2 : 4))
-        : Math.max(34, safeBottomInset + 18)
+    readonly property real compactBottomNavSafeFillHeight: mobilePlatform ? Math.max(mobileLandscape ? 4 : 8, compactBottomNavInset + (mobileLandscape ? 2 : 4)) : Math.max(34, safeBottomInset + 18)
     readonly property real compactBottomNavTopMargin: mobilePlatform ? (mobileLandscape ? 0 : 2) : 0
-
     readonly property real compactContentBottomClearance: compactBottomNavHeight + (mobilePlatform ? (mobileLandscape ? 8 : 14) : 18)
-
-    readonly property real compactAvailableHeight: Math.max(
-        1,
-        root.height - safeTopInset - compactContentBottomClearance
-    )
-
-    readonly property real compactHeightScale: compact
-        ? Math.max(0.54, Math.min(1.0, compactAvailableHeight / 700.0))
-        : 1.0
+    readonly property real compactAvailableHeight: Math.max(1, root.height - safeTopInset - compactContentBottomClearance)
+    readonly property real compactHeightScale: compact ? Math.max(0.54, Math.min(1.0, compactAvailableHeight / 700.0)) : 1.0
 
     // Android home geometry tokens to keep spacing proportional and avoid overlap.
     readonly property real mobileHomeScale: compact
@@ -122,37 +106,16 @@ ApplicationWindow {
 
     visible: true
 
-    width: mobilePlatform ? Screen.width : 430
+    width: mobilePlatform ? Screen.width : Math.min(1280, desktopAvailableWidth)
+    height: mobilePlatform ? Screen.height : Math.min(820, desktopAvailableHeight)
+    minimumWidth: mobilePlatform ? 0 : Math.min(900, desktopAvailableWidth)
+    minimumHeight: mobilePlatform ? 0 : Math.min(600, desktopAvailableHeight)
+    maximumWidth: 16777215
+    maximumHeight: 16777215
 
-    height: mobilePlatform ? Screen.height : 760
-
-    minimumWidth: mobilePlatform ? 0 : 430
-
-    minimumHeight: mobilePlatform ? 0 : 760
-
-    maximumWidth: mobilePlatform ? 16777215 : 430
-
-    maximumHeight: mobilePlatform ? 16777215 : 760
-
-    // visibility: mobilePlatform ? Window.FullScreen : Window.Windowed
-
-    flags: mobilePlatform
-
-           ? Qt.Window
-
-           : Qt.Window
-
-             | Qt.WindowTitleHint
-
-             | Qt.WindowSystemMenuHint
-
-             | Qt.WindowMinimizeButtonHint
-
-             | Qt.WindowCloseButtonHint
-
+    flags: mobilePlatform ? Qt.Window : Qt.Window | Qt.WindowTitleHint | Qt.WindowSystemMenuHint | Qt.WindowMinimizeButtonHint | Qt.WindowCloseButtonHint
 
     title: "GenyConnect (Build " + updater.appVersion + ") - " + osNameText()
-
     color: Colors.dsWindow
     font.family: FontSystem.contentFontFamily
     topPadding: 0
@@ -191,12 +154,8 @@ ApplicationWindow {
     readonly property string appRepoUrl: "https://github.com/genyleap/genyconnect"
     readonly property string appShareText: "GenyConnect is a cross-platform open-source network connection app."
 
-    property string selectedServerLabel: vpnController.currentProfileIndex >= 0
-                                         ? "Selected Profile"
-                                         : "Select Location"
-    property string selectedServerMeta: vpnController.currentProfileIndex >= 0
-                                        ? "Profile is selected"
-                                        : "Import and select a profile"
+    property string selectedServerLabel: vpnController.currentProfileIndex >= 0 ? "Selected Profile" : "Select Location"
+    property string selectedServerMeta: vpnController.currentProfileIndex >= 0 ? "Profile is selected" : "Import and select a profile"
     property string selectedServerFlag: vpnController.currentProfileIndex >= 0 ? "🇺🇸" : "🌐"
 
     property string mapPrimarySource: "qrc:/ui/Resources/image/map.png"
@@ -306,7 +265,6 @@ ApplicationWindow {
     readonly property var vpnControllerCtx: vpnController
     readonly property var updaterCtx: updater
 
-
     Sections.MainSurface {
         id: mainSurface
         anchors.fill: parent
@@ -340,8 +298,7 @@ ApplicationWindow {
     readonly property var themeModeOptions: ["System", "Light", "Dark"]
     readonly property var ipPrivacyOptions: ["Show", "Partial Mask", "Hidden"]
     readonly property bool systemPrefersDark: Qt.application.styleHints.colorScheme === Qt.ColorScheme.Dark
-    readonly property bool darkThemeEnabled: interfaceThemeSettings.mode === "Dark"
-                                         || (interfaceThemeSettings.mode === "System" && systemPrefersDark)
+    readonly property bool darkThemeEnabled: interfaceThemeSettings.mode === "Dark" || (interfaceThemeSettings.mode === "System" && systemPrefersDark)
     Settings {
         id: dashboardStatsSettings
         category: "Interface/DashboardStats"
@@ -2881,12 +2838,40 @@ ApplicationWindow {
     }
 
     function sheetWidth(maxWidth) {
+        if (root.desktopMode)
+            return Math.min(root.width, Math.max(700, Math.round(root.width * 0.50)))
         return root.width
     }
 
     function sheetHeight(maxHeight) {
+        if (root.desktopMode)
+            return root.height
         const reserved = root.compact ? (root.compactBottomNavHeight + 18) : 104
         return Math.min(root.height - reserved, maxHeight)
+    }
+
+    function sheetX(sheet) {
+        return root.desktopMode ? Math.max(0, root.width - sheet) : Math.max(0, (root.width - sheet) * 0.5)
+    }
+
+    function sheetY(sheet) {
+        return root.desktopMode ? 0 : root.drawerY(sheet)
+    }
+
+    function sheetAnimationProperty() {
+        return root.desktopMode ? "x" : "y"
+    }
+
+    function sheetEnterFrom(sheetWidth, sheetHeight) {
+        return root.desktopMode ? root.width : root.height
+    }
+
+    function sheetEnterTo(sheetWidth, sheetHeight) {
+        return root.desktopMode ? root.sheetX(sheetWidth) : root.drawerY(sheetHeight)
+    }
+
+    function sheetExitTo(sheetWidth, sheetHeight) {
+        return root.desktopMode ? root.width : root.height
     }
 
     function drawerY(sheet) {
@@ -3443,8 +3428,8 @@ ApplicationWindow {
 
         profilePopup.width = root.sheetWidth(430)
         profilePopup.height = root.compact ? root.height : root.sheetHeight(640)
-        profilePopup.x = (root.width - profilePopup.width) * 0.5
-        profilePopup.y = root.compact ? 0 : root.drawerY(profilePopup.height)
+        profilePopup.x = root.sheetX(profilePopup.width)
+        profilePopup.y = root.desktopMode ? 0 : (root.compact ? 0 : root.drawerY(profilePopup.height))
     }
 
     Component.onCompleted: {
@@ -3707,8 +3692,8 @@ ApplicationWindow {
     footer: Rectangle {
         id: footer
         width: parent.width
-        height: root.compact ? 0 : 34
-        visible: !root.compact
+        height: (root.compact || root.desktopMode) ? 0 : 34
+        visible: !root.compact && !root.desktopMode
         color: Colors.pageground
         border.width: 0
         border.color: Colors.borderActivated
