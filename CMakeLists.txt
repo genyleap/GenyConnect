@@ -161,14 +161,14 @@ option(GENYCONNECT_BUNDLE_DOCS "Install README and LICENSE at package root + NSI
 option(GENYCONNECT_MACDEPLOYQT_ALWAYS_OVERWRITE "Pass -always-overwrite to macdeployqt" OFF)
 option(GENYCONNECT_MACDEPLOYQT_NO_STRIP         "Pass -no-strip to macdeployqt" OFF)
 
-set(_GENYCONNECT_RECOMMENDED_XRAY_VERSION "v26.3.27")
-set(GENYCONNECT_XRAY_VERSION      "${_GENYCONNECT_RECOMMENDED_XRAY_VERSION}" CACHE STRING   "Xray-core release tag (e.g. v26.3.27)")
+set(_GENYCONNECT_RECOMMENDED_XRAY_VERSION "v26.4.13")
+set(GENYCONNECT_XRAY_VERSION      "${_GENYCONNECT_RECOMMENDED_XRAY_VERSION}" CACHE STRING   "Xray-core release tag (e.g. v26.4.13)")
 if(GENYCONNECT_BUILD_ANDROID AND GENYCONNECT_XRAY_VERSION STREQUAL "v26.3.27")
   message(STATUS
     "Upgrading cached GENYCONNECT_XRAY_VERSION from v26.3.27 to ${_GENYCONNECT_RECOMMENDED_XRAY_VERSION} "
-    "to include the Android TUN UDP FullCone fix."
+    "to keep the bundled Android core version and TUN configuration schema aligned."
   )
-  set(GENYCONNECT_XRAY_VERSION "${_GENYCONNECT_RECOMMENDED_XRAY_VERSION}" CACHE STRING "Xray-core release tag (e.g. v26.3.27)" FORCE)
+  set(GENYCONNECT_XRAY_VERSION "${_GENYCONNECT_RECOMMENDED_XRAY_VERSION}" CACHE STRING "Xray-core release tag (e.g. v26.4.13)" FORCE)
 endif()
 set(GENYCONNECT_XRAY_ASSET_NAME   ""        CACHE STRING   "Optional explicit Xray release asset name override")
 set(GENYCONNECT_BUNDLED_XRAY_PATH ""        CACHE FILEPATH "Path to prebuilt xray-core binary to bundle with app")

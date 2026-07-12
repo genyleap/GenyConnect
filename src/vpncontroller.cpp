@@ -212,7 +212,11 @@ bool xrayTunMtuRequiresArrayForVersion(const QString& version)
     }
 
     const auto [major, minor, patch] = parsed.value();
-    return major == 26 && minor == 4 && patch == 13;
+    // Xray 26.4.13 changed TunConfig.mtu from uint32 to []uint32. Keep using
+    // the array schema for later releases instead of special-casing one build.
+    return major > 26
+           || (major == 26 && minor > 4)
+           || (major == 26 && minor == 4 && patch >= 13);
 }
 
 bool xrayTunMtuRequiresArray(const QString& runtimeVersion)
