@@ -14,7 +14,7 @@ assert lib.versionAtLeast qt6.qtbase.version "6.8";
 
 llvmPackages.stdenv.mkDerivation {
   pname = "genyconnect";
-  version = "1.4.801";
+  version = "1.4.880";
 
   src = lib.cleanSourceWith {
     src = ../.;

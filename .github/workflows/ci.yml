@@ -352,6 +352,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Install CMake
+        uses: lukka/get-cmake@latest
+        with:
+          cmakeVersion: ${{ env.CMAKE_VERSION }}
+
       - name: Prepare Linux x64 toolchain
         shell: bash
         run: |

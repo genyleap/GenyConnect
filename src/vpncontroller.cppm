@@ -43,14 +43,14 @@ module;
 #include <QProcess>
 #endif
 
-class ServerProfileModel;
-class SystemProxyManager;
-class Updater;
 class PowerModeManager;
 
 #ifndef Q_MOC_RUN
 export module genyconnect.backend.vpncontroller;
 import genyconnect.backend.serverprofile;
+import genyconnect.backend.serverprofilemodel;
+import genyconnect.backend.systemproxymanager;
+import genyconnect.backend.updater;
 import genyconnect.backend.xrayconfigbuilder;
 #endif
 
