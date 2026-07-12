@@ -43,14 +43,21 @@ module;
 #include <QProcess>
 #endif
 
+#if defined(Q_OS_ANDROID)
+class ServerProfileModel;
+class SystemProxyManager;
+class Updater;
+#endif
 class PowerModeManager;
 
 #ifndef Q_MOC_RUN
 export module genyconnect.backend.vpncontroller;
 import genyconnect.backend.serverprofile;
+#if !defined(Q_OS_ANDROID)
 import genyconnect.backend.serverprofilemodel;
 import genyconnect.backend.systemproxymanager;
 import genyconnect.backend.updater;
+#endif
 import genyconnect.backend.xrayconfigbuilder;
 #endif
 

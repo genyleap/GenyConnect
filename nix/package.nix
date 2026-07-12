@@ -3,7 +3,7 @@
   cmake,
   ninja,
   pkg-config,
-  llvmPackages,
+  llvmPackages_18,
   qt6,
   libglvnd,
   libxkbcommon,
@@ -12,7 +12,7 @@
 
 assert lib.versionAtLeast qt6.qtbase.version "6.8";
 
-llvmPackages.stdenv.mkDerivation {
+llvmPackages_18.stdenv.mkDerivation {
   pname = "genyconnect";
   version = "1.4.880";
 
@@ -37,7 +37,7 @@ llvmPackages.stdenv.mkDerivation {
     cmake
     ninja
     pkg-config
-    llvmPackages.clang-tools
+    llvmPackages_18.clang-tools
     qt6.wrapQtAppsHook
   ];
 
@@ -54,7 +54,7 @@ llvmPackages.stdenv.mkDerivation {
 
   cmakeFlags =
     let
-      targetArch = if llvmPackages.stdenv.hostPlatform.isAarch64 then "arm64" else "x86_64";
+      targetArch = if llvmPackages_18.stdenv.hostPlatform.isAarch64 then "arm64" else "x86_64";
     in
     [
       "-DBUILD_TESTING=OFF"
@@ -68,7 +68,7 @@ llvmPackages.stdenv.mkDerivation {
       "-DGENYCONNECT_TARGET_ARCH=${targetArch}"
       "-DGENYCONNECT_TARGET_BUILD_ARCH=${targetArch}"
       "-DGENYCONNECT_USE_MODULES=ON"
-      "-DCMAKE_CXX_COMPILER_CLANG_SCAN_DEPS=${llvmPackages.clang-tools}/bin/clang-scan-deps"
+      "-DCMAKE_CXX_COMPILER_CLANG_SCAN_DEPS=${llvmPackages_18.clang-tools}/bin/clang-scan-deps"
     ];
 
   postInstall = ''

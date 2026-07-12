@@ -352,11 +352,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install CMake
-        uses: lukka/get-cmake@latest
-        with:
-          cmakeVersion: ${{ env.CMAKE_VERSION }}
-
       - name: Prepare Linux x64 toolchain
         shell: bash
         run: |
@@ -395,6 +390,11 @@ jobs:
           echo "CXX=/usr/bin/clang++-18" >> "$GITHUB_ENV"
           echo "CLANG_SCAN_DEPS=/usr/bin/clang-scan-deps-18" >> "$GITHUB_ENV"
           echo "APPIMAGE_EXTRACT_AND_RUN=1" >> "$GITHUB_ENV"
+
+      - name: Install CMake
+        uses: lukka/get-cmake@latest
+        with:
+          cmakeVersion: ${{ env.CMAKE_VERSION }}
 
       - name: Install Qt Linux x64
         shell: bash
