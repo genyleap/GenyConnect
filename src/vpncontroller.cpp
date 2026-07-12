@@ -114,6 +114,13 @@ import genyconnect.backend.systeminfoprovider;
 import genyconnect.backend.systemproxymanager;
 import genyconnect.backend.updater;
 
+struct VpnControllerPrivate
+{
+    ServerProfileModel *profileModel = nullptr;
+    Updater *updater = nullptr;
+    SystemProxyManager *systemProxyManager = nullptr;
+};
+
 void VpnController::__geny_vtable_anchor() {}
 
 const QMetaObject& vpnControllerConnectionStateMetaObject()
@@ -2868,7 +2875,8 @@ double combinedSpeedTestAverageMbps(double downloadMbps, double uploadMbps)
 }
 
 VpnController::VpnController(QObject *parent)
-    : QObject(parent)
+    : QObject(parent),
+      d(new VpnControllerPrivate)
 {
     m_startedWithTunElevationRequest = QCoreApplication::arguments().contains(
         QString::fromUtf8("--geny-elevated-tun"));
@@ -2908,11 +2916,11 @@ VpnController::VpnController(QObject *parent)
         m_runtimeRequiresNetworkExtension = caps.requiresNetworkExtension;
         emit runtimeCapabilitiesChanged();
     }
-    m_updater = new Updater(this);
+    d->updater = new Updater(this);
     m_securityStatus = new SecurityStatus(this);
     m_powerModeManager = new PowerModeManager(this);
-    m_profileModel = new ServerProfileModel(this);
-    m_systemProxyManager = new SystemProxyManager();
+    d->profileModel = new ServerProfileModel(this);
+    d->systemProxyManager = new SystemProxyManager();
     m_memoryUsageTimer.setInterval(1500);
     connect(&m_memoryUsageTimer, &QTimer::timeout, this, [this]() {
         if (m_powerModeManager) {
@@ -2987,9 +2995,9 @@ VpnController::VpnController(QObject *parent)
             appendSystemLog(QString::fromUtf8("[System] Runtime initialization warning: %1").arg(runtimeInitError.trimmed()));
         }
     }
-    if (m_updater) {
-        connect(m_updater, &Updater::systemLog, this, &VpnController::appendSystemLog);
-        m_updater->setPreInstallCleanupCallback([this](QString *errorMessage) {
+    if (d->updater) {
+        connect(d->updater, &Updater::systemLog, this, &VpnController::appendSystemLog);
+        d->updater->setPreInstallCleanupCallback([this](QString *errorMessage) {
             return performSafeNetworkReset(QString::fromUtf8("update preparation"), errorMessage);
         });
     }
@@ -3013,19 +3021,19 @@ VpnController::VpnController(QObject *parent)
             saveSettings();
         });
     }
-    connect(m_profileModel, &QAbstractItemModel::rowsInserted, this, [this]() {
+    connect(d->profileModel, &QAbstractItemModel::rowsInserted, this, [this]() {
         recomputeProfileStats();
         refreshProfileGroups();
     });
-    connect(m_profileModel, &QAbstractItemModel::rowsRemoved, this, [this]() {
+    connect(d->profileModel, &QAbstractItemModel::rowsRemoved, this, [this]() {
         recomputeProfileStats();
         refreshProfileGroups();
     });
-    connect(m_profileModel, &QAbstractItemModel::modelReset, this, [this]() {
+    connect(d->profileModel, &QAbstractItemModel::modelReset, this, [this]() {
         recomputeProfileStats();
         refreshProfileGroups();
     });
-    connect(m_profileModel, SIGNAL(dataChanged(QModelIndex,QModelIndex,QList<int>)),
+    connect(d->profileModel, SIGNAL(dataChanged(QModelIndex,QModelIndex,QList<int>)),
             this, SLOT(onProfileModelDataChanged()));
 
     updateMemoryUsage();
@@ -3044,8 +3052,8 @@ VpnController::VpnController(QObject *parent)
     loadSubscriptions();
     loadProfileUsage();
     refreshProfileGroups();
-    if (m_updater) {
-        m_updater->setAppVersion(QCoreApplication::applicationVersion());
+    if (d->updater) {
+        d->updater->setAppVersion(QCoreApplication::applicationVersion());
     }
 
     const QString bundledXrayPath = detectDefaultXrayPath();
@@ -3057,19 +3065,19 @@ VpnController::VpnController(QObject *parent)
     detectProcessRoutingSupport();
     cleanupManagedRuntimeOnStartup();
 
-    if (m_profileModel->rowCount() == 0) {
+    if (d->profileModel->rowCount() == 0) {
         m_currentProfileIndex = -1;
     } else if (!m_currentProfileId.trimmed().isEmpty()) {
-        const int resolvedIndex = m_profileModel->indexOfId(m_currentProfileId.trimmed());
+        const int resolvedIndex = d->profileModel->indexOfId(m_currentProfileId.trimmed());
         if (resolvedIndex >= 0) {
             m_currentProfileIndex = resolvedIndex;
-        } else if (m_currentProfileIndex < 0 || m_currentProfileIndex >= m_profileModel->rowCount()) {
+        } else if (m_currentProfileIndex < 0 || m_currentProfileIndex >= d->profileModel->rowCount()) {
             m_currentProfileIndex = 0;
         }
-    } else if (m_currentProfileIndex < 0 || m_currentProfileIndex >= m_profileModel->rowCount()) {
+    } else if (m_currentProfileIndex < 0 || m_currentProfileIndex >= d->profileModel->rowCount()) {
         m_currentProfileIndex = 0;
     }
-    const auto startupProfile = m_profileModel->profileAt(m_currentProfileIndex);
+    const auto startupProfile = d->profileModel->profileAt(m_currentProfileIndex);
     m_currentProfileId = startupProfile.has_value() ? startupProfile->id.trimmed() : QString();
     m_activeProfileAddress = startupProfile.has_value() ? startupProfile->address.trimmed() : QString();
     recomputeProfileStats();
@@ -3098,8 +3106,8 @@ VpnController::VpnController(QObject *parent)
 
     if (m_runtimeSupportsAutoUpdate) {
         QTimer::singleShot(1500, this, [this]() {
-            if (m_updater) {
-                m_updater->checkForUpdates(false);
+            if (d->updater) {
+                d->updater->checkForUpdates(false);
             }
         });
     }
@@ -3182,15 +3190,17 @@ VpnController::~VpnController()
     }
     if (m_systemProxyApplied || m_killSwitchEnabled || (m_useSystemProxy && m_autoDisableSystemProxyOnDisconnect)) {
         QString ignored;
-        Q_UNUSED(m_systemProxyManager->disable(&ignored, true));
+        Q_UNUSED(d->systemProxyManager->disable(&ignored, true));
         m_systemProxyApplied = false;
     }
-    delete m_systemProxyManager;
-    m_systemProxyManager = nullptr;
+    delete d->systemProxyManager;
+    d->systemProxyManager = nullptr;
     saveProfileUsage();
     if (!m_runtimeIsMobile) {
         cleanupDetachedHelpers();
     }
+    delete d;
+    d = nullptr;
 }
 
 ConnectionState VpnController::connectionState() const
@@ -3256,7 +3266,7 @@ QString VpnController::latestRecordedUsage() const
 
     QString profileId = m_currentProfileId.trimmed();
     if (profileId.isEmpty()) {
-        const auto profile = m_profileModel->profileAt(m_currentProfileIndex);
+        const auto profile = d->profileModel->profileAt(m_currentProfileIndex);
         if (profile.has_value()) {
             profileId = profile->id.trimmed();
         }
@@ -3401,13 +3411,13 @@ void VpnController::setCurrentProfileIndex(int index)
         return;
     }
 
-    if (index < -1 || index >= m_profileModel->rowCount()) {
+    if (index < -1 || index >= d->profileModel->rowCount()) {
         return;
     }
 
     const int previousIndex = m_currentProfileIndex;
     m_currentProfileIndex = index;
-    const auto profile = m_profileModel->profileAt(m_currentProfileIndex);
+    const auto profile = d->profileModel->profileAt(m_currentProfileIndex);
     m_currentProfileId = profile.has_value() ? profile->id.trimmed() : QString();
     emit currentProfileIndexChanged();
     emit profileUsageChanged();
@@ -3434,12 +3444,12 @@ void VpnController::setCurrentProfileIndex(int index)
 
 QObject *VpnController::profileModel()
 {
-    return m_profileModel;
+    return d->profileModel;
 }
 
 QObject *VpnController::updater()
 {
-    return m_updater;
+    return d->updater;
 }
 
 SecurityStatus *VpnController::securityStatus()
@@ -3582,7 +3592,7 @@ QVariantList VpnController::subscriptionItems() const
     out.reserve(m_subscriptionEntries.size());
     for (const SubscriptionEntry& entry : m_subscriptionEntries) {
         int profileCounter = 0;
-        const auto allProfiles = m_profileModel->profiles();
+        const auto allProfiles = d->profileModel->profiles();
         for (const ServerProfile& profile : allProfiles) {
             if (profile.sourceId.trimmed() == entry.id) {
                 ++profileCounter;
@@ -3607,7 +3617,7 @@ int VpnController::removeProfilesBySourceId(const QString& sourceId, bool preser
         return 0;
     }
 
-    const auto allProfiles = m_profileModel->profiles();
+    const auto allProfiles = d->profileModel->profiles();
     if (allProfiles.isEmpty()) {
         return 0;
     }
@@ -3643,20 +3653,20 @@ int VpnController::removeProfilesBySourceId(const QString& sourceId, bool preser
         return 0;
     }
 
-    m_profileModel->setProfiles(keptProfiles);
+    d->profileModel->setProfiles(keptProfiles);
 
     if (keptProfiles.isEmpty()) {
         setCurrentProfileIndex(-1);
         m_currentProfileId.clear();
     } else if (!m_currentProfileId.trimmed().isEmpty()) {
-        const int resolvedIndex = m_profileModel->indexOfId(m_currentProfileId.trimmed());
+        const int resolvedIndex = d->profileModel->indexOfId(m_currentProfileId.trimmed());
         setCurrentProfileIndex(resolvedIndex >= 0 ? resolvedIndex : 0);
     } else {
         setCurrentProfileIndex(0);
     }
 
     if (!m_selectedUsageProfileId.trimmed().isEmpty()
-        && m_profileModel->indexOfId(m_selectedUsageProfileId.trimmed()) < 0) {
+        && d->profileModel->indexOfId(m_selectedUsageProfileId.trimmed()) < 0) {
         m_selectedUsageProfileId.clear();
         emit selectedUsageProfileIdChanged();
         emit profileUsageChanged();
@@ -3673,7 +3683,7 @@ int VpnController::pruneOrphanSubscriptions()
     }
 
     QSet<QString> referencedSourceIds;
-    const auto allProfiles = m_profileModel->profiles();
+    const auto allProfiles = d->profileModel->profiles();
     for (const ServerProfile& profile : allProfiles) {
         const QString sourceId = profile.sourceId.trimmed();
         if (!sourceId.isEmpty() && sourceId != QString::fromUtf8("manual")) {
@@ -3954,7 +3964,7 @@ bool VpnController::renameProfileGroup(const QString& oldName, const QString& ne
         }
     }
 
-    auto profiles = m_profileModel->profiles();
+    auto profiles = d->profileModel->profiles();
     bool profilesChanged = false;
     for (ServerProfile& profile : profiles) {
         if (normalizeGroupName(profile.groupName).compare(from, Qt::CaseInsensitive) == 0) {
@@ -4013,7 +4023,7 @@ bool VpnController::renameProfileGroup(const QString& oldName, const QString& ne
     }
 
     if (profilesChanged) {
-        m_profileModel->setProfiles(profiles);
+        d->profileModel->setProfiles(profiles);
         saveProfiles();
     }
     saveSubscriptions();
@@ -4044,7 +4054,7 @@ bool VpnController::removeProfileGroup(const QString& groupName)
         }
     }
 
-    auto profiles = m_profileModel->profiles();
+    auto profiles = d->profileModel->profiles();
     bool profilesChanged = false;
     for (ServerProfile& profile : profiles) {
         if (normalizeGroupName(profile.groupName).compare(normalized, Qt::CaseInsensitive) == 0) {
@@ -4066,7 +4076,7 @@ bool VpnController::removeProfileGroup(const QString& groupName)
     }
 
     if (profilesChanged) {
-        m_profileModel->setProfiles(profiles);
+        d->profileModel->setProfiles(profiles);
         saveProfiles();
     }
     saveSubscriptions();
@@ -4099,7 +4109,7 @@ int VpnController::removeAllProfileGroups()
         }
     }
 
-    auto profiles = m_profileModel->profiles();
+    auto profiles = d->profileModel->profiles();
     bool profilesChanged = false;
     for (ServerProfile& profile : profiles) {
         const QString normalized = normalizeGroupName(profile.groupName);
@@ -4120,7 +4130,7 @@ int VpnController::removeAllProfileGroups()
     }
 
     if (profilesChanged) {
-        m_profileModel->setProfiles(profiles);
+        d->profileModel->setProfiles(profiles);
         saveProfiles();
     }
     saveSubscriptions();
@@ -4612,7 +4622,7 @@ QString VpnController::selectedUsageProfileId() const
 void VpnController::setSelectedUsageProfileId(const QString& profileId)
 {
     QString normalized = profileId.trimmed();
-    if (!normalized.isEmpty() && m_profileModel->indexOfId(normalized) < 0) {
+    if (!normalized.isEmpty() && d->profileModel->indexOfId(normalized) < 0) {
         normalized.clear();
     }
 
@@ -4635,7 +4645,7 @@ QVariantList VpnController::usageProfileOptions() const
     allItem.insert(QString::fromUtf8("name"), QString::fromUtf8("All Profiles"));
     options.append(allItem);
 
-    for (const ServerProfile& profile : m_profileModel->profiles()) {
+    for (const ServerProfile& profile : d->profileModel->profiles()) {
         QVariantMap item;
         item.insert(QString::fromUtf8("id"), profile.id.trimmed());
         item.insert(QString::fromUtf8("name"), profile.displayLabel());
@@ -4743,14 +4753,14 @@ bool VpnController::importProfileLink(const QString& link)
     profile.sourceName = QString::fromUtf8("Manual import");
     profile.sourceId = QString::fromUtf8("manual");
 
-    if (!m_profileModel->addProfile(profile)) {
+    if (!d->profileModel->addProfile(profile)) {
         setLastError(QString::fromUtf8("Failed to add imported profile."));
         return false;
     }
 
     saveProfiles();
 
-    const int importedIndex = m_profileModel->indexOfId(profile.id);
+    const int importedIndex = d->profileModel->indexOfId(profile.id);
     setCurrentProfileIndex(importedIndex);
     if (m_autoPingProfiles && importedIndex >= 0) {
         pingProfile(importedIndex);
@@ -4833,12 +4843,12 @@ int VpnController::importProfileBatch(const QString& text)
                 profile.sourceName = QString::fromUtf8("Manual import");
                 profile.sourceId = QString::fromUtf8("manual");
 
-                if (!m_profileModel->addProfile(profile)) {
+                if (!d->profileModel->addProfile(profile)) {
                     setLastError(QString::fromUtf8("Failed to add imported profile."));
                     return 0;
                 }
 
-                const int importedIndex = m_profileModel->indexOfId(profile.id);
+                const int importedIndex = d->profileModel->indexOfId(profile.id);
                 return finalizeImport(1, importedIndex, false);
             }
 
@@ -4861,9 +4871,9 @@ int VpnController::importProfileBatch(const QString& text)
                     profile.groupName = normalizedGroup;
                     profile.sourceName = QString::fromUtf8("Manual import");
                     profile.sourceId = QString::fromUtf8("manual");
-                    if (m_profileModel->addProfile(profile)) {
+                    if (d->profileModel->addProfile(profile)) {
                         ++importedCount;
-                        lastImportedIndex = m_profileModel->indexOfId(profile.id);
+                        lastImportedIndex = d->profileModel->indexOfId(profile.id);
                     }
                 };
 
@@ -5057,9 +5067,9 @@ int VpnController::importLinks(
         profile.groupName = normalizedGroup;
         profile.sourceName = normalizedSourceName;
         profile.sourceId = normalizedSourceId;
-        if (m_profileModel->addProfile(profile)) {
+        if (d->profileModel->addProfile(profile)) {
             ++importCount;
-            lastIndex = m_profileModel->indexOfId(profile.id);
+            lastIndex = d->profileModel->indexOfId(profile.id);
         }
     }
 
@@ -5368,7 +5378,7 @@ void VpnController::refreshProfileGroups()
         appendGroupIfNeeded(entry.group);
     }
 
-    const auto allProfiles = m_profileModel->profiles();
+    const auto allProfiles = d->profileModel->profiles();
     for (const ServerProfile& profile : allProfiles) {
         appendGroupIfNeeded(profile.groupName);
     }
@@ -5472,7 +5482,7 @@ void VpnController::refreshProfileGroups()
 
 bool VpnController::sortProfiles(const QString& mode, const QString& groupName)
 {
-    QList<ServerProfile> profiles = m_profileModel->profiles();
+    QList<ServerProfile> profiles = d->profileModel->profiles();
     if (profiles.size() < 2) {
         return false;
     }
@@ -5534,9 +5544,9 @@ bool VpnController::sortProfiles(const QString& mode, const QString& groupName)
     }
 
     const QString selectedId = m_currentProfileId.trimmed();
-    m_profileModel->setProfiles(profiles);
+    d->profileModel->setProfiles(profiles);
     if (!selectedId.isEmpty()) {
-        m_currentProfileIndex = m_profileModel->indexOfId(selectedId);
+        m_currentProfileIndex = d->profileModel->indexOfId(selectedId);
         emit currentProfileIndexChanged();
     }
     saveProfiles();
@@ -5560,7 +5570,7 @@ bool VpnController::sortProfiles(const QString& mode, const QString& groupName)
 
 void VpnController::recomputeProfileStats()
 {
-    const int totalCount = m_profileModel->rowCount();
+    const int totalCount = d->profileModel->rowCount();
     const QString normalizedCurrentGroup = normalizeGroupName(m_currentProfileGroup);
     const bool allGroups = (m_currentProfileGroup.compare(QString::fromUtf8("All"), Qt::CaseInsensitive) == 0);
 
@@ -5571,7 +5581,7 @@ void VpnController::recomputeProfileStats()
     qint64 sumPing = 0;
 
     for (int i = 0; i < totalCount; ++i) {
-        const auto profile = m_profileModel->profileAt(i);
+        const auto profile = d->profileModel->profileAt(i);
         if (!profile.has_value()) {
             continue;
         }
@@ -5628,7 +5638,7 @@ bool VpnController::removeProfile(int row)
     }
 
     QString removedProfileId;
-    const auto removedProfile = m_profileModel->profileAt(row);
+    const auto removedProfile = d->profileModel->profileAt(row);
     QString removedSourceId;
     if (removedProfile.has_value()) {
         removedProfileId = removedProfile->id.trimmed();
@@ -5636,11 +5646,11 @@ bool VpnController::removeProfile(int row)
     }
 
     const int previousIndex = m_currentProfileIndex;
-    if (!m_profileModel->removeAt(row)) {
+    if (!d->profileModel->removeAt(row)) {
         return false;
     }
 
-    const int rowCount = m_profileModel->rowCount();
+    const int rowCount = d->profileModel->rowCount();
     if (rowCount == 0) {
         setCurrentProfileIndex(-1);
     } else if (previousIndex == row) {
@@ -5680,7 +5690,7 @@ bool VpnController::updateProfile(
     const QString& configLink
 )
 {
-    QList<ServerProfile> profiles = m_profileModel->profiles();
+    QList<ServerProfile> profiles = d->profileModel->profiles();
     if (row < 0 || row >= profiles.size()) {
         setLastError(QString::fromUtf8("Profile is no longer available."));
         return false;
@@ -5747,7 +5757,7 @@ bool VpnController::updateProfile(
         return true;
     }
 
-    m_profileModel->setProfiles(profiles);
+    d->profileModel->setProfiles(profiles);
     upsertProfileGroupOptions(profileGroupOptionsFor(cleanGroup), false);
     refreshProfileGroups();
     recomputeProfileStats();
@@ -5762,7 +5772,7 @@ bool VpnController::updateProfile(
 
 int VpnController::removeAllProfiles()
 {
-    const auto allProfiles = m_profileModel->profiles();
+    const auto allProfiles = d->profileModel->profiles();
     if (allProfiles.isEmpty()) {
         return 0;
     }
@@ -5794,11 +5804,11 @@ int VpnController::removeAllProfiles()
         return 0;
     }
 
-    m_profileModel->setProfiles(keptProfiles);
+    d->profileModel->setProfiles(keptProfiles);
 
     if (!keptProfiles.isEmpty()) {
         const QString keepId = keptProfiles.first().id.trimmed();
-        const int keepIndex = m_profileModel->indexOfId(keepId);
+        const int keepIndex = d->profileModel->indexOfId(keepId);
         setCurrentProfileIndex(keepIndex >= 0 ? keepIndex : 0);
     } else {
         setCurrentProfileIndex(-1);
@@ -5806,12 +5816,12 @@ int VpnController::removeAllProfiles()
     }
 
     if (!m_currentProfileId.trimmed().isEmpty()
-        && m_profileModel->indexOfId(m_currentProfileId.trimmed()) < 0) {
+        && d->profileModel->indexOfId(m_currentProfileId.trimmed()) < 0) {
         m_currentProfileId = keptProfiles.isEmpty() ? QString() : keptProfiles.first().id.trimmed();
     }
 
     if (!m_selectedUsageProfileId.trimmed().isEmpty()
-        && m_profileModel->indexOfId(m_selectedUsageProfileId.trimmed()) < 0) {
+        && d->profileModel->indexOfId(m_selectedUsageProfileId.trimmed()) < 0) {
         m_selectedUsageProfileId.clear();
         emit selectedUsageProfileIdChanged();
         emit profileUsageChanged();
@@ -5842,7 +5852,7 @@ int VpnController::removeDeadProfiles()
         return 0;
     }
 
-    const auto allProfiles = m_profileModel->profiles();
+    const auto allProfiles = d->profileModel->profiles();
     if (allProfiles.isEmpty()) {
         return 0;
     }
@@ -5874,19 +5884,19 @@ int VpnController::removeDeadProfiles()
         return 0;
     }
 
-    m_profileModel->setProfiles(keptProfiles);
+    d->profileModel->setProfiles(keptProfiles);
     if (keptProfiles.isEmpty()) {
         setCurrentProfileIndex(-1);
         m_currentProfileId.clear();
     } else if (!m_currentProfileId.trimmed().isEmpty()) {
-        const int resolvedIndex = m_profileModel->indexOfId(m_currentProfileId.trimmed());
+        const int resolvedIndex = d->profileModel->indexOfId(m_currentProfileId.trimmed());
         setCurrentProfileIndex(resolvedIndex >= 0 ? resolvedIndex : 0);
     } else {
         setCurrentProfileIndex(0);
     }
 
     if (!m_selectedUsageProfileId.trimmed().isEmpty()
-        && m_profileModel->indexOfId(m_selectedUsageProfileId.trimmed()) < 0) {
+        && d->profileModel->indexOfId(m_selectedUsageProfileId.trimmed()) < 0) {
         m_selectedUsageProfileId.clear();
         emit selectedUsageProfileIdChanged();
         emit profileUsageChanged();
@@ -5912,7 +5922,7 @@ bool VpnController::removeSubscription(const QString& id)
     }
 
     if ((m_runtimeBackend && m_runtimeBackend->isRunning()) || connected() || busy()) {
-        const auto currentProfile = m_profileModel->profileAt(m_currentProfileIndex);
+        const auto currentProfile = d->profileModel->profileAt(m_currentProfileIndex);
         if (currentProfile.has_value()
             && currentProfile->sourceId.trimmed().compare(targetId, Qt::CaseInsensitive) == 0) {
             setLastError(QString::fromUtf8("Disconnect before removing the active subscription."));
@@ -5963,7 +5973,7 @@ int VpnController::removeSubscriptionsByGroup(const QString& group)
     }
 
     if ((m_runtimeBackend && m_runtimeBackend->isRunning()) || connected() || busy()) {
-        const auto currentProfile = m_profileModel->profileAt(m_currentProfileIndex);
+        const auto currentProfile = d->profileModel->profileAt(m_currentProfileIndex);
         if (currentProfile.has_value()
             && sourceIdsToRemove.contains(currentProfile->sourceId.trimmed())) {
             setLastError(QString::fromUtf8("Disconnect before removing the active subscription group."));
@@ -5996,7 +6006,7 @@ int VpnController::removeSubscriptionsByGroup(const QString& group)
 
 void VpnController::pingProfile(int row)
 {
-    const auto profile = m_profileModel->profileAt(row);
+    const auto profile = d->profileModel->profileAt(row);
     if (!profile.has_value()) {
         return;
     }
@@ -6004,18 +6014,18 @@ void VpnController::pingProfile(int row)
     const QString profileId = profile->id.trimmed();
     int currentRow = row;
     if (!profileId.isEmpty()) {
-        currentRow = m_profileModel->indexOfId(profileId);
+        currentRow = d->profileModel->indexOfId(profileId);
     }
     if (currentRow < 0) {
         return;
     }
 
     if (profile->address.trimmed().isEmpty() || profile->port == 0) {
-        m_profileModel->setPingResult(currentRow, -1, 100.0);
+        d->profileModel->setPingResult(currentRow, -1, 100.0);
         return;
     }
 
-    m_profileModel->setPinging(currentRow, true);
+    d->profileModel->setPinging(currentRow, true);
 
     const QPointer<VpnController> guard(this);
     const QString measurementMode = normalizeLatencyMeasurementModeValue(m_latencyMeasurementMode);
@@ -6028,7 +6038,7 @@ void VpnController::pingProfile(int row)
         }
         int rowNow = -1;
         if (!profileId.isEmpty()) {
-            rowNow = guard->m_profileModel->indexOfId(profileId);
+            rowNow = guard->d->profileModel->indexOfId(profileId);
         }
         if (rowNow < 0) {
             rowNow = currentRow;
@@ -6037,7 +6047,7 @@ void VpnController::pingProfile(int row)
             return;
         }
 
-        guard->m_profileModel->setPingResult(rowNow, result.averageMs, result.lossPct);
+        guard->d->profileModel->setPingResult(rowNow, result.averageMs, result.lossPct);
         if (result.averageMs >= 0) {
             const QString label = result.endpointFallback || measurementMode == QString::fromUtf8("Endpoint Latency")
                                       ? QString::fromUtf8("Endpoint ping")
@@ -6244,10 +6254,10 @@ void VpnController::pingAllProfiles()
     const QString normalizedCurrentGroup = normalizeGroupName(m_currentProfileGroup);
     const bool allGroups = (m_currentProfileGroup.compare(QString::fromUtf8("All"), Qt::CaseInsensitive) == 0);
 
-    const int count = m_profileModel->rowCount();
+    const int count = d->profileModel->rowCount();
     int scheduled = 0;
     for (int row = 0; row < count; ++row) {
-        const auto profile = m_profileModel->profileAt(row);
+        const auto profile = d->profileModel->profileAt(row);
         if (!profile.has_value()) {
             continue;
         }
@@ -6265,7 +6275,7 @@ void VpnController::pingAllProfiles()
         QTimer::singleShot(scheduled * kProfilePingStaggerMs, this, [this, profileId, fallbackRow]() {
             int rowNow = -1;
             if (!profileId.isEmpty()) {
-                rowNow = m_profileModel->indexOfId(profileId);
+                rowNow = d->profileModel->indexOfId(profileId);
             }
             if (rowNow < 0) {
                 rowNow = fallbackRow;
@@ -6287,7 +6297,7 @@ bool VpnController::moveProfile(int fromRow, int toRow)
 {
     const QString selectedId = m_currentProfileId.trimmed();
     int resolvedToRow = toRow;
-    const auto fromProfile = m_profileModel->profileAt(fromRow);
+    const auto fromProfile = d->profileModel->profileAt(fromRow);
     const QString activeGroup = normalizeGroupName(m_currentProfileGroup);
     if (fromProfile.has_value()
         && activeGroup.compare(QString::fromUtf8("All"), Qt::CaseInsensitive) != 0) {
@@ -6295,9 +6305,9 @@ bool VpnController::moveProfile(int fromRow, int toRow)
         const QString sourceGroup = normalizeGroupName(fromProfile->groupName);
         resolvedToRow = -1;
         for (int row = fromRow + direction;
-             row >= 0 && row < m_profileModel->rowCount();
+             row >= 0 && row < d->profileModel->rowCount();
              row += direction) {
-            const auto candidate = m_profileModel->profileAt(row);
+            const auto candidate = d->profileModel->profileAt(row);
             if (candidate.has_value()
                 && normalizeGroupName(candidate->groupName).compare(sourceGroup, Qt::CaseInsensitive) == 0) {
                 resolvedToRow = row;
@@ -6309,11 +6319,11 @@ bool VpnController::moveProfile(int fromRow, int toRow)
         }
     }
 
-    if (!m_profileModel->moveProfile(fromRow, resolvedToRow)) {
+    if (!d->profileModel->moveProfile(fromRow, resolvedToRow)) {
         return false;
     }
     if (!selectedId.isEmpty()) {
-        m_currentProfileIndex = m_profileModel->indexOfId(selectedId);
+        m_currentProfileIndex = d->profileModel->indexOfId(selectedId);
         emit currentProfileIndexChanged();
     }
     saveProfiles();
@@ -6356,9 +6366,9 @@ int VpnController::chooseBestProfileInGroup(const QString& groupName) const
     qint64 bestLastSuccess = -1;
     QString bestLabel;
 
-    const int count = m_profileModel->rowCount();
+    const int count = d->profileModel->rowCount();
     for (int row = 0; row < count; ++row) {
-        const auto profile = m_profileModel->profileAt(row);
+        const auto profile = d->profileModel->profileAt(row);
         if (!profile.has_value()) {
             continue;
         }
@@ -6409,7 +6419,7 @@ void VpnController::connectBestProfileInCurrentGroup()
         return;
     }
 
-    const auto profile = m_profileModel->profileAt(row);
+    const auto profile = d->profileModel->profileAt(row);
     appendSystemLog(QString::fromUtf8("[Profile] Auto-selected best profile for group '%1': %2")
                         .arg(m_currentProfileGroup,
                              profile.has_value() ? profile->displayLabel() : QString::fromUtf8("row %1").arg(row)));
@@ -6422,7 +6432,7 @@ void VpnController::connectToProfile(int row)
         return;
     }
 
-    if (row < 0 || row >= m_profileModel->rowCount()) {
+    if (row < 0 || row >= d->profileModel->rowCount()) {
         setLastError(QString::fromUtf8("Please select a valid server profile."));
         setConnectionState(ConnectionState::Error);
         return;
@@ -6453,7 +6463,7 @@ void VpnController::connectToProfile(int row)
         return;
     }
 
-    auto profile = m_profileModel->profileAt(row);
+    auto profile = d->profileModel->profileAt(row);
     if (!profile.has_value()) {
         setLastError(QString::fromUtf8("Please select a valid server profile."));
         setConnectionState(ConnectionState::Error);
@@ -6681,7 +6691,7 @@ void VpnController::connectSelected()
     QString selectionGroup = m_currentProfileGroup;
     if (selectionGroup.trimmed().isEmpty()
         || selectionGroup.compare(QString::fromUtf8("All"), Qt::CaseInsensitive) == 0) {
-        const auto selected = m_profileModel->profileAt(m_currentProfileIndex);
+        const auto selected = d->profileModel->profileAt(m_currentProfileIndex);
         if (selected.has_value()) {
             selectionGroup = normalizeGroupName(selected->groupName);
         }
@@ -6694,7 +6704,7 @@ void VpnController::connectSelected()
             targetRow = bestRow;
         }
     } else if (groupMode == QString::fromUtf8("Fallback")) {
-        const auto selected = m_profileModel->profileAt(m_currentProfileIndex);
+        const auto selected = d->profileModel->profileAt(m_currentProfileIndex);
         const bool selectedHealthy = selected.has_value()
                                      && selected->lastPingMs >= 0
                                      && selected->failureCount == 0;
@@ -6707,7 +6717,7 @@ void VpnController::connectSelected()
     }
 
     if (targetRow != m_currentProfileIndex) {
-        const auto chosen = m_profileModel->profileAt(targetRow);
+        const auto chosen = d->profileModel->profileAt(targetRow);
         appendSystemLog(QString::fromUtf8("[Profile] %1 mode selected '%2' for group '%3'.")
                             .arg(groupMode,
                                  chosen.has_value() ? chosen->displayLabel() : QString::fromUtf8("row %1").arg(targetRow),
@@ -6798,7 +6808,7 @@ void VpnController::toggleConnection()
 
 bool VpnController::shouldShowSecurityWarningForProfile(int row) const
 {
-    const auto profile = m_profileModel ? m_profileModel->profileAt(row) : std::nullopt;
+    const auto profile = d->profileModel ? d->profileModel->profileAt(row) : std::nullopt;
     if (!profile.has_value()) {
         return false;
     }
@@ -6813,7 +6823,7 @@ bool VpnController::shouldShowSecurityWarningForProfile(int row) const
 
 void VpnController::setSecurityWarningDismissedForProfile(int row, bool dismissed)
 {
-    const auto profile = m_profileModel ? m_profileModel->profileAt(row) : std::nullopt;
+    const auto profile = d->profileModel ? d->profileModel->profileAt(row) : std::nullopt;
     if (!profile.has_value()) {
         return;
     }
@@ -7551,7 +7561,7 @@ QString VpnController::formatBytes(qint64 bytes) const
 
 QString VpnController::currentProfileAddress() const
 {
-    const auto profile = m_profileModel->profileAt(m_currentProfileIndex);
+    const auto profile = d->profileModel->profileAt(m_currentProfileIndex);
     if (!profile.has_value()) {
         return {};
     }
@@ -7560,7 +7570,7 @@ QString VpnController::currentProfileAddress() const
 
 QString VpnController::currentProfileLabel() const
 {
-    const auto profile = m_profileModel->profileAt(m_currentProfileIndex);
+    const auto profile = d->profileModel->profileAt(m_currentProfileIndex);
     if (!profile.has_value()) {
         return {};
     }
@@ -7569,7 +7579,7 @@ QString VpnController::currentProfileLabel() const
 
 QString VpnController::currentProfileSubtitle() const
 {
-    const auto profile = m_profileModel->profileAt(m_currentProfileIndex);
+    const auto profile = d->profileModel->profileAt(m_currentProfileIndex);
     if (!profile.has_value()) {
         return {};
     }
@@ -7584,7 +7594,7 @@ QString VpnController::currentProfileSubtitle() const
 
 QString VpnController::currentProfileGroupLabel() const
 {
-    const auto profile = m_profileModel->profileAt(m_currentProfileIndex);
+    const auto profile = d->profileModel->profileAt(m_currentProfileIndex);
     if (!profile.has_value()) {
         return {};
     }
@@ -7593,7 +7603,7 @@ QString VpnController::currentProfileGroupLabel() const
 
 int VpnController::currentProfilePingMs() const
 {
-    const auto profile = m_profileModel->profileAt(m_currentProfileIndex);
+    const auto profile = d->profileModel->profileAt(m_currentProfileIndex);
     if (!profile.has_value()) {
         return -1;
     }
@@ -7602,7 +7612,7 @@ int VpnController::currentProfilePingMs() const
 
 double VpnController::currentProfilePacketLossPct() const
 {
-    const auto profile = m_profileModel->profileAt(m_currentProfileIndex);
+    const auto profile = d->profileModel->profileAt(m_currentProfileIndex);
     if (!profile.has_value()) {
         return -1.0;
     }
@@ -7786,7 +7796,7 @@ void VpnController::completeRuntimeConnectedStartup(bool restoredExistingMobileR
         m_powerModeManager->recordReconnectSuccess();
     }
     if (!m_activeProfileUsageId.trimmed().isEmpty()
-        && m_profileModel->setRuntimeStats(
+        && d->profileModel->setRuntimeStats(
             m_activeProfileUsageId.trimmed(),
             QDateTime::currentDateTimeUtc().toMSecsSinceEpoch(),
             0)) {
@@ -7852,7 +7862,7 @@ void VpnController::syncMobileRuntimeState(const QString& reason)
             return;
         }
 
-        const auto profile = m_profileModel->profileAt(m_currentProfileIndex);
+        const auto profile = d->profileModel->profileAt(m_currentProfileIndex);
         if (profile.has_value()) {
             m_activeProfileUsageId = profile->id.trimmed();
             m_activeProfileAddress = profile->address.trimmed();
@@ -8223,11 +8233,11 @@ void VpnController::onProcessStopped(int exitCode, VpnRuntimeBackend::ExitStatus
         if (m_powerModeManager) {
             m_powerModeManager->recordRuntimeInstability(QString::fromUtf8("runtime crash"));
         }
-        const auto profile = m_profileModel->profileAt(m_currentProfileIndex);
+        const auto profile = d->profileModel->profileAt(m_currentProfileIndex);
         if (profile.has_value()) {
             const QString failedProfileId = profile->id.trimmed();
             if (!failedProfileId.isEmpty()
-                && m_profileModel->setRuntimeStats(
+                && d->profileModel->setRuntimeStats(
                     failedProfileId,
                     profile->lastSuccessfulConnectionMs,
                     profile->failureCount + 1)) {
@@ -8264,11 +8274,11 @@ void VpnController::onProcessError(const QString& error)
     if (m_powerModeManager) {
         m_powerModeManager->recordRuntimeInstability(error);
     }
-    const auto profile = m_profileModel->profileAt(m_currentProfileIndex);
+    const auto profile = d->profileModel->profileAt(m_currentProfileIndex);
     if (profile.has_value()) {
         const QString failedProfileId = profile->id.trimmed();
         if (!failedProfileId.isEmpty()
-            && m_profileModel->setRuntimeStats(
+            && d->profileModel->setRuntimeStats(
                 failedProfileId,
                 profile->lastSuccessfulConnectionMs,
                 profile->failureCount + 1)) {
@@ -9020,8 +9030,8 @@ void VpnController::appendConnectionHistoryEvent(ConnectionState state)
     }
 
     QString profileLabel;
-    if (m_profileModel != nullptr) {
-        const auto profile = m_profileModel->profileAt(m_currentProfileIndex);
+    if (d->profileModel != nullptr) {
+        const auto profile = d->profileModel->profileAt(m_currentProfileIndex);
         if (profile.has_value()) {
             profileLabel = profile->displayLabel().trimmed();
             if (profileLabel.isEmpty()) {
@@ -9462,8 +9472,8 @@ QVariantMap VpnController::routingRuleToVariantMap(const RoutingRule& rule) cons
 
     QString profileName = QString::fromUtf8("All Profiles");
     if (!rule.profileId.trimmed().isEmpty()) {
-        const int row = m_profileModel->indexOfId(rule.profileId.trimmed());
-        const auto profile = m_profileModel->profileAt(row);
+        const int row = d->profileModel->indexOfId(rule.profileId.trimmed());
+        const auto profile = d->profileModel->profileAt(row);
         if (profile.has_value()) {
             profileName = profile->displayLabel();
         } else {
@@ -9495,7 +9505,7 @@ QVariantMap VpnController::validateRoutingRuleData(
         RoutingRuleService::ValidationContext{
             enforceProfileExists,
             normalizedProfileId.isEmpty()
-                || (m_profileModel && m_profileModel->indexOfId(normalizedProfileId) >= 0),
+                || (d->profileModel && d->profileModel->indexOfId(normalizedProfileId) >= 0),
             m_runtimeSupportsPerAppRouting && m_runtimeIsDesktop,
             m_processRoutingSupportChecked && !m_processRoutingSupported
         });
@@ -9572,7 +9582,7 @@ bool VpnController::setRoutingRules(
 void VpnController::reconnectActiveProfileForRoutingChange(const QString& reason)
 {
     if (busy()) {
-        if (m_currentProfileIndex >= 0 && m_currentProfileIndex < m_profileModel->rowCount()) {
+        if (m_currentProfileIndex >= 0 && m_currentProfileIndex < d->profileModel->rowCount()) {
             m_pendingReconnectProfileIndex = m_currentProfileIndex;
             appendSystemLog(QString::fromUtf8(
                                 "[Routing] %1 Runtime is still connecting; queued reconnect to apply changes.")
@@ -9590,7 +9600,7 @@ void VpnController::reconnectActiveProfileForRoutingChange(const QString& reason
         return;
     }
 
-    if (m_currentProfileIndex < 0 || m_currentProfileIndex >= m_profileModel->rowCount()) {
+    if (m_currentProfileIndex < 0 || m_currentProfileIndex >= d->profileModel->rowCount()) {
         return;
     }
 
@@ -9667,7 +9677,7 @@ QString VpnController::usageScopeProfileId() const
 
     QString currentId = m_currentProfileId.trimmed();
     if (currentId.isEmpty()) {
-        const auto profile = m_profileModel->profileAt(m_currentProfileIndex);
+        const auto profile = d->profileModel->profileAt(m_currentProfileIndex);
         if (profile.has_value()) {
             currentId = profile->id.trimmed();
         }
@@ -10081,7 +10091,7 @@ bool VpnController::minimizeToBackground() const
 
 QString VpnController::currentProfileTransportPowerClass() const
 {
-    const auto profile = m_profileModel ? m_profileModel->profileAt(m_currentProfileIndex) : std::nullopt;
+    const auto profile = d->profileModel ? d->profileModel->profileAt(m_currentProfileIndex) : std::nullopt;
     if (!profile.has_value()) {
         return QString::fromUtf8("Balanced");
     }
@@ -10126,7 +10136,7 @@ void VpnController::maybeReconnectToPendingProfile()
 
     const int reconnectIndex = m_pendingReconnectProfileIndex;
     m_pendingReconnectProfileIndex = -1;
-    if (reconnectIndex < 0 || reconnectIndex >= m_profileModel->rowCount()) {
+    if (reconnectIndex < 0 || reconnectIndex >= d->profileModel->rowCount()) {
         return;
     }
 
@@ -10159,7 +10169,7 @@ void VpnController::updatePerProfileUsageCounters(qint64 nextRx, qint64 nextTx)
         profileId = m_currentProfileId.trimmed();
     }
     if (profileId.isEmpty()) {
-        const auto profile = m_profileModel->profileAt(m_currentProfileIndex);
+        const auto profile = d->profileModel->profileAt(m_currentProfileIndex);
         if (profile.has_value()) {
             profileId = profile->id.trimmed();
         }
@@ -10535,7 +10545,7 @@ QVariantMap VpnController::currentProfileUsageSummary() const
 {
     QString id = m_currentProfileId.trimmed();
     if (id.isEmpty()) {
-        const auto profile = m_profileModel->profileAt(m_currentProfileIndex);
+        const auto profile = d->profileModel->profileAt(m_currentProfileIndex);
         if (profile.has_value()) {
             id = profile->id.trimmed();
         }
@@ -10633,7 +10643,7 @@ QVariantList VpnController::currentProfileUsageHistory(const QString& period, in
 {
     QString id = m_currentProfileId.trimmed();
     if (id.isEmpty()) {
-        const auto profile = m_profileModel->profileAt(m_currentProfileIndex);
+        const auto profile = d->profileModel->profileAt(m_currentProfileIndex);
         if (profile.has_value()) {
             id = profile->id.trimmed();
         }
@@ -10703,7 +10713,7 @@ QVariantList VpnController::currentProfileUsageSessions(int limit) const
 {
     QString id = m_currentProfileId.trimmed();
     if (id.isEmpty()) {
-        const auto profile = m_profileModel->profileAt(m_currentProfileIndex);
+        const auto profile = d->profileModel->profileAt(m_currentProfileIndex);
         if (profile.has_value()) {
             id = profile->id.trimmed();
         }
@@ -11011,7 +11021,7 @@ bool VpnController::clearRoutingRules()
 
 QString VpnController::exportProfile(int row) const
 {
-    const auto profile = m_profileModel->profileAt(row);
+    const auto profile = d->profileModel->profileAt(row);
     if (!profile.has_value()) {
         return QString();
     }
@@ -11020,7 +11030,7 @@ QString VpnController::exportProfile(int row) const
 
 QString VpnController::exportProfileLink(int row) const
 {
-    const auto profile = m_profileModel->profileAt(row);
+    const auto profile = d->profileModel->profileAt(row);
     if (!profile.has_value()) {
         return QString();
     }
@@ -11040,14 +11050,14 @@ QString VpnController::exportProfiles(const QVariantList& rows) const
 
     QJsonArray exported;
     if (uniqueRows.isEmpty()) {
-        for (const ServerProfile& profile : m_profileModel->profiles()) {
+        for (const ServerProfile& profile : d->profileModel->profiles()) {
             exported.append(profile.toJson());
         }
     } else {
         QList<int> sortedRows = uniqueRows.values();
         std::sort(sortedRows.begin(), sortedRows.end());
         for (int row : sortedRows) {
-            const auto profile = m_profileModel->profileAt(row);
+            const auto profile = d->profileModel->profileAt(row);
             if (profile.has_value()) {
                 exported.append(profile->toJson());
             }
@@ -11995,9 +12005,9 @@ bool VpnController::performSafeNetworkReset(const QString& reason, QString *erro
 
     if (!m_runtimeIsMobile
         && m_runtimeSupportsSystemProxy
-        && m_systemProxyManager != nullptr) {
+        && d->systemProxyManager != nullptr) {
         QString proxyError;
-        if (!m_systemProxyManager->disable(&proxyError, true)) {
+        if (!d->systemProxyManager->disable(&proxyError, true)) {
             rememberError(proxyError);
             appendSystemLog(QString::fromUtf8("[System] Proxy cleanup warning: %1")
                                 .arg(proxyError.trimmed().isEmpty()
@@ -12190,7 +12200,7 @@ void VpnController::refreshSecurityStatus()
     // Keep this unknown until a real route/firewall diagnostic is available.
     inputs.ipv6RoutingKnown = false;
 
-    const auto profile = m_profileModel ? m_profileModel->profileAt(m_currentProfileIndex) : std::nullopt;
+    const auto profile = d->profileModel ? d->profileModel->profileAt(m_currentProfileIndex) : std::nullopt;
     if (profile.has_value()) {
         inputs.activeProtocol = profile->protocol;
     }
@@ -13378,9 +13388,9 @@ void VpnController::loadProfiles()
         loadedProfiles[i].manualOrder = i;
     }
 
-    m_profileModel->setProfiles(loadedProfiles);
+    d->profileModel->setProfiles(loadedProfiles);
     if (!m_selectedUsageProfileId.trimmed().isEmpty()
-        && m_profileModel->indexOfId(m_selectedUsageProfileId.trimmed()) < 0) {
+        && d->profileModel->indexOfId(m_selectedUsageProfileId.trimmed()) < 0) {
         m_selectedUsageProfileId.clear();
     }
     if (m_autoPingProfiles && !loadedProfiles.isEmpty()) {
@@ -13460,7 +13470,7 @@ void VpnController::loadSubscriptions()
 void VpnController::saveProfiles() const
 {
     QJsonArray arr;
-    const auto allProfiles = m_profileModel->profiles();
+    const auto allProfiles = d->profileModel->profiles();
     for (const auto &profile : allProfiles) {
         arr.append(profile.toJson());
     }

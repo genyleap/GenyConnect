@@ -43,22 +43,15 @@ module;
 #include <QProcess>
 #endif
 
-#if defined(Q_OS_ANDROID)
-class ServerProfileModel;
-class SystemProxyManager;
-class Updater;
-#endif
 class PowerModeManager;
 
 #ifndef Q_MOC_RUN
 export module genyconnect.backend.vpncontroller;
 import genyconnect.backend.serverprofile;
-#if !defined(Q_OS_ANDROID)
-import genyconnect.backend.serverprofilemodel;
-import genyconnect.backend.systemproxymanager;
-import genyconnect.backend.updater;
-#endif
 import genyconnect.backend.xrayconfigbuilder;
+struct VpnControllerPrivate;
+#else
+struct VpnControllerPrivate;
 #endif
 
 namespace App {
@@ -1402,11 +1395,9 @@ private:
     qint64 m_usageSessionTxBytes = 0;
     QDateTime m_usageSessionStartedAt;
 
-    ServerProfileModel *m_profileModel = nullptr;
-    Updater *m_updater = nullptr;
+    VpnControllerPrivate *d = nullptr;
     SecurityStatus *m_securityStatus = nullptr;
     PowerModeManager *m_powerModeManager = nullptr;
-    SystemProxyManager *m_systemProxyManager = nullptr;
     VpnRuntimeBackend *m_runtimeBackend = nullptr;
     bool m_runtimeIsMobile = false;
     bool m_runtimeIsDesktop = true;
