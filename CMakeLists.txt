@@ -32,7 +32,7 @@ if(APPLE AND NOT IOS)
   set(CMAKE_OSX_DEPLOYMENT_TARGET "${GENYCONNECT_MACOS_DEPLOYMENT_TARGET}" CACHE STRING "Minimum macOS version" FORCE)
 endif()
 
-project(${PROJECT_NAME} VERSION 1.4.880 LANGUAGES CXX)
+project(${PROJECT_NAME} VERSION 1.4.894 LANGUAGES CXX)
 
 # -------------------------
 # Detect Android generator architecture
@@ -877,6 +877,9 @@ endif()
 set(qml_core
   ui/Core/FontSystem.qml
   ui/Core/AppGlobals.qml
+  ui/Core/I18n.qml
+  ui/Translations/catalogs.js
+  ui/Translations/licenses.js
   ui/Core/Colors.qml
   ui/Core/Metrics.qml
   ui/Core/Typography.qml
@@ -942,6 +945,7 @@ set(qml_files ${qml_main} ${qml_core} ${qml_controls} ${qml_sections})
 
 set(qml_singletons
   ui/Core/AppGlobals.qml
+  ui/Core/I18n.qml
   ui/Core/Metrics.qml
   ui/Core/Typography.qml
   ui/Core/Theme.qml
@@ -994,6 +998,10 @@ qt_add_resources(${PROJECT_NAME} GenyConnectAssets
   FILES
     ui/Resources/fonts/Inter-Regular.ttf
     ui/Resources/fonts/Inter-Bold.ttf
+    ui/Resources/fonts/Vazirmatn-Regular.ttf
+    ui/Resources/fonts/Vazirmatn-Medium.ttf
+    ui/Resources/fonts/Vazirmatn-Bold.ttf
+    ui/Resources/fonts/Vazirmatn-OFL.txt
     ui/Resources/fonts/fa-brands-400.otf
     ui/Resources/fonts/fa-regular-400.otf
     ui/Resources/fonts/fa-solid-900.otf
@@ -1067,6 +1075,14 @@ if(BUILD_TESTING AND NOT ANDROID AND NOT IOS)
   target_include_directories(genyconnect_securitystatus_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
   target_link_libraries(genyconnect_securitystatus_tests PRIVATE Qt6::Core Qt6::Test)
   add_test(NAME genyconnect_securitystatus_tests COMMAND genyconnect_securitystatus_tests)
+
+  add_executable(genyconnect_linuxhelperlaunch_tests
+    tests/linuxhelperlaunch_tests.cpp
+    src/linuxhelperlaunch.hpp
+  )
+  target_include_directories(genyconnect_linuxhelperlaunch_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+  target_link_libraries(genyconnect_linuxhelperlaunch_tests PRIVATE Qt6::Core Qt6::Test)
+  add_test(NAME genyconnect_linuxhelperlaunch_tests COMMAND genyconnect_linuxhelperlaunch_tests)
 endif()
 
 if(GENYCONNECT_AUTO_DOWNLOAD_XRAY AND NOT GENYCONNECT_BUNDLED_XRAY_PATH)

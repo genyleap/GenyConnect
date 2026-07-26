@@ -69,7 +69,7 @@ ColumnLayout {
 
                 Text {
                     Layout.fillWidth: true
-                    text: statTile.label
+                    text: I18n.t(statTile.label)
                     color: Colors.dsTextSubtle
                     font.family: FontSystem.contentFontFamily
                     font.pixelSize: Typography.uiCaption
@@ -123,7 +123,7 @@ ColumnLayout {
             }
 
             Text {
-                text: lanBadge.text
+                text: I18n.t(lanBadge.text)
                 color: lanBadge.textColor
                 font.family: lanBadge.bold ? FontSystem.getContentFontBold.name : FontSystem.contentFontFamily
                 font.pixelSize: lanBadge.textPixelSize
@@ -170,7 +170,7 @@ ColumnLayout {
 
             Text {
                 Layout.maximumWidth: Math.max(42, lanAction.width - 58)
-                text: lanAction.text
+                text: I18n.t(lanAction.text)
                 color: lanAction.accentColor
                 font.family: FontSystem.getContentFontBold.name
                 font.pixelSize: root.compact ? Typography.uiBody : Typography.uiBodyLg
@@ -220,7 +220,7 @@ ColumnLayout {
 
                 Text {
                     Layout.fillWidth: true
-                    text: lanInfoCell.label
+                    text: I18n.t(lanInfoCell.label)
                     color: Colors.dsTextMuted
                     font.family: FontSystem.contentFontFamily
                     font.pixelSize: Typography.uiCaption
@@ -358,7 +358,7 @@ ColumnLayout {
 
             Text {
                 Layout.fillWidth: true
-                text: presetTile.title
+                text: I18n.t(presetTile.title)
                 color: presetTile.selected ? presetTile.accentColor : Colors.dsText
                 font.family: presetTile.selected ? FontSystem.getContentFontBold.name : FontSystem.contentFontFamily
                 font.pixelSize: presetTile.width < 124 ? Typography.uiCaption : Typography.uiBody
@@ -443,7 +443,7 @@ ColumnLayout {
 
             Text {
                 Layout.fillWidth: true
-                text: guideStep.text
+                text: I18n.t(guideStep.text)
                 color: Colors.dsText
                 font.family: FontSystem.contentFontFamily
                 font.pixelSize: Typography.uiBody
@@ -555,7 +555,7 @@ ColumnLayout {
 
                 Text {
                     Layout.fillWidth: true
-                    text: lanModeCard.modeName
+                    text: I18n.t(lanModeCard.modeName)
                     color: Colors.dsText
                     font.family: FontSystem.getContentFontBold.name
                     font.pixelSize: Typography.uiBodyLg
@@ -566,7 +566,7 @@ ColumnLayout {
                 LanBadge {
 
                     visible: lanModeCard.badgeText.length > 0
-                    text: lanModeCard.badgeText
+                    text: I18n.t(lanModeCard.badgeText)
                     glyph: "\uf0a3"
                     badgeColor: Qt.rgba(lanModeCard.accentColor.r, lanModeCard.accentColor.g, lanModeCard.accentColor.b, Colors.lightMode ? 0.10 : 0.16)
                     borderColor: Qt.rgba(lanModeCard.accentColor.r, lanModeCard.accentColor.g, lanModeCard.accentColor.b, Colors.lightMode ? 0.30 : 0.44)
@@ -575,7 +575,7 @@ ColumnLayout {
 
                 Text {
                     Layout.fillWidth: true
-                    text: lanModeCard.summary
+                    text: I18n.t(lanModeCard.summary)
                     color: Colors.dsTextMuted
                     font.family: FontSystem.contentFontFamily
                     font.pixelSize: Typography.uiCaption
@@ -650,7 +650,7 @@ ColumnLayout {
 
                 Text {
                     Layout.fillWidth: true
-                    text: metricChip.label
+                    text: I18n.t(metricChip.label)
                     color: Colors.dsTextMuted
                     font.family: FontSystem.contentFontFamily
                     font.pixelSize: Typography.uiCaption
@@ -659,7 +659,7 @@ ColumnLayout {
 
                 Text {
                     Layout.fillWidth: true
-                    text: metricChip.value
+                    text: I18n.localizeDigits(I18n.t(metricChip.value))
                     color: Colors.dsText
                     font.family: FontSystem.getContentFontBold.name
                     font.pixelSize: Typography.uiBodyLg
@@ -743,7 +743,7 @@ ColumnLayout {
 
                         Text {
                             Layout.fillWidth: true
-                            text: vpnController.lanSharingEnabled ? "Sharing On" : "Sharing Off"
+                            text: I18n.t(vpnController.lanSharingEnabled ? "Sharing On" : "Sharing Off")
                             color: vpnController.lanSharingEnabled ? Colors.dsSuccess : Colors.dsText
                             font.family: FontSystem.getContentFontBold.name
                             font.pixelSize: Typography.uiTitle
@@ -753,9 +753,9 @@ ColumnLayout {
 
                         Text {
                             Layout.fillWidth: true
-                            text: vpnController.lanSharingEnabled
-                                  ? (root.compact ? "Proxy is available on your LAN." : "Your proxy is available on the LAN.")
-                                  : (root.compact ? "Share your proxy on local Wi-Fi." : "Enable to share your proxy on local Wi-Fi.")
+                            text: I18n.t(vpnController.lanSharingEnabled
+                                         ? (root.compact ? "Proxy is available on your LAN." : "Your proxy is available on the LAN.")
+                                         : (root.compact ? "Share your proxy on local Wi-Fi." : "Enable to share your proxy on local Wi-Fi."))
                             color: Colors.dsTextMuted
                             font.family: FontSystem.contentFontFamily
                             font.pixelSize: root.compact ? Typography.uiBodySm : Typography.uiBody
@@ -788,13 +788,13 @@ ColumnLayout {
                             Layout.minimumWidth: root.compact ? 96 : 166
                             Layout.preferredWidth: root.compact ? 148 : 260
                             Layout.maximumWidth: root.compact ? 208 : 360
-                            label: settingsFlick.width < 560 ? "Host" : "LAN Address (Host)"
+                            label: I18n.t(settingsFlick.width < 560 ? "Host" : "LAN Address (Host)")
                             value: root.lanProxyHost()
                             copyable: true
                             accentColor: Colors.dsPrimarySolid
                             onCopyClicked: {
                                 vpnController.copyTextToClipboard(root.lanProxyHost())
-                                root.showSettingsFeedback("Host copied.")
+                                root.showSettingsFeedback(I18n.t("Host copied."))
                             }
                         }
 
@@ -808,13 +808,13 @@ ColumnLayout {
                             Layout.minimumWidth: root.compact ? 74 : 116
                             Layout.preferredWidth: root.compact ? 94 : 162
                             Layout.maximumWidth: root.compact ? 132 : 208
-                            label: "Port"
+                            label: I18n.t("Port")
                             value: String(vpnController.httpPort)
                             copyable: true
                             accentColor: Colors.dsPrimarySolid
                             onCopyClicked: {
                                 vpnController.copyTextToClipboard(String(vpnController.httpPort))
-                                root.showSettingsFeedback("Port copied.")
+                                root.showSettingsFeedback(I18n.t("Port copied."))
                             }
                         }
 
@@ -828,7 +828,7 @@ ColumnLayout {
                             Layout.minimumWidth: root.compact ? 104 : 188
                             Layout.preferredWidth: root.compact ? 140 : 274
                             Layout.maximumWidth: root.compact ? 210 : 380
-                            label: "Protocol"
+                            label: I18n.t("Protocol")
                             value: root.lanProtocolDisplay(root.lanUiMode)
                             glyph: "\uf0ac"
                             chip: true
@@ -842,27 +842,30 @@ ColumnLayout {
                     spacing: 10
 
                     LanActionButton {
-                        text: settingsFlick.width < 560 ? "Copy" : "Copy Address"
+                        text: I18n.t(settingsFlick.width < 560 ? "Copy" : "Copy Address")
                         glyph: "\uf0c5"
                         accentColor: Colors.dsPrimarySolid
                         onClicked: {
                             vpnController.copyTextToClipboard(root.lanProxyHost())
-                            root.showSettingsFeedback("Address copied.")
+                            root.showSettingsFeedback(I18n.t("Address copied."))
                         }
                     }
 
                     LanActionButton {
-                        text: settingsFlick.width < 560 ? "Test" : "Test Connection"
+                        text: I18n.t(settingsFlick.width < 560 ? "Test" : "Test Connection")
                         glyph: "\uf2f1"
                         accentColor: Colors.dsPrimarySolid
-                        onClicked: root.showLanStatusFeedback("Test with Host " + root.lanProxyHost() + " and Port " + String(vpnController.httpPort) + ".")
+                        onClicked: root.showLanStatusFeedback(I18n.t("Test with Host %1 and Port %2.", [
+                                                                        I18n.ltr(root.lanProxyHost()),
+                                                                        I18n.ltr(String(vpnController.httpPort))
+                                                                    ]))
                     }
                 }
 
                 Text {
                     Layout.fillWidth: true
                     visible: root.settingsFeedbackText.length > 0 || root.lanStatusFeedbackText.length > 0
-                    text: root.lanStatusFeedbackText.length > 0 ? root.lanStatusFeedbackText : root.settingsFeedbackText
+                    text: I18n.t(root.lanStatusFeedbackText.length > 0 ? root.lanStatusFeedbackText : root.settingsFeedbackText)
                     color: Colors.dsTextSubtle
                     font.family: FontSystem.contentFontFamily
                     font.pixelSize: Typography.uiCaption
@@ -872,7 +875,7 @@ ColumnLayout {
                 Text {
                     Layout.fillWidth: true
                     visible: !vpnController.lanSharingSupported
-                    text: "LAN proxy unavailable on this runtime."
+                    text: I18n.t("LAN proxy unavailable on this runtime.")
                     color: Colors.dsDanger
                     font.family: FontSystem.contentFontFamily
                     font.pixelSize: Typography.uiBody
@@ -923,9 +926,9 @@ ColumnLayout {
                         Text {
                             Layout.fillWidth: true
                             Layout.minimumWidth: 0
-                            text: vpnController.lanSharingAllowAnyBind
-                                  ? (root.compact ? "Security: LAN Access Allowed" : "Security: LAN Connections Allowed")
-                                  : (root.compact ? "Security: Private LAN" : "Security: Private LAN Only")
+                            text: I18n.t(vpnController.lanSharingAllowAnyBind
+                                         ? (root.compact ? "Security: LAN Access Allowed" : "Security: LAN Connections Allowed")
+                                         : (root.compact ? "Security: Private LAN" : "Security: Private LAN Only"))
                             color: Colors.dsText
                             font.family: FontSystem.getContentFontBold.name
                             font.pixelSize: root.compact ? Typography.uiBodySm : Typography.uiBody
@@ -936,7 +939,7 @@ ColumnLayout {
 
                         LanBadge {
                             Layout.alignment: Qt.AlignVCenter
-                            text: vpnController.lanSharingAllowAnyBind ? "Review" : (root.compact ? "Safe" : "Recommended")
+                            text: I18n.t(vpnController.lanSharingAllowAnyBind ? "Review" : (root.compact ? "Safe" : "Recommended"))
                             badgeColor: vpnController.lanSharingAllowAnyBind
                                        ? Qt.rgba(Colors.dsWarning.r, Colors.dsWarning.g, Colors.dsWarning.b, Colors.lightMode ? 0.12 : 0.20)
                                        : Qt.rgba(Colors.dsSuccess.r, Colors.dsSuccess.g, Colors.dsSuccess.b, Colors.lightMode ? 0.12 : 0.20)
@@ -950,9 +953,9 @@ ColumnLayout {
                     Text {
                         Layout.fillWidth: true
                         Layout.minimumWidth: 0
-                        text: vpnController.lanSharingAllowAnyBind
-                              ? "Devices on your LAN can connect."
-                              : "Only devices on your local network can connect."
+                        text: I18n.t(vpnController.lanSharingAllowAnyBind
+                                     ? "Devices on your LAN can connect."
+                                     : "Only devices on your local network can connect.")
                         color: Colors.dsTextMuted
                         font.family: FontSystem.contentFontFamily
                         font.pixelSize: root.compact ? Typography.t4 : Typography.uiCaption
@@ -987,7 +990,7 @@ ColumnLayout {
 
                     Text {
                         Layout.fillWidth: true
-                        text: "Choose Your Device"
+                        text: I18n.t("Choose Your Device")
                         color: Colors.dsText
                         font.family: FontSystem.getContentFontBold.name
                         font.pixelSize: Typography.uiTitleSm
@@ -996,7 +999,7 @@ ColumnLayout {
                     }
 
                     LanBadge {
-                        text: root.lanUiModeLabelCompact
+                        text: I18n.t(root.lanUiModeLabelCompact)
                         badgeColor: Qt.rgba(root.lanUiAccent.r, root.lanUiAccent.g, root.lanUiAccent.b, Colors.lightMode ? 0.10 : 0.18)
                         borderColor: "transparent"
                         textColor: root.lanUiAccent
@@ -1066,7 +1069,7 @@ ColumnLayout {
 
                     Text {
                         Layout.fillWidth: true
-                        text: "Setup Guide: " + root.lanUiModeLabelCompact
+                        text: I18n.t("Setup Guide: %1", [I18n.t(root.lanUiModeLabelCompact)])
                         color: Colors.dsText
                         font.family: FontSystem.getContentFontBold.name
                         font.pixelSize: Typography.uiTitleSm
@@ -1075,7 +1078,7 @@ ColumnLayout {
                     }
 
                     LanBadge {
-                        text: "6 Steps"
+                        text: I18n.t("6 Steps")
                         badgeColor: Qt.rgba(Colors.dsPrimarySolid.r, Colors.dsPrimarySolid.g, Colors.dsPrimarySolid.b, Colors.lightMode ? 0.10 : 0.18)
                         borderColor: "transparent"
                         textColor: Colors.dsPrimarySolid
@@ -1108,10 +1111,10 @@ ColumnLayout {
                                 const target = modelData.copy || ""
                                 if (target === "host") {
                                     vpnController.copyTextToClipboard(root.lanProxyHost())
-                                    root.showLanSetupFeedback("Host copied.")
+                                    root.showLanSetupFeedback(I18n.t("Host copied."))
                                 } else if (target === "port") {
                                     vpnController.copyTextToClipboard(String(vpnController.httpPort))
-                                    root.showLanSetupFeedback("Port copied.")
+                                    root.showLanSetupFeedback(I18n.t("Port copied."))
                                 }
                             }
                         }
@@ -1119,16 +1122,19 @@ ColumnLayout {
                 }
 
                 LanActionButton {
-                    text: "Test Connection"
+                    text: I18n.t("Test Connection")
                     glyph: "\uf2f1"
                     accentColor: Colors.dsPrimarySolid
-                    onClicked: root.showLanSetupFeedback("Use Host " + root.lanProxyHost() + " and Port " + String(vpnController.httpPort) + ".")
+                    onClicked: root.showLanSetupFeedback(I18n.t("Use Host %1 and Port %2.", [
+                                                                   I18n.ltr(root.lanProxyHost()),
+                                                                   I18n.ltr(String(vpnController.httpPort))
+                                                               ]))
                 }
 
                 Text {
                     Layout.fillWidth: true
                     visible: root.lanSetupFeedbackText.length > 0
-                    text: root.lanSetupFeedbackText
+                    text: I18n.t(root.lanSetupFeedbackText)
                     color: Colors.dsTextSubtle
                     font.family: FontSystem.contentFontFamily
                     font.pixelSize: Typography.uiCaption
@@ -1140,8 +1146,8 @@ ColumnLayout {
 
         PowerSectionCard {
             root: surface.root
-            title: "Advanced Options"
-            subtitle: "Collapsed by default."
+            title: I18n.t("Advanced Options")
+            subtitle: I18n.t("Collapsed by default.")
             glyph: "\uf085"
             accentColor: Colors.dsPrimarySolid
             animated: root.powerVisualAnimationsEnabled
@@ -1152,9 +1158,9 @@ ColumnLayout {
 
                 Text {
                     Layout.fillWidth: true
-                    text: root.lanAdvancedControlsExpanded
-                          ? "Advanced controls visible."
-                          : "Advanced controls hidden."
+                    text: I18n.t(root.lanAdvancedControlsExpanded
+                                 ? "Advanced controls visible."
+                                 : "Advanced controls hidden.")
                     color: Colors.dsTextMuted
                     font.family: FontSystem.contentFontFamily
                     font.pixelSize: Typography.uiBody
@@ -1162,7 +1168,7 @@ ColumnLayout {
                 }
 
                 LanBadge {
-                    text: root.lanAdvancedControlsExpanded ? "Expanded" : "Collapsed"
+                    text: I18n.t(root.lanAdvancedControlsExpanded ? "Expanded" : "Collapsed")
                     glyph: root.lanAdvancedControlsExpanded ? "\uf06e" : "\uf070"
                     badgeColor: Qt.rgba(root.lanUiAccent.r, root.lanUiAccent.g, root.lanUiAccent.b, Colors.lightMode ? 0.11 : 0.18)
                     borderColor: Qt.rgba(root.lanUiAccent.r, root.lanUiAccent.g, root.lanUiAccent.b, Colors.lightMode ? 0.30 : 0.44)
@@ -1171,7 +1177,7 @@ ColumnLayout {
 
                 Controls.OutlineButton {
                     compact: true
-                    text: root.lanAdvancedControlsExpanded ? "Hide" : "Show"
+                    text: I18n.t(root.lanAdvancedControlsExpanded ? "Hide" : "Show")
                     onClicked: root.lanAdvancedControlsExpanded = !root.lanAdvancedControlsExpanded
                 }
             }
@@ -1188,21 +1194,21 @@ ColumnLayout {
                     rowSpacing: 8
 
                     PowerMetricChip {
-                        label: "Sharing"
+                        label: I18n.t("Sharing")
                         value: vpnController.lanSharingEnabled ? "Enabled" : "Disabled"
                         glyph: vpnController.lanSharingEnabled ? "\uf00c" : "\uf00d"
                         accentColor: vpnController.lanSharingEnabled ? Colors.dsSuccess : Colors.dsTextSubtle
                     }
 
                     PowerMetricChip {
-                        label: "Bind Mode"
+                        label: I18n.t("Bind Mode")
                         value: vpnController.lanSharingAllowAnyBind ? "LAN Wide" : "Private LAN"
                         glyph: vpnController.lanSharingAllowAnyBind ? "\uf3ed" : "\uf132"
                         accentColor: vpnController.lanSharingAllowAnyBind ? Colors.dsWarning : Colors.dsSuccess
                     }
 
                     PowerMetricChip {
-                        label: "Gateway"
+                        label: I18n.t("Gateway")
                         value: vpnController.lanGatewayExperimentalEnabled ? "Enabled" : "Off"
                         glyph: "\uf0e7"
                         accentColor: vpnController.lanGatewayExperimentalEnabled ? Colors.dsDanger : Colors.dsTextSubtle
@@ -1221,7 +1227,7 @@ ColumnLayout {
 
                     Text {
                         Layout.fillWidth: true
-                        text: vpnController.lanSharingEnabled ? "Sharing enabled." : "Sharing disabled."
+                        text: I18n.t(vpnController.lanSharingEnabled ? "Sharing enabled." : "Sharing disabled.")
                         color: Colors.dsTextMuted
                         font.family: FontSystem.contentFontFamily
                         font.pixelSize: Typography.uiBody
@@ -1262,7 +1268,7 @@ ColumnLayout {
 
                     Controls.OutlineButton {
                         compact: true
-                        text: "Refresh"
+                        text: I18n.t("Refresh")
                         onClicked: root.refreshLanHostCandidates()
                     }
                 }
@@ -1277,7 +1283,7 @@ ColumnLayout {
                     }
 
                     LanBadge {
-                        text: vpnController.lanSharingAllowAnyBind ? "LAN Wide (0.0.0.0)" : "Private LAN Only"
+                        text: I18n.t(vpnController.lanSharingAllowAnyBind ? "LAN Wide (0.0.0.0)" : "Private LAN Only")
                         glyph: vpnController.lanSharingAllowAnyBind ? "\uf3ed" : "\uf132"
                         badgeColor: vpnController.lanSharingAllowAnyBind
                                    ? Qt.rgba(Colors.dsWarning.r, Colors.dsWarning.g, Colors.dsWarning.b, Colors.lightMode ? 0.14 : 0.22)
@@ -1315,7 +1321,7 @@ ColumnLayout {
 
                             Text {
                                 Layout.fillWidth: false
-                                text: "Full VPN Gateway / Hotspot"
+                                text: I18n.t("Full VPN Gateway / Hotspot")
                                 color: Colors.dsText
                                 font.family: FontSystem.getContentFontBold.name
                                 font.pixelSize: Typography.uiBody
@@ -1329,9 +1335,9 @@ ColumnLayout {
                         Text {
                             id: gatewayHintText
                             Layout.fillWidth: true
-                            text: root.lanGatewayPlatformSupported()
-                                  ? "Experimental: Use only when you need full-device routing. Proxy mode is recommended first."
-                                  : "Not available on this platform runtime (Experimental)."
+                            text: I18n.t(root.lanGatewayPlatformSupported()
+                                         ? "Experimental: Use only when you need full-device routing. Proxy mode is recommended first."
+                                         : "Not available on this platform runtime (Experimental).")
                             color: Colors.dsTextSubtle
                             font.family: FontSystem.contentFontFamily
                             font.pixelSize: Typography.uiCaption

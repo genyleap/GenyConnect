@@ -92,7 +92,7 @@ Item {
                     Layout.preferredWidth: root.speedColumnWidth
                     Layout.minimumWidth: root.speedColumnWidth
                     Controls.Label {
-                        text: "Speed"
+                        text: I18n.t("Speed")
                         font.pixelSize: Typography.t3
                         color: root.textMuted
                     }
@@ -115,7 +115,7 @@ Item {
                 }
 
                 Controls.Label {
-                    text: "Time Left"
+                    text: I18n.t("Time Left")
                     Layout.preferredWidth: root.timeColumnWidth
                     Layout.minimumWidth: root.timeColumnWidth
                     font.pixelSize: Typography.t3
@@ -123,7 +123,7 @@ Item {
                 }
 
                 Controls.Label {
-                    text: "Actions"
+                    text: I18n.t("Actions")
                     Layout.preferredWidth: root.actionsColumnWidth
                     Layout.minimumWidth: root.actionsColumnWidth
                     font.pixelSize: Typography.t3
@@ -171,7 +171,7 @@ Item {
                 }
 
                 Controls.Label {
-                    text: "Actions"
+                    text: I18n.t("Actions")
                     Layout.preferredWidth: root.actionsColumnWidth
                     Layout.minimumWidth: root.actionsColumnWidth
                     font.pixelSize: Typography.t3

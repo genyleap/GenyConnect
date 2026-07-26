@@ -37,7 +37,7 @@ Item {
 
         Text {
             Layout.fillWidth: true
-            text: root.title
+            text: I18n.t(root.title)
             color: Colors.dsText
             font.family: FontSystem.getContentFontBold.name
             font.pixelSize: root.compact ? Typography.uiTitle : Typography.uiTitleLg

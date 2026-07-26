@@ -17,7 +17,7 @@ Dialog {
     width: 640
     height: 720
     focus: true
-    title: "Add Download"
+    title: I18n.t("Add Download")
 
     property bool pathEdited: false
     property bool startPaused: false
@@ -214,7 +214,7 @@ Dialog {
 
     FileDialog {
         id: saveDialog
-        title: "Save Download"
+        title: I18n.t("Save Download")
         fileMode: FileDialog.SaveFile
         currentFolder: defaultFolder.length > 0 ? "file://" + defaultFolder : ""
         onAccepted: {
@@ -247,7 +247,7 @@ Dialog {
                 spacing: 14
 
                 GroupBox {
-                    title: "Source"
+                    title: I18n.t("Source")
                     Layout.fillWidth: true
                     ColumnLayout {
                         spacing: 8
@@ -265,7 +265,7 @@ Dialog {
                 }
 
                 GroupBox {
-                    title: "Destination"
+                    title: I18n.t("Destination")
                     Layout.fillWidth: true
                     ColumnLayout {
                         spacing: 8
@@ -275,11 +275,11 @@ Dialog {
                             Controls.TextField {
                                 id: pathField
                                 Layout.fillWidth: true
-                                placeholderText: "Output file path"
+                                placeholderText: I18n.t("Output file path")
                                 onTextEdited: pathEdited = true
                             }
                             Controls.Button {
-                                text: "Browse"
+                                text: I18n.t("Browse")
                                 Layout.fillWidth: false
                                 onClicked: saveDialog.open()
                             }
@@ -288,7 +288,7 @@ Dialog {
                         RowLayout {
                             Layout.fillWidth: true
                             spacing: 8
-                            Controls.Label { text: "Queue" }
+                            Controls.Label { text: I18n.t("Queue") }
                             Controls.ComboBox {
                                 id: queueCombo
                                 Layout.fillWidth: true
@@ -298,18 +298,18 @@ Dialog {
                         RowLayout {
                             Layout.fillWidth: true
                             spacing: 8
-                            Controls.Label { text: "New queue" }
+                            Controls.Label { text: I18n.t("New queue") }
                             Controls.TextField {
                                 id: newQueueField
                                 Layout.fillWidth: true
-                                placeholderText: "Optional"
+                                placeholderText: I18n.t("Optional")
                             }
                         }
 
                         RowLayout {
                             Layout.fillWidth: true
                             spacing: 8
-                            Controls.Label { text: "Category" }
+                            Controls.Label { text: I18n.t("Category") }
                             Controls.ComboBox {
                                 id: categoryCombo
                                 Layout.fillWidth: true
@@ -324,7 +324,7 @@ Dialog {
                         RowLayout {
                             Layout.fillWidth: true
                             spacing: 8
-                            Controls.Label { text: "Start paused" }
+                            Controls.Label { text: I18n.t("Start paused") }
                             Controls.Switch {
                                 title: ""
                                 checked: startPaused
@@ -335,12 +335,12 @@ Dialog {
                 }
 
                 GroupBox {
-                    title: "Advanced"
+                    title: I18n.t("Advanced")
                     Layout.fillWidth: true
                     ColumnLayout {
                         spacing: 10
                         Controls.Button {
-                            text: advancedOpen ? "Hide Advanced" : "Show Advanced"
+                            text: I18n.t(advancedOpen ? "Hide Advanced" : "Show Advanced")
                             Layout.fillWidth: false
                             onClicked: advancedOpen = !advancedOpen
                         }
@@ -355,7 +355,7 @@ Dialog {
                             Behavior on Layout.preferredHeight { NumberAnimation { duration: 200; easing.type: Easing.OutCubic } }
                             Behavior on opacity { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
 
-                            Controls.Label { text: "Mirrors (one per line)" }
+                            Controls.Label { text: I18n.t("Mirrors (one per line)") }
                             Controls.TextArea {
                                 text: mirrorsText
                                 placeholderText: "https://mirror1/file.zip\nhttps://mirror2/file.zip"
@@ -364,7 +364,7 @@ Dialog {
                                 onTextChanged: mirrorsText = text
                             }
 
-                            Controls.Label { text: "Checksum" }
+                            Controls.Label { text: I18n.t("Checksum") }
                             RowLayout {
                                 Layout.fillWidth: true
                                 spacing: 8
@@ -375,21 +375,21 @@ Dialog {
                                 }
                                 Controls.TextField {
                                     Layout.fillWidth: true
-                                    placeholderText: "Expected hash (optional)"
+                                    placeholderText: I18n.t("Expected hash (optional)")
                                     text: checksumExpectedText
                                     onTextChanged: checksumExpectedText = text
                                 }
                                 Controls.Switch {
-                                    title: "Verify on complete"
+                                    title: I18n.t("Verify on complete")
                                     checked: verifyOnComplete
                                     onToggled: verifyOnComplete = checked
                                 }
                             }
 
-                            Controls.Label { text: "Custom headers (one per line)" }
+                            Controls.Label { text: I18n.t("Custom headers (one per line)") }
                             Controls.TextArea {
                                 text: headersText
-                                placeholderText: "Header: value"
+                                placeholderText: I18n.t("Header: value")
                                 Layout.fillWidth: true
                                 wrapMode: TextArea.Wrap
                                 onTextChanged: headersText = text
@@ -397,7 +397,7 @@ Dialog {
 
                             Controls.TextField {
                                 Layout.fillWidth: true
-                                placeholderText: "Cookie header"
+                                placeholderText: I18n.t("Cookie header")
                                 text: cookieText
                                 onTextChanged: cookieText = text
                             }
@@ -407,26 +407,26 @@ Dialog {
                                 spacing: 8
                                 Controls.TextField {
                                     Layout.fillWidth: true
-                                    placeholderText: "Auth user"
+                                    placeholderText: I18n.t("Auth user")
                                     text: authUserText
                                     onTextChanged: authUserText = text
                                 }
                                 Controls.TextField {
                                     Layout.fillWidth: true
-                                    placeholderText: "Auth password"
+                                    placeholderText: I18n.t("Auth password")
                                     echoMode: TextInput.Password
                                     text: authPasswordText
                                     onTextChanged: authPasswordText = text
                                 }
                             }
 
-                            Controls.Label { text: "Proxy" }
+                            Controls.Label { text: I18n.t("Proxy") }
                             RowLayout {
                                 Layout.fillWidth: true
                                 spacing: 8
                                 Controls.TextField {
                                     Layout.fillWidth: true
-                                    placeholderText: "Host"
+                                    placeholderText: I18n.t("Host")
                                     text: proxyHostText
                                     onTextChanged: proxyHostText = text
                                 }
@@ -443,24 +443,24 @@ Dialog {
                                 spacing: 8
                                 Controls.TextField {
                                     Layout.fillWidth: true
-                                    placeholderText: "Proxy user"
+                                    placeholderText: I18n.t("Proxy user")
                                     text: proxyUserText
                                     onTextChanged: proxyUserText = text
                                 }
                                 Controls.TextField {
                                     Layout.fillWidth: true
-                                    placeholderText: "Proxy password"
+                                    placeholderText: I18n.t("Proxy password")
                                     echoMode: TextInput.Password
                                     text: proxyPasswordText
                                     onTextChanged: proxyPasswordText = text
                                 }
                             }
 
-                            Controls.Label { text: "Retry policy" }
+                            Controls.Label { text: I18n.t("Retry policy") }
                             RowLayout {
                                 Layout.fillWidth: true
                                 spacing: 8
-                                Controls.Label { text: "Max" }
+                                Controls.Label { text: I18n.t("Max") }
                                 Controls.SpinBox {
                                     from: -1
                                     to: 20
@@ -468,7 +468,7 @@ Dialog {
                                     editable: true
                                     onValueChanged: retryMaxValue = value
                                 }
-                                Controls.Label { text: "Delay (s)" }
+                                Controls.Label { text: I18n.t("Delay (s)") }
                                 Controls.SpinBox {
                                     from: -1
                                     to: 300
@@ -478,17 +478,17 @@ Dialog {
                                 }
                             }
 
-                            Controls.Label { text: "Post actions" }
+                            Controls.Label { text: I18n.t("Post actions") }
                             RowLayout {
                                 Layout.fillWidth: true
                                 spacing: 12
-                                Controls.Switch { title: "Open file"; checked: postOpenFileValue; onToggled: postOpenFileValue = checked }
-                                Controls.Switch { title: "Reveal folder"; checked: postRevealValue; onToggled: postRevealValue = checked }
-                                Controls.Switch { title: "Extract archive"; checked: postExtractValue; onToggled: postExtractValue = checked }
+                                Controls.Switch { title: I18n.t("Open file"); checked: postOpenFileValue; onToggled: postOpenFileValue = checked }
+                                Controls.Switch { title: I18n.t("Reveal folder"); checked: postRevealValue; onToggled: postRevealValue = checked }
+                                Controls.Switch { title: I18n.t("Extract archive"); checked: postExtractValue; onToggled: postExtractValue = checked }
                             }
                             Controls.TextArea {
                                 text: postScriptText
-                                placeholderText: "Post script (use {file} and {dir})"
+                                placeholderText: I18n.t("Post script (use {file} and {dir})")
                                 Layout.fillWidth: true
                                 wrapMode: TextArea.Wrap
                                 onTextChanged: postScriptText = text
@@ -502,12 +502,12 @@ Dialog {
 
     footer: DialogButtonBox {
         Controls.Button {
-            text: "Cancel"
+            text: I18n.t("Cancel")
             Layout.fillWidth: false
             DialogButtonBox.buttonRole: DialogButtonBox.RejectRole
         }
         Controls.Button {
-            text: "Add"
+            text: I18n.t("Add")
             Layout.fillWidth: false
             enabled: urlField.text.trim().length > 0 && pathField.text.trim().length > 0
             DialogButtonBox.buttonRole: DialogButtonBox.AcceptRole

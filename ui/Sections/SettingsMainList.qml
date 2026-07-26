@@ -39,19 +39,19 @@ ColumnLayout {
 
             Repeater {
                 model: [
-                    { "title": "Interface", "icon": "\uf53f", "action": "interface" },
-                    { "title": "App Updates", "icon": "\uf2f1", "action": "updates" },
-                    { "title": "Connection Mode", "icon": "\uf6ff", "action": "connection" },
-                    { "title": "Cache Management", "icon": "\uf1c0", "action": "cache" },
-                    { "title": "Power Mode", "icon": "\uf0e7", "action": "power" },
-                    { "title": "Routing Rules", "icon": "\uf542", "action": "routing" },
-                    { "title": "LAN Sharing", "icon": "\uf1eb", "action": "lan" },
-                    { "title": "Custom DNS", "icon": "\uf1eb", "action": "dns" },
-                    { "title": "Logs", "icon": "\uf1da", "action": "logs" },
-                    { "title": "Terms & License", "icon": "\uf15c", "action": "terms" },
-                    { "title": "Share App", "icon": "\uf1e0", "action": "share" },
-                    { "title": "Donate $GENY", "icon": "\uf4b9", "action": "donate" },
-                    { "title": "About App", "icon": "\uf05a", "action": "about" }
+                    { "title": I18n.t("Interface"), "subtitle": I18n.t("Theme and language"), "icon": "\uf53f", "action": "interface" },
+                    { "title": I18n.t("App Updates"), "icon": "\uf2f1", "action": "updates" },
+                    { "title": I18n.t("Connection Mode"), "icon": "\uf6ff", "action": "connection" },
+                    { "title": I18n.t("Cache Management"), "icon": "\uf1c0", "action": "cache" },
+                    { "title": I18n.t("Power Mode"), "icon": "\uf0e7", "action": "power" },
+                    { "title": I18n.t("Routing Rules"), "icon": "\uf542", "action": "routing" },
+                    { "title": I18n.t("LAN Sharing"), "icon": "\uf1eb", "action": "lan" },
+                    { "title": I18n.t("Custom DNS"), "icon": "\uf1eb", "action": "dns" },
+                    { "title": I18n.t("Logs"), "icon": "\uf1da", "action": "logs" },
+                    { "title": I18n.t("Terms & License"), "icon": "\uf15c", "action": "terms" },
+                    { "title": I18n.t("Share App"), "icon": "\uf1e0", "action": "share" },
+                    { "title": I18n.t("Donate $GENY"), "icon": "\uf4b9", "action": "donate" },
+                    { "title": I18n.t("About App"), "icon": "\uf05a", "action": "about" }
                 ]
 
                 delegate: Rectangle {
@@ -66,6 +66,7 @@ ColumnLayout {
                         anchors.right: parent.right
                         compact: root.compact
                         title: modelData.title
+                        subtitle: modelData.subtitle || ""
                         glyph: modelData.icon
                         glyphFontFamily: root.faSolid
                         onClicked: root.openSettingsSection(modelData.action)

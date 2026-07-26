@@ -44,7 +44,7 @@ ColumnLayout {
             spacing: 8
 
             Text {
-                text: "Connection Mode"
+                text: I18n.t("Connection Mode")
                 color: root.themeColorToken("mainHex_2a3240", "mainHex_d7e4f6")
                 font.family: FontSystem.contentFontFamily
                 font.pixelSize: 15
@@ -53,12 +53,13 @@ ColumnLayout {
 
             Text {
                 text: vpnController.useSystemProxy
-                      ? "Global mode: " + osNameText() + " routes compatible apps through GenyConnect automatically."
+                      ? I18n.t("Global mode: %1 routes compatible apps through GenyConnect automatically.", [osNameText()])
                       : (vpnController.tunMode
-                         ? "TUN mode: " + osNameText() + " routes system traffic through Xray TUN without changing proxy settings."
+                         ? I18n.t("TUN mode: %1 routes system traffic through Xray TUN without changing proxy settings.", [osNameText()])
                          : (vpnController.isMobile
-                            ? "Mobile mode: runtime uses platform VPN APIs and ignores desktop proxy helpers."
-                            : "Clean mode: " + osNameText() + " proxy stays untouched. Only apps set to 127.0.0.1:" + String(vpnController.socksPort) + " use the tunnel."))
+                            ? I18n.t("Mobile mode: runtime uses platform VPN APIs and ignores desktop proxy helpers.")
+                            : I18n.t("Clean mode: %1 proxy stays untouched. Only apps set to %2 use the tunnel.",
+                                     [osNameText(), I18n.ltr("127.0.0.1:" + String(vpnController.socksPort))])))
                 color: root.themeColorToken("mainHex_7c8697", "mainHex_9bb0cb")
                 font.family: FontSystem.contentFontFamily
                 font.pixelSize: 13
@@ -154,7 +155,7 @@ ColumnLayout {
 
                                 Text {
                                     Layout.fillWidth: true
-                                    text: modelData.title
+                                    text: I18n.t(modelData.title)
                                     color: root.themeColorToken("mainHex_2a3240", "mainHex_d7e4f6")
                                     font.family: FontSystem.contentFontFamily
                                     font.pixelSize: 13
@@ -163,7 +164,7 @@ ColumnLayout {
 
                                 Text {
                                     Layout.fillWidth: true
-                                    text: modelData.subtitle
+                                    text: I18n.t(modelData.subtitle)
                                     color: root.themeColorToken("mainHex_7c8697", "mainHex_9bb0cb")
                                     font.family: FontSystem.contentFontFamily
                                     font.pixelSize: 11
@@ -200,7 +201,7 @@ ColumnLayout {
 
         Text {
             Layout.fillWidth: true
-            text: "Auto-disable system proxy when disconnecting"
+            text: I18n.t("Auto-disable system proxy when disconnecting")
             color: root.themeColorToken("mainHex_334155", "mainHex_d7e4f6")
             font.family: FontSystem.contentFontFamily
             font.pixelSize: 14
@@ -225,7 +226,7 @@ ColumnLayout {
 
             Text {
                 Layout.fillWidth: true
-                text: vpnController.supportsSystemProxy ? "Kill Switch" : "Kill Switch (Unavailable)"
+                text: I18n.t(vpnController.supportsSystemProxy ? "Kill Switch" : "Kill Switch (Unavailable)")
                 color: root.themeColorToken("mainHex_334155", "mainHex_d7e4f6")
                 font.family: FontSystem.getContentFontBold.name
                 font.pixelSize: 14
@@ -234,7 +235,7 @@ ColumnLayout {
 
             Text {
                 Layout.fillWidth: true
-                text: "When disconnected, keep the OS proxy locked to GenyConnect so proxy-aware apps cannot fall back to direct traffic."
+                text: I18n.t("When disconnected, keep the OS proxy locked to GenyConnect so proxy-aware apps cannot fall back to direct traffic.")
                 color: root.themeColorToken("mainHex_7c8697", "mainHex_9bb0cb")
                 font.family: FontSystem.contentFontFamily
                 font.pixelSize: 12
@@ -246,7 +247,7 @@ ColumnLayout {
     Text {
         Layout.fillWidth: true
         visible: root.settingsSection === "connection" && !vpnController.supportsSystemProxy
-        text: "Global mode and Kill Switch require system proxy control, which is not available on this runtime. Use TUN Mode for full-device routing."
+        text: I18n.t("Global mode and Kill Switch require system proxy control, which is not available on this runtime. Use TUN Mode for full-device routing.")
         color: root.themeColorToken("mainHex_a0682a", "mainHex_f4c56a")
         font.family: FontSystem.contentFontFamily
         font.pixelSize: 12
@@ -265,7 +266,7 @@ ColumnLayout {
 
         Text {
             Layout.fillWidth: true
-            text: "Auto measure profile latency"
+            text: I18n.t("Auto measure profile latency")
             color: root.themeColorToken("mainHex_334155", "mainHex_d7e4f6")
             font.family: FontSystem.contentFontFamily
             font.pixelSize: 14
@@ -288,7 +289,7 @@ ColumnLayout {
 
                 Text {
                     Layout.fillWidth: true
-                    text: "Latency Measurement Mode"
+                    text: I18n.t("Latency Measurement Mode")
                     color: root.themeColorToken("mainHex_334155", "mainHex_d7e4f6")
                     font.family: FontSystem.getContentFontBold.name
                     font.pixelSize: 14
@@ -297,11 +298,11 @@ ColumnLayout {
 
                 Text {
                     Layout.fillWidth: true
-                    text: vpnController.latencyMeasurementMode === "Endpoint Latency"
+                    text: I18n.t(vpnController.latencyMeasurementMode === "Endpoint Latency"
                           ? "Diagnostic mode: measures only the raw server endpoint and does not represent VPN route latency."
                           : (vpnController.latencyMeasurementMode === "Route Latency"
                              ? "Measures through the selected VPN/proxy path and represents real user experience."
-                             : "Recommended: uses route latency when available, with endpoint latency only as a fallback.")
+                             : "Recommended: uses route latency when available, with endpoint latency only as a fallback."))
                     color: vpnController.latencyMeasurementMode === "Endpoint Latency"
                            ? root.themeColorToken("mainHex_a0682a", "mainHex_f4c56a")
                            : root.themeColorToken("mainHex_7c8697", "mainHex_9bb0cb")
@@ -327,7 +328,7 @@ ColumnLayout {
 
         Text {
             Layout.fillWidth: true
-            text: "Auto: route first, endpoint fallback. Route Latency: real VPN/proxy path and Best Proxy ranking. Endpoint Latency: raw server troubleshooting only."
+            text: I18n.t("Auto: route first, endpoint fallback. Route Latency: real VPN/proxy path and Best Proxy ranking. Endpoint Latency: raw server troubleshooting only.")
             color: root.themeColorToken("mainHex_8a95a8", "mainHex_8ea0b8")
             font.family: FontSystem.contentFontFamily
             font.pixelSize: 12
@@ -337,9 +338,9 @@ ColumnLayout {
 
     Controls.Button {
         visible: root.settingsSection === "connection"
-        text: (vpnController.currentProfileGroup || "All").toLowerCase() === "all"
+        text: I18n.t((vpnController.currentProfileGroup || "All").toLowerCase() === "all"
               ? "Measure Profiles Now"
-              : "Measure Current Group"
+              : "Measure Current Group")
         Layout.fillWidth: true
         onClicked: vpnController.pingAllProfiles()
     }
@@ -347,13 +348,13 @@ ColumnLayout {
     Text {
         Layout.fillWidth: true
         visible: root.settingsSection === "connection"
-        text: vpnController.tunMode
+        text: I18n.t(vpnController.tunMode
               ? (vpnController.isMobile
                  ? "Mobile TUN uses VPN service permissions and native runtime bridge setup."
                  : "TUN mode does not change OS proxy settings. If connect fails, run app with elevated privileges.")
               : (vpnController.useSystemProxy
                  ? "Recommended: keep this enabled to restore system proxy cleanly after tunnel disconnect."
-                 : "In Clean mode this option is ignored because system proxy remains disabled.")
+                 : "In Clean mode this option is ignored because system proxy remains disabled."))
         color: root.themeColorToken("mainHex_7f8897", "mainHex_99abc4")
         font.family: FontSystem.contentFontFamily
         font.pixelSize: 12
@@ -363,7 +364,7 @@ ColumnLayout {
     Button {
         visible: root.settingsSection === "connection" && vpnController.supportsSystemProxy
         isDefault: false
-        text: "Reset System Proxy Now"
+        text: I18n.t("Reset System Proxy Now")
         Layout.fillWidth: true
         onClicked: vpnController.cleanSystemProxy()
     }

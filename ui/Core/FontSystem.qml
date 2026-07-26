@@ -9,21 +9,27 @@ Item {
     property alias getAwesomeLight: fontAwesomeRegular
     property alias getAwesomeSolid: fontAwesomeSolid
 
-    property alias getContentFont: contentFontRegular
-    property alias getContentFontRegular: contentFontRegular
-    property alias getContentFontMedium: contentFontRegular
-    property alias getContentFontBold: contentFontBold
+    readonly property bool usePersianArabicFont: I18n.language === "fa" || I18n.language === "ar"
+    readonly property var getContentFont: usePersianArabicFont ? vazirmatnRegular : contentFontRegular
+    readonly property var getContentFontRegular: usePersianArabicFont ? vazirmatnRegular : contentFontRegular
+    readonly property var getContentFontMedium: usePersianArabicFont ? vazirmatnMedium : contentFontRegular
+    readonly property var getContentFontBold: usePersianArabicFont ? vazirmatnBold : contentFontBold
     property alias getFontSize: fontSize
 
     readonly property string contentFontFamily:
-        contentFontRegular.status === FontLoader.Ready && contentFontRegular.name.length > 0
-            ? contentFontRegular.name
+        getContentFontRegular.status === FontLoader.Ready && getContentFontRegular.name.length > 0
+            ? getContentFontRegular.name
             : Qt.application.font.family
 
     readonly property string contentBoldFontFamily:
-        contentFontBold.status === FontLoader.Ready && contentFontBold.name.length > 0
-            ? contentFontBold.name
+        getContentFontBold.status === FontLoader.Ready && getContentFontBold.name.length > 0
+            ? getContentFontBold.name
             : contentFontFamily
+
+    readonly property string technicalFontFamily:
+        contentFontRegular.status === FontLoader.Ready && contentFontRegular.name.length > 0
+            ? contentFontRegular.name
+            : Qt.application.font.family
 
     QtObject {
         id: fontSize
@@ -63,11 +69,31 @@ Item {
         source: "qrc:/ui/Resources/fonts/Inter-Bold.ttf"
     }
 
+    FontLoader {
+        id: vazirmatnRegular
+        source: "qrc:/ui/Resources/fonts/Vazirmatn-Regular.ttf"
+    }
+
+    FontLoader {
+        id: vazirmatnMedium
+        source: "qrc:/ui/Resources/fonts/Vazirmatn-Medium.ttf"
+    }
+
+    FontLoader {
+        id: vazirmatnBold
+        source: "qrc:/ui/Resources/fonts/Vazirmatn-Bold.ttf"
+    }
+
     Component.onCompleted: {
         if (contentFontRegular.status === FontLoader.Error)
             console.warn("Failed to load Inter-Regular.ttf")
 
         if (contentFontBold.status === FontLoader.Error)
             console.warn("Failed to load Inter-Bold.ttf")
+
+        if (vazirmatnRegular.status === FontLoader.Error
+                || vazirmatnMedium.status === FontLoader.Error
+                || vazirmatnBold.status === FontLoader.Error)
+            console.warn("Failed to load one or more Vazirmatn fonts")
     }
 }

@@ -6,6 +6,8 @@ import QtQuick
 import QtQuick.Controls.Basic
 import QtQuick.Layouts
 
+import GenyConnect 1.0
+
 
 Item {
 
@@ -85,7 +87,7 @@ Item {
                 horizontalAlignment: Text.AlignHCenter
                 verticalAlignment: Text.AlignVCenter
                 font.pixelSize: 14
-                text: qsTr("Unknown")
+                text: I18n.t("Unknown")
                 color: "#ffffff"
             }
         }

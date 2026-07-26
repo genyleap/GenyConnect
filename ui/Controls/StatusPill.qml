@@ -34,7 +34,7 @@ Rectangle {
         }
 
         Text {
-            text: root.text
+            text: I18n.t(root.text)
             color: root.textColor
             font.family: bold ? FontSystem.getContentFontBold.name : FontSystem.contentFontFamily
             font.pixelSize: Typography.uiTitleSm

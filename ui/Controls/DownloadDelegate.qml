@@ -53,7 +53,7 @@ Item {
     readonly property bool showPercent: hasTotal
     readonly property string progressLabel: {
         if (isActive && showPercent) return progressPercent + "%"
-        if (isActive) return "Downloading"
+        if (isActive) return I18n.t("Downloading")
         return statusLabel
     }
     readonly property int statusVisualWidth: compact ? 120 : 140
@@ -70,13 +70,13 @@ Item {
         : "-"
 
     readonly property string sizeReceivedText: formatter && hasTotal
-        ? ("Received " + formatter.bytes(safeBytesReceived))
+        ? I18n.t("Received %1", [formatter.bytes(safeBytesReceived)])
         : ""
 
     readonly property string speedText: {
         if (!formatter || !task) return "-"
         if (task.stateString === "Active") return formatter.speed(task.speed)
-        if (task.lastSpeed > 0) return "Last " + formatter.speed(task.lastSpeed)
+        if (task.lastSpeed > 0) return I18n.t("Last %1", [formatter.speed(task.lastSpeed)])
         return "-"
     }
 
@@ -85,9 +85,9 @@ Item {
         if (task.stateString === "Paused") {
             if (task.pausedAt > 0 && nowMs > 0) {
                 var diffSec = Math.floor(Math.max(0, nowMs - task.pausedAt) / 1000)
-                return "Paused " + formatter.eta(diffSec)
+                return I18n.t("Paused %1", [formatter.eta(diffSec)])
             }
-            return "Paused"
+            return I18n.t("Paused")
         }
         return formatter.eta(task.eta)
     }
@@ -100,13 +100,13 @@ Item {
     }
 
     readonly property string statusLabel: {
-        if (!task) return status && status.length > 0 ? status : "Unknown"
+        if (!task) return I18n.t(status && status.length > 0 ? status : "Unknown")
         if (task.stateString === "Paused" && task.pauseReason && task.pauseReason !== "User") {
-            return "Paused (" + task.pauseReason + ")"
+            return I18n.t("Paused (%1)", [I18n.t(task.pauseReason)])
         }
-        if (task.stateString === "Queued") return "Waiting"
-        if (task.stateString === "Done") return "Complete"
-        return task.stateString
+        if (task.stateString === "Queued") return I18n.t("Waiting")
+        if (task.stateString === "Done") return I18n.t("Complete")
+        return I18n.t(task.stateString)
     }
 
     readonly property color progressFill: {
@@ -304,7 +304,7 @@ Item {
                 color: textColor
             }
             Controls.Label {
-                text: task ? ("Segments " + task.segments()) : ""
+                text: task ? I18n.t("Segments %1", [task.segments()]) : ""
                 font.pixelSize: Typography.t4
                 color: textMuted
                 visible: !!task
@@ -338,7 +338,7 @@ Item {
                 color: textColor
             }
             Controls.Label {
-                text: task && task.stateString === "Done" ? "Finished" : ""
+                text: task && task.stateString === "Done" ? I18n.t("Finished") : ""
                 font.pixelSize: Typography.t4
                 color: textMuted
                 visible: !!task && task.stateString === "Done"
@@ -499,7 +499,7 @@ Item {
         id: contextMenu
         parent: row
         MenuItem {
-            text: task && task.stateString === "Active" ? "Pause" : "Resume"
+            text: I18n.t(task && task.stateString === "Active" ? "Pause" : "Resume")
             enabled: !!(task && (task.stateString === "Active" || task.stateString === "Paused"))
             onTriggered: {
                 if (!downloadManager || !task) return
@@ -508,50 +508,50 @@ Item {
             }
         }
         MenuItem {
-            text: "Retry"
+            text: I18n.t("Retry")
             enabled: !!(task && task.stateString === "Error")
             onTriggered: if (task) task.restart()
         }
         MenuItem {
-            text: "Stop"
+            text: I18n.t("Stop")
             enabled: !!(task && task.stateString !== "Done" && task.stateString !== "Canceled")
             onTriggered: if (task) task.cancel()
         }
         MenuSeparator {}
         MenuItem {
-            text: "Open"
+            text: I18n.t("Open")
             enabled: !!(downloadManager && task && task.stateString === "Done" && downloadManager.fileExists(rowIndex))
             onTriggered: if (downloadManager) downloadManager.openFile(rowIndex)
         }
         MenuItem {
-            text: "Show in Folder"
+            text: I18n.t("Show in Folder")
             enabled: !!(downloadManager && task)
             onTriggered: if (downloadManager) downloadManager.revealInFolder(rowIndex)
         }
         MenuSeparator {}
         MenuItem {
-            text: "Copy URL"
+            text: I18n.t("Copy URL")
             enabled: !!(downloadManager && task)
             onTriggered: if (downloadManager && task) downloadManager.copyText(task.url())
         }
         MenuItem {
-            text: "Copy Path"
+            text: I18n.t("Copy Path")
             enabled: !!(downloadManager && task)
             onTriggered: if (downloadManager && task) downloadManager.copyText(task.fileName())
         }
         MenuSeparator {}
         MenuItem {
-            text: "Properties"
+            text: I18n.t("Properties")
             enabled: !!(openProperties && task)
             onTriggered: if (openProperties && task) openProperties(task, bytesReceived, bytesTotal, queueName, category, rowIndex)
         }
         MenuItem {
-            text: "Verify Checksum"
+            text: I18n.t("Verify Checksum")
             enabled: !!(downloadManager && task)
             onTriggered: if (downloadManager) downloadManager.verifyTask(rowIndex)
         }
         MenuItem {
-            text: "Remove"
+            text: I18n.t("Remove")
             enabled: !!downloadManager
             onTriggered: if (downloadManager) downloadManager.removeDownload(rowIndex)
         }

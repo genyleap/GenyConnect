@@ -48,7 +48,7 @@ T.Button {
 
             Text {
                 id: buttonLabel
-                text: control.text
+                text: I18n.t(control.text)
                 font.family: control.isBold ? FontSystem.getContentFontBold.name : FontSystem.contentFontFamily
                 font.pixelSize: compact ? Typography.uiBodyLg : Typography.uiTitleSm
                 font.bold: control.isBold

@@ -37,7 +37,7 @@ ColumnLayout {
         }
 
         Text {
-            text: "Whitelist mode"
+            text: I18n.t("Whitelist mode")
             color: root.themeColorToken("mainHex_334155", "mainHex_d7e4f6")
             font.family: FontSystem.contentFontFamily
             font.pixelSize: 14
@@ -49,10 +49,10 @@ ColumnLayout {
         visible: root.settingsSection === "routing"
         text: {
             if (vpnController.tunMode)
-                return "TUN mode keeps unmatched traffic on VPN by default. Use Direct rules for explicit bypass targets."
+                return I18n.t("TUN mode keeps unmatched traffic on VPN by default. Use Direct rules for explicit bypass targets.")
             return vpnController.whitelistMode
-                   ? "Whitelist mode is ON: unmatched traffic goes Direct, and only rules set to VPN/Tunnel use the VPN."
-                   : "Whitelist mode is OFF: unmatched traffic goes through VPN, unless a rule sends it Direct or Block."
+                   ? I18n.t("Whitelist mode is ON: unmatched traffic goes Direct, and only rules set to VPN/Tunnel use the VPN.")
+                   : I18n.t("Whitelist mode is OFF: unmatched traffic goes through VPN, unless a rule sends it Direct or Block.")
         }
         wrapMode: Text.Wrap
         color: root.themeColorToken("mainHex_8a95a8", "mainHex_9eb2cb")
@@ -69,7 +69,7 @@ ColumnLayout {
 
     Text {
         visible: root.settingsSection === "routing"
-        text: "Routing Rules"
+        text: I18n.t("Routing Rules")
         color: root.themeColorToken("mainHex_667081", "mainHex_9ab0ca")
         font.family: FontSystem.contentFontFamily
         font.pixelSize: 14
@@ -78,7 +78,7 @@ ColumnLayout {
     Text {
         Layout.fillWidth: true
         visible: root.settingsSection === "routing"
-        text: "Create rules with Target Type + Target Value + Action. Rules are evaluated from top to bottom."
+        text: I18n.t("Create rules with Target Type + Target Value + Action. Rules are evaluated from top to bottom.")
         wrapMode: Text.Wrap
         color: root.themeColorToken("mainHex_8a95a8", "mainHex_9eb2cb")
         font.family: FontSystem.contentFontFamily
@@ -88,7 +88,7 @@ ColumnLayout {
     Text {
         Layout.fillWidth: true
         visible: root.settingsSection === "routing"
-        text: "Tip: choose Action = Direct to bypass VPN for that target."
+        text: I18n.t("Tip: choose Action = Direct to bypass VPN for that target.")
         wrapMode: Text.Wrap
         color: root.themeColorToken("mainHex_8a95a8", "mainHex_9eb2cb")
         font.family: FontSystem.contentFontFamily
@@ -112,7 +112,7 @@ ColumnLayout {
 
             Text {
                 Layout.fillWidth: true
-                text: root.routingRuleEditingId.length > 0 ? "Edit Rule" : "Create Rule"
+                text: I18n.t(root.routingRuleEditingId.length > 0 ? "Edit Rule" : "Create Rule")
                 color: root.themeColorToken("mainHex_334155", "mainHex_d7e4f6")
                 font.family: FontSystem.getContentFontBold.name
                 font.pixelSize: 13
@@ -206,7 +206,7 @@ ColumnLayout {
                 }
 
                 Text {
-                    text: root.routingRuleDraftEnabled ? "Enabled" : "Disabled"
+                    text: I18n.t(root.routingRuleDraftEnabled ? "Enabled" : "Disabled")
                     color: root.themeColorToken("mainHex_5f7088", "mainHex_9eb2cb")
                     font.family: FontSystem.contentFontFamily
                     font.pixelSize: 12
@@ -220,14 +220,14 @@ ColumnLayout {
                 placeholderText: {
                     const type = (root.routingRuleDraftType || "domain").toLowerCase()
                     if (type === "ip")
-                        return "Example: 185.143.233.0/24 or geoip:ir"
+                        return I18n.t("Example: 185.143.233.0/24 or geoip:ir")
                     if (type === "app")
-                        return "Example: C:/Games/game.exe or /Applications/Telegram.app/Contents/MacOS/Telegram"
+                        return I18n.t("Example: C:/Games/game.exe or /Applications/Telegram.app/Contents/MacOS/Telegram")
                     if (type === "process")
-                        return "Example: telegram.exe or com.apple.Safari"
+                        return I18n.t("Example: telegram.exe or com.apple.Safari")
                     if (type === "protocol")
-                        return "Example: tcp,udp"
-                    return "Example: example.com or domain:example.com"
+                        return I18n.t("Example: tcp,udp")
+                    return I18n.t("Example: example.com or domain:example.com")
                 }
                 onTextEdited: {
                     root.routingRuleDraftValue = text
@@ -238,7 +238,7 @@ ColumnLayout {
             Text {
                 Layout.fillWidth: true
                 visible: root.routingRuleValidationText.length > 0
-                text: root.routingRuleValidationText
+                text: I18n.t(root.routingRuleValidationText)
                 color: root.themeColorToken("mainHex_c65050", "mainHex_ff8e8e")
                 font.family: FontSystem.contentFontFamily
                 font.pixelSize: 12
@@ -251,12 +251,12 @@ ColumnLayout {
 
                 Controls.Button {
                     Layout.fillWidth: true
-                    text: root.routingRuleEditingId.length > 0 ? "Save Rule" : "Add Rule"
+                    text: I18n.t(root.routingRuleEditingId.length > 0 ? "Save Rule" : "Add Rule")
                     onClicked: root.saveRoutingRuleDraft()
                 }
 
                 Controls.Button {
-                    text: root.routingRuleEditingId.length > 0 ? "Cancel" : "Validate"
+                    text: I18n.t(root.routingRuleEditingId.length > 0 ? "Cancel" : "Validate")
                     implicitWidth: 88
                     onClicked: {
                         if (root.routingRuleEditingId.length > 0) {
@@ -275,7 +275,7 @@ ColumnLayout {
                 }
 
                 Controls.Button {
-                    text: "Clear All"
+                    text: I18n.t("Clear All")
                     implicitWidth: 88
                     enabled: (root.currentRoutingRules() || []).length > 0
                     onClicked: vpnController.clearRoutingRules()
@@ -301,7 +301,7 @@ ColumnLayout {
 
             Text {
                 Layout.fillWidth: true
-                text: "Active Rules"
+                text: I18n.t("Active Rules")
                 color: root.themeColorToken("mainHex_334155", "mainHex_d7e4f6")
                 font.family: FontSystem.getContentFontBold.name
                 font.pixelSize: 13
@@ -338,7 +338,7 @@ ColumnLayout {
 
                             Text {
                                 Layout.fillWidth: true
-                                text: (index + 1) + ". " + root.routingRuleTypeLabel(modelData.targetType)
+                                text: (index + 1) + ". " + I18n.t(root.routingRuleTypeLabel(modelData.targetType))
                                       + " → " + root.routingRuleActionLabel(modelData.action)
                                 color: root.themeColorToken("mainHex_334155", "mainHex_d2def0")
                                 font.family: FontSystem.getContentFontBold.name
@@ -358,7 +358,7 @@ ColumnLayout {
 
                             Text {
                                 Layout.fillWidth: true
-                                text: "Scope: " + (modelData.profileName || "All Profiles")
+                                text: I18n.t("Scope: %1", [I18n.ltr(modelData.profileName || I18n.t("All Profiles"))])
                                       + " • " + (modelData.enabled === false ? "Disabled" : "Enabled")
                                 color: root.themeColorToken("mainHex_7f8da2", "mainHex_a8bdd7")
                                 font.family: FontSystem.contentFontFamily
@@ -390,7 +390,7 @@ ColumnLayout {
                         Controls.Button {
                             Layout.fillWidth: false
                             sizeType: "compact"
-                            text: modelData.enabled === false ? "Off" : "On"
+                            text: I18n.t(modelData.enabled === false ? "Off" : "On")
                             implicitWidth: 44
                             implicitHeight: 28
                             onClicked: vpnController.setRoutingRuleEnabled(modelData.id || "", modelData.enabled === false)
@@ -399,7 +399,7 @@ ColumnLayout {
                         Controls.Button {
                             Layout.fillWidth: false
                             sizeType: "compact"
-                            text: "Edit"
+                            text: I18n.t("Edit")
                             implicitWidth: 46
                             implicitHeight: 28
                             onClicked: root.editRoutingRule(modelData)
@@ -408,7 +408,7 @@ ColumnLayout {
                         Controls.Button {
                             Layout.fillWidth: false
                             sizeType: "compact"
-                            text: "Dup"
+                            text: I18n.t("Dup")
                             implicitWidth: 42
                             implicitHeight: 28
                             onClicked: vpnController.duplicateRoutingRule(modelData.id || "")
@@ -417,7 +417,7 @@ ColumnLayout {
                         Controls.Button {
                             Layout.fillWidth: false
                             sizeType: "compact"
-                            text: "Del"
+                            text: I18n.t("Del")
                             implicitWidth: 42
                             implicitHeight: 28
                             onClicked: vpnController.removeRoutingRule(modelData.id || "")
@@ -428,7 +428,7 @@ ColumnLayout {
                 Text {
                     anchors.fill: parent
                     visible: routingRuleListView.count === 0
-                    text: "No rules yet. Add your first rule above.\nExample: Domain example.com → Direct."
+                    text: I18n.t("No rules yet. Add your first rule above.\nExample: Domain example.com → Direct.")
                     color: root.themeColorToken("mainHex_8a95a8", "mainHex_9eb1c9")
                     font.family: FontSystem.contentFontFamily
                     font.pixelSize: 12
@@ -445,17 +445,17 @@ ColumnLayout {
         visible: root.settingsSection === "routing"
         text: {
             if (!vpnController.supportsPerAppRouting) {
-                return "App/process routing is not supported on this platform runtime."
+                return I18n.t("App/process routing is not supported on this platform runtime.")
             }
             if (Qt.platform.os === "android" || Qt.platform.os === "ios")
-                return "Mobile platforms currently support domain/IP/protocol rules. App-level routing visibility may be limited by OS/runtime constraints."
+                return I18n.t("Mobile platforms currently support domain/IP/protocol rules. App-level routing visibility may be limited by OS/runtime constraints.")
             if (!vpnController.processRoutingSupported) {
                 const detected = (vpnController.xrayVersion || "").trim()
                 if (detected.length > 0)
                     return detected
-                return "Desktop app/process routing requires xray-core 26.1.23+ with process matching enabled."
+                return I18n.t("Desktop app/process routing requires xray-core 26.1.23+ with process matching enabled.")
             }
-            return "App rules are supported on this runtime. Use absolute executable paths for the most reliable matching."
+            return I18n.t("App rules are supported on this runtime. Use absolute executable paths for the most reliable matching.")
         }
         wrapMode: Text.Wrap
         color: (!vpnController.processRoutingSupported && vpnController.supportsPerAppRouting)
@@ -472,7 +472,7 @@ ColumnLayout {
 
         Text {
             Layout.fillWidth: true
-            text: "Running apps"
+            text: I18n.t("Running apps")
             color: root.themeColorToken("mainHex_334155", "mainHex_d7e4f6")
             font.family: FontSystem.getContentFontBold.name
             font.pixelSize: 13
@@ -480,7 +480,7 @@ ColumnLayout {
         }
 
         Controls.Button {
-            text: root.appRuleSuggestionsLoading ? "Loading..." : "Refresh"
+            text: I18n.t(root.appRuleSuggestionsLoading ? "Loading..." : "Refresh")
             implicitWidth: 82
             implicitHeight: 32
             enabled: vpnController.processRoutingSupported && !root.appRuleSuggestionsLoading
@@ -523,7 +523,7 @@ ColumnLayout {
                     Layout.fillWidth: true
                     padding: 0
                     text: root.appRuleSearchQuery
-                    placeholderText: "Search running apps"
+                    placeholderText: I18n.t("Search running apps")
                     color: root.themeColorToken("mainHex_1f2a3a", "mainHex_edf4ff")
                     font.family: FontSystem.contentFontFamily
                     font.pixelSize: 12
@@ -537,7 +537,7 @@ ColumnLayout {
         }
 
         Controls.Button {
-            text: "Select visible"
+            text: I18n.t("Select visible")
             implicitWidth: 128
             implicitHeight: 32
             Layout.fillWidth: false
@@ -574,7 +574,7 @@ ColumnLayout {
             Item { Layout.fillWidth: true }
 
             Controls.Button {
-                text: "Clear"
+                text: I18n.t("Clear")
                 implicitWidth: 62
                 implicitHeight: 30
                 enabled: (root.selectedAppRuleTargets || []).length > 0
@@ -582,7 +582,7 @@ ColumnLayout {
             }
 
             Controls.Button {
-                text: "Direct"
+                text: I18n.t("Direct")
                 implicitWidth: 72
                 implicitHeight: 30
                 enabled: vpnController.processRoutingSupported
@@ -591,7 +591,7 @@ ColumnLayout {
             }
 
             Controls.Button {
-                text: "Tunnel"
+                text: I18n.t("Tunnel")
                 implicitWidth: 72
                 implicitHeight: 30
                 enabled: vpnController.processRoutingSupported
@@ -600,7 +600,7 @@ ColumnLayout {
             }
 
             Controls.Button {
-                text: "Block"
+                text: I18n.t("Block")
                 implicitWidth: 72
                 implicitHeight: 30
                 enabled: vpnController.processRoutingSupported
@@ -618,7 +618,7 @@ ColumnLayout {
             Controls.Button {
                 width: Math.max(66, Math.floor((routingRuleActionFlow.width - (routingRuleActionFlow.spacing * 3)) / 4))
                 implicitHeight: 30
-                text: "Clear"
+                text: I18n.t("Clear")
                 enabled: (root.selectedAppRuleTargets || []).length > 0
                 onClicked: root.clearAppSuggestionSelection()
             }
@@ -626,7 +626,7 @@ ColumnLayout {
             Controls.Button {
                 width: Math.max(66, Math.floor((routingRuleActionFlow.width - (routingRuleActionFlow.spacing * 3)) / 4))
                 implicitHeight: 30
-                text: "Direct"
+                text: I18n.t("Direct")
                 enabled: vpnController.processRoutingSupported
                          && (root.selectedAppRuleTargets || []).length > 0
                 onClicked: root.appendSelectedAppRules("direct")
@@ -635,7 +635,7 @@ ColumnLayout {
             Controls.Button {
                 width: Math.max(66, Math.floor((routingRuleActionFlow.width - (routingRuleActionFlow.spacing * 3)) / 4))
                 implicitHeight: 30
-                text: "Tunnel"
+                text: I18n.t("Tunnel")
                 enabled: vpnController.processRoutingSupported
                          && (root.selectedAppRuleTargets || []).length > 0
                 onClicked: root.appendSelectedAppRules("proxy")
@@ -644,7 +644,7 @@ ColumnLayout {
             Controls.Button {
                 width: Math.max(66, Math.floor((routingRuleActionFlow.width - (routingRuleActionFlow.spacing * 3)) / 4))
                 implicitHeight: 30
-                text: "Block"
+                text: I18n.t("Block")
                 enabled: vpnController.processRoutingSupported
                          && (root.selectedAppRuleTargets || []).length > 0
                 onClicked: root.appendSelectedAppRules("block")
@@ -725,7 +725,7 @@ ColumnLayout {
 
                         Text {
                             width: parent.width
-                            text: modelData.source ? ("Source: " + modelData.source) : ""
+                            text: modelData.source ? I18n.t("Source: %1", [modelData.source]) : ""
                             visible: text.length > 0
                             color: root.themeColorToken("mainHex_95a3b8", "mainHex_a4b6cd")
                             font.family: FontSystem.contentFontFamily
@@ -758,7 +758,7 @@ ColumnLayout {
 
                         Text {
                             anchors.centerIn: parent
-                            text: "Direct"
+                            text: I18n.t("Direct")
                             color: root.themeColorToken("mainHex_3862a9", "mainHex_8bb7ff")
                             font.family: FontSystem.contentFontFamily
                             font.pixelSize: 11
@@ -784,7 +784,7 @@ ColumnLayout {
 
                         Text {
                             anchors.centerIn: parent
-                            text: "Tunnel"
+                            text: I18n.t("Tunnel")
                             color: root.themeColorToken("mainHex_2f6ff1", "mainHex_86b6ff")
                             font.family: FontSystem.contentFontFamily
                             font.pixelSize: 11
@@ -810,7 +810,7 @@ ColumnLayout {
 
                         Text {
                             anchors.centerIn: parent
-                            text: "Block"
+                            text: I18n.t("Block")
                             color: root.themeColorToken("mainHex_ca3b3b", "mainHex_ff8da0")
                             font.family: FontSystem.contentFontFamily
                             font.pixelSize: 11
@@ -840,7 +840,7 @@ ColumnLayout {
         Layout.fillWidth: true
         visible: false
         Layout.preferredHeight: 74
-        placeholderText: "Tunnel Domains\nexample.com\ndomain:youtube.com\nregexp:.*\\\\.openai\\\\.com$"
+        placeholderText: I18n.t("Tunnel Domains\nexample.com\ndomain:youtube.com\nregexp:.*\\\\.openai\\\\.com$")
         text: vpnController.proxyDomainRules
         onTextChanged: vpnController.proxyDomainRules = text
     }
@@ -849,7 +849,7 @@ ColumnLayout {
         Layout.fillWidth: true
         visible: false
         Layout.preferredHeight: 74
-        placeholderText: "Direct Domains\nfull:localhost\ngeosite:private\nexample.org"
+        placeholderText: I18n.t("Direct Domains\nfull:localhost\ngeosite:private\nexample.org")
         text: vpnController.directDomainRules
         onTextChanged: vpnController.directDomainRules = text
     }
@@ -858,7 +858,7 @@ ColumnLayout {
         Layout.fillWidth: true
         visible: false
         Layout.preferredHeight: 74
-        placeholderText: "Block Domains\ngeosite:category-ads-all\nregexp:.*ads.*"
+        placeholderText: I18n.t("Block Domains\ngeosite:category-ads-all\nregexp:.*ads.*")
         text: vpnController.blockDomainRules
         onTextChanged: vpnController.blockDomainRules = text
     }
@@ -869,7 +869,7 @@ ColumnLayout {
         Layout.preferredHeight: 66
         enabled: vpnController.processRoutingSupported
         opacity: enabled ? 1.0 : 0.6
-        placeholderText: "Tunnel Apps\nTelegram\nchrome.exe\ncom.apple.Safari"
+        placeholderText: I18n.t("Tunnel Apps\nTelegram\nchrome.exe\ncom.apple.Safari")
         text: vpnController.proxyAppRules
         onTextChanged: vpnController.proxyAppRules = text
     }
@@ -880,7 +880,7 @@ ColumnLayout {
         Layout.preferredHeight: 66
         enabled: vpnController.processRoutingSupported
         opacity: enabled ? 1.0 : 0.6
-        placeholderText: "Direct Apps\nFinder\nexplorer.exe\nfirefox"
+        placeholderText: I18n.t("Direct Apps\nFinder\nexplorer.exe\nfirefox")
         text: vpnController.directAppRules
         onTextChanged: vpnController.directAppRules = text
     }
@@ -891,7 +891,7 @@ ColumnLayout {
         Layout.preferredHeight: 66
         enabled: vpnController.processRoutingSupported
         opacity: enabled ? 1.0 : 0.6
-        placeholderText: "Block Apps\nsteam.exe\nDiscord\ncom.apple.Music"
+        placeholderText: I18n.t("Block Apps\nsteam.exe\nDiscord\ncom.apple.Music")
         text: vpnController.blockAppRules
         onTextChanged: vpnController.blockAppRules = text
     }

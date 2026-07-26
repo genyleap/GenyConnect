@@ -26,6 +26,7 @@ Item {
     required property var dashboardStatsSettings
     required property var interfaceThemeSettings
     required property var interfacePrivacySettings
+    required property var interfaceLanguageSettings
 
     property alias updateNoticePopup: updateNoticePopup
     property alias donationSuggestPopup: donationSuggestPopup
@@ -94,7 +95,7 @@ Item {
     
             Text {
                 visible: !homeBadge.compact
-                text: homeBadge.modeName === "High Performance" ? "Performance" : homeBadge.modeName
+                text: I18n.t(homeBadge.modeName === "High Performance" ? "Performance" : homeBadge.modeName)
                 color: homeBadge.accentColor
                 font.family: FontSystem.getContentFontBold.name
                 font.pixelSize: 11
@@ -117,6 +118,8 @@ Item {
         property string label: ""
         property string glyph: ""
         property bool compactStyle: root.compact
+        readonly property bool denseStyle: surface.profilePopup.height < 720
+        readonly property bool ultraDenseStyle: surface.profilePopup.height < 520
         property color accentColor: Colors.dsPrimarySolid
         property color fillColor: compactStyle ? Colors.dsSurfaceSoft : Colors.dsSurface
         property color hoverFillColor: compactStyle ? Colors.dsSurface : Colors.dsSurfaceSoft
@@ -132,8 +135,10 @@ Item {
         signal clicked()
     
         Layout.fillWidth: true
-        Layout.preferredHeight: compactStyle ? 70 : 46
-        radius: compactStyle ? 18 : 14
+        Layout.preferredHeight: compactStyle
+                                ? (ultraDenseStyle ? 50 : (denseStyle ? 58 : 70))
+                                : (ultraDenseStyle ? 36 : (denseStyle ? 40 : 46))
+        radius: compactStyle ? (denseStyle ? 15 : 18) : (denseStyle ? 12 : 14)
         color: !enabled
                ? disabledFillColor
                : chipMouse.pressed
@@ -151,15 +156,15 @@ Item {
     
         ColumnLayout {
             anchors.fill: parent
-            anchors.margins: compactStyle ? 8 : 0
-            spacing: compactStyle ? 6 : 0
+            anchors.margins: compactStyle ? (denseStyle ? 5 : 8) : 0
+            spacing: compactStyle ? (denseStyle ? 3 : 6) : 0
             visible: compactStyle
     
             Rectangle {
                 Layout.alignment: Qt.AlignHCenter
-                Layout.preferredWidth: 30
-                Layout.preferredHeight: 30
-                radius: 15
+                Layout.preferredWidth: denseStyle ? 24 : 30
+                Layout.preferredHeight: denseStyle ? 24 : 30
+                radius: width / 2
                 color: chip.enabled ? chip.iconBubbleColor : chip.disabledIconBubbleColor
                 border.width: 0
     
@@ -168,16 +173,16 @@ Item {
                     text: chip.glyph
                     color: chip.enabled ? chip.accentColor : chip.disabledAccentColor
                     font.family: root.faSolid
-                    font.pixelSize: 13
+                    font.pixelSize: denseStyle ? 11 : 13
                 }
             }
     
             Text {
                 Layout.fillWidth: true
-                text: chip.label
+                text: I18n.t(chip.label)
                 color: chip.enabled ? chip.labelColor : chip.disabledLabelColor
                 font.family: FontSystem.getContentFontBold.name
-                font.pixelSize: 11
+                font.pixelSize: denseStyle ? 10 : 11
                 font.bold: true
                 horizontalAlignment: Text.AlignHCenter
                 wrapMode: Text.WordWrap
@@ -188,15 +193,15 @@ Item {
     
         RowLayout {
             anchors.fill: parent
-            anchors.leftMargin: 12
-            anchors.rightMargin: 12
-            spacing: 10
+            anchors.leftMargin: denseStyle ? 9 : 12
+            anchors.rightMargin: denseStyle ? 9 : 12
+            spacing: denseStyle ? 7 : 10
             visible: !compactStyle
     
             Rectangle {
-                Layout.preferredWidth: 28
-                Layout.preferredHeight: 28
-                radius: 14
+                Layout.preferredWidth: denseStyle ? 24 : 28
+                Layout.preferredHeight: denseStyle ? 24 : 28
+                radius: width / 2
                 color: chip.enabled ? chip.iconBubbleColor : chip.disabledIconBubbleColor
                 border.width: 0
     
@@ -205,16 +210,16 @@ Item {
                     text: chip.glyph
                     color: chip.enabled ? chip.accentColor : chip.disabledAccentColor
                     font.family: root.faSolid
-                    font.pixelSize: 12
+                    font.pixelSize: denseStyle ? 11 : 12
                 }
             }
     
             Text {
                 Layout.fillWidth: true
-                text: chip.label
+                text: I18n.t(chip.label)
                 color: chip.enabled ? chip.labelColor : chip.disabledLabelColor
                 font.family: FontSystem.getContentFontBold.name
-                font.pixelSize: 13
+                font.pixelSize: denseStyle ? 12 : 13
                 font.bold: true
                 elide: Text.ElideRight
                 verticalAlignment: Text.AlignVCenter
@@ -241,7 +246,7 @@ Item {
         width: root.desktopMode ? Math.min(420, Math.max(360, root.width * 0.28)) : root.sheetWidth(420)
         height: updateNoticeContent.implicitHeight
                 + (root.desktopMode ? 32 : 28 + (root.mobilePlatform ? Math.max(12, root.safeBottomInset) : 0))
-        x: root.desktopMode ? root.width - width - 24 : root.sheetX(width)
+        x: root.desktopMode ? (I18n.isRtl ? 24 : root.width - width - 24) : root.sheetX(width)
         y: root.desktopMode
            ? Math.max(24, root.height - height - 24)
            : root.sheetY(height)
@@ -337,7 +342,7 @@ Item {
 
                 Text {
                     Layout.fillWidth: true
-                    text: "Update Available"
+                    text: I18n.t("Update Available")
                     color: root.themeColorToken("mainHex_1f2a3a", "mainHex_d8e1f0")
                     font.family: FontSystem.contentFontFamily
                     font.pixelSize: 16
@@ -347,7 +352,7 @@ Item {
 
             Text {
                 Layout.fillWidth: true
-                text: "GenyConnect " + updater.latestVersion + " is available. You're on " + updater.appVersion + "."
+                text: I18n.t("GenyConnect %1 is available. You're on %2.", [I18n.ltr(updater.latestVersion), I18n.ltr(updater.appVersion)])
                 color: root.themeColorToken("mainHex_667385", "mainHex_9bb0cb")
                 font.family: FontSystem.contentFontFamily
                 font.pixelSize: 13
@@ -362,7 +367,7 @@ Item {
                     implicitHeight: 32
                     implicitWidth: 86
 
-                    text: "Later"
+                    text: I18n.t("Later")
                     Layout.fillWidth: true
                     onClicked: updateNoticePopup.close()
                 }
@@ -370,7 +375,7 @@ Item {
                 Controls.Button {
                     implicitHeight: 32
                     implicitWidth: 86
-                    text: "Open Updates"
+                    text: I18n.t("Open Updates")
                     Layout.fillWidth: true
                     onClicked: {
                         updateNoticePopup.close()
@@ -391,7 +396,7 @@ Item {
         width: root.desktopMode ? Math.min(430, Math.max(360, root.width * 0.28)) : root.sheetWidth(400)
         height: donationSuggestContent.implicitHeight
                 + (root.desktopMode ? 32 : 28 + (root.mobilePlatform ? Math.max(20, root.safeBottomInset + 20) : 0))
-        x: root.desktopMode ? root.width - width - 24 : root.sheetX(width)
+        x: root.desktopMode ? (I18n.isRtl ? 24 : root.width - width - 24) : root.sheetX(width)
         y: root.desktopMode
            ? Math.max(24, root.height - height - 24)
            : (root.compact ? root.height - height : root.drawerY(height))
@@ -481,7 +486,7 @@ Item {
 
                 Text {
                     Layout.fillWidth: true
-                    text: "Enjoying GenyConnect?"
+                    text: I18n.t("Enjoying GenyConnect?")
                     color: root.themeColorToken("mainHex_1f2a3a", "mainHex_d8e1f0")
                     font.family: FontSystem.getContentFontBold.name
                     font.pixelSize: 17
@@ -492,7 +497,7 @@ Item {
 
             Text {
                 Layout.fillWidth: true
-                text: "If it helps, you can support development with a small donation."
+                text: I18n.t("If it helps, you can support development with a small donation.")
                 color: root.themeColorToken("mainHex_667385", "mainHex_9bb0cb")
                 font.family: FontSystem.contentFontFamily
                 font.pixelSize: 13
@@ -504,14 +509,14 @@ Item {
                 spacing: 8
 
                 Controls.Button {
-                    text: "Not now"
+                    text: I18n.t("Not now")
                     Layout.fillWidth: true
                     isDefault: false
                     onClicked: donationSuggestPopup.close()
                 }
 
                 Controls.Button {
-                    text: "Support"
+                    text: I18n.t("Support")
                     Layout.fillWidth: true
                     onClicked: {
                         donationSuggestPopup.close()
@@ -553,10 +558,10 @@ Item {
         }
 
         background: Rectangle {
-            topLeftRadius: 24
-            topRightRadius: root.desktopMode ? 0 : 24
-            bottomLeftRadius: root.desktopMode ? 24 : 0
-            bottomRightRadius: 0
+            topLeftRadius: root.desktopMode ? (I18n.isRtl ? 0 : 24) : 24
+            topRightRadius: root.desktopMode ? (I18n.isRtl ? 24 : 0) : 24
+            bottomLeftRadius: root.desktopMode && !I18n.isRtl ? 24 : 0
+            bottomRightRadius: root.desktopMode && I18n.isRtl ? 24 : 0
             color: root.themeColorToken("mainHex_ffffff", "mainHex_090b14")
             border.width: 0
             border.color: root.themeColorToken("mainHex_d7deea", "mainHex_30435d")
@@ -590,7 +595,7 @@ Item {
 
             Text {
                 Layout.fillWidth: true
-                text: root.tunConflictPopupText
+                text: I18n.t(root.tunConflictPopupText)
                 color: root.themeColorToken("mainHex_5f6f86", "mainHex_9bb0cb")
                 font.family: FontSystem.contentFontFamily
                 font.pixelSize: 13
@@ -605,7 +610,7 @@ Item {
 
                 Controls.Button {
                     Layout.fillWidth: true
-                    text: "Open Logs"
+                    text: I18n.t("Open Logs")
                     onClicked: {
                         tunConflictPopup.close()
                         logsPopup.open()
@@ -614,7 +619,7 @@ Item {
 
                 Controls.Button {
                     Layout.fillWidth: true
-                    text: "OK"
+                    text: I18n.t("OK")
                     onClicked: tunConflictPopup.close()
                 }
             }
@@ -652,10 +657,10 @@ Item {
         }
 
         background: Rectangle {
-            topLeftRadius: 24
-            topRightRadius: root.desktopMode ? 0 : 24
-            bottomLeftRadius: root.desktopMode ? 24 : 0
-            bottomRightRadius: 0
+            topLeftRadius: root.desktopMode ? (I18n.isRtl ? 0 : 24) : 24
+            topRightRadius: root.desktopMode ? (I18n.isRtl ? 24 : 0) : 24
+            bottomLeftRadius: root.desktopMode && !I18n.isRtl ? 24 : 0
+            bottomRightRadius: root.desktopMode && I18n.isRtl ? 24 : 0
             color: root.themeColorToken("mainHex_ffffff", "mainHex_090b14")
             border.width: 0
         }
@@ -677,7 +682,7 @@ Item {
             }
 
             Text {
-                text: "Security Warning"
+                text: I18n.t("Security Warning")
                 color: root.themeColorToken("mainHex_1f2a3a", "mainHex_d8e1f0")
                 font.family: FontSystem.contentFontFamily
                 font.pixelSize: 22
@@ -686,7 +691,7 @@ Item {
 
             Text {
                 Layout.fillWidth: true
-                text: "This profile uses legacy or insecure TLS settings. Newer Xray-core versions no longer support allowInsecure. GenyConnect will try to handle it safely, but you should review the profile before connecting."
+                text: I18n.t("This profile uses legacy or insecure TLS settings. Newer Xray-core versions no longer support allowInsecure. GenyConnect will try to handle it safely, but you should review the profile before connecting.")
                 color: root.themeColorToken("mainHex_5f6f86", "mainHex_9bb0cb")
                 font.family: FontSystem.contentFontFamily
                 font.pixelSize: 13
@@ -697,7 +702,7 @@ Item {
                 id: securityWarningDontShowAgainBox
                 Layout.fillWidth: true
                 checked: root.securityWarningDontShowAgain
-                text: "Don't show this warning again for this profile"
+                text: I18n.t("Don't show this warning again for this profile")
                 onToggled: root.securityWarningDontShowAgain = checked
             }
 
@@ -709,7 +714,7 @@ Item {
 
                 Controls.Button {
                     Layout.fillWidth: true
-                    text: "Review Profile"
+                    text: I18n.t("Review Profile")
                     onClicked: {
                         const row = root.securityWarningProfileRow
                         securityWarningPopup.close()
@@ -721,7 +726,7 @@ Item {
 
                 Controls.Button {
                     Layout.fillWidth: true
-                    text: "Connect Anyway"
+                    text: I18n.t("Connect Anyway")
                     onClicked: {
                         const row = root.securityWarningProfileRow
                         if (row >= 0 && root.securityWarningDontShowAgain) {
@@ -737,7 +742,7 @@ Item {
 
             Controls.Button {
                 Layout.fillWidth: true
-                text: "Cancel"
+                text: I18n.t("Cancel")
                 onClicked: securityWarningPopup.close()
             }
         }
@@ -745,6 +750,8 @@ Item {
 
     Popup {
         id: profilePopup
+        readonly property bool denseLayout: height < 720
+        readonly property bool ultraDenseLayout: height < 520
 
         modal: true
         focus: true
@@ -788,10 +795,10 @@ Item {
         }
 
         background: Rectangle {
-            topLeftRadius: root.compact ? 0 : 22
-            topRightRadius: (root.compact || root.desktopMode) ? 0 : 22
-            bottomLeftRadius: root.desktopMode ? 22 : 0
-            bottomRightRadius: 0
+            topLeftRadius: root.compact || (root.desktopMode && I18n.isRtl) ? 0 : 22
+            topRightRadius: root.compact || (root.desktopMode && !I18n.isRtl) ? 0 : 22
+            bottomLeftRadius: root.desktopMode && !I18n.isRtl ? 22 : 0
+            bottomRightRadius: root.desktopMode && I18n.isRtl ? 22 : 0
             color: root.themeColorToken("mainHex_ffffff", "mainHex_090b14")
             border.width: 0
             border.color: root.themeColorToken("mainHex_dbe2ee", "mainHex_30435d")
@@ -815,11 +822,11 @@ Item {
 
             ColumnLayout {
                 anchors.fill: parent
-                anchors.leftMargin: root.compact ? 16 : 10
-                anchors.rightMargin: root.compact ? 16 : 10
-                anchors.topMargin: root.compact ? (12 + root.safeTopInset) : 10
-                anchors.bottomMargin: root.compact ? 24 : 10
-                spacing: root.compact ? 12 : 8
+                anchors.leftMargin: root.compact ? 14 : 10
+                anchors.rightMargin: root.compact ? 14 : 10
+                anchors.topMargin: root.compact ? (10 + root.safeTopInset) : (profilePopup.denseLayout ? 7 : 10)
+                anchors.bottomMargin: root.compact ? Math.max(12, root.safeBottomInset + 8) : (profilePopup.denseLayout ? 7 : 10)
+                spacing: profilePopup.denseLayout ? 6 : (root.compact ? 12 : 8)
 
                 Rectangle {
                     Layout.alignment: Qt.AlignHCenter
@@ -843,7 +850,7 @@ Item {
                         elevated: false
                         backgroundColor: root.themeColorToken("mainHex_faf9ff", "mainHex_1a2b42")
                         borderColor: root.themeColorToken("mainHex_f0eef8", "mainHex_355173")
-                        iconText: "\uf060"
+                        iconText: I18n.isRtl ? "\uf061" : "\uf060"
                         iconFontFamily: root.faSolid
                         iconColor: root.themeColorToken("mainHex_050505", "mainHex_d8e1f0")
                         iconPixelSize: 15
@@ -852,7 +859,7 @@ Item {
 
                     Text {
                         Layout.fillWidth: true
-                        text: "Server Location"
+                        text: I18n.t("Server Location")
                         color: root.themeColorToken("mainHex_090909", "mainHex_e7eefb")
                         font.family: FontSystem.getContentFontBold.name
                         font.pixelSize: 18
@@ -881,7 +888,9 @@ Item {
                 Rectangle {
                     id: searchBar
                     Layout.fillWidth: true
-                    implicitHeight: root.compact ? 48 : 58
+                    implicitHeight: profilePopup.ultraDenseLayout ? 40
+                                                                  : (profilePopup.denseLayout ? 44
+                                                                                              : (root.compact ? 48 : 58))
                     radius: 14
                     color: Colors.dsSurface
                     border.width: 0
@@ -909,7 +918,7 @@ Item {
                         anchors.leftMargin: 34
                         anchors.rightMargin: 4
                         padding: 0
-                        placeholderText: root.compact ? "Search location..." : "Search by profile, country, or IP"
+                        placeholderText: I18n.t(root.compact ? "Search location..." : "Search by profile, country, or IP")
                         placeholderTextColor: root.themeColorToken("mainHex_8c8f98", "mainHex_9cb0c8")
                         text: root.profileSearchQuery
                         color: root.themeColorToken("mainHex_1f2a3a", "mainHex_d8e1f0")
@@ -949,15 +958,15 @@ Item {
                 GridLayout {
                     id: compactActionGrid
                     Layout.fillWidth: true
-                    columns: 3
-                    columnSpacing: 8
-                    rowSpacing: 8
+                    columns: profilePopup.width >= 340 ? 4 : 3
+                    columnSpacing: profilePopup.denseLayout ? 6 : 8
+                    rowSpacing: profilePopup.denseLayout ? 6 : 8
                     visible: root.compact
 
                     ProfileActionChip {
                         compactStyle: true
                         enabled: listView.count > 0
-                        label: (vpnController.currentProfileGroup || "All").toLowerCase() === "all" ? "Ping" : "Ping Group"
+                        label: I18n.t((vpnController.currentProfileGroup || "All").toLowerCase() === "all" ? "Ping" : "Ping Group")
                         glyph: root.iconPing
                         accentColor: Colors.dsPrimarySolid
                         onClicked: vpnController.pingAllProfiles()
@@ -966,7 +975,7 @@ Item {
                     ProfileActionChip {
                         compactStyle: true
                         enabled: listView.count > 0 && !vpnController.busy
-                        label: "Best"
+                        label: I18n.t("Best")
                         glyph: "\uf521"
                         accentColor: Colors.dsSuccess
                         onClicked: vpnController.connectBestProfileInCurrentGroup()
@@ -975,7 +984,7 @@ Item {
                     ProfileActionChip {
                         compactStyle: true
                         enabled: listView.count > 1
-                        label: "Sort Ping"
+                        label: I18n.t("Sort Ping")
                         glyph: "\uf160"
                         accentColor: Colors.dsPrimarySolid
                         onClicked: vpnController.sortProfilesByPing(vpnController.currentProfileGroup || "All")
@@ -984,7 +993,7 @@ Item {
                     ProfileActionChip {
                         compactStyle: true
                         enabled: vpnController.subscriptions.length > 0 && !vpnController.subscriptionBusy
-                        label: (vpnController.currentProfileGroup || "All") === "All" ? "Refresh" : "Refresh Group"
+                        label: I18n.t((vpnController.currentProfileGroup || "All") === "All" ? "Refresh" : "Refresh Group")
                         glyph: "\uf021"
                         accentColor: Colors.dsPrimarySolid
                         onClicked: {
@@ -999,7 +1008,7 @@ Item {
                     ProfileActionChip {
                         compactStyle: true
                         enabled: listView.count > 0 && !vpnController.busy
-                        label: "Cleanup"
+                        label: I18n.t("Cleanup")
                         glyph: root.iconShield
                         accentColor: Colors.dsWarning
                         onClicked: {
@@ -1019,7 +1028,7 @@ Item {
                     ProfileActionChip {
                         compactStyle: true
                         enabled: listView.count > 0
-                        label: "Export"
+                        label: I18n.t("Export")
                         glyph: root.iconFileLines
                         accentColor: Colors.dsTextMuted
                         onClicked: {
@@ -1040,7 +1049,7 @@ Item {
                     ProfileActionChip {
                         compactStyle: true
                         enabled: listView.count > 1
-                        label: "Delete Rest"
+                        label: I18n.t("Delete Rest")
                         glyph: root.iconTrash
                         accentColor: Colors.dsDanger
                         onClicked: clearProfilesPopup.open()
@@ -1049,7 +1058,7 @@ Item {
                     ProfileActionChip {
                         compactStyle: true
                         enabled: vpnController.subscriptions.length > 0 && !vpnController.subscriptionBusy && !vpnController.busy
-                        label: "Remove Subs"
+                        label: I18n.t("Remove Subs")
                         glyph: root.iconMinus
                         accentColor: Colors.dsDanger
                         onClicked: {
@@ -1073,14 +1082,14 @@ Item {
                 GridLayout {
                     id: actionsRow
                     Layout.fillWidth: true
-                    columns: 3
-                    columnSpacing: 10
-                    rowSpacing: 10
+                    columns: profilePopup.denseLayout && profilePopup.width >= 620 ? 4 : 3
+                    columnSpacing: profilePopup.denseLayout ? 7 : 10
+                    rowSpacing: profilePopup.denseLayout ? 7 : 10
                     visible: !root.compact
 
                     ProfileActionChip {
                         enabled: true
-                        label: "Add Profile"
+                        label: I18n.t("Add Profile")
                         glyph: root.iconPlus
                         accentColor: Colors.dsPrimarySolid
                         onClicked: {
@@ -1091,9 +1100,9 @@ Item {
 
                     ProfileActionChip {
                         enabled: listView.count > 0
-                        label: (vpnController.currentProfileGroup || "All").toLowerCase() === "all"
+                        label: I18n.t((vpnController.currentProfileGroup || "All").toLowerCase() === "all"
                                ? "Ping Profiles"
-                               : "Ping Group"
+                               : "Ping Group")
                         glyph: root.iconPing
                         accentColor: Colors.dsPrimarySolid
                         onClicked: vpnController.pingAllProfiles()
@@ -1101,7 +1110,7 @@ Item {
 
                     ProfileActionChip {
                         enabled: listView.count > 0 && !vpnController.busy
-                        label: "Best in Group"
+                        label: I18n.t("Best in Group")
                         glyph: "\uf521"
                         accentColor: Colors.dsSuccess
                         onClicked: vpnController.connectBestProfileInCurrentGroup()
@@ -1109,7 +1118,7 @@ Item {
 
                     ProfileActionChip {
                         enabled: listView.count > 1
-                        label: "Sort by Ping"
+                        label: I18n.t("Sort by Ping")
                         glyph: "\uf160"
                         accentColor: Colors.dsPrimarySolid
                         onClicked: vpnController.sortProfilesByPing(vpnController.currentProfileGroup || "All")
@@ -1117,7 +1126,7 @@ Item {
 
                     ProfileActionChip {
                         enabled: listView.count > 1
-                        label: "Sort by Name"
+                        label: I18n.t("Sort by Name")
                         glyph: "\uf15d"
                         accentColor: Colors.dsTextMuted
                         onClicked: vpnController.sortProfilesByName(vpnController.currentProfileGroup || "All")
@@ -1125,7 +1134,7 @@ Item {
 
                     ProfileActionChip {
                         enabled: listView.count > 1
-                        label: "Sort Stable"
+                        label: I18n.t("Sort Stable")
                         glyph: "\uf0ae"
                         accentColor: Colors.dsTextMuted
                         onClicked: vpnController.sortProfilesByLastSuccess(vpnController.currentProfileGroup || "All")
@@ -1133,9 +1142,9 @@ Item {
 
                     ProfileActionChip {
                         enabled: vpnController.subscriptions.length > 0 && !vpnController.subscriptionBusy
-                        label: (vpnController.currentProfileGroup || "All") === "All"
-                               ? "Refresh Subs"
-                               : "Refresh Group"
+                        label: I18n.t((vpnController.currentProfileGroup || "All") === "All"
+                               ? "Refresh Subscriptions"
+                               : "Refresh Group")
                         glyph: "\uf021"
                         accentColor: Colors.dsPrimarySolid
                         onClicked: {
@@ -1149,7 +1158,7 @@ Item {
 
                     ProfileActionChip {
                         enabled: listView.count > 0 && !vpnController.busy
-                        label: "Remove Dead"
+                        label: I18n.t("Remove Dead")
                         glyph: root.iconShield
                         accentColor: Colors.dsWarning
                         onClicked: {
@@ -1168,7 +1177,7 @@ Item {
 
                     ProfileActionChip {
                         enabled: listView.count > 0
-                        label: "Export All"
+                        label: I18n.t("Export All")
                         glyph: root.iconFileLines
                         accentColor: Colors.dsTextMuted
                         onClicked: {
@@ -1188,7 +1197,7 @@ Item {
 
                     ProfileActionChip {
                         enabled: listView.count > 1
-                        label: "Delete Others"
+                        label: I18n.t("Delete Others")
                         glyph: root.iconTrash
                         accentColor: Colors.dsDanger
                         onClicked: clearProfilesPopup.open()
@@ -1196,7 +1205,7 @@ Item {
 
                     ProfileActionChip {
                         enabled: vpnController.subscriptions.length > 0 && !vpnController.subscriptionBusy && !vpnController.busy
-                        label: "Remove Subs"
+                        label: I18n.t("Remove Subs")
                         glyph: root.iconMinus
                         accentColor: Colors.dsDanger
                         onClicked: {
@@ -1240,7 +1249,7 @@ Item {
 
                         Text {
                             anchors.centerIn: parent
-                            text: "All"
+                            text: I18n.t("All")
                             color: root.compactProfileFilterSelected("All")
                                    ? Colors.mainHex_ffffff
                                    : root.themeColorToken("mainHex_111111", "mainHex_e2ecf9")
@@ -1272,7 +1281,7 @@ Item {
 
                         Text {
                             anchors.centerIn: parent
-                            text: "Free"
+                            text: I18n.t("Free")
                             color: root.compactProfileFilterSelected("Free")
                                    ? Colors.mainHex_ffffff
                                    : root.themeColorToken("mainHex_111111", "mainHex_e2ecf9")
@@ -1304,7 +1313,7 @@ Item {
 
                         Text {
                             anchors.centerIn: parent
-                            text: "Premium"
+                            text: I18n.t("Premium")
                             color: root.compactProfileFilterSelected("Premium")
                                    ? Colors.mainHex_ffffff
                                    : root.themeColorToken("mainHex_111111", "mainHex_e2ecf9")
@@ -1328,7 +1337,7 @@ Item {
                     visible: !root.compact
 
                     Text {
-                        text: "Group"
+                        text: I18n.t("Group")
                         color: root.themeColorToken("mainHex_6b778a", "mainHex_9cb0c8")
                         font.family: FontSystem.contentFontFamily
                         font.pixelSize: 12
@@ -1384,8 +1393,8 @@ Item {
 
                     Rectangle {
                         radius: 10
-                        height: 30
-                        width: visibleProfilesText.implicitWidth + 16
+                        Layout.preferredHeight: 30
+                        Layout.preferredWidth: visibleProfilesText.implicitWidth + 16
                         color: root.themeColorToken("mainHex_eef4ff", "mainHex_223753")
                         border.width: 0
                         border.color: root.themeColorToken("mainHex_d8e4f8", "mainHex_151c32")
@@ -1393,7 +1402,7 @@ Item {
                         Text {
                             id: visibleProfilesText
                             anchors.centerIn: parent
-                            text: "Visible " + vpnController.filteredProfileCount
+                            text: I18n.t("Visible %1", [I18n.ltr(vpnController.filteredProfileCount)])
                             color: root.themeColorToken("mainHex_5f6f86", "mainHex_9bb0cb")
                             font.family: FontSystem.contentFontFamily
                             font.pixelSize: 11
@@ -1424,7 +1433,7 @@ Item {
                             spacing: 10
 
                             Text {
-                                text: "Enabled"
+                                text: I18n.t("Enabled")
                                 color: root.themeColorToken("mainHex_5f6f86", "mainHex_9bb0cb")
                                 font.family: FontSystem.contentFontFamily
                                 font.pixelSize: 12
@@ -1436,7 +1445,7 @@ Item {
                             }
 
                             Text {
-                                text: "Exclusive"
+                                text: I18n.t("Exclusive")
                                 color: root.themeColorToken("mainHex_5f6f86", "mainHex_9bb0cb")
                                 font.family: FontSystem.contentFontFamily
                                 font.pixelSize: 12
@@ -1448,7 +1457,7 @@ Item {
                             }
 
                             Text {
-                                text: "Mode"
+                                text: I18n.t("Mode")
                                 color: root.themeColorToken("mainHex_5f6f86", "mainHex_9bb0cb")
                                 font.family: FontSystem.contentFontFamily
                                 font.pixelSize: 12
@@ -1502,7 +1511,7 @@ Item {
                                     anchors.rightMargin: 8
                                     padding: 0
                                     clip: true
-                                    placeholderText: "Badge"
+                                    placeholderText: I18n.t("Badge")
                                     text: root.profileGroupBadgeText(groupFilterCombo.groupNameAt(groupFilterCombo.currentIndex))
                                     color: root.themeColorToken("mainHex_3b4a61", "mainHex_d0ddf0")
                                     font.family: FontSystem.contentFontFamily
@@ -1532,7 +1541,7 @@ Item {
                     id: statsFlow
                     Layout.fillWidth: true
                     spacing: 6
-                    visible: !root.compact
+                    visible: !root.compact && !profilePopup.denseLayout
 
                     Rectangle {
                         radius: 11
@@ -1545,7 +1554,7 @@ Item {
                         Text {
                             id: autoPingText
                             anchors.centerIn: parent
-                            text: vpnController.autoPingProfiles ? "Auto Ping ON" : "Auto Ping OFF"
+                            text: I18n.t(vpnController.autoPingProfiles ? "Auto Ping ON" : "Auto Ping OFF")
                             color: vpnController.autoPingProfiles ? Colors.mainHex_278c59 : Colors.mainHex_7b8799
                             font.family: FontSystem.contentFontFamily
                             font.pixelSize: 11
@@ -1564,7 +1573,7 @@ Item {
                         Text {
                             id: subsText
                             anchors.centerIn: parent
-                            text: "Subs " + subscriptionsInCurrentGroup() + "/" + vpnController.subscriptions.length
+                            text: I18n.t("Subscriptions %1/%2", [I18n.ltr(subscriptionsInCurrentGroup()), I18n.ltr(vpnController.subscriptions.length)])
                             color: root.themeColorToken("mainHex_667487", "mainHex_9bb0cb")
                             font.family: FontSystem.contentFontFamily
                             font.pixelSize: 11
@@ -1583,7 +1592,7 @@ Item {
                         Text {
                             id: groupText
                             anchors.centerIn: parent
-                            text: "Group " + (vpnController.currentProfileGroup || "All")
+                            text: I18n.t("Group %1", [I18n.ltr(vpnController.currentProfileGroup || I18n.t("All"))])
                             color: root.themeColorToken("mainHex_5f7290", "mainHex_9cb2cf")
                             font.family: FontSystem.contentFontFamily
                             font.pixelSize: 11
@@ -1602,7 +1611,7 @@ Item {
                         Text {
                             id: profilesText
                             anchors.centerIn: parent
-                            text: "Profiles " + vpnController.profileCount
+                            text: I18n.t("Profiles %1", [I18n.ltr(vpnController.profileCount)])
                             color: root.themeColorToken("mainHex_667487", "mainHex_9bb0cb")
                             font.family: FontSystem.contentFontFamily
                             font.pixelSize: 11
@@ -1621,7 +1630,7 @@ Item {
                         Text {
                             id: bestText
                             anchors.centerIn: parent
-                            text: "Best " + (vpnController.bestPingMs >= 0 ? (vpnController.bestPingMs + " ms") : "--")
+                            text: I18n.t("Best %1", [I18n.ltr(vpnController.bestPingMs >= 0 ? (vpnController.bestPingMs + " ms") : "--")])
                             color: root.themeColorToken("mainHex_667487", "mainHex_9bb0cb")
                             font.family: FontSystem.contentFontFamily
                             font.pixelSize: 11
@@ -1640,7 +1649,7 @@ Item {
                         Text {
                             id: worstText
                             anchors.centerIn: parent
-                            text: "Worst " + (vpnController.worstPingMs >= 0 ? (vpnController.worstPingMs + " ms") : "--")
+                            text: I18n.t("Worst %1", [I18n.ltr(vpnController.worstPingMs >= 0 ? (vpnController.worstPingMs + " ms") : "--")])
                             color: root.themeColorToken("mainHex_667487", "mainHex_9bb0cb")
                             font.family: FontSystem.contentFontFamily
                             font.pixelSize: 11
@@ -1659,7 +1668,7 @@ Item {
                         Text {
                             id: scoreText
                             anchors.centerIn: parent
-                            text: "Score " + root.profileScoreStars()
+                            text: I18n.t("Score %1", [I18n.ltr(root.profileScoreStars())])
                             color: root.themeColorToken("mainHex_9c6b1f", "mainHex_f4c56a")
                             font.family: FontSystem.contentFontFamily
                             font.pixelSize: 11
@@ -1673,6 +1682,8 @@ Item {
                     Layout.fillWidth: true
                     Layout.fillHeight: true
                     Layout.preferredHeight: Math.min(Math.max(listView.contentHeight, 100), 300)
+                    Layout.minimumHeight: profilePopup.ultraDenseLayout ? 96
+                                                                        : (profilePopup.denseLayout ? 140 : 100)
 
                     ListView {
                         id: listView
@@ -1712,7 +1723,8 @@ Item {
                             readonly property bool matched: root.profileGroupVisible(groupName)
                                                             && root.profileMatchesSearch(displayLabel, protocol, address, security, groupName, sourceName)
                             width: listView.width
-                            height: matched ? (root.compact ? 62 : 80) : 0
+                            height: matched ? (root.compact ? (profilePopup.denseLayout ? 56 : 62)
+                                                            : (profilePopup.denseLayout ? 68 : 80)) : 0
                             visible: matched
 
                             Rectangle {
@@ -1808,7 +1820,7 @@ Item {
                                         }
 
                                         Text {
-                                            text: pinging ? "..." : (pingMs >= 0 ? (pingMs + " ms" + (packetLossPct > 0 ? (" / " + packetLossText) : "")) : "--")
+                                            text: I18n.localizeDisplay(pinging ? "..." : (pingMs >= 0 ? (pingMs + " ms" + (packetLossPct > 0 ? (" / " + packetLossText) : "")) : "--"))
                                             color: pingMs >= 0 ? (pingMs < 250 ? Colors.mainHex_36d984 : (pingMs < 500 ? Colors.mainHex_d0ad19 : Colors.mainHex_ef4444)) : Colors.mainHex_9aa4b6
                                             font.family: FontSystem.getContentFontBold.name
                                             font.pixelSize: root.compact ? 11 : 12
@@ -1871,7 +1883,7 @@ Item {
 
                                     Text {
                                         visible: false
-                                        text: protocol.toUpperCase() + " " + address + ":" + port + ((security || "").length ? " | " + security : "")
+                                        text: root.privacyMaskedEndpointText(protocol.toUpperCase() + " " + address + ":" + port + ((security || "").length ? " | " + security : ""))
                                         font.family: FontSystem.contentFontFamily
                                         font.pixelSize: 12
                                         color: root.themeColorToken("mainHex_8c95a4", "mainHex_9fb4cd")
@@ -1882,7 +1894,7 @@ Item {
 
                                     Text {
                                         visible: false
-                                        text: (sourceName || "Manual import")
+                                        text: sourceName || I18n.t("Manual import")
                                               + " • " + normalizedGroup
                                               + (groupExclusive ? " • Exclusive" : "")
                                               + (groupBadge.length > 0 ? " • " + groupBadge : "")
@@ -2078,10 +2090,10 @@ Item {
         }
 
         background: Rectangle {
-            topLeftRadius: 20
-            topRightRadius: root.desktopMode ? 0 : 20
-            bottomLeftRadius: root.desktopMode ? 20 : 0
-            bottomRightRadius: 0
+            topLeftRadius: root.desktopMode ? (I18n.isRtl ? 0 : 20) : 20
+            topRightRadius: root.desktopMode ? (I18n.isRtl ? 20 : 0) : 20
+            bottomLeftRadius: root.desktopMode && !I18n.isRtl ? 20 : 0
+            bottomRightRadius: root.desktopMode && I18n.isRtl ? 20 : 0
             color: root.themeColorToken("mainHex_ffffff", "mainHex_090b14")
             border.width: 0
             border.color: root.themeColorToken("mainHex_d8dde8", "mainHex_151c32")
@@ -2101,7 +2113,7 @@ Item {
             }
 
             Text {
-                text: "Delete other profiles?"
+                text: I18n.t("Delete other profiles?")
                 color: root.themeColorToken("mainHex_1f2530", "mainHex_d8e1f0")
                 font.family: FontSystem.contentFontFamily
                 font.pixelSize: 24
@@ -2110,7 +2122,7 @@ Item {
 
             Text {
                 Layout.fillWidth: true
-                text: "This keeps the selected profile and any active connection, then removes the rest."
+                text: I18n.t("This keeps the selected profile and any active connection, then removes the rest.")
                 color: root.themeColorToken("mainHex_6a778b", "mainHex_9eb3cc")
                 font.family: FontSystem.contentFontFamily
                 font.pixelSize: 13
@@ -2125,13 +2137,13 @@ Item {
 
                 Controls.Button {
                     Layout.fillWidth: true
-                    text: "Cancel"
+                    text: I18n.t("Cancel")
                     onClicked: clearProfilesPopup.close()
                 }
 
                 Controls.Button {
                     Layout.fillWidth: true
-                    text: "Delete Others"
+                    text: I18n.t("Delete Others")
                     onClicked: {
                         const removed = vpnController.removeAllProfiles()
                         clearProfilesPopup.close()
@@ -2156,10 +2168,9 @@ Item {
                 return root.height
             if (root.compact) {
                 const topGap = root.safeTopInset + 14
-                return Math.max(420, root.height - topGap)
+                return Math.max(1, root.height - topGap)
             }
-            const target = editProfileContent.implicitHeight + 22
-            return Math.min(root.height - 58, target)
+            return Math.max(1, root.sheetHeight(660))
         }
         x: root.sheetX(width)
         y: root.desktopMode ? 0 : (root.compact ? (root.safeTopInset + 6) : root.drawerY(height))
@@ -2185,10 +2196,10 @@ Item {
         }
 
         background: Rectangle {
-            topLeftRadius: 24
-            topRightRadius: root.desktopMode ? 0 : 24
-            bottomLeftRadius: root.desktopMode ? 24 : 0
-            bottomRightRadius: 0
+            topLeftRadius: root.desktopMode ? (I18n.isRtl ? 0 : 24) : 24
+            topRightRadius: root.desktopMode ? (I18n.isRtl ? 24 : 0) : 24
+            bottomLeftRadius: root.desktopMode && !I18n.isRtl ? 24 : 0
+            bottomRightRadius: root.desktopMode && I18n.isRtl ? 24 : 0
             color: root.themeColorToken("mainHex_ffffff", "mainHex_090b14")
             border.width: 0
             border.color: root.themeColorToken("mainHex_d8dde8", "mainHex_151c32")
@@ -2197,11 +2208,11 @@ Item {
         contentItem: ColumnLayout {
             id: editProfileContent
             anchors.fill: parent
-            anchors.leftMargin: 16
-            anchors.rightMargin: 16
-            anchors.topMargin: 16
-            anchors.bottomMargin: root.compact ? 10 : 20
-            spacing: 10
+            anchors.leftMargin: root.compact ? 12 : 16
+            anchors.rightMargin: root.compact ? 12 : 16
+            anchors.topMargin: root.compact ? 10 : 16
+            anchors.bottomMargin: root.compact ? Math.max(8, root.safeBottomInset + 6) : 16
+            spacing: root.compact ? 8 : 10
 
             Rectangle {
                 Layout.alignment: Qt.AlignHCenter
@@ -2212,7 +2223,7 @@ Item {
             }
 
             Text {
-                text: "Edit Profile"
+                text: I18n.t("Edit Profile")
                 color: root.themeColorToken("mainHex_1f2530", "mainHex_d8e1f0")
                 font.family: FontSystem.getContentFontBold.name
                 font.pixelSize: root.compact ? 20 : 22
@@ -2242,7 +2253,7 @@ Item {
                         Layout.fillWidth: true
                         Layout.preferredHeight: 44
                         text: root.editProfileName
-                        placeholderText: "Profile name"
+                        placeholderText: I18n.t("Profile name")
                         selectByMouse: true
                         onTextEdited: {
                             root.editProfileName = text
@@ -2255,7 +2266,7 @@ Item {
                         Layout.fillWidth: true
                         Layout.preferredHeight: 44
                         text: root.editProfileGroup
-                        placeholderText: "Group"
+                        placeholderText: I18n.t("Group")
                         selectByMouse: true
                         onTextEdited: {
                             root.editProfileGroup = text
@@ -2299,12 +2310,12 @@ Item {
                                     Layout.preferredHeight: 38
                                     readOnly: false
                                     text: root.editProfileVlessForm.uuid || ""
-                                    placeholderText: (root.editProfileVlessForm.protocol || "vless") === "wireguard"
+                                    placeholderText: I18n.t((root.editProfileVlessForm.protocol || "vless") === "wireguard"
                                                      ? "Private key"
                                                      : ((root.editProfileVlessForm.protocol || "vless") === "trojan"
                                                         || (root.editProfileVlessForm.protocol || "vless") === "shadowsocks"
                                                         ? "Password"
-                                                        : "UUID")
+                                                        : "UUID"))
                                     selectByMouse: true
                                     onTextChanged: {
                                         root.editProfileVlessForm.uuid = text
@@ -2331,12 +2342,12 @@ Item {
                                     Layout.preferredHeight: 38
                                     readOnly: false
                                     text: root.editProfileVlessForm.uuid || ""
-                                    placeholderText: (root.editProfileVlessForm.protocol || "vless") === "wireguard"
+                                    placeholderText: I18n.t((root.editProfileVlessForm.protocol || "vless") === "wireguard"
                                                      ? "Private key"
                                                      : ((root.editProfileVlessForm.protocol || "vless") === "trojan"
                                                         || (root.editProfileVlessForm.protocol || "vless") === "shadowsocks"
                                                         ? "Password"
-                                                        : "UUID")
+                                                        : "UUID"))
                                     selectByMouse: true
                                     onTextChanged: {
                                         root.editProfileVlessForm.uuid = text
@@ -2352,7 +2363,7 @@ Item {
                                     Layout.fillWidth: true
                                     Layout.preferredHeight: 38
                                     text: root.editProfileVlessForm.address || ""
-                                    placeholderText: "Address"
+                                    placeholderText: I18n.t("Address")
                                     selectByMouse: true
                                     onTextChanged: {
                                         root.editProfileVlessForm.address = text
@@ -2363,7 +2374,7 @@ Item {
                                     Layout.preferredWidth: 108
                                     Layout.preferredHeight: 38
                                     text: root.editProfileVlessForm.port || "443"
-                                    placeholderText: "Port"
+                                    placeholderText: I18n.t("Port")
                                     inputMethodHints: Qt.ImhDigitsOnly
                                     validator: IntValidator { bottom: 1; top: 65535 }
                                     selectByMouse: true
@@ -2412,9 +2423,9 @@ Item {
                                     Layout.fillWidth: true
                                     Layout.preferredHeight: 38
                                     text: root.editProfileVlessForm.encryption || "none"
-                                    placeholderText: (root.editProfileVlessForm.protocol || "vless") === "wireguard"
+                                    placeholderText: I18n.t((root.editProfileVlessForm.protocol || "vless") === "wireguard"
                                                      ? "Encryption"
-                                                     : "Encryption (none/auto/...)"
+                                                     : "Encryption (none/auto/...)")
                                     selectByMouse: true
                                     onTextChanged: {
                                         root.editProfileVlessForm.encryption = text
@@ -2426,9 +2437,9 @@ Item {
                                     Layout.fillWidth: true
                                     Layout.preferredHeight: 38
                                     text: root.editProfileVlessForm.flow || ""
-                                    placeholderText: (root.editProfileVlessForm.protocol || "vless") === "wireguard"
+                                    placeholderText: I18n.t((root.editProfileVlessForm.protocol || "vless") === "wireguard"
                                                      ? "MTU"
-                                                     : "Flow (optional)"
+                                                     : "Flow (optional)")
                                     selectByMouse: true
                                     onTextChanged: {
                                         root.editProfileVlessForm.flow = text
@@ -2444,9 +2455,9 @@ Item {
                                     Layout.fillWidth: true
                                     Layout.preferredHeight: 38
                                     text: root.editProfileVlessForm.sni || ""
-                                    placeholderText: (root.editProfileVlessForm.protocol || "vless") === "wireguard"
+                                    placeholderText: I18n.t((root.editProfileVlessForm.protocol || "vless") === "wireguard"
                                                      ? "DNS"
-                                                     : "SNI"
+                                                     : "SNI")
                                     selectByMouse: true
                                     onTextChanged: {
                                         root.editProfileVlessForm.sni = text
@@ -2457,9 +2468,9 @@ Item {
                                     Layout.fillWidth: true
                                     Layout.preferredHeight: 38
                                     text: root.editProfileVlessForm.host || ""
-                                    placeholderText: (root.editProfileVlessForm.protocol || "vless") === "wireguard"
+                                    placeholderText: I18n.t((root.editProfileVlessForm.protocol || "vless") === "wireguard"
                                                      ? "Public key"
-                                                     : "Host header"
+                                                     : "Host header")
                                     selectByMouse: true
                                     onTextChanged: {
                                         root.editProfileVlessForm.host = text
@@ -2472,9 +2483,9 @@ Item {
                                 Layout.fillWidth: true
                                 Layout.preferredHeight: 38
                                 text: root.editProfileVlessForm.path || ""
-                                placeholderText: (root.editProfileVlessForm.protocol || "vless") === "wireguard"
+                                placeholderText: I18n.t((root.editProfileVlessForm.protocol || "vless") === "wireguard"
                                                  ? "Client address"
-                                                 : "Path (for ws/xhttp)"
+                                                 : "Path (for ws/xhttp)")
                                 selectByMouse: true
                                 onTextChanged: {
                                     root.editProfileVlessForm.path = text
@@ -2488,7 +2499,7 @@ Item {
                         id: editProfileConfigArea
                         Layout.fillWidth: true
                         Layout.preferredHeight: root.editProfileVlessSupported ? 120 : 140
-                        placeholderText: "Paste or edit full profile link/config"
+                        placeholderText: I18n.t("Paste or edit full profile link/config")
                         text: root.editProfileConfigLink
                         wrapMode: TextEdit.WrapAnywhere
                         selectByMouse: true
@@ -2512,7 +2523,7 @@ Item {
                     Text {
                         Layout.fillWidth: true
                         visible: root.editProfileError.length > 0
-                        text: root.editProfileError
+                        text: I18n.t(root.editProfileError)
                         color: root.themeColorToken("mainHex_c65050", "mainHex_ff8e8e")
                         font.family: FontSystem.contentFontFamily
                         font.pixelSize: 12
@@ -2529,13 +2540,13 @@ Item {
 
                 Controls.Button {
                     Layout.fillWidth: true
-                    text: "Cancel"
+                    text: I18n.t("Cancel")
                     onClicked: editProfilePopup.close()
                 }
 
                 Controls.Button {
                     Layout.fillWidth: true
-                    text: "Save"
+                    text: I18n.t("Save")
                     onClicked: {
                         let saved = false
                         const rawConfigText = (editProfileConfigArea.text || "").trim()
@@ -2645,10 +2656,10 @@ Item {
         }
 
         background: Rectangle {
-            topLeftRadius: root.compact ? 0 : 24
-            topRightRadius: (root.compact || root.desktopMode) ? 0 : 24
-            bottomLeftRadius: root.desktopMode ? 24 : 0
-            bottomRightRadius: 0
+            topLeftRadius: root.compact || (root.desktopMode && I18n.isRtl) ? 0 : 24
+            topRightRadius: root.compact || (root.desktopMode && !I18n.isRtl) ? 0 : 24
+            bottomLeftRadius: root.desktopMode && !I18n.isRtl ? 24 : 0
+            bottomRightRadius: root.desktopMode && I18n.isRtl ? 24 : 0
             color: Colors.dsWindow
             border.width: 0
             border.color: Colors.dsBorderSoft
@@ -2686,7 +2697,7 @@ Item {
                         elevated: false
                         backgroundColor: root.themeColorToken("mainHex_faf9ff", "mainHex_151c32")
                         borderColor: root.themeColorToken("mainHex_f0eef8", "mainHex_151c32")
-                        iconText: "\uf060"
+                        iconText: I18n.isRtl ? "\uf061" : "\uf060"
                         iconFontFamily: root.faSolid
                         iconColor: root.themeColorToken("mainHex_050505", "mainHex_d8e1f0")
                         iconPixelSize: 15
@@ -2694,7 +2705,7 @@ Item {
                     }
 
                     Text {
-                        text: root.settingsTitle()
+                        text: I18n.t(root.settingsTitle())
                         font.family: FontSystem.getContentFontBold.name
                         font.weight: Font.Bold
                         font.pixelSize: root.compact ? 18 : 24
@@ -2765,11 +2776,17 @@ Item {
                             dashboardStatsSettings: surface.dashboardStatsSettings
                             interfaceThemeSettings: surface.interfaceThemeSettings
                             interfacePrivacySettings: surface.interfacePrivacySettings
+                            interfaceLanguageSettings: surface.interfaceLanguageSettings
                         }
 
                         Rectangle {
+                            id: termsPanel
                             Layout.fillWidth: true
                             visible: root.settingsSection === "terms"
+                            property bool showOriginalLicense: false
+                            readonly property string displayedLicense: showOriginalLicense || I18n.language === "en"
+                                                                        ? vpnController.licenseText()
+                                                                        : I18n.localizedLicense(vpnController.licenseText())
                             implicitHeight: termsColumn.implicitHeight + 28
                             radius: Colors.innerRadius
                             color: root.themeColorToken("mainHex_f7f9fc", "mainHex_151c32")
@@ -2783,7 +2800,7 @@ Item {
                                 spacing: 8
 
                                 Text {
-                                    text: "Terms, Conditions & License"
+                                    text: I18n.t("Terms, Conditions & License")
                                     color: root.themeColorToken("mainHex_2a3240", "mainHex_d7e4f6")
                                     font.family: FontSystem.getContentFontBold.name
                                     font.pixelSize: 16
@@ -2792,7 +2809,7 @@ Item {
 
                                 Text {
                                     Layout.fillWidth: true
-                                    text: "Use GenyConnect only with profiles and networks you are authorized to access. You are responsible for complying with local laws, service terms, and network policies."
+                                    text: I18n.t("Use GenyConnect only with profiles and networks you are authorized to access. You are responsible for complying with local laws, service terms, and network policies.")
                                     color: root.themeColorToken("mainHex_667385", "mainHex_9bb0cb")
                                     font.family: FontSystem.contentFontFamily
                                     font.pixelSize: 13
@@ -2801,20 +2818,42 @@ Item {
 
                                 Text {
                                     Layout.fillWidth: true
-                                    text: "This app is provided without warranty. Review the full license text below before production deployment."
+                                    text: I18n.t("This app is provided without warranty. Review the full license text below before production deployment.")
                                     color: root.themeColorToken("mainHex_7c8697", "mainHex_99abc4")
                                     font.family: FontSystem.contentFontFamily
                                     font.pixelSize: 12
                                     wrapMode: Text.WordWrap
                                 }
 
-                                Controls.Button {
-                                    text: "Copy License Text"
+                                Text {
                                     Layout.fillWidth: true
-                                    isDefault: false
-                                    onClicked: {
-                                        vpnController.copyTextToClipboard(vpnController.licenseText())
-                                        root.showSettingsFeedback("License copied to clipboard.")
+                                    visible: I18n.language !== "en"
+                                    text: I18n.t("Unofficial translation — the original English license is the legally authoritative text.")
+                                    color: root.themeColorToken("mainHex_a0682a", "mainHex_f4c56a")
+                                    font.family: FontSystem.contentFontFamily
+                                    font.pixelSize: 12
+                                    wrapMode: Text.WordWrap
+                                }
+
+                                RowLayout {
+                                    Layout.fillWidth: true
+
+                                    Controls.Button {
+                                        text: I18n.t("Copy License Text")
+                                        Layout.fillWidth: true
+                                        isDefault: false
+                                        onClicked: {
+                                            vpnController.copyTextToClipboard(termsPanel.displayedLicense)
+                                            root.showSettingsFeedback(I18n.t("License copied to clipboard."))
+                                        }
+                                    }
+
+                                    Controls.Button {
+                                        visible: I18n.language !== "en"
+                                        text: I18n.t(termsPanel.showOriginalLicense ? "Show Translation" : "Show Original English")
+                                        Layout.fillWidth: true
+                                        isDefault: false
+                                        onClicked: termsPanel.showOriginalLicense = !termsPanel.showOriginalLicense
                                     }
                                 }
 
@@ -2845,11 +2884,14 @@ Item {
                                         Text {
                                             id: licenseBody
                                             width: parent.width
-                                            text: vpnController.licenseText()
+                                            text: termsPanel.displayedLicense
                                             color: root.themeColorToken("mainHex_4d607a", "mainHex_b5c7de")
                                             font.family: FontSystem.contentFontFamily
                                             font.pixelSize: 11
                                             wrapMode: Text.Wrap
+                                            horizontalAlignment: I18n.isRtl && !termsPanel.showOriginalLicense
+                                                                 ? Text.AlignRight : Text.AlignLeft
+                                            LayoutMirroring.enabled: false
                                         }
                                     }
                                 }
@@ -2872,7 +2914,7 @@ Item {
                                 spacing: 12
 
                                 Text {
-                                    text: "Share App"
+                                    text: I18n.t("Share App")
                                     color: Colors.dsText
                                     font.family: FontSystem.getContentFontBold.name
                                     font.pixelSize: Typography.uiTitleLg
@@ -2881,7 +2923,7 @@ Item {
 
                                 Text {
                                     Layout.fillWidth: true
-                                    text: "Share GenyConnect using the native share sheet on mobile or desktop integrations where available."
+                                    text: I18n.t("Share GenyConnect using the native share sheet on mobile or desktop integrations where available.")
                                     color: Colors.dsTextMuted
                                     font.family: FontSystem.contentFontFamily
                                     font.pixelSize: Typography.uiBodyLg
@@ -2889,7 +2931,7 @@ Item {
                                 }
 
                                 Controls.PrimaryButton {
-                                    text: "Share Now"
+                                    text: I18n.t("Share Now")
                                     glyph: "\uf1e0"
                                     glyphFontFamily: root.faSolid
                                     Layout.fillWidth: true
@@ -2903,7 +2945,7 @@ Item {
                                     rowSpacing: 8
 
                                     Controls.LinkRow {
-                                        title: "Copy App Link"
+                                        title: I18n.t("Copy App Link")
                                         glyph: "\uf0c5"
                                         iconBackground: Colors.dsLinkIconBgPurple
                                         iconColor: Colors.dsLinkIconPurple
@@ -2915,7 +2957,7 @@ Item {
                                     }
 
                                     Controls.LinkRow {
-                                        title: "Copy Repo Link"
+                                        title: I18n.t("Copy Repo Link")
                                         glyph: "\uf0c5"
                                         iconBackground: Colors.dsLinkIconBgPurple
                                         iconColor: Colors.dsLinkIconPurple
@@ -2927,7 +2969,7 @@ Item {
                                     }
 
                                     Controls.LinkRow {
-                                        title: "Open Website"
+                                        title: I18n.t("Open Website")
                                         glyph: "\uf35d"
                                         iconBackground: Colors.dsLinkIconBgBlue
                                         iconColor: Colors.dsLinkIconBlue
@@ -2936,7 +2978,7 @@ Item {
                                     }
 
                                     Controls.LinkRow {
-                                        title: "Open Repository"
+                                        title: I18n.t("Open Repository")
                                         glyph: "\uf09b"
                                         glyphFontFamily: FontSystem.getAwesomeBrand.name
                                         iconBackground: Colors.dsSurface
@@ -2949,7 +2991,7 @@ Item {
                                 Text {
                                     Layout.fillWidth: true
                                     visible: root.settingsFeedbackText.length > 0
-                                    text: root.settingsFeedbackText
+                                    text: I18n.t(root.settingsFeedbackText)
                                     color: root.themeColorToken("mainHex_2c8b57", "mainHex_5adf97")
                                     font.family: FontSystem.contentFontFamily
                                     font.pixelSize: 12
@@ -2999,7 +3041,7 @@ Item {
                                         spacing: 1
 
                                         Text {
-                                            text: "About GenyConnect"
+                                            text: I18n.t("About GenyConnect")
                                             color: Colors.dsText
                                             font.family: FontSystem.getContentFontBold.name
                                             font.pixelSize: Typography.uiTitleLg
@@ -3008,7 +3050,7 @@ Item {
 
                                         Text {
                                             Layout.fillWidth: true
-                                            text: "Secure, profile-based connectivity for desktop and mobile runtimes."
+                                            text: I18n.t("Secure, profile-based connectivity for desktop and mobile runtimes.")
                                             color: Colors.dsTextMuted
                                             font.family: FontSystem.contentFontFamily
                                             font.pixelSize: Typography.uiBody
@@ -3040,7 +3082,7 @@ Item {
                                         Text {
                                             id: visionText
                                             Layout.fillWidth: true
-                                            text: "We stand with IRAN, with love."
+                                            text: I18n.t("We stand with IRAN, with love.")
                                             color: Colors.dsText
                                             font.family: FontSystem.getContentFontBold.name
                                             font.pixelSize: Typography.uiBody
@@ -3065,7 +3107,7 @@ Item {
                                         spacing: 7
 
                                         Text {
-                                            text: "Software Information"
+                                            text: I18n.t("Software Information")
                                             color: root.themeColorToken("mainHex_1f2530", "mainHex_d8e1f0")
                                             font.family: FontSystem.getContentFontBold.name
                                             font.pixelSize: 14
@@ -3074,7 +3116,7 @@ Item {
 
                                         Text {
                                             Layout.fillWidth: true
-                                            text: "App, runtime, and operating system details."
+                                            text: I18n.t("App, runtime, and operating system details.")
                                             color: root.themeColorToken("mainHex_7c8697", "mainHex_9bb0cb")
                                             font.family: FontSystem.contentFontFamily
                                             font.pixelSize: 11
@@ -3088,7 +3130,7 @@ Item {
                                             rowSpacing: 5
 
                                             Text {
-                                                text: "App Version"
+                                                text: I18n.t("App Version")
                                                 color: root.themeColorToken("mainHex_7c8697", "mainHex_9bb0cb")
                                                 font.family: FontSystem.contentFontFamily
                                                 font.pixelSize: 12
@@ -3104,7 +3146,7 @@ Item {
                                             }
 
                                             Text {
-                                                text: "xray-core"
+                                                text: I18n.t("xray-core")
                                                 color: root.themeColorToken("mainHex_7c8697", "mainHex_9bb0cb")
                                                 font.family: FontSystem.contentFontFamily
                                                 font.pixelSize: 12
@@ -3120,7 +3162,7 @@ Item {
                                             }
 
                                             Text {
-                                                text: "Qt Runtime"
+                                                text: I18n.t("Qt Runtime")
                                                 color: root.themeColorToken("mainHex_7c8697", "mainHex_9bb0cb")
                                                 font.family: FontSystem.contentFontFamily
                                                 font.pixelSize: 12
@@ -3136,7 +3178,7 @@ Item {
                                             }
 
                                             Text {
-                                                text: "Runtime"
+                                                text: I18n.t("Runtime")
                                                 color: root.themeColorToken("mainHex_7c8697", "mainHex_9bb0cb")
                                                 font.family: FontSystem.contentFontFamily
                                                 font.pixelSize: 12
@@ -3152,7 +3194,7 @@ Item {
                                             }
 
                                             Text {
-                                                text: "Platform"
+                                                text: I18n.t("Platform")
                                                 color: root.themeColorToken("mainHex_7c8697", "mainHex_9bb0cb")
                                                 font.family: FontSystem.contentFontFamily
                                                 font.pixelSize: 12
@@ -3168,7 +3210,7 @@ Item {
                                             }
 
                                             Text {
-                                                text: "OS Name"
+                                                text: I18n.t("OS Name")
                                                 color: root.themeColorToken("mainHex_7c8697", "mainHex_9bb0cb")
                                                 font.family: FontSystem.contentFontFamily
                                                 font.pixelSize: 12
@@ -3184,7 +3226,7 @@ Item {
                                             }
 
                                             Text {
-                                                text: "OS Kernel / API"
+                                                text: I18n.t("OS Kernel / API")
                                                 color: root.themeColorToken("mainHex_7c8697", "mainHex_9bb0cb")
                                                 font.family: FontSystem.contentFontFamily
                                                 font.pixelSize: 12
@@ -3200,7 +3242,7 @@ Item {
                                             }
 
                                             Text {
-                                                text: "SDK / Runtime"
+                                                text: I18n.t("SDK / Runtime")
                                                 color: root.themeColorToken("mainHex_7c8697", "mainHex_9bb0cb")
                                                 font.family: FontSystem.contentFontFamily
                                                 font.pixelSize: 12
@@ -3216,7 +3258,7 @@ Item {
                                             }
 
                                             Text {
-                                                text: "Language Standard"
+                                                text: I18n.t("Language Standard")
                                                 color: root.themeColorToken("mainHex_7c8697", "mainHex_9bb0cb")
                                                 font.family: FontSystem.contentFontFamily
                                                 font.pixelSize: 12
@@ -3232,13 +3274,13 @@ Item {
                                             }
 
                                             Text {
-                                                text: "Developer"
+                                                text: I18n.t("Developer")
                                                 color: root.themeColorToken("mainHex_7c8697", "mainHex_9bb0cb")
                                                 font.family: FontSystem.contentFontFamily
                                                 font.pixelSize: 12
                                             }
                                             Text {
-                                                text: "Genyleap LLC"
+                                                text: I18n.t("Genyleap LLC")
                                                 color: root.themeColorToken("mainHex_2a3240", "mainHex_d7e4f6")
                                                 font.family: FontSystem.getContentFontBold.name
                                                 font.pixelSize: 12
@@ -3265,7 +3307,7 @@ Item {
                                         spacing: 7
 
                                         Text {
-                                            text: "System Information"
+                                            text: I18n.t("System Information")
                                             color: root.themeColorToken("mainHex_1f2530", "mainHex_d8e1f0")
                                             font.family: FontSystem.getContentFontBold.name
                                             font.pixelSize: 14
@@ -3274,7 +3316,7 @@ Item {
 
                                         Text {
                                             Layout.fillWidth: true
-                                            text: "Hardware, memory, and display details for troubleshooting."
+                                            text: I18n.t("Hardware, memory, and display details for troubleshooting.")
                                             color: root.themeColorToken("mainHex_7c8697", "mainHex_9bb0cb")
                                             font.family: FontSystem.contentFontFamily
                                             font.pixelSize: 11
@@ -3288,7 +3330,7 @@ Item {
                                             rowSpacing: 5
 
                                             Text {
-                                                text: "CPU"
+                                                text: I18n.t("CPU")
                                                 color: root.themeColorToken("mainHex_7c8697", "mainHex_9bb0cb")
                                                 font.family: FontSystem.contentFontFamily
                                                 font.pixelSize: 12
@@ -3304,7 +3346,7 @@ Item {
                                             }
 
                                             Text {
-                                                text: "Architecture"
+                                                text: I18n.t("Architecture")
                                                 color: root.themeColorToken("mainHex_7c8697", "mainHex_9bb0cb")
                                                 font.family: FontSystem.contentFontFamily
                                                 font.pixelSize: 12
@@ -3320,7 +3362,7 @@ Item {
                                             }
 
                                             Text {
-                                                text: "Memory"
+                                                text: I18n.t("Memory")
                                                 color: root.themeColorToken("mainHex_7c8697", "mainHex_9bb0cb")
                                                 font.family: FontSystem.contentFontFamily
                                                 font.pixelSize: 12
@@ -3336,7 +3378,7 @@ Item {
                                             }
 
                                             Text {
-                                                text: "Process Memory"
+                                                text: I18n.t("Process Memory")
                                                 color: root.themeColorToken("mainHex_7c8697", "mainHex_9bb0cb")
                                                 font.family: FontSystem.contentFontFamily
                                                 font.pixelSize: 12
@@ -3352,7 +3394,7 @@ Item {
                                             }
 
                                             Text {
-                                                text: "Device / Host"
+                                                text: I18n.t("Device / Host")
                                                 color: root.themeColorToken("mainHex_7c8697", "mainHex_9bb0cb")
                                                 font.family: FontSystem.contentFontFamily
                                                 font.pixelSize: 12
@@ -3368,7 +3410,7 @@ Item {
                                             }
 
                                             Text {
-                                                text: "Display"
+                                                text: I18n.t("Display")
                                                 color: root.themeColorToken("mainHex_7c8697", "mainHex_9bb0cb")
                                                 font.family: FontSystem.contentFontFamily
                                                 font.pixelSize: 12
@@ -3388,7 +3430,7 @@ Item {
 
                                 Controls.OutlineButton {
                                     Layout.fillWidth: true
-                                    text: "Copy System Info"
+                                    text: I18n.t("Copy System Info")
                                     onClicked: vpnController.copyTextToClipboard(vpnController.systemInfoText())
                                 }
 
@@ -3398,13 +3440,13 @@ Item {
 
                                     Controls.PrimaryButton {
                                         Layout.fillWidth: true
-                                        text: "Open Project"
+                                        text: I18n.t("Open Project")
                                         onClicked: Qt.openUrlExternally(root.appRepoUrl)
                                     }
 
                                     Controls.OutlineButton {
                                         Layout.fillWidth: true
-                                        text: "Share App"
+                                        text: I18n.t("Share App")
                                         onClicked: root.openSettingsSection("share")
                                     }
                                 }
@@ -3417,20 +3459,20 @@ Item {
 
                                     Controls.OutlineButton {
                                         Layout.fillWidth: true
-                                        text: "Website"
+                                        text: I18n.t("Website")
                                         onClicked: Qt.openUrlExternally(root.appSiteUrl)
                                     }
 
                                     Controls.OutlineButton {
                                         Layout.fillWidth: true
-                                        text: "Support"
+                                        text: I18n.t("Support")
                                         onClicked: Qt.openUrlExternally("https://genyleap.com/support")
                                     }
 
                                     Controls.PrimaryButton {
                                         Layout.fillWidth: true
                                         Layout.columnSpan: root.compact ? 1 : 2
-                                        text: "Support Development"
+                                        text: I18n.t("Support Development")
                                         onClicked: root.openSettingsSection("donate")
                                     }
                                 }
@@ -3461,8 +3503,8 @@ Item {
                                 Controls.SupportHeroCard {
                                     Layout.fillWidth: true
                                     compact: root.compact
-                                    title: "Support GenyConnect"
-                                    description: "Your donation helps us improve GenyConnect, maintain infrastructure, and grow the Geny ecosystem."
+                                    title: I18n.t("Support GenyConnect")
+                                    description: I18n.t("Your donation helps us improve GenyConnect, maintain infrastructure, and grow the Geny ecosystem.")
                                     networkName: root.donationConfig.networkName || "Base Mainnet"
                                 }
 
@@ -3482,7 +3524,7 @@ Item {
 
                                         Text {
                                             Layout.fillWidth: true
-                                            text: "1. Choose Token"
+                                            text: I18n.t("1. Choose Token")
                                             color: Colors.dsText
                                             font.family: FontSystem.getContentFontBold.name
                                             font.pixelSize: root.compact ? 16 : 18
@@ -3533,7 +3575,7 @@ Item {
                                         Text {
                                             Layout.fillWidth: true
                                             visible: donateColumn.activeToken !== null
-                                            text: donateColumn.activeToken ? donateColumn.activeToken.message || "" : ""
+                                            text: donateColumn.activeToken ? I18n.t(donateColumn.activeToken.message || "") : ""
                                             color: Colors.dsTextMuted
                                             font.family: FontSystem.contentFontFamily
                                             font.pixelSize: Typography.uiBodySm
@@ -3542,7 +3584,7 @@ Item {
 
                                         Text {
                                             Layout.fillWidth: true
-                                            text: "2. Choose Amount"
+                                            text: I18n.t("2. Choose Amount")
                                             color: Colors.dsText
                                             font.family: FontSystem.getContentFontBold.name
                                             font.pixelSize: root.compact ? 16 : 18
@@ -3587,7 +3629,7 @@ Item {
                                                 anchors.leftMargin: 10
                                                 anchors.rightMargin: 10
                                                 text: root.donationCustomAmount
-                                                placeholderText: "Enter custom amount"
+                                                placeholderText: I18n.t("Enter custom amount")
                                                 color: root.themeColorToken("mainHex_2a3240", "mainHex_d7e4f6")
                                                 font.family: FontSystem.contentFontFamily
                                                 font.pixelSize: 13
@@ -3608,7 +3650,7 @@ Item {
                                         }
 
                                         Controls.PrimaryButton {
-                                            text: "Connect Wallet & Donate"
+                                            text: I18n.t("Connect Wallet & Donate")
                                             glyph: "\uf555"
                                             glyphFontFamily: root.faSolid
                                             Layout.fillWidth: true
@@ -3629,7 +3671,7 @@ Item {
 
                                             Text {
                                                 Layout.fillWidth: true
-                                                text: "Secure • Non-custodial • You stay in control"
+                                                text: I18n.t("Secure • Non-custodial • You stay in control")
                                                 color: Colors.dsTextSubtle
                                                 font.family: FontSystem.contentFontFamily
                                                 font.pixelSize: Typography.uiBodySm
@@ -3641,7 +3683,7 @@ Item {
                                         Text {
                                             Layout.fillWidth: true
                                             visible: root.donationValidationError.length > 0
-                                            text: root.donationValidationError
+                                            text: I18n.t(root.donationValidationError)
                                             color: Colors.dsDanger
                                             font.family: FontSystem.contentFontFamily
                                             font.pixelSize: Typography.uiBody
@@ -3652,7 +3694,7 @@ Item {
 
                                 Text {
                                     Layout.fillWidth: true
-                                    text: "Useful Links"
+                                    text: I18n.t("Useful Links")
                                     color: Colors.dsText
                                     font.family: FontSystem.getContentFontBold.name
                                     font.pixelSize: root.compact ? 16 : 18
@@ -3666,7 +3708,7 @@ Item {
                                     rowSpacing: 10
 
                                     Controls.UsefulLinkCard {
-                                        title: "Copy Creator Address"
+                                        title: I18n.t("Copy Creator Address")
                                         glyph: "\uf0c5"
                                         iconBackground: Colors.dsLinkIconBgPurple
                                         iconColor: Colors.dsLinkIconPurple
@@ -3679,7 +3721,7 @@ Item {
                                     }
 
                                     Controls.UsefulLinkCard {
-                                        title: "Copy GENY Token CA"
+                                        title: I18n.t("Copy GENY Token CA")
                                         glyph: "\uf0c5"
                                         iconBackground: Colors.dsLinkIconBgPurple
                                         iconColor: Colors.dsLinkIconPurple
@@ -3693,7 +3735,7 @@ Item {
                                     }
 
                                     Controls.UsefulLinkCard {
-                                        title: "Creator BaseScan"
+                                        title: I18n.t("Creator BaseScan")
                                         glyph: "\uf029"
                                         iconBackground: Colors.dsLinkIconBgBlue
                                         iconColor: Colors.dsLinkIconBlue
@@ -3702,7 +3744,7 @@ Item {
                                     }
 
                                     Controls.UsefulLinkCard {
-                                        title: "Token BaseScan"
+                                        title: I18n.t("Token BaseScan")
                                         glyph: "\uf029"
                                         iconBackground: Colors.dsLinkIconBgBlue
                                         iconColor: Colors.dsLinkIconBlue
@@ -3714,7 +3756,7 @@ Item {
                                     }
 
                                     Controls.UsefulLinkCard {
-                                        title: "Swap on Uniswap"
+                                        title: I18n.t("Swap on Uniswap")
                                         glyph: "\uf0ec"
                                         glyphFontFamily: FontSystem.getAwesomeBrand.name
                                         iconBackground: Colors.dsLinkIconBgPurple
@@ -3727,7 +3769,7 @@ Item {
                                     }
 
                                     Controls.UsefulLinkCard {
-                                        title: "White Paper"
+                                        title: I18n.t("White Paper")
                                         glyph: "\uf15c"
                                         iconBackground: Colors.dsLinkIconBgGreen
                                         iconColor: Colors.dsLinkIconGreen
@@ -3736,7 +3778,7 @@ Item {
                                     }
 
                                     Controls.UsefulLinkCard {
-                                        title: "GENY Repository"
+                                        title: I18n.t("GENY Repository")
                                         glyph: "\uf09b"
                                         glyphFontFamily: FontSystem.getAwesomeBrand.name
                                         iconBackground: Colors.dsSurface
@@ -3749,7 +3791,7 @@ Item {
                                 Text {
                                     Layout.fillWidth: true
                                     visible: root.donationFeedbackText.length > 0
-                                    text: root.donationFeedbackText
+                                    text: I18n.t(root.donationFeedbackText)
                                     color: Colors.dsSuccess
                                     font.family: FontSystem.contentFontFamily
                                     font.pixelSize: Typography.uiBody
@@ -3865,10 +3907,10 @@ Item {
         }
 
         background: Rectangle {
-            topLeftRadius: root.compact ? 20 : 24
-            topRightRadius: root.desktopMode ? 0 : (root.compact ? 20 : 24)
-            bottomLeftRadius: root.desktopMode ? 24 : 0
-            bottomRightRadius: 0
+            topLeftRadius: root.desktopMode ? (I18n.isRtl ? 0 : 24) : (root.compact ? 20 : 24)
+            topRightRadius: root.desktopMode ? (I18n.isRtl ? 24 : 0) : (root.compact ? 20 : 24)
+            bottomLeftRadius: root.desktopMode && !I18n.isRtl ? 24 : 0
+            bottomRightRadius: root.desktopMode && I18n.isRtl ? 24 : 0
             color: root.themeColorToken("mainHex_f8fbff", "mainHex_090b14")
             border.width: 1
             border.color: root.themeColorToken("mainHex_d8dde8", "mainHex_30435d")
@@ -3899,7 +3941,7 @@ Item {
                     spacing: 10
 
                     Text {
-                        text: "Profile QR Code"
+                        text: I18n.t("Profile QR Code")
                         color: root.themeColorToken("mainHex_2a3240", "mainHex_d7e4f6")
                         font.family: FontSystem.getContentFontBold.name
                         font.pixelSize: 19
@@ -3921,7 +3963,7 @@ Item {
 
                 Text {
                     Layout.fillWidth: true
-                    text: "Scan on another device to import this profile config."
+                    text: I18n.t("Scan on another device to import this profile config.")
                     color: root.themeColorToken("mainHex_667385", "mainHex_9bb0cb")
                     font.family: FontSystem.contentFontFamily
                     font.pixelSize: Typography.uiBody
@@ -3930,7 +3972,7 @@ Item {
 
                 Text {
                     Layout.fillWidth: true
-                    text: "Profile: " + root.profileQrProfileName
+                    text: I18n.t("Profile: %1", [I18n.ltr(root.profileQrProfileName)])
                     color: root.themeColorToken("mainHex_556378", "mainHex_9db6d6")
                     font.family: FontSystem.contentFontFamily
                     font.pixelSize: Typography.uiCaption
@@ -4005,7 +4047,7 @@ Item {
                     Controls.OutlineButton {
                         Layout.fillWidth: true
                         compact: true
-                        text: "Copy as JSON"
+                        text: I18n.t("Copy as JSON")
                         onClicked: {
                             vpnController.copyTextToClipboard(root.profileQrCopyJsonText.length > 0
                                                               ? root.profileQrCopyJsonText
@@ -4017,14 +4059,14 @@ Item {
                     Controls.OutlineButton {
                         Layout.fillWidth: true
                         compact: true
-                        text: "Save PNG"
+                        text: I18n.t("Save PNG")
                         onClicked: root.saveProfileQrImage()
                     }
 
                     Controls.Button {
                         Layout.fillWidth: true
                         Layout.columnSpan: 2
-                        text: "Close"
+                        text: I18n.t("Close")
                         onClicked: profileQrPopup.close()
                     }
                 }
@@ -4067,10 +4109,10 @@ Item {
         }
 
         background: Rectangle {
-            topLeftRadius: root.compact ? 20 : 24
-            topRightRadius: root.desktopMode ? 0 : (root.compact ? 20 : 24)
-            bottomLeftRadius: root.desktopMode ? 24 : 0
-            bottomRightRadius: 0
+            topLeftRadius: root.desktopMode ? (I18n.isRtl ? 0 : 24) : (root.compact ? 20 : 24)
+            topRightRadius: root.desktopMode ? (I18n.isRtl ? 24 : 0) : (root.compact ? 20 : 24)
+            bottomLeftRadius: root.desktopMode && !I18n.isRtl ? 24 : 0
+            bottomRightRadius: root.desktopMode && I18n.isRtl ? 24 : 0
             color: root.themeColorToken("mainHex_f8fbff", "mainHex_090b14")
             border.width: 1
             border.color: root.themeColorToken("mainHex_d8dde8", "mainHex_30435d")
@@ -4089,7 +4131,7 @@ Item {
                 spacing: 10
 
                 Text {
-                    text: "Choose Wallet"
+                    text: I18n.t("Choose Wallet")
                     color: root.themeColorToken("mainHex_2a3240", "mainHex_d7e4f6")
                     font.family: FontSystem.getContentFontBold.name
                     font.pixelSize: 18
@@ -4098,7 +4140,7 @@ Item {
 
                 Text {
                     Layout.fillWidth: true
-                    text: "Some apps support direct transfer links, while others (like Uniswap) open swap/buy flow."
+                    text: I18n.t("Some apps support direct transfer links, while others (like Uniswap) open swap/buy flow.")
                     color: root.themeColorToken("mainHex_667385", "mainHex_9bb0cb")
                     font.family: FontSystem.contentFontFamily
                     font.pixelSize: 12
@@ -4112,7 +4154,7 @@ Item {
                         visible: root.donationTargetVisible(modelData)
                         Layout.fillWidth: true
                         enabled: true
-                        text: modelData.label || "Wallet"
+                        text: I18n.t(modelData.label || "Wallet")
                         isDefault: modelData.id === "system"
                         onClicked: root.openDonationViaTarget(modelData)
                     }
@@ -4121,7 +4163,7 @@ Item {
                 Controls.Button {
                     Layout.fillWidth: true
                     isDefault: false
-                    text: "Cancel"
+                    text: I18n.t("Cancel")
                     onClicked: walletPickerPopup.close()
                 }
             }
@@ -4143,19 +4185,19 @@ Item {
 
         function aboutValue(map, key) {
             if (!map)
-                return "Unavailable"
+                return I18n.t("Unavailable")
             const value = map[key]
             if (value === undefined || value === null)
-                return "Unavailable"
+                return I18n.t("Unavailable")
             const text = String(value)
-            return text.length > 0 ? text : "Unavailable"
+            return text.length > 0 ? text : I18n.t("Unavailable")
         }
 
         function normalizeAboutValue(value) {
             if (value === undefined || value === null)
-                return "Unavailable"
+                return I18n.t("Unavailable")
             const text = String(value).trim()
-            return text.length > 0 ? text : "Unavailable"
+            return text.length > 0 ? text : I18n.t("Unavailable")
         }
 
         function aboutSoftwareValue(key) {
@@ -4287,10 +4329,10 @@ Item {
         }
 
         background: Rectangle {
-            topLeftRadius: 24
-            topRightRadius: root.desktopMode ? 0 : 24
-            bottomLeftRadius: root.desktopMode ? 24 : 0
-            bottomRightRadius: 0
+            topLeftRadius: root.desktopMode ? (I18n.isRtl ? 0 : 24) : 24
+            topRightRadius: root.desktopMode ? (I18n.isRtl ? 24 : 0) : 24
+            bottomLeftRadius: root.desktopMode && !I18n.isRtl ? 24 : 0
+            bottomRightRadius: root.desktopMode && I18n.isRtl ? 24 : 0
             color: root.themeColorToken("mainHex_ffffff", "mainHex_090b14")
             border.width: 0
             border.color: root.themeColorToken("mainHex_d8dde8", "mainHex_151c32")
@@ -4315,7 +4357,7 @@ Item {
                 RowLayout {
                     Layout.fillWidth: true
                     Text {
-                        text: "About"
+                        text: I18n.t("About")
                         font.family: FontSystem.getContentFontBold.name
                         font.weight: Font.Bold
                         font.pixelSize: 24
@@ -4357,7 +4399,7 @@ Item {
                                 spacing: 10
 
                                 Text {
-                                    text: "GenyConnect"
+                                    text: I18n.t("GenyConnect")
                                     color: root.themeColorToken("mainHex_667081", "mainHex_9ab0ca")
                                     font.family: FontSystem.contentFontFamily
                                     font.pixelSize: 14
@@ -4366,7 +4408,7 @@ Item {
                                 Item { Layout.fillWidth: true }
 
                                 Text {
-                                    text: "Version " + updater.appVersion
+                                    text: I18n.t("Version %1", [I18n.ltr(updater.appVersion)])
                                     Layout.maximumWidth: aboutPopup.width * 0.48
                                     elide: Text.ElideRight
                                     color: root.themeColorToken("mainHex_2a3240", "mainHex_d7e4f6")
@@ -4392,7 +4434,7 @@ Item {
                                 spacing: 10
 
                                 Text {
-                                    text: "Developer"
+                                    text: I18n.t("Developer")
                                     color: root.themeColorToken("mainHex_667081", "mainHex_9ab0ca")
                                     font.family: FontSystem.contentFontFamily
                                     font.pixelSize: 14
@@ -4401,7 +4443,7 @@ Item {
                                 Item { Layout.fillWidth: true }
 
                                 Text {
-                                    text: "Genyleap LLC"
+                                    text: I18n.t("Genyleap LLC")
                                     Layout.maximumWidth: aboutPopup.width * 0.48
                                     elide: Text.ElideRight
                                     color: root.themeColorToken("mainHex_2a3240", "mainHex_d7e4f6")
@@ -4427,7 +4469,7 @@ Item {
                                 spacing: 10
 
                                 Text {
-                                    text: "Website"
+                                    text: I18n.t("Website")
                                     color: root.themeColorToken("mainHex_667081", "mainHex_9ab0ca")
                                     font.family: FontSystem.contentFontFamily
                                     font.pixelSize: 14
@@ -4470,7 +4512,7 @@ Item {
                                 spacing: 10
 
                                 Text {
-                                    text: "Repository"
+                                    text: I18n.t("Repository")
                                     color: root.themeColorToken("mainHex_667081", "mainHex_9ab0ca")
                                     font.family: FontSystem.contentFontFamily
                                     font.pixelSize: 14
@@ -4512,7 +4554,7 @@ Item {
                                 spacing: 10
 
                                 Text {
-                                    text: "Creator's Telegram"
+                                    text: I18n.t("Creator's Telegram")
                                     color: root.themeColorToken("mainHex_667081", "mainHex_9ab0ca")
                                     font.family: FontSystem.contentFontFamily
                                     font.pixelSize: 14
@@ -4554,7 +4596,7 @@ Item {
                                 spacing: 10
 
                                 Text {
-                                    text: "Support Email"
+                                    text: I18n.t("Support Email")
                                     color: root.themeColorToken("mainHex_667081", "mainHex_9ab0ca")
                                     font.family: FontSystem.contentFontFamily
                                     font.pixelSize: 14
@@ -4563,7 +4605,7 @@ Item {
                                 Item { Layout.fillWidth: true }
 
                                 Text {
-                                    text: "support@genyleap.com"
+                                    text: I18n.t("support@genyleap.com")
                                     Layout.maximumWidth: aboutPopup.width * 0.52
                                     elide: Text.ElideMiddle
                                     color: root.themeColorToken("mainHex_2a3240", "mainHex_9ec1ff")
@@ -4622,10 +4664,10 @@ Item {
         }
 
         background: Rectangle {
-            topLeftRadius: root.compact ? 0 : 24
-            topRightRadius: (root.compact || root.desktopMode) ? 0 : 24
-            bottomLeftRadius: root.desktopMode ? 24 : 0
-            bottomRightRadius: 0
+            topLeftRadius: root.desktopMode ? (I18n.isRtl ? 0 : 24) : (root.compact ? 0 : 24)
+            topRightRadius: root.desktopMode ? (I18n.isRtl ? 24 : 0) : (root.compact ? 0 : 24)
+            bottomLeftRadius: root.desktopMode && !I18n.isRtl ? 24 : 0
+            bottomRightRadius: root.desktopMode && I18n.isRtl ? 24 : 0
             color: root.themeColorToken("mainHex_ffffff", "mainHex_090b14")
             border.width: 0
             border.color: root.themeColorToken("mainHex_d8dde8", "mainHex_151c32")
@@ -4676,7 +4718,7 @@ Item {
                         elevated: false
                         backgroundColor: root.themeColorToken("mainHex_faf9ff", "mainHex_151c32")
                         borderColor: root.themeColorToken("mainHex_f0eef8", "mainHex_151c32")
-                        iconText: "\uf060"
+                        iconText: I18n.isRtl ? "\uf061" : "\uf060"
                         iconFontFamily: root.faSolid
                         iconColor: root.themeColorToken("mainHex_050505", "mainHex_d8e1f0")
                         iconPixelSize: 15
@@ -4686,7 +4728,7 @@ Item {
                     Text {
                         Layout.fillWidth: true
                         Layout.alignment: Qt.AlignVCenter
-                        text: "Data Usage — " + root.selectedUsageProfileLabel()
+                        text: I18n.t("Data Usage — %1", [I18n.ltr(root.selectedUsageProfileLabel())])
                         color: root.themeColorToken("mainHex_1f2530", "mainHex_d8e1f0")
                         font.family: FontSystem.getContentFontBold.name
                         font.weight: Font.Bold
@@ -4708,7 +4750,7 @@ Item {
 
                 Text {
                     Layout.fillWidth: true
-                    text: "Track upload/download totals per profile or across all profiles."
+                    text: I18n.t("Track upload/download totals per profile or across all profiles.")
                     color: root.themeColorToken("mainHex_6f7f95", "mainHex_9eb2cb")
                     font.family: FontSystem.contentFontFamily
                     font.pixelSize: 12
@@ -4720,7 +4762,7 @@ Item {
                     spacing: 8
 
                     Text {
-                        text: "Profile"
+                        text: I18n.t("Profile")
                         color: root.themeColorToken("mainHex_5f7088", "mainHex_b5c8df")
                         font.family: FontSystem.contentFontFamily
                         font.pixelSize: 12
@@ -4788,7 +4830,7 @@ Item {
                     Text {
                         Layout.fillWidth: true
                         Layout.columnSpan: 1
-                        text: "Download: " + ((vpnController.usageSummaryForProfile(vpnController.selectedUsageProfileId || "").totalRxText) || "0 B")
+                        text: I18n.t("Download: %1", [I18n.ltr((vpnController.usageSummaryForProfile(vpnController.selectedUsageProfileId || "").totalRxText) || "0 B")])
                         color: root.themeColorToken("mainHex_64748b", "mainHex_a4b6cd")
                         font.family: FontSystem.contentFontFamily
                         font.pixelSize: 11
@@ -4798,7 +4840,7 @@ Item {
                     Text {
                         Layout.fillWidth: true
                         Layout.columnSpan: 1
-                        text: "Upload: " + ((vpnController.usageSummaryForProfile(vpnController.selectedUsageProfileId || "").totalTxText) || "0 B")
+                        text: I18n.t("Upload: %1", [I18n.ltr((vpnController.usageSummaryForProfile(vpnController.selectedUsageProfileId || "").totalTxText) || "0 B")])
                         color: root.themeColorToken("mainHex_64748b", "mainHex_a4b6cd")
                         font.family: FontSystem.contentFontFamily
                         font.pixelSize: 11
@@ -4809,7 +4851,7 @@ Item {
                     Text {
                         Layout.fillWidth: true
                         Layout.columnSpan: root.compact ? 2 : 1
-                        text: "Total: " + ((vpnController.usageSummaryForProfile(vpnController.selectedUsageProfileId || "").totalText) || "0 B")
+                        text: I18n.t("Total: %1", [I18n.ltr((vpnController.usageSummaryForProfile(vpnController.selectedUsageProfileId || "").totalText) || "0 B")])
                         color: root.themeColorToken("mainHex_334155", "mainHex_d2def0")
                         font.family: FontSystem.getContentFontBold.name
                         font.pixelSize: 11
@@ -4915,7 +4957,7 @@ Item {
 
                                         Text {
                                             Layout.fillWidth: true
-                                            text: modelData.totalText || "0 B"
+                                            text: I18n.localizeDisplay(modelData.totalText || "0 B")
                                             color: root.themeColor(root.brandBlue, Colors.mainHex_7fb0ff)
                                             font.family: FontSystem.getContentFontBold.name
                                             font.pixelSize: 12
@@ -4931,7 +4973,7 @@ Item {
 
                                         Text {
                                             Layout.fillWidth: true
-                                            text: "Down " + (modelData.rxText || "0 B")
+                                            text: I18n.t("Down %1", [I18n.ltr(modelData.rxText || "0 B")])
                                             color: root.themeColorToken("mainHex_64748b", "mainHex_a4b6cd")
                                             font.family: FontSystem.contentFontFamily
                                             font.pixelSize: 11
@@ -4940,7 +4982,7 @@ Item {
 
                                         Text {
                                             Layout.fillWidth: true
-                                            text: "Up " + (modelData.txText || "0 B")
+                                            text: I18n.t("Up %1", [I18n.ltr(modelData.txText || "0 B")])
                                             color: root.themeColorToken("mainHex_64748b", "mainHex_a4b6cd")
                                             font.family: FontSystem.contentFontFamily
                                             font.pixelSize: 11
@@ -4956,7 +4998,7 @@ Item {
                                 visible: usageHistoryListPopup.count === 0
                                 verticalAlignment: Text.AlignVCenter
                                 horizontalAlignment: Text.AlignHCenter
-                                text: "No usage history yet."
+                                text: I18n.t("No usage history yet.")
                                 color: root.themeColorToken("mainHex_8a95a8", "mainHex_9eb1c9")
                                 font.family: FontSystem.contentFontFamily
                                 font.pixelSize: 12
@@ -5010,7 +5052,7 @@ Item {
                                     }
                                     Text {
                                         Layout.fillWidth: true
-                                        text: modelData.totalText || "0 B"
+                                        text: I18n.localizeDisplay(modelData.totalText || "0 B")
                                         color: root.themeColor(root.brandBlue, Colors.mainHex_7fb0ff)
                                         font.family: FontSystem.getContentFontBold.name
                                         font.pixelSize: 12
@@ -5044,7 +5086,7 @@ Item {
                     columnSpacing: 8
 
                     Controls.PrimaryButton {
-                        text: "Refresh"
+                        text: I18n.t("Refresh")
                         compact: true
                         Layout.fillWidth: true
                         Layout.preferredWidth: 1
@@ -5053,7 +5095,7 @@ Item {
                     }
 
                     Controls.OutlineButton {
-                        text: "Clear Selected"
+                        text: I18n.t("Clear Selected")
                         compact: true
                         Layout.fillWidth: true
                         Layout.preferredWidth: 1
@@ -5065,7 +5107,7 @@ Item {
                     }
 
                     Controls.OutlineButton {
-                        text: "Clear All"
+                        text: I18n.t("Clear All")
                         compact: true
                         Layout.fillWidth: true
                         Layout.preferredWidth: 1
@@ -5111,10 +5153,10 @@ Item {
         }
 
         background: Rectangle {
-            topLeftRadius: 24
-            topRightRadius: root.desktopMode ? 0 : 24
-            bottomLeftRadius: root.desktopMode ? 24 : 0
-            bottomRightRadius: 0
+            topLeftRadius: root.desktopMode ? (I18n.isRtl ? 0 : 24) : 24
+            topRightRadius: root.desktopMode ? (I18n.isRtl ? 24 : 0) : 24
+            bottomLeftRadius: root.desktopMode && !I18n.isRtl ? 24 : 0
+            bottomRightRadius: root.desktopMode && I18n.isRtl ? 24 : 0
             color: root.themeColorToken("mainHex_ffffff", "mainHex_090b14")
             border.width: 0
             border.color: root.themeColorToken("mainHex_d8dde8", "mainHex_151c32")
@@ -5140,7 +5182,7 @@ Item {
                 spacing: 8
 
                 Text {
-                    text: "Runtime Logs"
+                    text: I18n.t("Runtime Logs")
                     font.family: FontSystem.getContentFontBold.name
                     font.weight: Font.Bold
                     font.pixelSize: 20
@@ -5159,7 +5201,7 @@ Item {
                     Text {
                         id: logModeLabel
                         anchors.centerIn: parent
-                        text: vpnController.loggingEnabled ? "Live" : "Disabled"
+                        text: I18n.t(vpnController.loggingEnabled ? "Live" : "Disabled")
                         color: vpnController.loggingEnabled ? Colors.dsPrimarySolid : Colors.dsTextMuted
                         font.family: FontSystem.getContentFontBold.name
                         font.pixelSize: Typography.uiBodySm
@@ -5228,7 +5270,7 @@ Item {
 
                     Text {
                         Layout.fillWidth: true
-                        text: "Logging is disabled"
+                        text: I18n.t("Logging is disabled")
                         color: root.themeColorToken("mainHex_2a3240", "mainHex_d7e4f6")
                         font.family: FontSystem.getContentFontBold.name
                         font.pixelSize: 16
@@ -5237,7 +5279,7 @@ Item {
 
                     Text {
                         Layout.fillWidth: true
-                        text: "Enable xray logs in Settings to capture connection history."
+                        text: I18n.t("Enable xray logs in Settings to capture connection history.")
                         color: root.themeColorToken("mainHex_8b95a5", "mainHex_9cb0c8")
                         font.family: FontSystem.contentFontFamily
                         font.pixelSize: 13
@@ -5310,10 +5352,10 @@ Item {
         }
 
         background: Rectangle {
-            topLeftRadius: root.compact ? 0 : 24
-            topRightRadius: (root.compact || root.desktopMode) ? 0 : 24
-            bottomLeftRadius: root.desktopMode ? 24 : 0
-            bottomRightRadius: 0
+            topLeftRadius: root.desktopMode ? (I18n.isRtl ? 0 : 24) : (root.compact ? 0 : 24)
+            topRightRadius: root.desktopMode ? (I18n.isRtl ? 24 : 0) : (root.compact ? 0 : 24)
+            bottomLeftRadius: root.desktopMode && !I18n.isRtl ? 24 : 0
+            bottomRightRadius: root.desktopMode && I18n.isRtl ? 24 : 0
             color: root.themeColorToken("mainHex_ffffff", "mainHex_090b14")
             border.width: 0
             border.color: root.themeColorToken("mainHex_d8dde8", "mainHex_151c32")
@@ -5359,7 +5401,7 @@ Item {
                     elevated: false
                     backgroundColor: root.themeColorToken("mainHex_faf9ff", "mainHex_151c32")
                     borderColor: root.themeColorToken("mainHex_f0eef8", "mainHex_151c32")
-                    iconText: "\uf060"
+                    iconText: I18n.isRtl ? "\uf061" : "\uf060"
                     iconFontFamily: root.faSolid
                     iconColor: root.themeColorToken("mainHex_050505", "mainHex_d8e1f0")
                     iconPixelSize: 15
@@ -5367,7 +5409,7 @@ Item {
                 }
 
                 Text {
-                    text: "Speed Test"
+                    text: I18n.t("Speed Test")
                     color: Colors.textPrimary
                     font.family: FontSystem.getContentFontBold.name
                     font.weight: Font.Bold
@@ -5405,16 +5447,15 @@ Item {
                 id: speedTestCenterArea
                 Layout.fillWidth: true
                 Layout.fillHeight: false
-                Layout.preferredHeight: root.desktopMode ? 154 : 200
-                Layout.minimumHeight: 32
+                Layout.preferredHeight: root.desktopMode ? 420 : (root.compact ? 300 : 360)
+                Layout.minimumHeight: root.compact ? 280 : 340
 
                 Controls.SpeedTestGauge {
                     id: speedDial
                     anchors.centerIn: parent
-                    width: root.desktopMode ? Math.min(speedTestCenterArea.width - 18, 260)
-                                            : Math.min(speedTestCenterArea.width - 18, 420)
-                    height: root.desktopMode ? Math.min(speedTestCenterArea.height, Math.max(146, width * 0.58))
-                                             : Math.max(248, width * 0.66)
+                    width: root.desktopMode ? Math.min(speedTestCenterArea.width - 24, 560)
+                                            : Math.min(speedTestCenterArea.width - 18, root.compact ? 360 : 500)
+                    height: Math.min(speedTestCenterArea.height, Math.max(280, width * 0.76))
                     value: root.speedGaugeValue()
                     minimumValue: 0.0
                     maximumValue: root.speedGaugeMaxMbps()
@@ -5432,7 +5473,7 @@ Item {
 
             Text {
                 Layout.fillWidth: true
-                text: vpnController.speedTestRunning ? speedTestStatusText() : speedTestSideStatusText()
+                text: I18n.localizeDigits(I18n.t(vpnController.speedTestRunning ? speedTestStatusText() : speedTestSideStatusText()))
                 color: vpnController.speedTestError.length > 0
                        ? root.themeColorToken("mainHex_d14545", "mainHex_ff8e8e")
                        : (vpnController.speedTestRunning
@@ -5458,7 +5499,7 @@ Item {
 
                     Text {
                         anchors.centerIn: parent
-                        text: root.speedTestPhaseBadgeText()
+                        text: I18n.localizeDigits(I18n.t(root.speedTestPhaseBadgeText()))
                         color: root.themeColorToken("mainHex_22456f", "mainHex_d7e9ff")
                         font.family: FontSystem.contentFontFamily
                         font.pixelSize: 12
@@ -5476,7 +5517,7 @@ Item {
 
                     Text {
                         anchors.centerIn: parent
-                        text: root.speedTestProgressText()
+                        text: I18n.localizeDigits(I18n.t(root.speedTestProgressText()))
                         color: root.themeColorToken("mainHex_22456f", "mainHex_d7e9ff")
                         font.family: FontSystem.contentFontFamily
                         font.pixelSize: 12
@@ -5498,7 +5539,7 @@ Item {
                         anchors.rightMargin: 10
                         verticalAlignment: Text.AlignVCenter
                         horizontalAlignment: Text.AlignHCenter
-                        text: root.speedTestFooterText()
+                        text: I18n.localizeDigits(I18n.t(root.speedTestFooterText()))
                         elide: Text.ElideRight
                         color: root.themeColorToken("mainHex_22456f", "mainHex_d7e9ff")
                         font.family: FontSystem.contentFontFamily
@@ -5514,7 +5555,7 @@ Item {
 
                 Text {
                     Layout.alignment: Qt.AlignHCenter
-                    text: "Gauge Range"
+                    text: I18n.t("Gauge Range")
                     color: root.themeColorToken("mainHex_64748b", "mainHex_9db2cc")
                     font.family: FontSystem.contentFontFamily
                     font.pixelSize: 12
@@ -5546,7 +5587,7 @@ Item {
 
                             Text {
                                 anchors.centerIn: parent
-                                text: modelData
+                                text: I18n.t(modelData)
                                 color: root.speedGaugeRangePreset === modelData
                                        ? Colors.mainHex_ffffff
                                        : root.themeColorToken("mainHex_495971", "mainHex_b7cae2")
@@ -5591,13 +5632,13 @@ Item {
                             spacing: 4
 
                             Text {
-                                text: root.speedMetricLabel(index)
+                                text: I18n.t(root.speedMetricLabel(index))
                                 color: root.themeColorToken("mainHex_5d7ea3", "mainHex_89a8c8")
                                 font.family: FontSystem.contentFontFamily
                                 font.pixelSize: 12
                             }
                             Text {
-                                text: root.speedMetricValue(index)
+                                text: I18n.localizeDigits(I18n.t(root.speedMetricValue(index)))
                                 color: root.themeColorToken("mainHex_16365c", "mainHex_f2f7ff")
                                 font.family: FontSystem.contentFontFamily
                                 font.pixelSize: root.desktopMode ? 16 : (index < 2 ? 19 : 17)
@@ -5614,9 +5655,9 @@ Item {
 
                 Text {
                     Layout.fillWidth: true
-                    text: "Route stability " + ((vpnController.speedTestRunning || vpnController.speedTestState === "Completed")
+                    text: I18n.t("Route stability %1", [I18n.ltr((vpnController.speedTestRunning || vpnController.speedTestState === "Completed")
                                                 ? (vpnController.speedTestRouteStabilityPct + "%")
-                                                : "--")
+                                                : "--")])
                     color: root.themeColorToken("mainHex_5d6d84", "mainHex_9db2cc")
                     font.family: FontSystem.contentFontFamily
                     font.pixelSize: 11
@@ -5627,7 +5668,7 @@ Item {
                 Text {
                     Layout.preferredWidth: root.compact ? 102 : implicitWidth
                     horizontalAlignment: Text.AlignRight
-                    text: "Overall " + root.speedOverallDisplayText()
+                    text: I18n.t("Overall %1", [I18n.ltr(root.speedOverallDisplayText())])
                     color: root.themeColorToken("mainHex_5d6d84", "mainHex_9db2cc")
                     font.family: FontSystem.contentFontFamily
                     font.pixelSize: 11
@@ -5647,7 +5688,7 @@ Item {
 
                     Text {
                         anchors.horizontalCenter: parent.horizontalCenter
-                        text: "Test Size"
+                        text: I18n.t("Test Size")
                         color: root.themeColorToken("mainHex_64748b", "mainHex_9db2cc")
                         font.family: FontSystem.contentFontFamily
                         font.pixelSize: 13
@@ -5675,7 +5716,7 @@ Item {
 
                                 Text {
                                     anchors.centerIn: parent
-                                    text: modelData + " MB"
+                                    text: I18n.localizeDisplay(modelData + " MB")
                                     color: vpnController.speedTestSelectedSizeMb === modelData
                                            ? Colors.mainHex_ffffff
                                            : root.themeColorToken("mainHex_495971", "mainHex_b7cae2")
@@ -5700,7 +5741,7 @@ Item {
                 Layout.alignment: Qt.AlignHCenter
                 width: 166
                 height: root.desktopMode ? 40 : 44
-                text: vpnController.speedTestRunning ? "Cancel" : "Start Test"
+                    text: I18n.t(vpnController.speedTestRunning ? "Cancel" : "Start Test")
                 enabled: vpnController.speedTestRunning || vpnController.connectionState === ConnectionState.Connected
                 onClicked: {
                     if (vpnController.speedTestRunning) {
@@ -5733,7 +5774,7 @@ Item {
                 Rectangle { width: 1; height: 26; color: root.themeColorToken("mainHex_d4d9e3", "mainHex_151c32") }
 
                 Text {
-                    text: "Proxy:"
+                    text: I18n.t("Proxy:")
                     color: root.themeColorToken("mainHex_1f2430", "mainHex_d7e4f6")
                     font.family: FontSystem.contentFontFamily
                     font.pixelSize: 16
@@ -5749,7 +5790,7 @@ Item {
                 Rectangle { width: 1; height: 26; color: root.themeColorToken("mainHex_d4d9e3", "mainHex_151c32") }
 
                 Text {
-                    text: "Provider:"
+                    text: I18n.t("Provider:")
                     color: root.themeColorToken("mainHex_1f2430", "mainHex_d7e4f6")
                     font.family: FontSystem.contentFontFamily
                     font.pixelSize: 16
@@ -5765,7 +5806,7 @@ Item {
                 Rectangle { width: 1; height: 26; color: root.themeColorToken("mainHex_d4d9e3", "mainHex_151c32") }
 
                 Text {
-                    text: "OS:"
+                    text: I18n.t("OS:")
                     color: root.themeColorToken("mainHex_1f2430", "mainHex_d7e4f6")
                     font.family: FontSystem.contentFontFamily
                     font.pixelSize: 16
@@ -5795,7 +5836,7 @@ Item {
                     spacing: 8
 
                     Text {
-                        text: "Latest Results"
+                        text: I18n.t("Latest Results")
                         color: root.themeColorToken("mainHex_3f4d63", "mainHex_d7e4f6")
                         font.family: FontSystem.contentFontFamily
                         font.pixelSize: 14
@@ -5838,7 +5879,7 @@ Item {
                             visible: vpnController.speedTestHistory.length === 0
                             verticalAlignment: Text.AlignVCenter
                             horizontalAlignment: Text.AlignLeft
-                            text: "No completed tests yet."
+                            text: I18n.t("No completed tests yet.")
                             color: root.themeColorToken("mainHex_8a95a8", "mainHex_9eb2cb")
                             font.family: FontSystem.contentFontFamily
                             font.pixelSize: 13
@@ -5856,6 +5897,7 @@ Item {
         modal: true
         focus: true
         property string selectedManageGroup: ""
+        readonly property bool shortViewport: height < 720
         readonly property bool hasExplicitGroup: ((subscriptionGroupField.text || "").trim().length > 0)
         readonly property string targetGroupName: root.normalizeImportGroupName(subscriptionGroupField.text || root.subscriptionGroupDraft)
         closePolicy: vpnController.subscriptionBusy
@@ -5878,6 +5920,7 @@ Item {
             root.importWaitingForSubscription = false
             root.importStatusKind = "idle"
             root.importStatusText = ""
+            importFlick.contentY = 0
         }
         onClosed: root.importWaitingForSubscription = false
 
@@ -5901,10 +5944,10 @@ Item {
         }
 
         background: Rectangle {
-            topLeftRadius: 24
-            topRightRadius: root.desktopMode ? 0 : 24
-            bottomLeftRadius: root.desktopMode ? 24 : 0
-            bottomRightRadius: 0
+            topLeftRadius: root.desktopMode ? (I18n.isRtl ? 0 : 24) : 24
+            topRightRadius: root.desktopMode ? (I18n.isRtl ? 24 : 0) : 24
+            bottomLeftRadius: root.desktopMode && !I18n.isRtl ? 24 : 0
+            bottomRightRadius: root.desktopMode && I18n.isRtl ? 24 : 0
             color: root.themeColorToken("mainHex_ffffff", "mainHex_090b14")
             border.width: 0
             border.color: root.themeColorToken("mainHex_d8dde8", "mainHex_151c32")
@@ -5932,13 +5975,38 @@ Item {
             }
         }
 
-        contentItem: ColumnLayout {
+        contentItem: Flickable {
+            id: importFlick
             anchors.fill: parent
-            anchors.leftMargin: root.compact ? 12 : 16
-            anchors.rightMargin: root.compact ? 12 : 16
-            anchors.topMargin: root.compact ? (12 + root.safeTopInset) : 16
-            anchors.bottomMargin: root.compact ? (20 + root.safeBottomInset) : 16
-            spacing: 10
+            clip: true
+            contentWidth: width
+            contentHeight: importContentColumn.implicitHeight
+                           + importContentColumn.y
+                           + (root.compact ? Math.max(14, root.safeBottomInset + 10) : 16)
+            boundsBehavior: Flickable.StopAtBounds
+            flickableDirection: Flickable.VerticalFlick
+            interactive: contentHeight > height
+            ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
+
+            function revealItem(item) {
+                if (!item)
+                    return
+                const mapped = item.mapToItem(importFlick.contentItem, 0, 0)
+                const top = mapped.y - 12
+                const bottom = mapped.y + item.height + 12
+                if (top < contentY)
+                    contentY = Math.max(0, top)
+                else if (bottom > contentY + height)
+                    contentY = Math.min(Math.max(0, contentHeight - height),
+                                        Math.max(0, bottom - height))
+            }
+
+            ColumnLayout {
+                id: importContentColumn
+                x: root.compact ? 12 : 16
+                y: root.compact ? (10 + root.safeTopInset) : 16
+                width: importFlick.width - (root.compact ? 24 : 32)
+                spacing: importPopup.shortViewport ? 8 : 10
 
             Rectangle {
                 Layout.alignment: Qt.AlignHCenter
@@ -5953,7 +6021,7 @@ Item {
                 spacing: 8
 
                 Text {
-                    text: "Import Profiles"
+                    text: I18n.t("Import Profiles")
                     font.family: FontSystem.getContentFontBold.name
                     font.weight: Font.Bold
                     font.pixelSize: 23
@@ -5978,7 +6046,7 @@ Item {
 
             Text {
                 Layout.fillWidth: true
-                text: "Paste VMESS/VLESS/Trojan/Shadowsocks/WireGuard links, profile JSON, percent/base64 encoded JSON, WireGuard config text, base64 payload, or an https subscription URL. Multi-line import is supported."
+                text: I18n.t("Paste VMESS/VLESS/Trojan/Shadowsocks/WireGuard links, profile JSON, percent/base64 encoded JSON, WireGuard config text, base64 payload, or an https subscription URL. Multi-line import is supported.")
                 color: root.themeColorToken("mainHex_6f7f95", "mainHex_9eb2cb")
                 font.family: FontSystem.contentFontFamily
                 font.pixelSize: 12
@@ -6006,7 +6074,7 @@ Item {
                         anchors.rightMargin: 12
                         padding: 0
                         text: root.subscriptionGroupDraft
-                        placeholderText: "Group name"
+                        placeholderText: I18n.t("Group name")
                         color: root.themeColorToken("mainHex_1f2a3a", "mainHex_edf4ff")
                         font.family: FontSystem.contentFontFamily
                         font.pixelSize: 13
@@ -6014,6 +6082,10 @@ Item {
                         selectionColor: root.brandBlue
                         selectByMouse: true
                         background: null
+                        onActiveFocusChanged: {
+                            if (activeFocus)
+                                Qt.callLater(function() { importFlick.revealItem(subscriptionGroupField) })
+                        }
                         onTextEdited: {
                             root.subscriptionGroupDraft = text
                             importPopup.selectedManageGroup = root.normalizeImportGroupName(text)
@@ -6114,14 +6186,14 @@ Item {
                 spacing: 8
 
                 Text {
-                    text: "Badge"
+                    text: I18n.t("Badge")
                     color: root.themeColorToken("mainHex_6b778a", "mainHex_9cb0c8")
                     font.family: FontSystem.contentFontFamily
                     font.pixelSize: 12
                 }
 
                 Rectangle {
-                    Layout.preferredWidth: 76
+                    Layout.preferredWidth: root.compact ? 58 : 76
                     Layout.preferredHeight: 32
                     radius: 16
                     color: root.profileGroupBadgeText(subscriptionGroupField.text).length === 0
@@ -6134,7 +6206,7 @@ Item {
 
                     Text {
                         anchors.centerIn: parent
-                        text: "None"
+                        text: I18n.t("None")
                         color: root.profileGroupBadgeText(subscriptionGroupField.text).length === 0
                                ? root.brandBlue
                                : root.themeColorToken("mainHex_667487", "mainHex_9bb0cb")
@@ -6155,7 +6227,7 @@ Item {
                 }
 
                 Rectangle {
-                    Layout.preferredWidth: 76
+                    Layout.preferredWidth: root.compact ? 62 : 76
                     Layout.preferredHeight: 32
                     radius: 16
                     color: root.profileGroupBadgeText(subscriptionGroupField.text).toLowerCase() === "free"
@@ -6168,7 +6240,7 @@ Item {
 
                     Text {
                         anchors.centerIn: parent
-                        text: "Free"
+                        text: I18n.t("Free")
                         color: root.profileGroupBadgeText(subscriptionGroupField.text).toLowerCase() === "free"
                                ? root.brandBlue
                                : root.themeColorToken("mainHex_667487", "mainHex_9bb0cb")
@@ -6189,7 +6261,7 @@ Item {
                 }
 
                 Rectangle {
-                    Layout.preferredWidth: 92
+                    Layout.preferredWidth: root.compact ? 78 : 92
                     Layout.preferredHeight: 32
                     radius: 16
                     color: root.profileGroupBadgeText(subscriptionGroupField.text).toLowerCase() === "premium"
@@ -6202,7 +6274,7 @@ Item {
 
                     Text {
                         anchors.centerIn: parent
-                        text: "Premium"
+                        text: I18n.t("Premium")
                         color: root.profileGroupBadgeText(subscriptionGroupField.text).toLowerCase() === "premium"
                                ? root.themeColor(root.brandViolet, Colors.mainHex_b8acff)
                                : root.themeColorToken("mainHex_667487", "mainHex_9bb0cb")
@@ -6232,8 +6304,8 @@ Item {
 
                 Rectangle {
                     radius: 10
-                    height: 28
-                    width: groupStateText.implicitWidth + 18
+                    Layout.preferredHeight: 28
+                    Layout.preferredWidth: groupStateText.implicitWidth + 18
                     color: root.profileGroupEnabled(subscriptionGroupField.text)
                            ? root.themeColorToken("mainHex_e8f7ef", "mainHex_173c2f")
                            : root.themeColorToken("mainHex_fff0f0", "mainHex_3b2631")
@@ -6245,7 +6317,7 @@ Item {
                     Text {
                         id: groupStateText
                         anchors.centerIn: parent
-                        text: root.profileGroupEnabled(subscriptionGroupField.text) ? "Group Enabled" : "Group Disabled"
+                        text: I18n.t(root.profileGroupEnabled(subscriptionGroupField.text) ? "Group Enabled" : "Group Disabled")
                         color: root.profileGroupEnabled(subscriptionGroupField.text)
                                ? root.themeColorToken("mainHex_2c8b57", "mainHex_5adf97")
                                : root.themeColorToken("mainHex_bf4d4d", "mainHex_ff8e8e")
@@ -6274,7 +6346,8 @@ Item {
                                 const groupName = root.normalizeImportGroupName(subscriptionGroupField.text)
                                 vpnController.setProfileGroupEnabled(groupName, checked)
                             }
-                            title: "Enabled"
+                            title: I18n.t("Enabled")
+
                         }
 
                         Controls.Switch {
@@ -6283,7 +6356,8 @@ Item {
                                 const groupName = root.normalizeImportGroupName(subscriptionGroupField.text)
                                 vpnController.setProfileGroupExclusive(groupName, checked)
                             }
-                            title: "Exclusive"
+                            title: I18n.t("Exclusive")
+
                         }
 
                         Rectangle {
@@ -6301,7 +6375,7 @@ Item {
                                 anchors.rightMargin: 8
                                 padding: 0
                                 clip: true
-                                placeholderText: "Badge"
+                                placeholderText: I18n.t("Badge")
                                 text: root.profileGroupBadgeText(subscriptionGroupField.text)
                                 color: root.themeColorToken("mainHex_3b4a61", "mainHex_d0ddf0")
                                 font.family: FontSystem.contentFontFamily
@@ -6328,7 +6402,7 @@ Item {
                 Item { Layout.fillWidth: true }
 
                 Text {
-                    text: "Groups: " + root.importSelectableGroups().length
+                    text: I18n.t("Groups: %1", [I18n.ltr(root.importSelectableGroups().length)])
                     color: root.themeColorToken("mainHex_90a0b5", "mainHex_9fb4cd")
                     font.family: FontSystem.contentFontFamily
                     font.pixelSize: 11
@@ -6350,7 +6424,7 @@ Item {
                     spacing: 8
 
                     Text {
-                        text: "Import Target Group:"
+                        text: I18n.t("Import Target Group:")
                         color: root.themeColorToken("mainHex_5f6f86", "mainHex_9bb0cb")
                         font.family: FontSystem.contentFontFamily
                         font.pixelSize: 12
@@ -6367,7 +6441,7 @@ Item {
 
                     Text {
                         visible: root.width >= 620
-                        text: "All pasted profiles/subscriptions will be saved here."
+                        text: I18n.t("All pasted profiles/subscriptions will be saved here.")
                         color: root.themeColorToken("mainHex_7d8ea7", "mainHex_9eb2cb")
                         font.family: FontSystem.contentFontFamily
                         font.pixelSize: 11
@@ -6378,7 +6452,7 @@ Item {
             Rectangle {
                 Layout.fillWidth: true
                 visible: root.width >= 620
-                Layout.preferredHeight: 232
+                Layout.preferredHeight: importPopup.shortViewport ? 176 : 232
                 radius: 12
                 color: root.themeColorToken("mainHex_f7f9fd", "mainHex_151c32")
                 border.width: 0
@@ -6392,7 +6466,7 @@ Item {
                     RowLayout {
                         Layout.fillWidth: true
                         Text {
-                            text: "Manage Groups"
+                            text: I18n.t("Manage Groups")
                             color: root.themeColorToken("mainHex_5f6f86", "mainHex_9bb0cb")
                             font.family: FontSystem.getContentFontBold.name
                             font.pixelSize: 12
@@ -6403,7 +6477,7 @@ Item {
                             implicitWidth: 130
                             implicitHeight: 28
                             isDefault: false
-                            text: "Remove All Groups"
+                            text: I18n.t("Remove All Groups")
                             enabled: !vpnController.subscriptionBusy && root.importSelectableGroups().length > 1
                             onClicked: vpnController.removeAllProfileGroups()
                         }
@@ -6480,14 +6554,14 @@ Item {
 
                                 Controls.Switch {
                                     Layout.fillWidth: false
-                                    title: "Enabled"
+                                    title: I18n.t("Enabled")
                                     checked: groupEnabled
                                     onToggled: vpnController.setProfileGroupEnabled(groupName, checked)
                                 }
 
                                 Controls.Switch {
                                     Layout.fillWidth: false
-                                    title: "Exclusive"
+                                    title: I18n.t("Exclusive")
                                     checked: groupExclusive
                                     enabled: groupEnabled
                                     onToggled: vpnController.setProfileGroupExclusive(groupName, checked)
@@ -6497,7 +6571,7 @@ Item {
 
                                 TextField {
                                     Layout.fillWidth: true
-                                    placeholderText: "Badge"
+                                    placeholderText: I18n.t("Badge")
                                     text: groupBadge
                                     selectByMouse: true
                                     color: root.themeColorToken("mainHex_3b4a61", "mainHex_d0ddf0")
@@ -6533,16 +6607,19 @@ Item {
             Controls.TextArea {
                 id: importTextArea
                 Layout.fillWidth: true
-                Layout.fillHeight: true
-                Layout.preferredHeight: 128
-                Layout.minimumHeight: root.compact ? 180 : 128
+                Layout.preferredHeight: root.compact ? 180 : (importPopup.shortViewport ? 150 : 180)
+                Layout.minimumHeight: 128
                 fillColor: root.themeColorToken("mainHex_f8fbff", "mainHex_8a18283d")
                 strokeColor: root.themeColorToken("mainHex_d8e2f0", "mainHex_3f587a")
                 focusColor: root.themeColorToken("mainHex_8bb8ff", "mainHex_6ba0ff")
-                placeholderText: "Paste links/configs here (multi-line supported)"
+                placeholderText: I18n.t("Paste links/configs here (multi-line supported)")
                 wrapMode: TextEdit.WrapAtWordBoundaryOrAnywhere
                 text: root.importDraft
                 onTextChanged: root.importDraft = text
+                onActiveFocusChanged: {
+                    if (activeFocus)
+                        Qt.callLater(function() { importFlick.revealItem(importTextArea) })
+                }
             }
 
             RowLayout {
@@ -6591,7 +6668,7 @@ Item {
                 Controls.Button {
                     implicitWidth: root.compact ? 96 : 104
                     isDefault: false
-                    text: vpnController.subscriptionBusy ? "Working..." : "Close"
+                    text: I18n.t(vpnController.subscriptionBusy ? "Working..." : "Close")
                     Layout.fillWidth: root.compact
                     enabled: !vpnController.subscriptionBusy
                     onClicked: importPopup.close()
@@ -6605,7 +6682,7 @@ Item {
                 Controls.Button {
                     implicitWidth: root.compact ? 140 : 218
                     isDefault: true
-                    text: vpnController.subscriptionBusy ? "Please wait..." : "Import"
+                    text: I18n.t(vpnController.subscriptionBusy ? "Please wait..." : "Import")
                     Layout.fillWidth: true
                     enabled: !vpnController.subscriptionBusy && importPopup.hasExplicitGroup
                     onClicked: {
@@ -6656,6 +6733,7 @@ Item {
             }
         }
     }
+    }
 
     Item {
         id: legacyWideDashboard
@@ -6673,7 +6751,7 @@ Item {
             spacing: 8
 
             Text {
-                text: "<strong>GENY</strong>CONNECT"
+                text: I18n.t("<strong>GENY</strong>CONNECT")
                 color: Colors.textPrimary
                 font.family: FontSystem.getContentFontBold.name
                 font.pixelSize: 20
@@ -6974,7 +7052,7 @@ Item {
                             }
 
                             Text {
-                                text: connectButtonText()
+                                text: I18n.t(connectButtonText())
                                 color: Colors.mainHex_ffffff
                                 font.family: FontSystem.contentFontFamily
                                 font.pixelSize: 40 * 0.58
@@ -7066,13 +7144,13 @@ Item {
                             ColumnLayout {
                                 spacing: 1
                                 Text {
-                                    text: "Status"
+                                    text: I18n.t("Status")
                                     color: root.themeColorToken("mainHex_6f7f96", "mainHex_9fb4cd")
                                     font.family: FontSystem.contentFontFamily
                                     font.pixelSize: Typography.h6
                                 }
                                 Text {
-                                    text: root.stateText()
+                                    text: I18n.t(root.stateText())
                                     color: root.themeColorToken("mainHex_1f2a37", "mainHex_d7e4f6")
                                     font.family: FontSystem.contentFontFamily
                                     font.pixelSize: Typography.t2
@@ -7113,7 +7191,7 @@ Item {
                             ColumnLayout {
                                 spacing: 1
                                 Text {
-                                    text: "Receive"
+                                    text: I18n.t("Receive")
                                     color: root.themeColorToken("mainHex_6682ad", "mainHex_9fc3f2")
                                     font.family: FontSystem.contentFontFamily
                                     font.pixelSize: Typography.h6
@@ -7166,7 +7244,7 @@ Item {
                             ColumnLayout {
                                 spacing: 1
                                 Text {
-                                    text: "Send"
+                                    text: I18n.t("Send")
                                     color: root.themeColorToken("mainHex_5f9478", "mainHex_9fceb7")
                                     font.family: FontSystem.contentFontFamily
                                     font.pixelSize: Typography.h6
@@ -7254,7 +7332,7 @@ Item {
                 spacing: 6
 
                 Text {
-                    text: "Your Location:"
+                    text: I18n.t("Your Location:")
                     color: root.themeColorToken("mainHex_2a3140", "mainHex_d7e4f6")
                     font.family: FontSystem.contentFontFamily
                     font.pixelSize: 16
@@ -7369,7 +7447,7 @@ Item {
                     spacing: 10
 
                     Text {
-                        text: "<strong>GENY</strong>CONNECT"
+                        text: I18n.t("<strong>GENY</strong>CONNECT")
                         color: root.themeColor(root.brandInk, Colors.mainHex_e5edf9)
                         font.family: FontSystem.contentFontFamily
                         font.pixelSize: 18
@@ -7442,7 +7520,7 @@ Item {
                 id: dashboardTimerText
                 Layout.alignment: Qt.AlignHCenter
                 Layout.preferredHeight: root.mobileHomeTimerHeight
-                text: vpnController.connected ? root.sessionTimeText() : "00:00:00"
+                text: I18n.localizeDigits(vpnController.connected ? root.sessionTimeText() : "00:00:00")
                 color: root.themeColorToken("mainHex_050505", "mainHex_f1f5ff")
                 font.family: FontSystem.getContentFontBold.name
                 font.pixelSize: Math.max(32, Math.round(44 * root.mobileHomeScale))
@@ -7460,7 +7538,7 @@ Item {
 
                     Text {
                         Layout.alignment: Qt.AlignHCenter
-                        text: "Last Usage"
+                        text: I18n.t("Last Usage")
                         color: root.themeColorToken("mainHex_557299", "mainHex_9ab2ce")
                         font.family: FontSystem.contentFontFamily
                         font.pixelSize: 11
@@ -7692,7 +7770,7 @@ Item {
                     Text {
                         id: statusChipText
                         anchors.centerIn: parent
-                        text: root.stateText()
+                        text: I18n.t(root.stateText())
                         color: root.heroPowerStatusTextColor()
                         font.family: FontSystem.getContentFontBold.name
                         font.pixelSize: 13
@@ -7777,7 +7855,7 @@ Item {
                             }
 
                             Text {
-                                text: root.currentProfilePingText()
+                                text: I18n.localizeDisplay(root.currentProfilePingText())
                                 color: root.currentProfileSignalColor()
                                 font.family: FontSystem.getContentFontBold.name
                                 font.pixelSize: 10
@@ -7854,7 +7932,7 @@ Item {
                                 Layout.fillWidth: true
                                 spacing: 2
                                 Text {
-                                    text: "Downlink"
+                                    text: I18n.t("Downlink")
                                     color: root.themeColorToken("mainHex_1b1b1f", "mainHex_cbd9ec")
                                     font.family: FontSystem.contentFontFamily
                                     font.pixelSize: 12
@@ -7872,7 +7950,7 @@ Item {
                                     }
                                     Text {
                                         width: root.mobileLandscape ? 38 : 42
-                                        text: root.formatSpeedValue(Math.max(0, downRateBytesPerSec), dashboardStatsSettings.speedUnit).unit
+                                        text: I18n.t(root.formatSpeedValue(Math.max(0, downRateBytesPerSec), dashboardStatsSettings.speedUnit).unit)
                                         color: root.themeColorToken("mainHex_5b5d66", "mainHex_9db0c9")
                                         font.family: FontSystem.contentFontFamily
                                         font.pixelSize: root.mobileLandscape ? 11 : 12
@@ -7981,7 +8059,7 @@ Item {
                                 Layout.fillWidth: true
                                 spacing: 2
                                 Text {
-                                    text: "Uplink"
+                                    text: I18n.t("Uplink")
                                     color: root.themeColorToken("mainHex_1b1b1f", "mainHex_cbd9ec")
                                     font.family: FontSystem.contentFontFamily
                                     font.pixelSize: 12
@@ -7999,7 +8077,7 @@ Item {
                                     }
                                     Text {
                                         width: root.mobileLandscape ? 38 : 42
-                                        text: root.formatSpeedValue(Math.max(0, upRateBytesPerSec), dashboardStatsSettings.speedUnit).unit
+                                        text: I18n.t(root.formatSpeedValue(Math.max(0, upRateBytesPerSec), dashboardStatsSettings.speedUnit).unit)
                                         color: root.themeColorToken("mainHex_5b5d66", "mainHex_9db0c9")
                                         font.family: FontSystem.contentFontFamily
                                         font.pixelSize: root.mobileLandscape ? 11 : 12

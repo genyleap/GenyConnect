@@ -27,6 +27,20 @@ ColumnLayout {
     Layout.fillWidth: true
     spacing: root.compact ? 14 : 10
 
+    function localizedUpdateStatus(value) {
+        const source = String(value || "")
+        let match = source.match(/^You are up to date \((.+)\)\.$/)
+        if (match)
+            return I18n.t("You are up to date (%1).", [I18n.ltr(match[1])])
+        match = source.match(/^Update available: (.+)$/)
+        if (match)
+            return I18n.t("Update available: %1", [I18n.ltr(match[1])])
+        match = source.match(/^No published release yet\. Current version (.+)\.$/)
+        if (match)
+            return I18n.t("No published release yet. Current version %1.", [I18n.ltr(match[1])])
+        return I18n.t(source)
+    }
+
     Rectangle {
         Layout.fillWidth: true
         visible: root.settingsSection === "updates" && vpnController.supportsAutoUpdate
@@ -48,9 +62,9 @@ ColumnLayout {
                 spacing: 8
 
                 Text {
-                    text: "App Updates"
+                    text: I18n.t("App Updates")
                     color: root.themeColorToken("mainHex_2a3240", "mainHex_d7e4f6")
-                    font.family: FontSystem.contentFontFamily
+                    font.family: FontSystem.getContentFontBold.name
                     font.pixelSize: 15
                     font.bold: true
                 }
@@ -58,7 +72,7 @@ ColumnLayout {
                 Item { Layout.fillWidth: true }
 
                 Text {
-                    text: "Current " + updater.appVersion
+                    text: I18n.t("Current %1", [I18n.ltr(updater.appVersion)])
                     color: root.themeColorToken("mainHex_677385", "mainHex_9bb0cb")
                     font.family: FontSystem.contentFontFamily
                     font.pixelSize: 13
@@ -67,7 +81,7 @@ ColumnLayout {
 
             Text {
                 Layout.fillWidth: true
-                text: updater.status
+                text: section.localizedUpdateStatus(updater.status)
                 color: updater.error.length > 0
                        ? root.themeColorToken("mainHex_c44a4a", "mainHex_ff8e8e")
                        : (updater.updateAvailable
@@ -81,7 +95,7 @@ ColumnLayout {
             Text {
                 Layout.fillWidth: true
                 visible: updater.updateAvailable && updater.latestVersion.length > 0
-                text: "Latest " + updater.latestVersion
+                text: I18n.t("Latest %1", [I18n.ltr(updater.latestVersion)])
                 color: root.themeColorToken("mainHex_7f8897", "mainHex_99abc4")
                 font.family: FontSystem.contentFontFamily
                 font.pixelSize: 12
@@ -147,18 +161,18 @@ ColumnLayout {
                 rowSpacing: 8
 
                 Controls.Button {
-                    text: updater.checking ? "Checking..." : "Check Now"
+                    text: I18n.t(updater.checking ? "Checking..." : "Check Now")
                     enabled: !updater.checking
                     Layout.fillWidth: true
                     onClicked: updater.checkForUpdates(true)
                 }
 
                 Controls.Button {
-                    text: updater.downloadedFilePath.length > 0
-                          ? (root.mobilePlatform
-                             ? (updater.canInstallDownloadedUpdate ? "Install Update" : "Open Installer")
-                             : (updater.canInstallDownloadedUpdate ? "Install & Restart" : "Open Installer"))
-                          : "Download"
+                    text: I18n.t(updater.downloadedFilePath.length > 0
+                                 ? (root.mobilePlatform
+                                    ? (updater.canInstallDownloadedUpdate ? "Install Update" : "Open Installer")
+                                    : (updater.canInstallDownloadedUpdate ? "Install & Restart" : "Open Installer"))
+                                 : "Download")
                     enabled: updater.updateAvailable && !updater.checking
                     Layout.fillWidth: true
                     onClicked: {
@@ -175,7 +189,7 @@ ColumnLayout {
                 }
 
                 Controls.Button {
-                    text: "Release Page"
+                    text: I18n.t("Release Page")
                     isDefault: false
                     visible: !root.mobilePlatform
                     enabled: !root.mobilePlatform && updater.releaseUrl.length > 0
@@ -204,16 +218,16 @@ ColumnLayout {
 
             Text {
                 Layout.fillWidth: true
-                text: "App Updates"
+                text: I18n.t("App Updates")
                 color: root.themeColorToken("mainHex_2a3240", "mainHex_d7e4f6")
-                font.family: FontSystem.contentFontFamily
+                font.family: FontSystem.getContentFontBold.name
                 font.pixelSize: 15
                 font.bold: true
             }
 
             Text {
                 Layout.fillWidth: true
-                text: "Current " + updater.appVersion
+                text: I18n.t("Current %1", [I18n.ltr(updater.appVersion)])
                 color: root.themeColorToken("mainHex_677385", "mainHex_9bb0cb")
                 font.family: FontSystem.contentFontFamily
                 font.pixelSize: 13
@@ -221,7 +235,7 @@ ColumnLayout {
 
             Text {
                 Layout.fillWidth: true
-                text: "Auto-update is not available on this runtime build. Use the release page to get the latest APK or desktop package."
+                text: I18n.t("Auto-update is not available on this runtime build. Use the release page to get the latest APK or desktop package.")
                 color: root.themeColorToken("mainHex_5f6f88", "mainHex_9bb0cb")
                 font.family: FontSystem.contentFontFamily
                 font.pixelSize: 13
@@ -229,13 +243,13 @@ ColumnLayout {
             }
 
             Controls.Button {
-                text: "Release Page"
+                text: I18n.t("Release Page")
                 Layout.fillWidth: true
                 onClicked: updater.openReleasePage()
             }
 
             Controls.Button {
-                text: "Open Project"
+                text: I18n.t("Open Project")
                 Layout.fillWidth: true
                 isDefault: false
                 onClicked: Qt.openUrlExternally("https://github.com/genyleap/genyconnect")

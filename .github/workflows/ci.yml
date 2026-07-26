@@ -459,6 +459,12 @@ jobs:
           set -euo pipefail
           cmake --build build --config Release --parallel
 
+      - name: Test Linux x64 helper launch
+        shell: bash
+        run: |
+          set -euo pipefail
+          ctest --test-dir build --output-on-failure -R genyconnect_linuxhelperlaunch_tests
+
       - name: Create and verify Linux x64 RPM
         shell: bash
         run: |
@@ -624,6 +630,7 @@ jobs:
           fi
 
           "${GITHUB_WORKSPACE}/scripts/validate_appimage_contents.sh" squashfs-root "${GITHUB_WORKSPACE}"
+          "${GITHUB_WORKSPACE}/scripts/verify_linux_tun_helper_runtime.sh" squashfs-root
 
           if [[ -f src/xrayconfigbuilder.cpp ]] && grep -q '"mtu"), QJsonArray' src/xrayconfigbuilder.cpp; then
             echo "TUN MTU must be emitted as a JSON number, not an array."
@@ -787,6 +794,12 @@ jobs:
         run: |
           set -euo pipefail
           cmake --build build --config Release --parallel
+
+      - name: Test Linux ARM64 helper launch
+        shell: bash
+        run: |
+          set -euo pipefail
+          ctest --test-dir build --output-on-failure -R genyconnect_linuxhelperlaunch_tests
 
       - name: Create and verify Linux ARM64 RPM
         shell: bash
@@ -954,6 +967,7 @@ jobs:
           fi
 
           "${GITHUB_WORKSPACE}/scripts/validate_appimage_contents.sh" squashfs-root "${GITHUB_WORKSPACE}"
+          "${GITHUB_WORKSPACE}/scripts/verify_linux_tun_helper_runtime.sh" squashfs-root
 
           if [[ -f src/xrayconfigbuilder.cpp ]] && grep -q '"mtu"), QJsonArray' src/xrayconfigbuilder.cpp; then
             echo "TUN MTU must be emitted as a JSON number, not an array."

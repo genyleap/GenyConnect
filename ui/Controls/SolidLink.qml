@@ -54,7 +54,7 @@ Rectangle {
             Behavior on scale { NumberAnimation { duration: 200; } }
         }
         Text {
-            text: setTitle
+            text: I18n.t(setTitle)
             Layout.alignment: Qt.AlignHCenter | Qt.AlignVCenter
             font.family: fontSystem.getContentFont.name
             font.pixelSize: isBold ? appStyle.t2 : appStyle.t2

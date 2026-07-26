@@ -90,7 +90,7 @@ Item {
         const meta = (root.selectedServerMeta || "").trim()
         if (meta.length === 0 || meta === "Import and select a profile" || meta === "Profile is selected")
             return meta
-        return meta.split("|")[0].trim()
+        return root.privacyMaskedEndpointText(meta.split("|")[0].trim())
     }
 
     function routeText() {
@@ -136,6 +136,17 @@ Item {
 
     function connectionHistoryText(indexFromTop) {
         return connectionHistory()[indexFromTop] || ""
+    }
+
+    function localizedConnectionHistoryText(indexFromTop) {
+        const original = connectionHistoryText(indexFromTop)
+        const match = original.match(/^(\d{1,2}:\d{2}:\d{2})\s+(Connected|Disconnected|Connecting|Waiting|Failed|Active)(?:\s+(.*))?$/i)
+        if (!match)
+            return original
+        const statusKey = match[2].charAt(0).toUpperCase() + match[2].slice(1).toLowerCase()
+        const detail = (match[3] || "").trim()
+        return I18n.ltr(match[1]) + "  " + I18n.t(statusKey)
+                + (detail.length > 0 ? ("  " + I18n.ltr(detail)) : "")
     }
 
     function connectionHistoryColor(indexFromTop) {
@@ -327,9 +338,9 @@ Item {
 
             Text {
                 id: labelText
-                text: actionButton.label
+                text: I18n.t(actionButton.label)
                 color: desktop.textStrong
-                font.family: FontSystem.contentFontFamily
+                font.family: FontSystem.getContentFontBold.name
                 font.pixelSize: 13
                 font.bold: true
             }
@@ -388,11 +399,11 @@ Item {
 
             Text {
                 Layout.fillWidth: true
-                text: navItem.label
+                text: I18n.t(navItem.label)
                 color: navItem.selected ? desktop.accentBlue : desktop.textStrong
-                font.family: FontSystem.contentFontFamily
+                font.family: FontSystem.getContentFontBold.name
                 font.pixelSize: 14
-                font.bold: navItem.selected
+                font.bold: true
                 elide: Text.ElideRight
             }
         }
@@ -415,6 +426,7 @@ Item {
         property color valueColor: desktop.textStrong
         property var series: []
         property bool emphasized: false
+        property bool technicalValue: false
 
         Layout.fillWidth: true
         Layout.preferredHeight: 34
@@ -434,7 +446,7 @@ Item {
 
             Text {
                 Layout.fillWidth: true
-                text: sessionRow.label
+                text: I18n.t(sessionRow.label)
                 color: desktop.textMuted
                 font.family: FontSystem.contentFontFamily
                 font.pixelSize: 12
@@ -442,12 +454,16 @@ Item {
             }
 
             Text {
-                text: sessionRow.value
+                text: sessionRow.technicalValue ? I18n.ltr(sessionRow.value) : I18n.t(sessionRow.value)
                 color: sessionRow.valueColor
-                font.family: FontSystem.contentFontFamily
+                font.family: sessionRow.technicalValue && !FontSystem.usePersianArabicFont
+                             ? FontSystem.technicalFontFamily : FontSystem.contentFontFamily
                 font.pixelSize: 12
                 font.bold: sessionRow.emphasized
-                horizontalAlignment: Text.AlignRight
+                horizontalAlignment: sessionRow.technicalValue
+                                     ? Text.AlignLeft
+                                     : (I18n.isRtl ? Text.AlignRight : Text.AlignLeft)
+                LayoutMirroring.enabled: !sessionRow.technicalValue
                 elide: Text.ElideRight
                 Layout.maximumWidth: 124
             }
@@ -506,7 +522,7 @@ Item {
 
                 Text {
                     Layout.fillWidth: true
-                    text: metricCard.title
+                    text: I18n.t(metricCard.title)
                     color: desktop.textStrong
                     font.family: FontSystem.contentFontFamily
                     font.pixelSize: 12
@@ -519,7 +535,7 @@ Item {
                 spacing: 6
 
                 Controls.NumberFlowText {
-                    text: metricCard.value
+                    text: I18n.localizeDisplay(metricCard.value)
                     color: desktop.textStrong
                     fontSize: 24
                     bold: true
@@ -527,7 +543,7 @@ Item {
                 }
 
                 Text {
-                    text: metricCard.unit
+                    text: I18n.t(metricCard.unit)
                     color: desktop.textMuted
                     font.family: FontSystem.contentFontFamily
                     font.pixelSize: 13
@@ -665,10 +681,11 @@ Item {
 
                     Text {
                         Layout.fillWidth: true
-                        text: "<strong>GENY</strong>CONNECT"
-                        textFormat: Text.RichText
+                        text: I18n.language === "fa" ? I18n.t("GenyConnect") : "<strong>GENY</strong>CONNECT"
+                        textFormat: I18n.language === "fa" ? Text.PlainText : Text.RichText
+                        LayoutMirroring.enabled: false
                         color: root.themeColor(root.brandInk, Colors.mainHex_e5edf9)
-                        font.family: FontSystem.contentFontFamily
+                        font.family: I18n.language === "fa" ? FontSystem.getContentFontBold.name : FontSystem.technicalFontFamily
                         font.pixelSize: 20
                         elide: Text.ElideRight
                     }
@@ -677,21 +694,21 @@ Item {
                 Item { Layout.fillWidth: true }
 
                 TopActionButton {
-                    label: "Quick Connect"
+                    label: I18n.t("Quick Connect")
                     glyph: "\uf0e7"
                     accent: accentBlue
                     onClicked: root.handleConnectAction()
                 }
 
                 TopActionButton {
-                    label: "Diagnostics"
+                    label: I18n.t("Diagnostics")
                     glyph: root.iconSpeed
                     accent: Colors.dsLinkIconPurple
                     onClicked: openDiagnosticsDrawer()
                 }
 
                 TopActionButton {
-                    label: "Update"
+                    label: I18n.t("Update")
                     glyph: "\uf019"
                     accent: accentBlue
                     onClicked: {
@@ -731,7 +748,9 @@ Item {
             spacing: 0
 
             Rectangle {
-                Layout.preferredWidth: desktop.narrowLayout ? 176 : 224
+                Layout.preferredWidth: desktop.narrowLayout
+                                       ? (I18n.isRtl ? 224 : 190)
+                                       : (I18n.isRtl ? 282 : 238)
                 Layout.fillHeight: true
                 color: root.themeColorToken("mainHex_f7f9fc", "mainHex_111425")
                 border.width: 0
@@ -752,13 +771,13 @@ Item {
                     anchors.bottomMargin: 22
                     spacing: 8
 
-                    SidebarButton { label: "Dashboard"; glyph: "\uf015"; selected: desktop.navSelected("dashboard"); action: "dashboard" }
-                    SidebarButton { label: "Profiles"; glyph: "\uf007"; selected: desktop.navSelected("profiles"); action: "profiles" }
-                    SidebarButton { label: "Routing"; glyph: "\uf542"; selected: desktop.navSelected("routing"); action: "routing" }
-                    SidebarButton { label: "Traffic"; glyph: root.iconUsage; selected: desktop.navSelected("traffic"); action: "traffic" }
-                    SidebarButton { label: "LAN Sharing"; glyph: "\uf108"; selected: desktop.navSelected("lan"); action: "lan" }
-                    SidebarButton { label: "Logs"; glyph: "\uf15c"; selected: desktop.navSelected("logs"); action: "logs" }
-                    SidebarButton { label: "Settings"; glyph: root.iconGear; selected: desktop.navSelected("settings"); action: "settings" }
+                    SidebarButton { label: I18n.t("Dashboard"); glyph: "\uf015"; selected: desktop.navSelected("dashboard"); action: "dashboard" }
+                    SidebarButton { label: I18n.t("Profiles"); glyph: "\uf007"; selected: desktop.navSelected("profiles"); action: "profiles" }
+                    SidebarButton { label: I18n.t("Routing"); glyph: "\uf542"; selected: desktop.navSelected("routing"); action: "routing" }
+                    SidebarButton { label: I18n.t("Traffic"); glyph: root.iconUsage; selected: desktop.navSelected("traffic"); action: "traffic" }
+                    SidebarButton { label: I18n.t("LAN Sharing"); glyph: "\uf108"; selected: desktop.navSelected("lan"); action: "lan" }
+                    SidebarButton { label: I18n.t("Logs"); glyph: "\uf15c"; selected: desktop.navSelected("logs"); action: "logs" }
+                    SidebarButton { label: I18n.t("Settings"); glyph: root.iconGear; selected: desktop.navSelected("settings"); action: "settings" }
 
                     Item { Layout.fillHeight: true }
 
@@ -790,7 +809,7 @@ Item {
                                 spacing: 4
 
                                 Text {
-                                    text: "Core Status"
+                                    text: I18n.t("Core Status")
                                     color: textStrong
                                     font.family: FontSystem.contentFontFamily
                                     font.pixelSize: 12
@@ -798,7 +817,7 @@ Item {
                                 }
 
                                 Text {
-                                    text: coreText()
+                                    text: I18n.t(coreText())
                                     color: coreText() === "Healthy" ? accentGreen : accentYellow
                                     font.family: FontSystem.getContentFontBold.name
                                     font.pixelSize: 12
@@ -806,7 +825,8 @@ Item {
                                 }
 
                                 Text {
-                                    text: "Xray Core " + ((vpnController.xrayVersion || "").trim().length > 0 ? vpnController.xrayVersion : "--")
+                                    text: I18n.ltr("Xray Core " + ((vpnController.xrayVersion || "").trim().length > 0 ? vpnController.xrayVersion : "--"))
+                                    LayoutMirroring.enabled: false
                                     color: textMuted
                                     font.family: FontSystem.contentFontFamily
                                     font.pixelSize: 10
@@ -854,7 +874,7 @@ Item {
                             anchors.top: parent.top
                             anchors.leftMargin: 24
                             anchors.topMargin: 22
-                            text: "Connection"
+                            text: I18n.t("Connection")
                             color: textStrong
                             font.family: FontSystem.getContentFontBold.name
                             font.pixelSize: 16
@@ -887,7 +907,7 @@ Item {
 
                                 Text {
                                     id: heroStateText
-                                    text: root.stateText()
+                                    text: I18n.t(root.stateText())
                                     color: statusColor()
                                     font.family: FontSystem.getContentFontBold.name
                                     font.pixelSize: 12
@@ -929,7 +949,7 @@ Item {
 
                             Text {
                                 anchors.horizontalCenter: parent.horizontalCenter
-                                text: formatDuration(root.sessionSeconds)
+                                text: I18n.localizeDigits(formatDuration(root.sessionSeconds))
                                 color: root.themeColorToken("mainHex_050505", "mainHex_d8e1f0")
                                 font.family: FontSystem.getContentFontBold.name
                                 font.pixelSize: Math.max(42, Math.min(58, connectionCard.width * 0.066))
@@ -938,7 +958,7 @@ Item {
 
                             Text {
                                 anchors.horizontalCenter: parent.horizontalCenter
-                                text: "Last Usage: " + root.latestUsageValuePart() + " " + root.latestUsageUnitPart()
+                                text: I18n.t("Last Usage: %1", [I18n.ltr(root.latestUsageValuePart() + " " + root.latestUsageUnitPart())])
                                 color: root.themeColorToken("mainHex_4f5d70", "mainHex_9fb4cd")
                                 font.family: FontSystem.contentFontFamily
                                 font.pixelSize: 15
@@ -1061,18 +1081,24 @@ Item {
                                     spacing: 2
 
                                     Text {
-                                        text: root.selectedServerLabel
+                                        text: I18n.ltr(root.selectedServerLabel)
+                                        LayoutMirroring.enabled: false
                                         color: textStrong
-                                        font.family: FontSystem.getContentFontBold.name
+                                        font.family: FontSystem.usePersianArabicFont
+                                                     ? FontSystem.getContentFontBold.name
+                                                     : FontSystem.technicalFontFamily
                                         font.pixelSize: 16
                                         font.bold: true
                                         elide: Text.ElideRight
                                     }
 
                                     Text {
-                                        text: serverMetaPreview()
+                                        text: I18n.ltr(serverMetaPreview())
+                                        LayoutMirroring.enabled: false
                                         color: textMuted
-                                        font.family: FontSystem.contentFontFamily
+                                        font.family: FontSystem.usePersianArabicFont
+                                                     ? FontSystem.contentFontFamily
+                                                     : FontSystem.technicalFontFamily
                                         font.pixelSize: 12
                                         elide: Text.ElideRight
                                     }
@@ -1086,9 +1112,12 @@ Item {
                                 }
 
                                 Text {
-                                    text: root.currentProfilePingText()
+                                    text: I18n.ltr(root.currentProfilePingText())
+                                    LayoutMirroring.enabled: false
                                     color: accentBlue
-                                    font.family: FontSystem.contentFontFamily
+                                    font.family: FontSystem.usePersianArabicFont
+                                                 ? FontSystem.contentFontFamily
+                                                 : FontSystem.technicalFontFamily
                                     font.pixelSize: 12
                                 }
 
@@ -1141,7 +1170,7 @@ Item {
 
                                     Text {
                                         Layout.fillWidth: true
-                                        text: "Traffic Overview"
+                                        text: I18n.t("Traffic Overview")
                                         color: textStrong
                                         font.family: FontSystem.getContentFontBold.name
                                         font.pixelSize: 15
@@ -1149,7 +1178,7 @@ Item {
                                     }
 
                                     Text {
-                                        text: totalUsageText()
+                                        text: I18n.localizeDisplay(totalUsageText())
                                         color: textMuted
                                         font.family: FontSystem.contentFontFamily
                                         font.pixelSize: 12
@@ -1163,7 +1192,7 @@ Item {
                                     spacing: 12
 
                                     MetricSummaryCard {
-                                        title: "Downlink"
+                                        title: I18n.t("Downlink")
                                         glyph: "\uf063"
                                         accent: accentGreen
                                         value: root.formatSpeedValue(Math.max(0, root.downRateBytesPerSec), dashboardStatsSettings.speedUnit).value
@@ -1172,7 +1201,7 @@ Item {
                                     }
 
                                     MetricSummaryCard {
-                                        title: "Uplink"
+                                        title: I18n.t("Uplink")
                                         glyph: "\uf062"
                                         accent: accentYellow
                                         value: root.formatSpeedValue(Math.max(0, root.upRateBytesPerSec), dashboardStatsSettings.speedUnit).value
@@ -1201,7 +1230,7 @@ Item {
 
                                     Text {
                                         Layout.fillWidth: true
-                                        text: "Connection History"
+                                        text: I18n.t("Connection History")
                                         color: textStrong
                                         font.family: FontSystem.getContentFontBold.name
                                         font.pixelSize: 15
@@ -1209,7 +1238,7 @@ Item {
                                     }
 
                                     Text {
-                                        text: "View All"
+                                        text: I18n.t("View All")
                                         color: accentBlue
                                         font.family: FontSystem.contentFontFamily
                                         font.pixelSize: 12
@@ -1225,7 +1254,7 @@ Item {
                                 Text {
                                     Layout.fillWidth: true
                                     visible: connectionHistoryCount() === 0
-                                    text: "No connection history yet."
+                                    text: I18n.t("No connection history yet.")
                                     color: textMuted
                                     font.family: FontSystem.contentFontFamily
                                     font.pixelSize: 12
@@ -1247,7 +1276,7 @@ Item {
 
                                         Text {
                                             Layout.fillWidth: true
-                                            text: connectionHistoryText(index)
+                                            text: localizedConnectionHistoryText(index)
                                             color: textStrong
                                             font.family: FontSystem.contentFontFamily
                                             font.pixelSize: 12
@@ -1278,7 +1307,7 @@ Item {
                         spacing: 4
 
                         Text {
-                            text: "Session Info"
+                            text: I18n.t("Session Info")
                             color: textStrong
                             font.family: FontSystem.getContentFontBold.name
                             font.pixelSize: 16
@@ -1286,21 +1315,21 @@ Item {
                             Layout.bottomMargin: 8
                         }
 
-                        SessionGroupLabel { text: "Connection" }
+                        SessionGroupLabel { text: I18n.t("Connection") }
 
                         SessionRow {
                             glyph: "\uf3ed"
-                            label: "Status"
+                            label: I18n.t("Status")
                             value: root.stateText()
                             valueColor: statusColor()
                             accent: accentBlue
                             emphasized: true
                         }
-                        SessionRow { glyph: "\uf542"; label: "Protocol"; value: protocolText(); accent: accentBlue; emphasized: true }
-                        SessionRow { glyph: "\uf108"; label: "Mode"; value: modeText(); accent: accentBlue; emphasized: true }
-                        SessionRow { glyph: "\uf233"; label: "Server"; value: root.selectedServerLabel + " " + root.selectedServerFlag; accent: accentBlue; emphasized: true }
-                        SessionRow { glyph: "\uf3c5"; label: "IP Address"; value: root.infoIpText(); accent: accentBlue; valueColor: accentBlue }
-                        SessionRow { glyph: "\uf625"; label: "Latency"; value: root.currentProfilePingText(); accent: accentBlue; valueColor: accentBlue; emphasized: true }
+                        SessionRow { glyph: "\uf542"; label: I18n.t("Protocol"); value: protocolText(); accent: accentBlue; emphasized: true; technicalValue: true }
+                        SessionRow { glyph: "\uf108"; label: I18n.t("Mode"); value: modeText(); accent: accentBlue; emphasized: true; technicalValue: true }
+                        SessionRow { glyph: "\uf233"; label: I18n.t("Server"); value: root.selectedServerLabel + " " + root.selectedServerFlag; accent: accentBlue; emphasized: true; technicalValue: true }
+                        SessionRow { glyph: "\uf3c5"; label: I18n.t("IP Address"); value: root.infoIpText(); accent: accentBlue; valueColor: accentBlue; technicalValue: true }
+                        SessionRow { glyph: "\uf625"; label: I18n.t("Latency"); value: root.currentProfilePingText(); accent: accentBlue; valueColor: accentBlue; emphasized: true; technicalValue: true }
 
                         Rectangle {
                             Layout.fillWidth: true
@@ -1310,11 +1339,11 @@ Item {
                             Layout.bottomMargin: 2
                         }
 
-                        SessionGroupLabel { text: "Security" }
+                        SessionGroupLabel { text: I18n.t("Security") }
 
                         SessionRow {
                             glyph: "\uf3ed"
-                            label: "Kill Switch"
+                            label: I18n.t("Kill Switch")
                             value: securityLabel("killSwitch")
                             valueColor: securityValueColor(securityLabel("killSwitch"))
                             accent: securityValueColor(securityLabel("killSwitch"))
@@ -1322,7 +1351,7 @@ Item {
                         }
                         SessionRow {
                             glyph: "\uf57d"
-                            label: "DNS Leak"
+                            label: I18n.t("DNS Leak")
                             value: securityLabel("dnsLeak")
                             valueColor: securityValueColor(securityLabel("dnsLeak"))
                             accent: securityValueColor(securityLabel("dnsLeak"))
@@ -1330,7 +1359,7 @@ Item {
                         }
                         SessionRow {
                             glyph: "\uf0ac"
-                            label: "IPv6 Leak"
+                            label: I18n.t("IPv6 Leak")
                             value: securityLabel("ipv6Leak")
                             valueColor: securityValueColor(securityLabel("ipv6Leak"))
                             accent: securityValueColor(securityLabel("ipv6Leak"))
@@ -1338,7 +1367,7 @@ Item {
                         }
                         SessionRow {
                             glyph: "\uf023"
-                            label: "Encryption"
+                            label: I18n.t("Encryption")
                             value: securityLabel("encryption")
                             valueColor: securityValueColor(securityLabel("encryption"))
                             accent: securityValueColor(securityLabel("encryption"))
@@ -1353,12 +1382,12 @@ Item {
                             Layout.bottomMargin: 2
                         }
 
-                        SessionGroupLabel { text: "System" }
+                        SessionGroupLabel { text: I18n.t("System") }
 
-                        SessionRow { glyph: "\uf0e7"; label: "Power Mode"; value: (vpnController.powerMode || "Normal"); valueColor: accentGreen; accent: accentBlue; emphasized: true }
-                        SessionRow { glyph: "\uf542"; label: "Routing"; value: routeText(); accent: accentBlue; emphasized: true }
-                        SessionRow { glyph: "\uf57d"; label: "DNS"; value: dnsText(); accent: accentBlue; emphasized: true }
-                        SessionRow { glyph: "\uf1b2"; label: "Core"; value: coreText(); valueColor: coreText() === "Healthy" ? accentGreen : accentYellow; accent: accentBlue; emphasized: true }
+                        SessionRow { glyph: "\uf0e7"; label: I18n.t("Power Mode"); value: I18n.t(vpnController.powerMode || "Normal"); valueColor: accentGreen; accent: accentBlue; emphasized: true }
+                        SessionRow { glyph: "\uf542"; label: I18n.t("Routing"); value: I18n.t(routeText()); accent: accentBlue; emphasized: true }
+                        SessionRow { glyph: "\uf57d"; label: I18n.t("DNS"); value: I18n.t(dnsText()); accent: accentBlue; emphasized: true }
+                        SessionRow { glyph: "\uf1b2"; label: I18n.t("Core"); value: I18n.t(coreText()); valueColor: coreText() === "Healthy" ? accentGreen : accentYellow; accent: accentBlue; emphasized: true }
 
                         Item { Layout.fillHeight: true }
                     }

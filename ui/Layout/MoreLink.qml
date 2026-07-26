@@ -6,6 +6,8 @@ import QtQuick
 import QtQuick.Layouts
 import QtQuick.Controls.Basic
 
+import GenyConnect 1.0
+
 import "../Controls" as Controls
 
 Drawer {
@@ -66,27 +68,27 @@ Drawer {
 
                 Controls.LinkButton {
                     icon: "\uf14d"
-                    title: "Share"
+                    title: I18n.t("Share")
                 }
 
                 Controls.LinkButton {
                     icon: "\uf0c1"
-                    title: "Link"
+                    title: I18n.t("Link")
                 }
 
                 Controls.LinkButton {
                     icon: "\uf02e"
-                    title: "Save"
+                    title: I18n.t("Save")
                 }
 
                 Controls.LinkButton {
                     icon: "\uf029"
-                    title: "QRCode"
+                    title: I18n.t("QRCode")
                 }
             }
 
             Controls.Button {
-                text: "Report"
+                text: I18n.t("Report")
                 style: Colors.error
                 onClicked: {
                     drawer.close();

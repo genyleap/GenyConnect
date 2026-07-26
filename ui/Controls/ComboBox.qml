@@ -9,6 +9,15 @@ import "../Core"
 T.ComboBox {
     id: control
 
+    // Parent layouts still position this control according to the page direction.
+    // Its internals are handled explicitly to keep the indicator and padding from
+    // being mirrored independently and overlapping the displayed value.
+    LayoutMirroring.enabled: false
+    // Propagate this explicit opt-out to every internal item. With false here,
+    // nested Text items can inherit the application's RTL mirroring again and
+    // Qt mirrors AlignRight back to the left.
+    LayoutMirroring.childrenInherit: true
+
     readonly property bool darkMode: Theme.mode === Theme.Dark
     property color fillColor: Colors.gcControlBg
     property color strokeColor: Colors.gcControlBorder
@@ -21,31 +30,44 @@ T.ComboBox {
     font.family: FontSystem.contentFontFamily
     font.pixelSize: Typography.t2
 
-    leftPadding: 12
-    rightPadding: 28
+    leftPadding: I18n.isRtl ? 28 : 12
+    rightPadding: I18n.isRtl ? 12 : 28
     topPadding: 6
     bottomPadding: 6
 
-    contentItem: Text {
-        readonly property var currentData: (control.currentIndex >= 0 && control.model && control.model.length !== undefined)
-                                           ? control.model[control.currentIndex]
-                                           : null
-        text: (currentData && typeof currentData === "object" && currentData.name !== undefined)
-              ? currentData.name
-              : control.displayText
-        font.family: control.font.family
-        font.pixelSize: control.font.pixelSize
-        color: Colors.gcControlText
-        verticalAlignment: Text.AlignVCenter
-        elide: Text.ElideRight
+    contentItem: Item {
+        x: control.leftPadding
+        y: control.topPadding
+        width: Math.max(0, control.width - control.leftPadding - control.rightPadding)
+        height: Math.max(0, control.height - control.topPadding - control.bottomPadding)
+        implicitWidth: selectedText.implicitWidth
+        implicitHeight: selectedText.implicitHeight
+
+        Text {
+            id: selectedText
+            anchors.fill: parent
+            LayoutMirroring.enabled: false
+            LayoutMirroring.childrenInherit: true
+            readonly property var currentData: (control.currentIndex >= 0 && control.model && control.model.length !== undefined)
+                                               ? control.model[control.currentIndex]
+                                               : null
+            text: (currentData && typeof currentData === "object" && currentData.name !== undefined)
+                  ? I18n.t(currentData.name)
+                  : I18n.t(control.displayText)
+            font.family: control.font.family
+            font.pixelSize: control.font.pixelSize
+            color: Colors.gcControlText
+            verticalAlignment: Text.AlignVCenter
+            horizontalAlignment: I18n.isRtl ? Text.AlignRight : Text.AlignLeft
+            elide: Text.ElideRight
+        }
     }
 
     indicator: Item {
         width: 12
         height: 8
-        anchors.right: parent.right
-        anchors.rightMargin: 10
-        anchors.verticalCenter: parent.verticalCenter
+        x: I18n.isRtl ? 10 : control.width - width - 10
+        y: Math.round((control.height - height) / 2)
 
         Canvas {
             anchors.fill: parent
@@ -80,6 +102,8 @@ T.ComboBox {
         highlighted: control.highlightedIndex === index
         readonly property bool itemEnabled: !(modelData && typeof modelData === "object" && modelData.enabled === false)
         enabled: itemEnabled
+        LayoutMirroring.enabled: false
+        LayoutMirroring.childrenInherit: true
         text: {
             if (modelData && typeof modelData === "object") {
                 let value = modelData.name !== undefined ? String(modelData.name) : control.textAt(index)
@@ -87,21 +111,35 @@ T.ComboBox {
                     value += "  •  Exclusive"
                 if (modelData.badge !== undefined && String(modelData.badge).trim().length > 0)
                     value += "  •  " + String(modelData.badge).trim()
-                return value
+                return I18n.t(value)
             }
-            return control.textAt(index)
+            return I18n.t(control.textAt(index))
         }
         font.family: control.font.family
         font.pixelSize: control.font.pixelSize
-        contentItem: Text {
-            text: comboDelegate.text
-            color: comboDelegate.enabled
-                   ? Colors.gcControlText
-                   : Colors.gcControlMuted
-            font.family: comboDelegate.font.family
-            font.pixelSize: comboDelegate.font.pixelSize
-            verticalAlignment: Text.AlignVCenter
-            elide: Text.ElideRight
+        contentItem: Item {
+            x: comboDelegate.leftPadding
+            y: comboDelegate.topPadding
+            width: Math.max(0, comboDelegate.width - comboDelegate.leftPadding - comboDelegate.rightPadding)
+            height: Math.max(0, comboDelegate.height - comboDelegate.topPadding - comboDelegate.bottomPadding)
+            implicitWidth: delegateText.implicitWidth
+            implicitHeight: delegateText.implicitHeight
+
+            Text {
+                id: delegateText
+                anchors.fill: parent
+                LayoutMirroring.enabled: false
+                LayoutMirroring.childrenInherit: true
+                text: comboDelegate.text
+                color: comboDelegate.enabled
+                       ? Colors.gcControlText
+                       : Colors.gcControlMuted
+                font.family: comboDelegate.font.family
+                font.pixelSize: comboDelegate.font.pixelSize
+                verticalAlignment: Text.AlignVCenter
+                horizontalAlignment: I18n.isRtl ? Text.AlignRight : Text.AlignLeft
+                elide: Text.ElideRight
+            }
         }
         background: Rectangle {
             radius: 10
@@ -121,6 +159,8 @@ T.ComboBox {
             border.color: control.popupBorderColor
         }
         contentItem: ListView {
+            LayoutMirroring.enabled: false
+            LayoutMirroring.childrenInherit: true
             clip: true
             implicitHeight: contentHeight
             model: control.popup.visible ? control.delegateModel : null

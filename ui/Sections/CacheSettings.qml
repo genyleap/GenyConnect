@@ -99,14 +99,15 @@ Rectangle {
                     font.bold: true
                     font.family: FontSystem.getContentFontBold.name
                     font.pixelSize: 16
-                    text: "Network Cache"
+                    text: I18n.t("Network Cache")
+
                 }
                 Text {
                     Layout.fillWidth: true
                     color: root.themeColorToken("mainHex_7c8697", "mainHex_9bb0cb")
                     font.family: FontSystem.contentFontFamily
                     font.pixelSize: 12
-                    text: "Clear the OS DNS resolver cache and IP neighbor cache for this device."
+                    text: I18n.t("Clear the OS DNS resolver cache and IP neighbor cache for this device.")
                     wrapMode: Text.WordWrap
                 }
             }
@@ -118,16 +119,16 @@ Rectangle {
             font.pixelSize: 12
             text: {
                 if (Qt.platform.os === "windows")
-                    return "Windows uses ipconfig and netsh and may show a UAC prompt.";
+                    return I18n.t("Windows uses ipconfig and netsh and may show a UAC prompt.");
                 if (Qt.platform.os === "osx")
-                    return "macOS uses dscacheutil, mDNSResponder, and arp and may ask for administrator permission.";
+                    return I18n.t("macOS uses dscacheutil, mDNSResponder, and arp and may ask for administrator permission.");
                 if (Qt.platform.os === "linux")
-                    return "Linux uses resolvectl/systemd-resolve/nscd when available plus ip neigh flush all; pkexec or root may be required.";
+                    return I18n.t("Linux uses resolvectl/systemd-resolve/nscd when available plus ip neigh flush all; pkexec or root may be required.");
                 if (Qt.platform.os === "android")
-                    return "Android refreshes GenyConnect's VPN network through VpnService and asks the framework to re-evaluate connectivity.";
+                    return I18n.t("Android refreshes GenyConnect's VPN network through VpnService and asks the framework to re-evaluate connectivity.");
                 if (Qt.platform.os === "ios")
-                    return "iOS does not expose global DNS or IP neighbor cache clearing to apps.";
-                return "This platform has a dedicated runtime response when the action is run.";
+                    return I18n.t("iOS does not expose global DNS or IP neighbor cache clearing to apps.");
+                return I18n.t("This platform has a dedicated runtime response when the action is run.");
             }
             wrapMode: Text.WordWrap
         }
@@ -161,7 +162,7 @@ Rectangle {
                     font.family: FontSystem.contentFontFamily
                     font.pixelSize: 12
                     maximumLineCount: 2
-                    text: cacheSection.statusText.length > 0 ? cacheSection.statusText : "Preparing network cache cleanup..."
+                    text: I18n.t(cacheSection.statusText.length > 0 ? cacheSection.statusText : "Preparing network cache cleanup...")
                     wrapMode: Text.WordWrap
                 }
             }
@@ -191,7 +192,7 @@ Rectangle {
             compact: true
             enabled: !cacheSection.busy
             glyph: cacheSection.busy ? "" : "\uf2f1"
-            text: cacheSection.busy ? "Clearing..." : "Clear Network Cache"
+            text: I18n.t(cacheSection.busy ? "Clearing..." : "Clear Network Cache")
 
             onClicked: {
                 root.settingsFeedbackText = "";
@@ -206,7 +207,7 @@ Rectangle {
             color: (vpnController.lastError || "").trim().length > 0 ? root.themeColorToken("mainHex_b42318", "mainHex_ff8a8a") : root.themeColorToken("mainHex_2c8b57", "mainHex_5adf97")
             font.family: FontSystem.contentFontFamily
             font.pixelSize: 12
-            text: root.settingsFeedbackText
+            text: I18n.t(root.settingsFeedbackText)
             visible: root.settingsFeedbackText.length > 0
             wrapMode: Text.WordWrap
         }

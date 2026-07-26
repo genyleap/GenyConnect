@@ -62,7 +62,7 @@ GlassCard {
                 spacing: 6
 
                 Text {
-                    text: root.title
+                    text: I18n.t(root.title)
                     color: Colors.dsText
                     font.family: FontSystem.getContentFontBold.name
                     font.pixelSize: Typography.uiTitle
@@ -81,7 +81,7 @@ GlassCard {
                         id: badgeLabel
                         anchors.centerIn: parent
                         width: parent.width - 8
-                        text: root.badgeText
+                        text: I18n.t(root.badgeText)
                         color: Colors.dsPrimaryText
                         font.family: FontSystem.getContentFontBold.name
                         font.pixelSize: Typography.uiBodySm
@@ -96,7 +96,7 @@ GlassCard {
 
             Text {
                 Layout.fillWidth: true
-                text: root.subtitle
+                text: I18n.t(root.subtitle)
                 color: Colors.dsTextMuted
                 font.family: FontSystem.contentFontFamily
                 font.pixelSize: Typography.uiTitleSm

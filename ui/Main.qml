@@ -106,6 +106,11 @@ ApplicationWindow {
 
     visible: true
 
+    // Mirror the complete visual tree for right-to-left languages. Individual
+    // controls can still opt out for direction-neutral data such as URLs.
+    LayoutMirroring.enabled: I18n.isRtl
+    LayoutMirroring.childrenInherit: true
+
     width: mobilePlatform ? Screen.width : Math.min(1280, desktopAvailableWidth)
     height: mobilePlatform ? Screen.height : Math.min(820, desktopAvailableHeight)
     minimumWidth: mobilePlatform ? 0 : Math.min(900, desktopAvailableWidth)
@@ -115,7 +120,7 @@ ApplicationWindow {
 
     flags: mobilePlatform ? Qt.Window : Qt.Window | Qt.WindowTitleHint | Qt.WindowSystemMenuHint | Qt.WindowMinimizeButtonHint | Qt.WindowCloseButtonHint
 
-    title: "GenyConnect (Build " + updater.appVersion + ") - " + osNameText()
+    title: I18n.formatWindowTitle("GenyConnect", updater.appVersion, osNameText())
     color: Colors.dsWindow
     font.family: FontSystem.contentFontFamily
     topPadding: 0
@@ -154,8 +159,8 @@ ApplicationWindow {
     readonly property string appRepoUrl: "https://github.com/genyleap/genyconnect"
     readonly property string appShareText: "GenyConnect is a cross-platform open-source network connection app."
 
-    property string selectedServerLabel: vpnController.currentProfileIndex >= 0 ? "Selected Profile" : "Select Location"
-    property string selectedServerMeta: vpnController.currentProfileIndex >= 0 ? "Profile is selected" : "Import and select a profile"
+    property string selectedServerLabel: vpnController.currentProfileIndex >= 0 ? I18n.t("Selected Profile") : I18n.t("Select Location")
+    property string selectedServerMeta: vpnController.currentProfileIndex >= 0 ? I18n.t("Profile is selected") : I18n.t("Import and select a profile")
     property string selectedServerFlag: vpnController.currentProfileIndex >= 0 ? "🇺🇸" : "🌐"
 
     property string mapPrimarySource: "qrc:/ui/Resources/image/map.png"
@@ -274,6 +279,7 @@ ApplicationWindow {
         dashboardStatsSettings: dashboardStatsSettings
         interfaceThemeSettings: interfaceThemeSettings
         interfacePrivacySettings: interfacePrivacySettings
+        interfaceLanguageSettings: interfaceLanguageSettings
     }
 
     readonly property var updateNoticePopup: mainSurface.updateNoticePopup
@@ -316,6 +322,19 @@ ApplicationWindow {
         id: interfacePrivacySettings
         category: "Interface/Privacy"
         property string ipDisplayMode: "Show"
+    }
+
+    Settings {
+        id: interfaceLanguageSettings
+        category: "Interface/Language"
+        property string language: "en"
+        onLanguageChanged: I18n.language = language
+    }
+
+    Binding {
+        target: AppGlobals
+        property: "rtl"
+        value: I18n.isRtl
     }
 
     onClosing: function(closeEvent) {
@@ -463,10 +482,10 @@ ApplicationWindow {
 
     function powerModeSummary(mode) {
         if (mode === "Save")
-            return "Lower wakeups and calmer visuals for battery-sensitive sessions."
+            return I18n.t("Lower wakeups and calmer visuals for battery-sensitive sessions.")
         if (mode === "High Performance")
-            return "Faster refresh and richer feedback for latency-focused use."
-        return "Balanced defaults close to the current GenyConnect behavior."
+            return I18n.t("Faster refresh and richer feedback for latency-focused use.")
+        return I18n.t("Balanced defaults close to the current GenyConnect behavior.")
     }
 
     function homeConnectGlyph() {
@@ -797,23 +816,23 @@ ApplicationWindow {
 
     function stateText() {
         if (vpnController.connectionState === ConnectionState.Connecting)
-            return "Connecting"
+            return I18n.t("Connecting")
         if (vpnController.connectionState === ConnectionState.Connected) {
             if (vpnController.isMobile && !vpnController.runtimeTunActive)
-                return "Proxy Connected"
-            return "Connected"
+                return I18n.t("Proxy Connected")
+            return I18n.t("Connected")
         }
         if (vpnController.connectionState === ConnectionState.Error)
-            return "Error"
-        return "Disconnected"
+            return I18n.t("Error")
+        return I18n.t("Disconnected")
     }
 
     function connectButtonText() {
         if (vpnController.connectionState === ConnectionState.Connecting)
-            return "Connecting"
+            return I18n.t("Connecting")
         if (vpnController.connectionState === ConnectionState.Connected)
-            return "Disconnect"
-        return "Connect"
+            return I18n.t("Disconnect")
+        return I18n.t("Connect")
     }
 
     function scrollFlickByWheel(flick, event) {
@@ -1117,27 +1136,27 @@ ApplicationWindow {
     function lanModeLabel(mode) {
         const key = (mode || "").toLowerCase()
         if (key === "tv")
-            return "Smart TV Mode"
+            return I18n.t("Smart TV Mode")
         if (key === "mobile")
-            return "Phone / Tablet Mode"
+            return I18n.t("Phone / Tablet Mode")
         if (key === "laptop")
-            return "Laptop / Browser Mode"
+            return I18n.t("Laptop / Browser Mode")
         if (key === "advanced")
-            return "Advanced Mode"
-        return "Game Console Mode"
+            return I18n.t("Advanced Mode")
+        return I18n.t("Game Console Mode")
     }
 
     function lanModeCompactLabel(mode) {
         const key = (mode || "").toLowerCase()
         if (key === "tv")
-            return "Smart TV"
+            return I18n.t("Smart TV")
         if (key === "mobile")
-            return "Phone / Tablet"
+            return I18n.t("Phone / Tablet")
         if (key === "laptop")
-            return "Laptop / Browser"
+            return I18n.t("Laptop / Browser")
         if (key === "advanced")
-            return "Advanced"
-        return "Game Console"
+            return I18n.t("Advanced")
+        return I18n.t("Game Console")
     }
 
     function lanModeGlyph(mode) {
@@ -1169,51 +1188,51 @@ ApplicationWindow {
     function lanModeCardSummary(mode) {
         const key = (mode || "").toLowerCase()
         if (key === "tv")
-            return "Best for proxy-ready streaming and TV apps."
+            return I18n.t("Best for proxy-ready streaming and TV apps.")
         if (key === "mobile")
-            return "Share with another phone or tablet nearby."
+            return I18n.t("Share with another phone or tablet nearby.")
         if (key === "laptop")
-            return "Great for browser and proxy-aware apps."
+            return I18n.t("Great for browser and proxy-aware apps.")
         if (key === "advanced")
-            return "Manual controls and experimental gateway switch."
-        return "Best for login, updates, and downloads."
+            return I18n.t("Manual controls and experimental gateway switch.")
+        return I18n.t("Best for login, updates, and downloads.")
     }
 
     function lanModeRecommendedMethod(mode) {
         const key = (mode || "").toLowerCase()
         if (key === "mobile")
-            return "HTTP + SOCKS5"
+            return I18n.t("HTTP + SOCKS5")
         if (key === "laptop")
-            return "HTTP + SOCKS5 + Mixed"
+            return I18n.t("HTTP + SOCKS5 + Mixed")
         if (key === "advanced")
-            return "Manual"
-        return "HTTP Proxy"
+            return I18n.t("Manual")
+        return I18n.t("HTTP Proxy")
     }
 
     function lanModeDescription(mode) {
         const key = (mode || "").toLowerCase()
         if (key === "tv")
-            return "For TV apps that support proxy settings."
+            return I18n.t("For TV apps that support proxy settings.")
         if (key === "mobile")
-            return "For another Android or iOS device."
+            return I18n.t("For another Android or iOS device.")
         if (key === "laptop")
-            return "For desktop browsers and proxy-aware clients."
+            return I18n.t("For desktop browsers and proxy-aware clients.")
         if (key === "advanced")
-            return "Manual bind, exposure, and gateway controls."
-        return "For PlayStation, Xbox, and Nintendo Switch."
+            return I18n.t("Manual bind, exposure, and gateway controls.")
+        return I18n.t("For PlayStation, Xbox, and Nintendo Switch.")
     }
 
     function lanModeWarning(mode) {
         const key = (mode || "").toLowerCase()
         if (key === "tv")
-            return "Some apps may ignore proxy."
+            return I18n.t("Some apps may ignore proxy.")
         if (key === "mobile")
-            return "Some apps may bypass manual proxy."
+            return I18n.t("Some apps may bypass manual proxy.")
         if (key === "laptop")
-            return "Affects browser and proxy-aware apps."
+            return I18n.t("Affects browser and proxy-aware apps.")
         if (key === "advanced")
-            return "0.0.0.0 exposes proxy to the whole LAN."
-        return "Full game traffic may require Gateway mode."
+            return I18n.t("0.0.0.0 exposes proxy to the whole LAN.")
+        return I18n.t("Full game traffic may require Gateway mode.")
     }
 
     function lanPrimaryProtocol(mode) {
@@ -1809,8 +1828,8 @@ ApplicationWindow {
 
         const label = (vpnController.currentProfileLabel() || "").trim()
         const subtitle = (vpnController.currentProfileSubtitle() || "").trim()
-        selectedServerLabel = label.length > 0 ? label : "Selected Profile"
-        selectedServerMeta = subtitle.length > 0 ? subtitle : "Profile is selected"
+        selectedServerLabel = label.length > 0 ? label : I18n.t("Selected Profile")
+        selectedServerMeta = subtitle.length > 0 ? subtitle : I18n.t("Profile is selected")
         selectedServerFlag = guessFlag(selectedServerLabel)
     }
 
@@ -1855,7 +1874,7 @@ ApplicationWindow {
         if (text.length === 0 || mode === "Show")
             return text
         if (mode === "Hidden")
-            return "Endpoint hidden"
+            return I18n.t("Endpoint hidden")
 
         let masked = text.replace(/\b(?:\d{1,3}\.){3}\d{1,3}\b/g, function(match) {
             return partiallyMaskIpToken(match)
@@ -2067,32 +2086,32 @@ ApplicationWindow {
 
     function settingsTitle() {
         if (settingsSection === "interface")
-            return "Interface"
+            return I18n.t("Interface")
         if (settingsSection === "updates")
-            return "App Updates"
+            return I18n.t("App Updates")
         if (settingsSection === "connection")
-            return "Connection Mode"
+            return I18n.t("Connection Mode")
         if (settingsSection === "cache")
-            return "Cache Management"
+            return I18n.t("Cache Management")
         if (settingsSection === "power")
-            return "Power Mode"
+            return I18n.t("Power Mode")
         if (settingsSection === "routing")
-            return "Routing Rules"
+            return I18n.t("Routing Rules")
         if (settingsSection === "lan")
-            return "LAN Sharing"
+            return I18n.t("LAN Sharing")
         if (settingsSection === "dns")
-            return "Custom DNS"
+            return I18n.t("Custom DNS")
         if (settingsSection === "logs")
-            return "Logs"
+            return I18n.t("Logs")
         if (settingsSection === "terms")
-            return "Terms, Conditions & License"
+            return I18n.t("Terms, Conditions & License")
         if (settingsSection === "share")
-            return "Share App"
+            return I18n.t("Share App")
         if (settingsSection === "donate")
-            return "Support GenyConnect"
+            return I18n.t("Support GenyConnect")
         if (settingsSection === "about")
-            return "About App"
-        return "Settings"
+            return I18n.t("About App")
+        return I18n.t("Settings")
     }
 
     function openSettingsSection(section) {
@@ -2851,7 +2870,9 @@ ApplicationWindow {
     }
 
     function sheetX(sheet) {
-        return root.desktopMode ? Math.max(0, root.width - sheet) : Math.max(0, (root.width - sheet) * 0.5)
+        if (root.desktopMode)
+            return I18n.isRtl ? 0 : Math.max(0, root.width - sheet)
+        return Math.max(0, (root.width - sheet) * 0.5)
     }
 
     function sheetY(sheet) {
@@ -2863,7 +2884,7 @@ ApplicationWindow {
     }
 
     function sheetEnterFrom(sheetWidth, sheetHeight) {
-        return root.desktopMode ? root.width : root.height
+        return root.desktopMode ? (I18n.isRtl ? -sheetWidth : root.width) : root.height
     }
 
     function sheetEnterTo(sheetWidth, sheetHeight) {
@@ -2871,7 +2892,7 @@ ApplicationWindow {
     }
 
     function sheetExitTo(sheetWidth, sheetHeight) {
-        return root.desktopMode ? root.width : root.height
+        return root.desktopMode ? (I18n.isRtl ? -sheetWidth : root.width) : root.height
     }
 
     function drawerY(sheet) {
@@ -2908,55 +2929,55 @@ ApplicationWindow {
         if ((vpnController.tunMode && (gatewayIssue || routeIssue || vpnConflictHint))) {
             return {
                 ok: true,
-                title: "VPN Conflict Detected",
-                message: "Another VPN or system tunnel appears active, or macOS could not take ownership of the TUN routes. Disconnect the other tunnel first, then reconnect GenyConnect."
+                title: I18n.t("VPN Conflict Detected"),
+                message: I18n.t("Another VPN or system tunnel appears active, or macOS could not take ownership of the TUN routes. Disconnect the other tunnel first, then reconnect GenyConnect.")
             }
         }
 
         if (portConflict) {
             return {
                 ok: true,
-                title: "Local Port Conflict",
-                message: "Another VPN or proxy app is still holding a local proxy port that GenyConnect needs. If the next retry still fails, change or stop the conflicting app and then reconnect."
+                title: I18n.t("Local Port Conflict"),
+                message: I18n.t("Another VPN or proxy app is still holding a local proxy port that GenyConnect needs. If the next retry still fails, change or stop the conflicting app and then reconnect.")
             }
         }
 
         if (permissionIssue) {
             return {
                 ok: true,
-                title: "VPN Permission Required",
-                message: "GenyConnect needs Android VPN permission before it can connect."
+                title: I18n.t("VPN Permission Required"),
+                message: I18n.t("GenyConnect needs Android VPN permission before it can connect.")
             }
         }
 
         if (fakeDnsIssue) {
             return {
                 ok: true,
-                title: "Android Runtime Issue",
-                message: "The current xray-core runtime failed inside FakeDNS. GenyConnect now keeps FakeDNS disabled for Android TUN mode; reconnect and try again."
+                title: I18n.t("Android Runtime Issue"),
+                message: I18n.t("The current xray-core runtime failed inside FakeDNS. GenyConnect now keeps FakeDNS disabled for Android TUN mode; reconnect and try again.")
             }
         }
 
         if (runtimeConfigIssue) {
             return {
                 ok: true,
-                title: "Runtime Config Issue",
-                message: "The generated Xray runtime configuration is not valid for the current core/runtime settings."
+                title: I18n.t("Runtime Config Issue"),
+                message: I18n.t("The generated Xray runtime configuration is not valid for the current core/runtime settings.")
             }
         }
 
         if (startupIssue) {
             return {
                 ok: true,
-                title: "Runtime Startup Failed",
-                message: "xray-core could not start correctly. Open Logs for the exact runtime details."
+                title: I18n.t("Runtime Startup Failed"),
+                message: I18n.t("xray-core could not start correctly. Open Logs for the exact runtime details.")
             }
         }
 
         return {
             ok: vpnController.connectionState === ConnectionState.Error,
-            title: "Connection Failed",
-            message: "GenyConnect could not establish the connection. Review the details and logs, then try again."
+            title: I18n.t("Connection Failed"),
+            message: I18n.t("GenyConnect could not establish the connection. Review the details and logs, then try again.")
         }
     }
 
@@ -3183,16 +3204,16 @@ ApplicationWindow {
     function speedTestStatusText() {
         if (vpnController.speedTestRunning) {
             if (vpnController.speedTestPhase === "Latency")
-                return "Measuring latency and jitter..."
+                return I18n.t("Measuring latency and jitter...")
             if (vpnController.speedTestPhase === "Download")
-                return "Measuring live download throughput..."
+                return I18n.t("Measuring live download throughput...")
             if (vpnController.speedTestPhase === "Upload")
-                return "Measuring live upload throughput..."
+                return I18n.t("Measuring live upload throughput...")
             if (vpnController.speedTestState === "Analyzing")
-                return "Analyzing connection quality..."
+                return I18n.t("Analyzing connection quality...")
             if (vpnController.speedTestState === "Preparing")
-                return "Preparing diagnostics..."
-            return "Running..."
+                return I18n.t("Preparing diagnostics...")
+            return I18n.t("Running...")
         }
         return ""
     }
@@ -3201,31 +3222,31 @@ ApplicationWindow {
         if (vpnController.speedTestRunning)
             return ""
         if (vpnController.speedTestError.length > 0)
-            return "Error: " + (vpnController.speedTestError === "Operation canceled"
-                                 ? "Speed test timed out or endpoint did not respond."
-                                 : vpnController.speedTestError)
+            return I18n.t("Error: %1", [vpnController.speedTestError === "Operation canceled"
+                                         ? I18n.t("Speed test timed out or endpoint did not respond.")
+                                         : I18n.t(vpnController.speedTestError)])
         if (vpnController.speedTestState === "Completed")
             return vpnController.speedTestQualityScore >= 0
-                    ? ("Completed • Quality " + vpnController.speedTestQualityScore + "/100")
-                    : "Completed"
+                    ? I18n.t("Completed • Quality %1/100", [vpnController.speedTestQualityScore])
+                    : I18n.t("Completed")
         if (vpnController.speedTestState === "Cancelled")
-            return "Cancelled"
-        return "Ready"
+            return I18n.t("Cancelled")
+        return I18n.t("Ready")
     }
 
     function speedTestHeroTitle() {
         if (vpnController.speedTestRunning) {
             if (vpnController.speedTestPhase === "Download")
-                return "Live download"
+                return I18n.t("Live download")
             if (vpnController.speedTestPhase === "Upload")
-                return "Live upload"
+                return I18n.t("Live upload")
             if (vpnController.speedTestPhase === "Latency")
-                return "Latency probe"
-            return "Running test"
+                return I18n.t("Latency probe")
+            return I18n.t("Running test")
         }
         if (vpnController.speedTestState === "Completed")
-            return "Overall average"
-        return "Speed estimate"
+            return I18n.t("Overall average")
+        return I18n.t("Speed estimate")
     }
 
     function speedTestHeroValueText() {
@@ -3239,38 +3260,38 @@ ApplicationWindow {
     function speedTestHeroCaption() {
         if (vpnController.speedTestRunning) {
             if (vpnController.speedTestPhase === "Download")
-                return "Current tunnel download rate"
+                return I18n.t("Current tunnel download rate")
             if (vpnController.speedTestPhase === "Upload")
-                return "Current tunnel upload rate"
+                return I18n.t("Current tunnel upload rate")
             if (vpnController.speedTestPhase === "Latency")
-                return "Collecting response-time baseline"
-            return "Collecting measurements"
+                return I18n.t("Collecting response-time baseline")
+            return I18n.t("Collecting measurements")
         }
         if (vpnController.speedTestState === "Completed")
-            return "Mean of final download and upload results"
-        return "Run a diagnostics pass through the active VPN"
+            return I18n.t("Mean of final download and upload results")
+        return I18n.t("Run a diagnostics pass through the active VPN")
     }
 
     function speedTestProgressText() {
         if (vpnController.speedTestState === "Completed")
             return vpnController.speedTestQualityScore >= 0
-                    ? ("Quality " + vpnController.speedTestQualityScore + "/100")
-                    : "Completed"
+                    ? I18n.t("Quality %1/100", [vpnController.speedTestQualityScore])
+                    : I18n.t("Completed")
         if (vpnController.speedTestRunning)
-            return "Progress " + Math.round(Math.max(0, Math.min(vpnController.speedTestProgress, 1.0)) * 100) + "%"
+            return I18n.t("Progress %1%", [Math.round(Math.max(0, Math.min(vpnController.speedTestProgress, 1.0)) * 100)])
         return "--"
     }
 
     function speedTestPhaseBadgeText() {
         if (vpnController.speedTestRunning)
-            return "Phase " + vpnController.speedTestPhase
-        return vpnController.speedTestState === "Idle" ? "Ready" : vpnController.speedTestState
+            return I18n.t("Phase %1", [I18n.t(vpnController.speedTestPhase)])
+        return I18n.t(vpnController.speedTestState === "Idle" ? "Ready" : vpnController.speedTestState)
     }
 
     function speedTestFooterText() {
         const down = vpnController.speedTestDownloadMbps > 0 ? vpnController.speedTestDownloadMbps.toFixed(1) + " Mbps" : "--"
         const up = vpnController.speedTestUploadMbps > 0 ? vpnController.speedTestUploadMbps.toFixed(1) + " Mbps" : "--"
-        return "DL " + down + "  |  UL " + up
+        return I18n.t("DL %1 | UL %2", [down, up])
     }
 
     function speedOverallDisplayText() {
@@ -3281,12 +3302,12 @@ ApplicationWindow {
 
     function speedMetricLabel(index) {
         switch (index) {
-        case 0: return "Download"
-        case 1: return "Upload"
-        case 2: return "Latency"
-        case 3: return "Jitter"
-        case 4: return "Overall"
-        case 5: return "Quality"
+        case 0: return I18n.t("Download")
+        case 1: return I18n.t("Upload")
+        case 2: return I18n.t("Latency")
+        case 3: return I18n.t("Jitter")
+        case 4: return I18n.t("Overall")
+        case 5: return I18n.t("Quality")
         default: return "--"
         }
     }
@@ -3435,6 +3456,7 @@ ApplicationWindow {
     Component.onCompleted: {
         AppGlobals.appWindow = root
         AppGlobals.mainRect = root.contentItem
+        I18n.language = interfaceLanguageSettings.language
         Theme.mode = darkThemeEnabled ? Theme.Dark : Theme.Light
         androidSystemBarsSyncTimer.restart()
         if (mobilePlatform && contentItem && contentItem.Keys && contentItem.Keys.released) {
@@ -3704,7 +3726,7 @@ ApplicationWindow {
             Item { Layout.preferredWidth: 10; }
 
             Text {
-                text: "Build: v" + updater.appVersion
+                text: I18n.t("Build: v%1", [I18n.ltr(updater.appVersion)])
                 color: Colors.textSecondary
                 font.family: FontSystem.contentFontFamily
                 font.pixelSize: 11
@@ -3712,7 +3734,7 @@ ApplicationWindow {
             }
 
             Text {
-                text: " | Memory: " + vpnController.memoryUsageText
+                text: I18n.t("Memory: %1", [I18n.ltr(vpnController.memoryUsageText)])
                 visible: root.width >= 520
                 color: Colors.textSecondary
                 font.family: FontSystem.contentFontFamily
@@ -3726,7 +3748,7 @@ ApplicationWindow {
                 visible: root.width >= 860
 
                 Text {
-                    text: "Current Profile Usage -->"
+                    text: I18n.t("Current Profile Usage -->")
                     color: root.themeColorToken("mainHex_4f627f", "mainHex_9eb2cb")
                     font.family: FontSystem.getContentFontBold.name
                     font.pixelSize: 12
@@ -3734,28 +3756,28 @@ ApplicationWindow {
                 }
 
                 Text {
-                    text: "<strong>Hour</strong> " + vpnController.currentProfileUsageHour
+                    text: "<strong>" + I18n.t("Hour") + "</strong> " + vpnController.currentProfileUsageHour
                     color: root.themeColorToken("mainHex_647891", "mainHex_9fb4cd")
                     font.family: FontSystem.contentFontFamily
                     font.pixelSize: 12
                 }
 
                 Text {
-                    text: "<strong>Day</strong> " + vpnController.currentProfileUsageDay
+                    text: "<strong>" + I18n.t("Day") + "</strong> " + vpnController.currentProfileUsageDay
                     color: root.themeColorToken("mainHex_647891", "mainHex_9fb4cd")
                     font.family: FontSystem.contentFontFamily
                     font.pixelSize: 12
                 }
 
                 Text {
-                    text: "<strong>Week</strong> " + vpnController.currentProfileUsageWeek
+                    text: "<strong>" + I18n.t("Week") + "</strong> " + vpnController.currentProfileUsageWeek
                     color: root.themeColorToken("mainHex_647891", "mainHex_9fb4cd")
                     font.family: FontSystem.contentFontFamily
                     font.pixelSize: 12
                 }
 
                 Text {
-                    text: "<strong>Month</strong> " + vpnController.currentProfileUsageMonth
+                    text: "<strong>" + I18n.t("Month") + "</strong> " + vpnController.currentProfileUsageMonth
                     color: root.themeColorToken("mainHex_647891", "mainHex_9fb4cd")
                     font.family: FontSystem.contentFontFamily
                     font.pixelSize: 12

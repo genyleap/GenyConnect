@@ -1,0 +1,674 @@
+GNU GENERAL İCTİMAİ LİSENZİYASI
+   Versiya 3, 29 iyun 2007-ci il
+
+Müəllif hüququ (C) 2007 Free Software Foundation, Inc. <https://fsf.org/>
+Hər kəsə sözlü surətləri köçürməyə və yaymağa icazə verilir
+bu lisenziya sənədinin dəyişdirilməsinə icazə verilmir.
+
+Preambula
+
+GNU General Public License pulsuz, copyleft lisenziyasıdır
+proqram təminatı və digər növ işlər.
+
+Əksər proqram təminatı və digər praktik işlər üçün lisenziyalar tərtib edilmişdir
+işləri bölüşmək və dəyişdirmək azadlığını əlindən almaq.  Əksinə,
+GNU General Public License sizin azadlığınızı təmin etmək üçün nəzərdə tutulub
+pulsuz qaldığından əmin olmaq üçün proqramın bütün versiyalarını paylaşın və dəyişdirin
+bütün istifadəçiləri üçün proqram təminatı.  Biz, Azad Proqram təminatı Fondu, istifadə edirik
+Proqram təminatımızın əksəriyyəti üçün GNU Ümumi İctimai Lisenziyası; üçün də aiddir
+müəllifləri tərəfindən bu şəkildə buraxılmış hər hansı digər əsər.  müraciət edə bilərsiniz
+proqramlarınız da.
+
+Azad proqram təminatı dedikdə biz azadlığı nəzərdə tuturuq, yox
+qiymət.  Ümumi İctimai Lisenziyalarımız sizə əmin olmaq üçün hazırlanmışdır
+pulsuz proqram təminatının nüsxələrini yaymaq azadlığına sahib olun (və bunun üçün ödəniş edin
+istəsəniz, mənbə kodu alırsınız və ya onu əldə edə bilərsiniz
+İstəsəniz, proqramı dəyişdirə və ya onun hissələrini yenisində istifadə edə bilərsiniz
+pulsuz proqramlar və bunları edə biləcəyinizi bildiyiniz üçün.
+
+Hüquqlarınızı qorumaq üçün başqalarının sizi inkar etməsinin qarşısını almalıyıq
+bu hüquqlardan və ya sizdən hüquqlardan imtina etməyinizi xahiş edir.  Buna görə də var
+proqram təminatının nüsxələrini paylasanız və ya əgər müəyyən öhdəliklər
+siz onu dəyişdirirsiniz: başqalarının azadlığına hörmət etmək öhdəlikləri.
+
+Məsələn, belə bir proqramın surətlərini yaysanız, istər
+pulsuz və ya ödənişli olaraq, siz eyni şeyi alıcılara ötürməlisiniz
+aldığınız azadlıqlar.  Onların da qəbul etdiyinə əmin olmalısınız
+və ya mənbə kodunu əldə edə bilərsiniz.  Və onlara bu şərtləri göstərməlisiniz ki, onlar
+hüquqlarını bilsinlər.
+
+GNU GPL-dən istifadə edən tərtibatçılar hüquqlarınızı iki addımla qoruyur:
+(1) proqram təminatı üzərində müəllif hüquqlarını müdafiə edin və (2) sizə bu Lisenziyanı təklif edin
+sizə onu kopyalamaq, yaymaq və/və ya dəyişdirmək üçün qanuni icazənin verilməsi.
+
+Tərtibatçıların və müəlliflərin qorunması üçün GPL aydın şəkildə izah edir
+bu pulsuz proqram təminatı üçün heç bir zəmanət yoxdur.  Həm istifadəçilər üçün, həm də
+müəlliflərin xatirinə, GPL dəyişdirilmiş versiyaların kimi qeyd olunmasını tələb edir
+dəyişdirildi, belə ki, onların problemləri səhvən səbəb olmasın
+əvvəlki versiyaların müəllifləri.
+
+Bəzi qurğular istifadəçilərin quraşdırma və ya işə salınmasına icazə verməmək üçün nəzərdə tutulub
+istehsalçı olsa da, onların içərisində proqram təminatının dəyişdirilmiş versiyaları
+belə edə bilər.  Bu məqsədlə kökündən uyğun gəlmir
+istifadəçilərin proqram təminatını dəyişmək azadlığının qorunması.  Sistematik
+Bu cür sui-istifadə nümunələri fərdlər üçün məhsullar sahəsində baş verir
+istifadə, məhz ən qəbuledilməz olduğu yerdədir.  Ona görə də biz
+GPL-in bu versiyasını onlar üçün təcrübəni qadağan etmək üçün tərtib etmişlər
+məhsullar.  Bu cür problemlər əsas etibarilə digər sahələrdə yaranarsa, biz
+gələcək versiyalarda bu müddəanı həmin domenlərə genişləndirməyə hazırdır
+istifadəçilərin azadlığını qorumaq üçün lazım olduqda GPL.
+
+Nəhayət, hər bir proqram proqram patentləri ilə daim təhdid edilir.
+Dövlətlər patentlərin inkişafı və istifadəsini məhdudlaşdırmağa icazə verməməlidirlər
+Ümumi təyinatlı kompüterlərdə proqram, ancaq bunu edənlərdə biz istəyirik
+pulsuz proqrama tətbiq edilən patentlərin edə biləcəyi xüsusi təhlükədən qaçın
+onu effektiv şəkildə mülkiyyətə çevirin.  Bunun qarşısını almaq üçün GPL bunu təmin edir
+patentlər proqramı pulsuz göstərmək üçün istifadə edilə bilməz.
+
+Kopyalama, paylama və dəqiq şərtlər
+dəyişiklik izləyir.
+
+ŞƏRTLƏR VƏ ŞƏRTLƏR
+
+0. Təriflər.
+
+"Bu Lisenziya" GNU Ümumi İctimai Lisenziyasının 3-cü versiyasına istinad edir.
+
+"Müəllif hüququ" həmçinin digər növlərə tətbiq olunan müəllif hüququna bənzər qanunlar deməkdir
+yarımkeçirici maskalar kimi işlər.
+
+“Proqram” buna əsasən lisenziyalaşdırılmış müəllif hüququ ilə qorunan işə aiddir
+Lisenziya.  Hər bir lisenziya sahibinə “siz” kimi müraciət edilir.  "Lisenziyalar" və
+“alıcılar” fiziki şəxslər və ya təşkilatlar ola bilər.
+
+Əsəri “dəyişdirmək” əsərin bütün və ya bir hissəsini köçürmək və ya uyğunlaşdırmaq deməkdir
+hazırlanmasından başqa, müəllif hüququ icazəsi tələb edən tərzdə
+dəqiq surəti.  Nəticə işin "dəyişdirilmiş versiyası" adlanır
+əvvəlki iş və ya əvvəlki işə "əsaslanan" iş.
+
+“Ətraflı iş” ya dəyişdirilməmiş Proqram, ya da əsaslı iş deməkdir
+Proqram üzrə.
+
+Əsəri “təbliğ etmək” onunla heç nə etməmək deməkdir
+icazə, sizi birbaşa və ya ikinci dərəcəli məsuliyyətə cəlb edəcək
+qüvvədə olan müəllif hüquqları qanununa əsasən pozuntu, a
+kompüter və ya şəxsi surətinin dəyişdirilməsi.  Təbliğə surət çıxarmaq daxildir,
+paylanması (dəyişikliklərlə və ya dəyişdirilmədən), istifadəyə verilməsi
+ictimai və bəzi ölkələrdə digər fəaliyyətlər də.
+
+Əsəri “ötürmək” başqasına imkan verən hər cür təbliğat deməkdir
+surətləri çıxarmaq və ya almaq üçün tərəflər.  vasitəsilə istifadəçi ilə sadəcə qarşılıqlı əlaqə
+surətinin ötürülməsi olmayan kompüter şəbəkəsi ötürülmür.
+
+İnteraktiv istifadəçi interfeysi "Müvafiq Hüquqi Bildirişləri" göstərir
+rahat və nəzərəçarpacaq dərəcədə nəzərə çarpacaq dərəcədə
+(1) müvafiq müəllif hüququ bildirişini göstərən xüsusiyyət və (2)
+istifadəçiyə iş üçün heç bir zəmanət olmadığını bildirir (
+zəmanətlərin verildiyi dərəcədə), lisenziya sahiblərinin ötürə biləcəyi
+bu Lisenziya altında işləmək və bu Lisenziyanın surətinə necə baxmaq.  Əgər
+interfeys istifadəçi əmrlərinin və ya seçimlərinin siyahısını təqdim edir, məsələn, a
+menyu, siyahıdakı görkəmli element bu meyara cavab verir.
+
+1. Mənbə kodu.
+
+Əsərin “mənbə kodu” əsərin üstünlük verilən formasını bildirir
+ona düzəlişlər etmək üçün.  "Obyekt kodu" hər hansı qeyri-mənbə deməkdir
+əsər forması.
+
+"Standart İnterfeys" rəsmi interfeys deməkdir
+tanınmış standartlar orqanı tərəfindən müəyyən edilmiş standart və ya olduqda
+müəyyən bir proqramlaşdırma dili üçün müəyyən edilmiş interfeyslər
+həmin dildə işləyən tərtibatçılar arasında geniş istifadə olunur.
+
+İcra edilə bilən işin "Sistem Kitabxanaları"na hər hansı bir şey daxildir
+bütövlükdə əsərdən daha, (a) normal formada daxil edilir
+Əsas Komponentin qablaşdırılması, lakin bu Majorun bir hissəsi deyil
+Komponent və (b) yalnız bununla işin istifadəsini təmin etməyə xidmət edir
+Əsas Komponent və ya Standart İnterfeys həyata keçirmək üçün
+tətbiqi mənbə kodu şəklində ictimaiyyətə açıqdır.  A
+Bu kontekstdə "Əsas Komponent" əsas vacib komponent deməkdir
+xüsusi əməliyyat sisteminin (kernel, pəncərə sistemi və s.)
+(əgər varsa) icra edilə bilən işin işlədiyi və ya istifadə etdiyi tərtibçi
+işi və ya onu işə salmaq üçün istifadə olunan obyekt kodu tərcüməçisini istehsal edin.
+
+Obyekt kodu formasında iş üçün "Müvafiq Mənbə" hamısını bildirir
+yaratmaq, quraşdırmaq və (icra olunan
+iş) obyekt kodunu işlədin və skriptlər daxil olmaqla işi dəyişdirin
+həmin fəaliyyətlərə nəzarət etmək.  Bununla belə, əsərin tərkibinə daxil deyil
+Sistem Kitabxanaları və ya ümumi təyinatlı alətlər və ya ümumiyyətlə pulsuzdur
+həmin fəaliyyətləri yerinə yetirərkən dəyişdirilmədən istifadə edilən proqramlar, lakin
+işin bir hissəsi olmayan.  Məsələn, Müvafiq Mənbə
+üçün mənbə faylları ilə əlaqəli interfeys tərifi faylları daxildir
+iş və paylaşılan kitabxanalar üçün mənbə kodu və dinamik olaraq
+işin tələb etmək üçün xüsusi olaraq hazırlanmış əlaqəli alt proqramları,
+məsələn, intim məlumat rabitəsi və ya bunlar arasında nəzarət axını
+alt proqramlar və işin digər hissələri.
+
+Müvafiq Mənbəyə istifadəçilərin aid etdiyi heç bir şey daxil edilməməlidir
+Müvafiq digər hissələrdən avtomatik bərpa oluna bilər
+Mənbə.
+
+Mənbə kodu şəklində bir iş üçün Müvafiq Mənbə budur
+eyni iş.
+
+2. Əsas İcazələr.
+
+Bu Lisenziya əsasında verilən bütün hüquqlar müddətinə verilir
+Proqramın müəllif hüquqları və ifadə edildiyi təqdirdə geri alınmazdır
+şərtlər yerinə yetirilir.  Bu Lisenziya açıq şəkildə limitsizliyinizi təsdiq edir
+dəyişdirilməmiş Proqramı işə salmaq icazəsi.  Çalışan çıxış a
+əhatə olunmuş iş bu Lisenziya ilə əhatə olunur, yalnız çıxışı nəzərə alınmaqla
+məzmunu, əhatəli əsəri təşkil edir.  Bu Lisenziya sizin
+ədalətli istifadə hüquqları və ya müəllif hüquqları qanununda nəzərdə tutulmuş digər ekvivalentlər.
+
+Siz etmədiyiniz örtülü işləri yarada, işlədə və təbliğ edə bilərsiniz
+lisenziyanız başqa cür qaldığı müddətcə heç bir şərt olmadan çatdırın
+qüvvədədir.  Qapalı işləri yalnız məqsəd üçün başqalarına ötürə bilərsiniz
+yalnız sizin üçün dəyişikliklər etmələri və ya sizə təmin etmələri
+riayət etmək şərti ilə həmin işləri yerinə yetirmək üçün imkanlarla
+etdiyiniz bütün materialların ötürülməsində bu Lisenziyanın şərtləri
+müəllif hüquqlarına nəzarət etmir.  Beləliklə, örtülü işləri görən və ya idarə edənlər
+çünki bunu yalnız öz adından, sənin rəhbərliyin altında etməlisən
+və onların surətlərinin çıxarılmasını qadağan edən şərtlərlə nəzarət
+sizinlə əlaqəsi xaricində müəllif hüquqları ilə qorunan materialınız.
+
+Hər hansı digər şəraitdə daşınmaya yalnız aşağıdakı hallarda icazə verilir
+aşağıda göstərilən şərtlər.  Sublisenziyaya icazə verilmir; bölmə 10
+gərəksiz edir.
+
+3. İstifadəçilərin Qanuni Hüquqlarının Qadağaya Qarşı Qanundan Müdafiəsi.
+
+Heç bir əhatə olunmuş iş effektiv texnoloji işin bir hissəsi hesab edilməməlidir
+maddə üzrə öhdəlikləri yerinə yetirən hər hansı qüvvədə olan qanuna uyğun tədbir
+20 dekabr 1996-cı ildə qəbul edilmiş ÜƏMT müəllif hüquqları müqaviləsinin 11-i və ya
+bunlardan yayınmağı qadağan edən və ya məhdudlaşdıran oxşar qanunlar
+tədbirlər.
+
+Qapalı bir işi çatdırdığınız zaman, qadağan etmək üçün hər hansı qanuni səlahiyyətdən imtina edirsiniz
+texnoloji tədbirlərdən belə yayınma dərəcəsinə qədər yayınma
+ilə bağlı bu Lisenziyaya əsasən hüquqların həyata keçirilməsi ilə həyata keçirilir
+əhatə olunan işi və siz əməliyyatı məhdudlaşdırmaq niyyətindən imtina edirsiniz və ya
+işin yerinə yetirilməsi üçün bir vasitə kimi işin dəyişdirilməsi
+istifadəçilərin, sizin və ya üçüncü şəxslərin qanuni hüquqlarının aşılmasını qadağan etmək
+texnoloji tədbirlər.
+
+4. Sözlü nüsxələrin daşınması.
+
+Proqramın mənbə kodunun hərfi surətlərini özünüz kimi ötürə bilərsiniz
+onu hər hansı bir mühitdə qəbul edin, bir şərtlə ki, nəzərə çarpan şəkildə və
+hər bir nüsxədə müvafiq müəllif hüququ bildirişi dərc etmək;
+bu Lisenziyanın və hər hansı olduğunu bildirən bütün bildirişləri toxunulmaz saxlayın
+koda 7-ci bölməyə uyğun olaraq əlavə edilmiş icazəsiz şərtlər tətbiq edilir;
+hər hansı bir zəmanətin olmaması barədə bütün bildirişləri toxunulmaz saxlamaq; və hamısını verin
+Proqramla birlikdə bu Lisenziyanın surətini alanlar.
+
+Çatdırdığınız hər bir nüsxə üçün istənilən qiymət tələb edə və ya heç bir qiymət ala bilərsiniz,
+və siz ödəniş müqabilində dəstək və ya zəmanət mühafizəsi təklif edə bilərsiniz.
+
+5. Dəyişdirilmiş mənbə versiyalarının ötürülməsi.
+
+Siz Proqrama əsaslanan işi və ya ona edilən dəyişiklikləri ötürə bilərsiniz
+altında mənbə kodu şəklində Proqramdan istehsal edin
+4-cü bölmənin şərtləri, bir şərtlə ki, siz bütün bu şərtlərə cavab versəniz:
+
+a) İşdə sizin dəyişdirdiyinizi bildirən görkəmli bildirişlər olmalıdır
+və müvafiq tarixi göstərir.
+
+b) Əsərdə olduğunu bildirən görkəmli bildirişlər olmalıdır
+bu Lisenziya və bölməyə əlavə edilən hər hansı şərtlər əsasında buraxılmışdır
+7. Bu tələb 4-cü bölmədəki tələbi dəyişdirir
+"bütün bildirişləri qoruyun".
+
+c) Siz bütün işi, bütövlükdə, bunun altında lisenziyalaşdırmalısınız
+Bir nüsxəyə sahib olan hər kəs üçün lisenziya.  Bu
+Buna görə də lisenziya hər hansı müvafiq bölmə 7 ilə birlikdə tətbiq olunacaq
+işin bütün hissəsinə və onun bütün hissələrinə əlavə şərtlər,
+necə qablaşdırılmasından asılı olmayaraq.  Bu Lisenziya No verir
+işi hər hansı başqa şəkildə lisenziyalaşdırma icazəsi verilir, lakin bunu etmir
+əgər siz onu ayrıca almısınızsa, belə icazəni etibarsız hesab edin.
+
+d) Əgər işin interaktiv istifadəçi interfeysləri varsa, hər biri göstərilməlidir
+Müvafiq Hüquqi Bildirişlər; lakin Proqramda interaktiv olduqda
+Müvafiq Hüquqi Bildirişləri göstərməyən interfeyslər, sizin
+iş onları buna məcbur etməməlidir.
+
+Digər ayrı və müstəqil işlərlə əhatə olunmuş işin toplusu
+təbiətinə görə əhatə olunmuş işin genişləndirilməsi olmayan əsərlər,
+və daha böyük bir proqram yaratmaq üçün onunla birləşdirilməyən,
+bir saxlama və ya paylama mühitində və ya həcminə an deyilir
+kompilyasiya və onun nəticəsində yaranan müəlliflik hüququ yoxdursa, "məcmu"
+kompilyasiya istifadəçilərinin çıxışını və ya qanuni hüquqlarını məhdudlaşdırmaq üçün istifadə olunur
+fərdi işlərin icazə verdiyindən artıqdır.  Qapalı işin daxil edilməsi
+ümumi olaraq bu Lisenziyanın digərinə tətbiq edilməsinə səbəb olmur
+aqreqat hissələri.
+
+6. Qeyri-mənbə formalarının daşınması.
+
+Şərtlərə uyğun olaraq əhatə olunmuş işi obyekt kodu şəklində çatdıra bilərsiniz
+4-cü və 5-ci bəndləri də çatdırmaq şərtilə
+bu Lisenziyanın şərtlərinə uyğun olaraq maşın tərəfindən oxuna bilən Müvafiq Mənbə,
+bu yollardan birində:
+
+a) Obyekt kodunu fiziki məhsulda və ya onun içində təcəssüm etdirin
+(fiziki paylama mühiti daxil olmaqla) ilə müşayiət olunur
+Müvafiq Mənbə davamlı fiziki mühitdə sabitlənmişdir
+adətən proqram mübadiləsi üçün istifadə olunur.
+
+b) Obyekt kodunu fiziki məhsulda və ya onun içində təcəssüm etdirin
+(fiziki paylama mühiti daxil olmaqla), a ilə müşayiət olunur
+yazılı təklif, ən azı üç il müddətində etibarlıdır və bu müddət ərzində etibarlıdır
+həmin məhsul üçün ehtiyat hissələri və ya müştəri dəstəyi təklif etdiyiniz müddətcə
+model, obyekt koduna sahib olan hər kəsə ya vermək (1) a
+daxilindəki bütün proqram təminatı üçün Müvafiq Mənbənin surəti
+bu Lisenziya ilə əhatə olunan məhsul, davamlı fiziki
+adətən proqram mübadiləsi üçün istifadə olunan mühit, qiymət №
+bunu fiziki olaraq yerinə yetirmək üçün məqbul xərcinizdən daha çox
+mənbənin ötürülməsi və ya (2) surəti çıxarmaq imkanı
+Şəbəkə serverindən pulsuz mənbə.
+
+c) Obyekt kodunun fərdi surətlərini onun surəti ilə birlikdə çatdırın
+Müvafiq Mənbəni təqdim etmək üçün yazılı təklif.  Bu
+alternativ yalnız arabir və qeyri-kommersiya olaraq icazə verilir və
+yalnız belə bir təkliflə obyekt kodunu alsanız, uyğun olaraq
+6b yarımbəndi ilə.
+
+d) Müəyyən edilmiş şəxsdən giriş təklif etməklə obyekt kodunu çatdırın
+yer (pulsuz və ya ödənişli) və ekvivalent giriş təklif edin
+Müvafiq Mənbə eyni şəkildə eyni yerdən yox
+əlavə ödəniş.  Siz alıcılardan kopyalamağı tələb etməməlisiniz
+Obyekt kodu ilə birlikdə Müvafiq Mənbə.  Əgər yer
+obyekt kodunu köçürün şəbəkə serveridir, Müvafiq Mənbədir
+fərqli serverdə ola bilər (siz və ya üçüncü tərəf tərəfindən idarə olunur)
+saxlamaq şərtilə, ekvivalent surət çıxarma vasitələrini dəstəkləyir
+harada tapılacağını söyləyən obyekt kodunun yanında aydın istiqamətlər
+Müvafiq Mənbə.  Hansı serverin yerləşdiyindən asılı olmayaraq
+Müvafiq Mənbə, siz bunun olmasını təmin etməyə borclusunuz
+bu tələbləri ödəmək üçün lazım olan müddət ərzində mövcuddur.
+
+e) Təmin edilmiş peer-to-peer ötürülməsindən istifadə edərək obyekt kodunu çatdırın
+siz digər həmyaşıdları məlumat harada obyekt kodu və Müvafiq
+Əsərin mənbəyi №-də geniş ictimaiyyətə təqdim olunur
+6d bəndinə əsasən ödəniş.
+
+Mənbə kodu xaric edilən obyekt kodunun ayrıla bilən hissəsi
+Sistem Kitabxanası olaraq Müvafiq Mənbədən, olması lazım deyil
+obyekt kodu işinin çatdırılmasına daxildir.
+
+"İstifadəçi Məhsulu" ya (1) "istehlakçı məhsuldur", yəni hər hansı deməkdir
+adətən şəxsi, ailə,
+və ya məişət məqsədləri, və ya (2) birləşmə üçün nəzərdə tutulmuş və ya satılan hər hansı bir şey
+yaşayış yerinə.  Məhsulun istehlak məhsulu olub olmadığını müəyyən edərkən,
+şübhəli hallar əhatə dairəsinin xeyrinə həll edilir.  Xüsusi üçün
+Müəyyən bir istifadəçi tərəfindən alınan məhsul, "normal olaraq istifadə edilən" a aiddir
+statusundan asılı olmayaraq həmin məhsul sinfinin tipik və ya ümumi istifadəsi
+xüsusi istifadəçinin və ya konkret istifadəçinin hansı üsulla
+faktiki olaraq məhsuldan istifadə edir və ya istifadə etməsini gözləyir və ya istifadə etməsi gözlənilir.  Bir məhsul
+məhsulun əhəmiyyətli olub-olmamasından asılı olmayaraq istehlak məhsuludur
+kommersiya, sənaye və ya qeyri-istehlak məqsədləri üçün istifadələr, əgər belə istifadələr nəzərdə tutulmayıbsa
+məhsulun yeganə əhəmiyyətli istifadə üsulu.
+
+İstifadəçi Məhsulu üçün "Quraşdırma Məlumatı" hər hansı üsulları,
+prosedurlar, avtorizasiya açarları və ya quraşdırma üçün tələb olunan digər məlumatlar
+və həmin İstifadəçi Məhsulunda əhatə olunmuş işin dəyişdirilmiş versiyalarını yerinə yetirin
+onun Müvafiq Mənbəsinin dəyişdirilmiş versiyası.  Məlumat olmalıdır
+dəyişdirilmiş obyektin davamlı işləməsini təmin etmək kifayətdir
+kodun qarşısı alınmır və ya müdaxilə edilmir
+modifikasiya edilib.
+
+Bir obyekt kodunu çatdırsanız, bu bölmə altında işləyin, və ya ilə
+Xüsusilə istifadə üçün, bir İstifadəçi Məhsulu və nəqli olaraq meydana gəlir
+sahiblik və istifadə hüququnun olduğu əməliyyatın bir hissəsidir
+İstifadəçi Məhsulu alıcıya əbədi və ya bir müddətə ötürülür
+sabit müddət (əməliyyatın necə xarakterizə olunmasından asılı olmayaraq), və
+Bu bölmədə verilən müvafiq Mənbə müşayiət olunmalıdır
+Quraşdırma Məlumatı ilə.  Lakin bu tələb tətbiq edilmir
+nə siz, nə də hər hansı üçüncü tərəf quraşdırmaq qabiliyyətini saxlamırsa
+İstifadəçi məhsulunda dəyişdirilmiş obyekt kodu (məsələn, işdə
+ROM-da quraşdırılmışdır).
+
+Quraşdırma məlumatının təqdim edilməsi tələbinə a daxil deyil
+dəstək xidməti, zəmanət və ya yeniləmələri təmin etməyə davam etmək tələbi
+alıcı tərəfindən dəyişdirilmiş və ya quraşdırılmış iş üçün və ya üçün
+dəyişdirildiyi və ya quraşdırıldığı İstifadəçi Məhsulu.  Giriş a
+modifikasiya özü maddi və zaman şəbəkə rədd edilə bilər
+şəbəkənin işinə mənfi təsir göstərir və ya qaydaları pozur və
+şəbəkədə rabitə üçün protokollar.
+
+Müvafiq Mənbə ötürülür və Quraşdırma Məlumatı verilir,
+bu bölməyə uyğun olaraq ictimaiyyətə açıq olan formatda olmalıdır
+sənədləşdirilmiş (və ictimaiyyətə təqdim edilən tətbiqi ilə
+mənbə kodu forması) və xüsusi parol və ya açar tələb etməməlidir
+açmaq, oxumaq və ya köçürmək.
+
+7. Əlavə Şərtlər.
+
+"Əlavə icazələr" bunun şərtlərini tamamlayan şərtlərdir
+Onun bir və ya bir neçə şərtindən istisnalar etməklə lisenziya.
+Bütün Proqrama aid olan əlavə icazələr
+dərəcədə bu Lisenziyaya daxil edilmiş kimi davranılmalıdır
+onların qüvvədə olan qanuna əsasən etibarlı olması.  Əlavə icazələr varsa
+yalnız Proqramın bir hissəsinə tətbiq edilir, həmin hissə ayrıca istifadə edilə bilər
+bu icazələr altında, lakin bütün Proqram tərəfindən idarə olunur
+əlavə icazələrdən asılı olmayaraq bu Lisenziya.
+
+Qapalı bir işin bir nüsxəsini çatdırdığınız zaman, seçiminizə görə edə bilərsiniz
+həmin nüsxədən və ya onun hər hansı bir hissəsindən əlavə icazələri silin
+o.  (Əlavə icazələr öz icazələrini tələb etmək üçün yazıla bilər
+işin dəyişdirilməsi müəyyən hallarda aradan qaldırılması.) yerləşdirə bilərsiniz
+əhatəli işə əlavə etdiyiniz materiala əlavə icazələr,
+bunun üçün müvafiq müəllif hüququ icazəniz var və ya verə bilərsiniz.
+
+Bu Lisenziyanın hər hansı digər müddəalarına baxmayaraq, sizin materialınız üçün
+əhatə olunmuş işə əlavə edə bilərsiniz (əgər müəllif hüquqları sahibləri tərəfindən icazə verilirsə
+həmin material) bu Lisenziyanın şərtlərini aşağıdakı şərtlərlə əlavə edin:
+
+a) Zəmanətdən imtina etmək və ya məsuliyyəti məhdudlaşdırmaq
+bu Lisenziyanın 15 və 16-cı bölmələrinin şərtləri; və ya
+
+b) Müəyyən edilmiş ağlabatan hüquqi bildirişlərin saxlanmasını tələb edən və ya
+həmin materialda və ya Müvafiq Hüquqda müəllif atributları
+Onu ehtiva edən əsərlər tərəfindən göstərilən bildirişlər; və ya
+
+c) Həmin materialın mənşəyinin təhrif edilməsinin qadağan edilməsi və ya
+belə materialın dəyişdirilmiş versiyalarının qeyd olunmasını tələb edir
+orijinal versiyadan fərqli olaraq ağlabatan yollar; və ya
+
+d) Lisenziya verənlərin adlarının reklam məqsədləri üçün istifadəsinin məhdudlaşdırılması və ya
+materialın müəllifləri; və ya
+
+e) Bəzilərinin istifadəsi üçün əmtəə nişanı qanununa əsasən hüquqların verilməsindən imtina
+ticarət adları, ticarət nişanları və ya xidmət nişanları; və ya
+
+f) lisenziya verənlərə və onun müəlliflərinə dəymiş ziyanın ödənilməsini tələb etmək
+materialı ötürən hər kəs tərəfindən material (və ya dəyişdirilmiş versiyaları
+o) alıcı qarşısında müqavilə öhdəlikləri ilə, üçün
+bu müqavilə fərziyyələrinin birbaşa üzərinə qoyduğu hər hansı öhdəlik
+həmin lisenziyaçılar və müəlliflər.
+
+Bütün digər icazə verilməyən əlavə şərtlər "bundan sonra
+məhdudiyyətlər" 10-cu bölmənin mənası daxilində. Əgər Proqram sizin kimi
+onu aldıqda və ya onun hər hansı bir hissəsində onun olduğunu bildirən bildiriş var
+bu Lisenziya ilə birlikdə daha bir müddət ilə idarə olunur
+məhdudiyyət, siz həmin termini silə bilərsiniz.  Lisenziya sənədi varsa
+əlavə bir məhdudiyyət, lakin bunun əsasında yenidən lisenziyaya və ya ötürülməyə icazə verir
+Lisenziya, siz şərtlərlə idarə olunan əhatə olunmuş iş materialına əlavə edə bilərsiniz
+həmin lisenziya sənədinin, bir şərtlə ki, əlavə məhdudiyyətlər olsun
+belə lisenziyalaşdırma və ya ötürülmədən sağ qalma.
+
+Bu bölməyə uyğun olaraq əhatə olunmuş işə şərtlər əlavə etsəniz, siz
+müvafiq mənbə sənədlərində bir bəyanat yerləşdirməlidir
+həmin fayllara tətbiq olunan əlavə şərtlər və ya bildiriş
+tətbiq olunan şərtləri haradan tapmaq olar.
+
+İcazə verən və ya icazə verməyən əlavə şərtlər də qeyd edilə bilər
+ayrıca yazılı və ya istisnalar kimi göstərilən lisenziyanın forması;
+yuxarıdakı tələblər hər iki şəkildə tətbiq olunur.
+
+8. Xitam.
+
+Siz açıq-aydın hallar istisna olmaqla, əhatə olunmuş işi təbliğ edə və ya dəyişdirə bilməzsiniz
+bu Lisenziyaya əsasən verilir.  Başqa cür təbliğ etmək cəhdi və ya
+dəyişdirmək etibarsızdır və altındakı hüquqlarınıza avtomatik xitam verəcəkdir
+bu Lisenziya (üçüncü bənddə verilmiş hər hansı patent lisenziyaları da daxil olmaqla
+11-ci bölmənin bəndi).
+
+Bununla belə, bu Lisenziyanın bütün pozulmasına son qoysanız, sizin
+xüsusi müəllif hüququ sahibinin lisenziyası bərpa olunur (a)
+Müəllif hüquqlarının sahibi açıq şəkildə və qədər, şərti olaraq
+nəhayət lisenziyanıza xitam verir və (b) müəlliflik hüququ varsa, həmişəlik
+sahibi bəzi ağlabatan vasitələrlə pozuntu barədə sizi xəbərdar etmir
+dayandırıldıqdan sonra 60 gün əvvəl.
+
+Üstəlik, müəyyən bir müəllif hüququ sahibinin lisenziyanızdır
+Müəllif hüququ sahibi sizi xəbərdar edərsə, daimi olaraq bərpa edilir
+bəzi ağlabatan vasitələrlə pozuntu, bu, ilk dəfədir
+ondan bu Lisenziyanın (hər hansı iş üçün) pozulması barədə bildiriş aldı
+müəllif hüququ sahibidir və siz 30 gündən əvvəl pozuntunu aradan qaldırırsınız
+bildiriş qəbziniz.
+
+Bu bölmədə nəzərdə tutulan hüquqlarınıza xitam verməniz
+altında sizdən surətləri və ya hüquqları almış tərəflərin lisenziyaları
+bu Lisenziya.  Hüquqlarınız daimi deyil, dayandırılıbsa
+bərpa edildikdə, siz eyni üçün yeni lisenziyalar almaq hüququna malik deyilsiniz
+10-cu maddəyə uyğun olaraq.
+
+9. Nüsxələrin olması üçün qəbul tələb olunmur.
+
+və ya almaq üçün bu Lisenziyanı qəbul etməyiniz tələb olunmur
+Proqramın surətini işə salın.  Qapalı işin köməkçi təbliğatı
+yalnız peer-to-peer ötürülməsinin istifadəsi nəticəsində baş verir
+surətini almaq üçün də qəbul tələb olunmur.  Bununla belə,
+bu Lisenziyadan başqa heç bir şey sizə təbliğ etmək icazəsi vermir
+hər hansı əhatə olunmuş işi dəyişdirin.  Bu hərəkətlər müəllif hüququnu pozur
+bu Lisenziyanı qəbul etmə.  Buna görə də, dəyişdirərək və ya təbliğ etməklə a
+əhatə olunmuş iş, siz bunu etmək üçün bu Lisenziyanı qəbul etdiyinizi bildirirsiniz.
+
+10. Downstream Resipientlərin Avtomatik Lisenziyalaşdırılması.
+
+Hər dəfə əhatə olunmuş işi çatdırdığınız zaman, alıcı avtomatik olaraq
+orijinal lisenziya verənlərdən lisenziya alır, işlətmək, dəyişdirmək və
+bu Lisenziyaya uyğun olaraq həmin işi təbliğ etmək.  Siz cavabdeh deyilsiniz
+üçüncü tərəflərin bu Lisenziyaya riayət etməsini təmin etmək üçün.
+
+"Müəssisə əməliyyatı" nəzarəti ötürən əməliyyatdır
+təşkilat və ya birinin əsas etibarilə bütün aktivləri və ya bir hissəsini bölmək
+təşkilat və ya birləşən təşkilatlar.  Əgər örtülü bir yayılma
+iş müəssisə əməliyyatından, hər bir tərəfin nəticəsidir
+Əsər nüsxəsini alan əməliyyat da hər şeyi alır
+İşin lisenziyaları partiyanın sələfi maraq dairəsində idi və ya edə bilərdi
+əvvəlki paraqrafa uyğun olaraq, üstəlik sahiblik hüququ verir
+Maraqlanan sələfdən işin Müvafiq Mənbəsi, əgər
+sələfi ona sahibdir və ya ağlabatan səylərlə əldə edə bilər.
+
+Proqramın həyata keçirilməsinə əlavə məhdudiyyətlər qoya bilməzsiniz
+bu Lisenziyaya əsasən verilmiş və ya təsdiq edilmiş hüquqlar.  Məsələn, edə bilərsiniz
+həyata keçirmək üçün lisenziya rüsumu, royalti və ya digər ödənişlər tətbiq etməmək
+bu Lisenziyaya əsasən verilən hüquqlar və siz məhkəməyə başlaya bilməzsiniz
+(iddiadakı çarpaz iddia və ya əks iddia daxil olmaqla).
+hər hansı patent iddiası etmək, istifadə etmək, satmaq, təklif etmək yolu ilə pozulur
+Proqramı və ya onun hər hansı bir hissəsini satmaq və ya idxal etmək.
+
+11. Patentlər.
+
+"Təqdimatçı" bunun əsasında istifadəyə icazə verən müəllif hüququ sahibidir
+Proqramın lisenziyası və ya Proqramın əsaslandığı əsər.  The
+beləliklə lisenziyalaşdırılan iş ianəçinin "töhfəçi versiyası" adlanır.
+
+Töhfəçinin "əsas patent iddiaları" hamısı patent iddialarıdır
+ianəçinin mülkiyyətində və ya nəzarətində olan, artıq əldə edilmiş və ya
+bundan sonra əldə edilmiş, hansısa şəkildə pozulacaq, icazə verilir
+bu Lisenziya ilə onun töhfə verən versiyasını hazırlamaq, istifadə etmək və ya satmaq,
+lakin yalnız a kimi pozulacaq iddiaları daxil etməyin
+ianəçi versiyasının əlavə modifikasiyasının nəticəsi.  üçün
+Bu tərifin məqsədlərinə "nəzarət" vermə haqqını ehtiva edir
+tələblərinə uyğun bir şəkildə patent sublisenziyaları
+bu Lisenziya.
+
+Hər bir ianəçi sizə qeyri-eksklüziv, dünya miqyasında, royaltisiz hədiyyə verir
+töhfə verənin əsas patent iddiaları çərçivəsində patent lisenziyası
+etmək, istifadə etmək, satmaq, satışa çıxarmaq, idxal etmək və başqa şəkildə işlətmək, dəyişdirmək və
+onun ianəçi versiyasının məzmununu təbliğ etmək.
+
+Aşağıdakı üç bənddə “patent lisenziyası” hər hansı bir ifadədir
+müqavilə və ya öhdəlik, nə qədər ifadə edilsə də, patentin icrasını təmin etməmək
+(məsələn, patentin tətbiqi üçün açıq icazə və ya etməmək şərti
+patentin pozulmasına görə məhkəməyə müraciət edin).  Belə bir patent lisenziyasını "vermək" üçün a
+tərəf belə bir razılaşma və ya öhdəliyi yerinə yetirməmək deməkdir
+tərəfə qarşı patent.
+
+Əgər siz bilə-bilə patent lisenziyasına əsaslanaraq əhatə olunmuş işi çatdırırsınızsa,
+və işin Müvafiq Mənbəsi heç kəs üçün əlçatan deyil
+pulsuz olaraq və bu Lisenziyanın şərtlərinə əsasən, a
+ictimaiyyətə açıq olan şəbəkə serveri və ya digər asanlıqla əldə edilə bilən vasitələr,
+onda siz ya (1) Müvafiq Mənbənin belə olmasına səbəb olmalısınız
+mövcud, və ya (2) özünüzü faydadan məhrum etməyi təşkil edin
+bu xüsusi iş üçün patent lisenziyası və ya (3) müəyyən bir şəkildə təşkil edin
+bu Lisenziyanın tələblərinə uyğun olaraq patentin müddətini uzatmaq
+aşağı axın alıcılarına lisenziya.  "Bilərəkdən güvənmək" var deməkdir
+Əsl məlumatı ancaq patent lisenziyası üçün sizə çatdırır
+bir ölkədə əhatə olunmuş iş və ya sizin alıcınızın əhatə olunmuş işdən istifadə etməsi
+bir ölkədə bir və ya daha çox müəyyən edilə bilən patentləri pozar
+etibarlı olduğuna inanmaq üçün əsasınız olan ölkə.
+
+Əgər, bir əməliyyata əsasən və ya onunla əlaqədar olaraq və ya
+tənzimləmə, siz çatdırmaq və ya nəqli təmin etməklə təbliğ etmək, a
+işi əhatə edir və bəzi tərəflərə patent lisenziyası verir
+istifadə etmək, yaymaq, dəyişdirmək hüququ verən əhatə olunmuş işi almaq
+və ya əhatə olunmuş işin xüsusi nüsxəsini, sonra patent lisenziyasını çatdırın
+qrant avtomatik olaraq əhatə olunan bütün alıcılara şamil edilir
+işləyir və onun əsasında işləyir.
+
+Patent lisenziyası daxil deyilsə, "ayrı-seçkilik" sayılır
+onun əhatə dairəsi, həyata keçirilməsini qadağan edir və ya edir
+olan hüquqların bir və ya bir neçəsinin həyata keçirilməməsi ilə şərtlənir
+bu Lisenziya əsasında xüsusi olaraq verilmişdir.  Siz əhatəli ötürə bilməzsiniz
+üçüncü tərəflə razılaşmanın tərəfisinizsə işləyin
+ödəniş etdiyiniz proqram təminatının yayılması işində
+ötürmə fəaliyyətinizin həcminə əsasən üçüncü tərəfə
+üçüncü tərəfin verdiyi işin hər hansı birinə
+Sizdən qapalı işi alacaq olan tərəflər, ayrı-seçkilik
+patent lisenziyası (a) əhatə olunmuş işin surətləri ilə əlaqədar
+sizin tərəfinizdən ötürülən (və ya həmin nüsxələrdən hazırlanmış nüsxələr) və ya (b) ilk növbədə
+üçün və xüsusi məhsullar və ya kompilyasiyalarla əlaqədar olaraq
+Əgər siz bu razılaşmaya daxil olmamısınızsa, əhatə olunmuş işi ehtiva edir,
+və ya həmin patent lisenziyası 28 mart 2007-ci ilə qədər verilmişdir.
+
+Bu Lisenziyadakı heç nə istisna və ya məhdudlaşdırıcı kimi şərh edilməməlidir
+ola biləcək hər hansı nəzərdə tutulan lisenziya və ya pozuntuya qarşı digər müdafiə vasitələri
+əks halda qüvvədə olan patent qanunvericiliyinə əsasən sizin üçün əlçatan ola bilər.
+
+12. Başqalarının Azadlığını Təslim Etməyin.
+
+Əgər sizə şərtlər qoyularsa (məhkəmə qərarı, razılaşma və ya
+əks halda) bu Lisenziyanın şərtlərinə zidd deyil
+bu Lisenziyanın şərtlərindən üzr istəyirəm.  Əgər çatdıra bilmirsinizsə a
+bununla bağlı öhdəliklərinizi eyni vaxtda yerinə yetirmək üçün əhatə olunmuş işi
+Lisenziya və hər hansı digər müvafiq öhdəliklər, nəticədə siz edə bilərsiniz
+qətiyyən çatdırma.  Məsələn, sizi məcbur edən şərtlərlə razılaşırsınızsa
+ötürdüyünüz şəxslərdən daha sonra çatdırmaq üçün qonorar toplamaq
+Proqram, həm bu şərtləri, həm də bunu təmin edə biləcəyiniz yeganə yoldur
+Lisenziya Proqramı ötürməkdən tamamilə çəkinmək olardı.
+
+13. GNU Affero General Public License ilə istifadə edin.
+
+Bu Lisenziyanın hər hansı digər müddəasına baxmayaraq, siz
+hər hansı əhatə olunmuş işi lisenziyalı işlə əlaqələndirmək və ya birləşdirmək icazəsi
+GNU Affero General Public License-nin 3-cü versiyasına uyğun olaraq vahid
+birləşmiş iş və nəticədə ortaya çıxan işi çatdırmaq.  Bunun şərtləri
+Lisenziya əhatə olunan iş olan hissəyə tətbiq olunmağa davam edəcək,
+lakin GNU Affero Ümumi İctimai Lisenziyasının xüsusi tələbləri,
+Şəbəkə vasitəsilə qarşılıqlı əlaqəyə aid 13-cü bölməyə şamil olunacaq
+kimi birləşmə.
+
+14. Bu Lisenziyanın yenidən işlənmiş versiyaları.
+
+Azad Proqram təminatı Fondu yenidən işlənmiş və/yaxud yeni versiyalarını dərc edə bilər
+zaman zaman GNU Ümumi İctimai Lisenziyası.  Belə yeni versiyalar olacaq
+ruh baxımından hazırkı versiyaya bənzəyir, lakin təfərrüatlarına görə fərqlənə bilər
+yeni problemlər və ya narahatlıqları həll edin.
+
+Hər bir versiyaya fərqləndirici versiya nömrəsi verilir.  Əgər
+Proqram GNU General-in müəyyən nömrələnmiş versiyasını təyin edir
+İctimai Lisenziya "və ya hər hansı sonrakı versiya" ona aiddir, sizdə var
+nömrələnmiş şərtlərdən hər hansı birinə riayət etmək seçimi
+versiyası və ya Azad Proqram təminatı tərəfindən nəşr olunan hər hansı sonrakı versiyanın
+Vəqf.  Proqram versiya nömrəsini göstərmirsə
+GNU General Public License, siz indiyə qədər dərc edilmiş istənilən versiyanı seçə bilərsiniz
+Azad Proqram təminatı Fondu tərəfindən.
+
+Proqram müəyyən edərsə ki, proksi hansı gələcəklə bağlı qərar verə bilər
+GNU Ümumi İctimai Lisenziyasının versiyaları istifadə edilə bilər, bu proxy-nin
+versiyanın qəbul edilməsi barədə açıq bəyanat sizə daimi olaraq icazə verir
+Proqram üçün həmin versiyanı seçmək üçün.
+
+Sonrakı lisenziya versiyaları sizə əlavə və ya fərqli verə bilər
+icazələr.  Bununla belə, heç birinin üzərinə əlavə öhdəliklər qoyulmur
+təqib etməyi seçdiyiniz nəticəsində müəllif və ya müəllif hüququ sahibi a
+sonrakı versiya.
+
+15. Zəmanətdən imtina.
+
+İCAZƏ VERDİĞİ ÖLÇÜDƏ, PROQRAM ÜÇÜN ZƏMANƏT YOXDUR.
+MÜTLƏQ QANUN.  MÜƏLLİF HÜQUQUNUN YAZILMASIDA BAŞQA ŞEYDƏ BİLDİRİLMƏSİNDƏN BAŞQA
+SAHİBLƏR VƏ/VƏ ya DİGƏR TƏRƏFLƏR PROQRAMI "OLDUĞU KİMİ" ZƏMANƏTSİZ TƏMİN EDİR
+İSTƏNİLƏN HƏR NÖVLƏRDƏ, YA BAŞARILI VƏ YA DEYİL OLAN, O cümlədən, lakin bununla məhdudlaşmayan,
+SATICILIQ VƏ XÜSUSİ BİR ŞEY ÜÇÜN UYĞUNLUĞUNUN ZƏMANƏTLƏRİ
+MƏQSƏD.  PROQRAMIN KEYFİYYƏTİ VƏ PERFORMANSINA GÖRƏ BÜTÜN RİSK
+SİZİNLEDİR.  PROQRAM QÜSÜL OLDUĞUNDA, SİZİN XƏRÇƏTİNİ ÖZÜNƏ OLUNUZ.
+BÜTÜN LAZIMLI XİDMƏT, TƏMİR VƏ YA DÜZƏLƏMƏ.
+
+16. Məsuliyyətin məhdudlaşdırılması.
+
+QANUNUN TƏLƏB EDİLMƏYƏCƏK və ya YAZILI RAZILIQ OLMADIĞINDAN HEÇ BİR HALDA
+HƏR MÜƏLLİF HÜQUQ SAHİBİ VƏ YA DƏYİŞƏN VƏ/VƏ YA ÖYÜRƏN BAŞQA TƏRƏF OLACAQ
+PROQRAM YUXARIDA İCAZƏ VERİLDİĞİ KİMİ, İSTƏNİLƏN ZƏYARLAR OLMALIDAN ZƏYƏRLƏ GÖRƏ SİZƏ MƏSULİYYƏT EDİR
+ÜMUMİ, XÜSUSİ, TASADİF VƏ YA NƏTİCƏLİ ZƏRƏRLƏR
+PROQRAMDAN İSTİFADƏ EDİLMƏYİN VƏ YA İSTİFADƏ ETMƏ BİLMƏMƏSİ (O cümlədən İTİRİLMƏYƏN
+SİZİN VƏ YA ÜÇÜNCÜ ŞƏXSİNDƏN DƏQİQ GÖSTƏRİLƏN MƏLUMAT VƏ YA MƏLUMATLAR
+TƏRƏFLƏR VƏ YA PROQRAMIN BAŞQA PROQRAMLARLA İŞLƏMƏMƏSİ),
+HƏTTA BELƏ SAHİBƏ VƏ YA BAŞQA TƏRƏFƏ MÜMKÜNLƏR HAQQINDA XƏBƏRDARLIQ OLUNSA
+BELƏ ZƏRƏRLƏR.
+
+17. 15 və 16-cı bölmələrin şərhi.
+
+Əgər zəmanətdən imtina və məsuliyyətin məhdudlaşdırılması təmin edilir
+yuxarıda göstərilən şərtlərə uyğun olaraq yerli hüquqi qüvvə verilə bilməz,
+nəzarət edən məhkəmələr ən yaxın olan yerli qanunları tətbiq etməlidirlər
+ilə əlaqədar bütün mülki məsuliyyətdən mütləq imtina
+Zəmanət və ya öhdəlik götürmədiyi halda Proqram, a
+ödəniş müqabilində Proqramın surəti.
+
+ŞƏRT VƏ ŞƏRTLƏRİN SONU
+
+Bu Şərtləri Yeni Proqramlarınıza Necə Tətbiq etmək olar
+
+Əgər yeni bir proqram hazırlayırsansa və onun ən böyük proqram olmasını istəyirsənsə
+ictimaiyyətə mümkün istifadə, buna nail olmağın ən yaxşı yolu bunu etməkdir
+hər kəsin bu şərtlər altında yenidən paylaya və dəyişdirə biləcəyi pulsuz proqram.
+
+Bunun üçün proqrama aşağıdakı bildirişləri əlavə edin.  Ən təhlükəsizdir
+onları hər bir mənbə faylının başlanğıcına ən effektiv şəkildə əlavə etmək
+zəmanətin istisna olunduğunu bildirin; və hər bir faylda ən azı olmalıdır
+"müəllif hüququ" xətti və tam bildirişin tapıldığı yerin göstəricisi.
+
+<proqramın adını və nə etdiyi haqqında qısa təsəvvürü vermək üçün bir sətir.>
+Müəllif hüququ (C) <il> <müəllifin adı>
+
+Bu proqram pulsuz proqramdır: siz onu yenidən paylaya və/və ya dəyişdirə bilərsiniz
+tərəfindən dərc edilən GNU Ümumi İctimai Lisenziyasının şərtlərinə uyğun olaraq
+Azad Proqram təminatı Fondu, ya Lisenziyanın 3-cü versiyası, ya da
+(sizin seçiminizlə) hər hansı sonrakı versiya.
+
+Bu proqram faydalı olacağı ümidi ilə yayılır,
+lakin heç bir ZƏMANƏT OLMADAN; hətta nəzərdə tutulan zəmanət olmadan
+SATILABİLƏNLİK və ya MÜƏKSƏD MƏQSƏD ÜÇÜN UYĞUNLUQ.  baxın
+Daha ətraflı məlumat üçün GNU General Public License.
+
+Siz GNU Ümumi İctimai Lisenziyasının surətini almalı idiniz
+bu proqramla birlikdə.  Əgər yoxsa, <https://www.gnu.org/licenses/> baxın.
+
+Elektron və kağız poçt vasitəsilə sizinlə necə əlaqə saxlamaq barədə məlumat əlavə edin.
+
+Əgər proqram terminalla qarşılıqlı əlaqə yaradırsa, onun çıxışını qısa edin
+interaktiv rejimdə başlayanda belə xəbər verin:
+
+<proqram> Müəlliflik hüququ (C) <il> <müəllifin adı>
+Bu proqram QEYDİYYƏT NO ZƏMANƏT ilə gəlir; təfərrüatlar üçün `show w' yazın.
+Bu pulsuz proqramdır və siz onu yenidən paylaya bilərsiniz
+müəyyən şərtlər altında; təfərrüatlar üçün `show c' yazın.
+
+`göstər w` və `göstər c` hipotetik əmrləri uyğun olanı göstərməlidir
+Ümumi İctimai Lisenziyanın hissələri.  Əlbəttə ki, proqramınızın əmrləri
+fərqli ola bilər; GUI interfeysi üçün "haqqında qutu"dan istifadə edərdiniz.
+
+Siz həmçinin işəgötürəninizi (proqramçı kimi işləyirsinizsə) və ya məktəbinizi almalısınız,
+əgər varsa, lazım gələrsə, proqram üçün "müəllif hüququndan imtina" imzalamaq.
+Bununla bağlı ətraflı məlumat və GNU GPL-ə necə müraciət etmək və ona əməl etmək üçün baxın
+<https://www.gnu.org/licenses/>.
+
+GNU General Public License proqramınızı daxil etməyə icazə vermir
+mülkiyyət proqramlarına çevrilir.  Proqramınız alt proqram kitabxanasıdırsa, siz
+ilə mülkiyyət proqramlarının əlaqələndirilməsinə icazə verilməsini daha faydalı hesab edə bilər
+kitabxana.  Əgər bunu etmək istəyirsinizsə, GNU Lesser General istifadə edin
+Bu Lisenziya əvəzinə İctimai Lisenziya.  Ancaq əvvəlcə oxuyun
+<https://www.gnu.org/licenses/why-not-lgpl.html>.

@@ -44,7 +44,7 @@ Rectangle {
                 font.pixelSize: Typography.h3
                 font.weight: Font.Bold
                 font.bold: true
-                text: qsTr("Modern Social")
+                text: I18n.t("Modern Social")
                 color: Colors.foregroundActivated
                 Layout.alignment: Qt.AlignHCenter | Qt.AlignVCenter
                 Layout.fillWidth: true
@@ -121,29 +121,29 @@ Rectangle {
 
                     Text {
                         Layout.alignment: Qt.AlignHCenter | Qt.AlignVCenter
-                        text: "Create"
+                        text: I18n.t("Create")
                     }
 
                     ListModel {
                         id: createMenuItem
                         ListElement {
-                            title: "Reel"
+                            title: I18n.t("Reel")
                             icon: "\uf401"
                         }
                         ListElement {
-                            title: "Post"
+                            title: I18n.t("Post")
                             icon: "\uf5fd"
                         }
                         ListElement {
-                            title: "Story"
+                            title: I18n.t("Story")
                             icon: "\uf1da"
                         }
                         ListElement {
-                            title: "Live"
+                            title: I18n.t("Live")
                             icon: "\uf8dd"
                         }
                         ListElement {
-                            title: "Guide"
+                            title: I18n.t("Guide")
                             icon: "\uf5da"
                         }
                     }
@@ -190,7 +190,7 @@ Rectangle {
                                         font.pixelSize: Typography.h5
                                         font.bold: true
                                         font.weight: Font.Normal
-                                        text: title
+                                        text: I18n.t(title)
                                         color: Colors.foregroundActivated
                                     }
                                 }
@@ -232,7 +232,7 @@ Rectangle {
             font.pixelSize: Typography.h3
             font.weight: Font.Bold
             font.bold: true
-            text: qsTr("Profile")
+            text: I18n.t("Profile")
             color: Colors.foregroundActivated
             Layout.alignment: Qt.AlignHCenter | Qt.AlignVCenter
             Layout.fillWidth: true
@@ -263,4 +263,3 @@ Rectangle {
 }
 
 }
-

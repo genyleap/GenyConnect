@@ -24,6 +24,7 @@ ColumnLayout {
     required property var dashboardStatsSettings
     required property var interfaceThemeSettings
     required property var interfacePrivacySettings
+    required property var interfaceLanguageSettings
 
     Layout.fillWidth: true
     spacing: root.compact ? 14 : 10
@@ -42,7 +43,55 @@ ColumnLayout {
             spacing: 12
 
             Text {
-                text: "Dashboard Stats"
+                text: I18n.t("Language & Region")
+                color: root.themeColorToken("mainHex_2a3240", "mainHex_d5deeb")
+                font.family: FontSystem.getContentFontBold.name
+                font.pixelSize: 16
+                font.bold: true
+            }
+
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 10
+
+                Text {
+                    Layout.fillWidth: true
+                    text: I18n.t("Language")
+                    color: root.themeColorToken("mainHex_334155", "mainHex_c8d3e2")
+                    font.family: FontSystem.getContentFontBold.name
+                    font.pixelSize: 14
+                    font.bold: true
+                }
+
+                Controls.ComboBox {
+                    id: languageCombo
+                    Layout.preferredWidth: root.compact ? 156 : 180
+                    Layout.preferredHeight: 40
+                    model: I18n.languages
+                    currentIndex: I18n.languageIndex(interfaceLanguageSettings.language)
+                    onActivated: function(activatedIndex) {
+                        interfaceLanguageSettings.language = I18n.languages[activatedIndex].code
+                    }
+                }
+            }
+
+            Text {
+                Layout.fillWidth: true
+                text: I18n.t("Changes are applied immediately and saved for the next launch.")
+                color: root.themeColorToken("mainHex_8a95a8", "mainHex_8ea0b8")
+                font.family: FontSystem.contentFontFamily
+                font.pixelSize: 12
+                wrapMode: Text.WordWrap
+            }
+
+            Rectangle {
+                Layout.fillWidth: true
+                height: 1
+                color: root.themeColorToken("mainHex_e3e8f1", "mainHex_30435d")
+            }
+
+            Text {
+                text: I18n.t("Dashboard Stats")
                 color: root.themeColorToken("mainHex_2a3240", "mainHex_d5deeb")
                 font.family: FontSystem.getContentFontBold.name
                 font.pixelSize: 16
@@ -51,7 +100,7 @@ ColumnLayout {
 
             Text {
                 Layout.fillWidth: true
-                text: "Choose visual behavior, privacy display, and the unit used by live transfer-rate indicators."
+                text: I18n.t("Choose visual behavior, privacy display, and the unit used by live transfer-rate indicators.")
                 color: root.themeColorToken("mainHex_7c8697", "mainHex_93a2b8")
                 font.family: FontSystem.contentFontFamily
                 font.pixelSize: 13
@@ -64,10 +113,11 @@ ColumnLayout {
 
                 Text {
                     Layout.fillWidth: true
-                    text: "Theme"
+                    text: I18n.t("Theme")
                     color: root.themeColorToken("mainHex_334155", "mainHex_c8d3e2")
-                    font.family: FontSystem.contentFontFamily
+                    font.family: FontSystem.getContentFontBold.name
                     font.pixelSize: 14
+                    font.bold: true
                 }
 
                 Controls.ComboBox {
@@ -83,7 +133,7 @@ ColumnLayout {
 
             Text {
                 Layout.fillWidth: true
-                text: "System follows macOS/Windows appearance. Light keeps current look."
+                text: I18n.t("System follows macOS/Windows appearance. Light keeps current look.")
                 color: root.themeColorToken("mainHex_8a95a8", "mainHex_8ea0b8")
                 font.family: FontSystem.contentFontFamily
                 font.pixelSize: 12
@@ -102,10 +152,11 @@ ColumnLayout {
 
                 Text {
                     Layout.fillWidth: true
-                    text: "IP Privacy"
+                    text: I18n.t("IP Privacy")
                     color: root.themeColorToken("mainHex_334155", "mainHex_c8d3e2")
-                    font.family: FontSystem.contentFontFamily
+                    font.family: FontSystem.getContentFontBold.name
                     font.pixelSize: 14
+                    font.bold: true
                 }
 
                 Controls.ComboBox {
@@ -121,11 +172,11 @@ ColumnLayout {
 
             Text {
                 Layout.fillWidth: true
-                text: interfacePrivacySettings.ipDisplayMode === "Hidden"
+                text: I18n.t(interfacePrivacySettings.ipDisplayMode === "Hidden"
                       ? "Home and status panels show *.*.*.* or Endpoint hidden instead of visible IP details."
                       : (interfacePrivacySettings.ipDisplayMode === "Partial Mask"
                          ? "Home and status panels keep enough context for troubleshooting while masking the precise address."
-                         : "Visible IP and endpoint details are shown normally.")
+                         : "Visible IP and endpoint details are shown normally."))
                 color: root.themeColorToken("mainHex_8a95a8", "mainHex_8ea0b8")
                 font.family: FontSystem.contentFontFamily
                 font.pixelSize: 12
@@ -144,10 +195,11 @@ ColumnLayout {
 
                 Text {
                     Layout.fillWidth: true
-                    text: "Speed Units"
+                    text: I18n.t("Speed Units")
                     color: root.themeColorToken("mainHex_334155", "mainHex_c8d3e2")
-                    font.family: FontSystem.contentFontFamily
+                    font.family: FontSystem.getContentFontBold.name
                     font.pixelSize: 14
+                    font.bold: true
                 }
 
                 Controls.ComboBox {
@@ -163,7 +215,7 @@ ColumnLayout {
 
             Text {
                 Layout.fillWidth: true
-                text: "Use lowercase b for bits and uppercase B for bytes."
+                text: I18n.t("Use lowercase b for bits and uppercase B for bytes.")
                 color: root.themeColorToken("mainHex_8a95a8", "mainHex_8ea0b8")
                 font.family: FontSystem.contentFontFamily
                 font.pixelSize: 12
@@ -182,10 +234,11 @@ ColumnLayout {
 
                 Text {
                     Layout.fillWidth: true
-                    text: "Total Traffic Units"
+                    text: I18n.t("Total Traffic Units")
                     color: root.themeColorToken("mainHex_334155", "mainHex_c8d3e2")
-                    font.family: FontSystem.contentFontFamily
+                    font.family: FontSystem.getContentFontBold.name
                     font.pixelSize: 14
+                    font.bold: true
                 }
 
                 Controls.ComboBox {

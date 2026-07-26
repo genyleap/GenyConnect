@@ -16,7 +16,7 @@ T.TabButton {
     property string description
     property string setIcon : ""
 
-    text: title
+    text: I18n.t(title)
 
     contentItem: Text {
         width: parent.width

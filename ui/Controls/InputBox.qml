@@ -81,7 +81,7 @@ ColumnLayout {
         Item { width: 1; }
 
         Text {
-            text: title
+            text: I18n.t(title)
             font.family: fontSystem.getContentFont.name
             Layout.fillWidth: false;
             font.pixelSize: appStyle.t1
@@ -241,7 +241,7 @@ ColumnLayout {
         Item { width: 1; }
 
         Text {
-            text: note
+            text: I18n.t(note)
             fontSizeMode: Text.Fit
             font.family: fontSystem.getContentFont.name
             Layout.fillWidth: true;
@@ -266,7 +266,7 @@ ColumnLayout {
         bottomPadding: 2
         rightPadding: 10
         leftPadding: 10
-        text: alert
+        text: I18n.t(alert)
         Layout.fillWidth: true;
         font.family: fontSystem.getContentFont.name
         font.pixelSize: 10

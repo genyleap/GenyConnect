@@ -38,7 +38,7 @@ T.Button {
             }
 
             Text {
-                text: control.text
+                text: I18n.t(control.text)
                 font.family: FontSystem.getContentFontBold.name
                 font.pixelSize: compact ? Typography.uiBodyLg : Typography.uiTitleSm
                 color: Colors.dsPrimaryText

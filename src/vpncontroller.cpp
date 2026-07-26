@@ -66,6 +66,7 @@ module;
 
 #include "runtime/runtimefactory.hpp"
 #include "runtime/vpnruntimebackend.hpp"
+#include "linuxhelperlaunch.hpp"
 #include "powermodemanager.hpp"
 #include "securitystatus.hpp"
 #include "thirdparty/qrcodegen/qrcodegen.h"
@@ -12476,17 +12477,18 @@ bool VpnController::ensurePrivilegedTunHelper(QString *errorMessage)
             launchError = QString::fromUtf8("pkexec is required for TUN helper on Linux.");
             continue;
         }
-        QStringList pkexecArgs;
         const QString ldLibraryPath = linuxAppImageHelperLdLibraryPath();
         const QString envPath = QStandardPaths::findExecutable(QString::fromUtf8("env"));
-        if (!qEnvironmentVariable("APPDIR").trimmed().isEmpty() && !ldLibraryPath.isEmpty() && !envPath.isEmpty()) {
-            pkexecArgs << envPath;
-            pkexecArgs << QString::fromUtf8("LD_LIBRARY_PATH=%1").arg(ldLibraryPath);
-            pkexecArgs << helperPath;
-        } else {
-            pkexecArgs << helperPath;
-        }
-        pkexecArgs << launchArgs;
+        // pkexec sanitizes LD_LIBRARY_PATH. Forward the already-selected Qt
+        // runtime through /usr/bin/env even when APPDIR is unavailable (for
+        // example, an extracted/repackaged AppImage or a portable DEB).
+        // Requiring APPDIR here made the helper fall back to an older host Qt
+        // and terminate before it could open its local control port.
+        const QStringList pkexecArgs = LinuxHelperLaunch::pkexecArguments(
+            helperPath,
+            launchArgs,
+            ldLibraryPath,
+            envPath);
         qint64 detachedPid = 0;
         QProcess process;
         process.setProgram(QString::fromUtf8("pkexec"));

@@ -9,15 +9,18 @@ T.Switch {
     property string setIcon
     property bool animation : false
 
-    text: title
+    text: I18n.t(title)
     font.family: FontSystem.contentFontFamily
     font.pixelSize: Typography.t2
+    LayoutMirroring.enabled: false
 
     indicator: Rectangle {
         id: rectangle
         implicitWidth: 42
         implicitHeight: 22
-        x: control.leftPadding
+        x: I18n.isRtl
+           ? control.width - width - control.rightPadding
+           : control.leftPadding
         radius: 11
         anchors.verticalCenter: parent.verticalCenter
         color: control.checked ? Colors.dsPrimarySolid : Colors.dsSurface
@@ -25,7 +28,9 @@ T.Switch {
 
         Rectangle {
             id: rectTwo
-            x: control.checked ? parent.width / 1.7 : 5
+            x: control.checked
+               ? (I18n.isRtl ? 5 : parent.width - width - 5)
+               : (I18n.isRtl ? parent.width - width - 5 : 5)
             width: 13
             height: 13
             radius: width
@@ -46,13 +51,15 @@ T.Switch {
     }
 
     contentItem: Text {
-        text: control.text
+        text: I18n.t(control.text)
         font: control.font
         fontSizeMode: Text.Fit
         opacity: enabled ? 1.0 : 0.3
         color: Colors.dsText
-        leftPadding: control.indicator.width + control.spacing
+        leftPadding: I18n.isRtl ? 0 : control.indicator.width + control.spacing
+        rightPadding: I18n.isRtl ? control.indicator.width + control.spacing : 0
         topPadding: 5
+        horizontalAlignment: I18n.isRtl ? Text.AlignRight : Text.AlignLeft
         wrapMode: Text.WordWrap
         Behavior on color { ColorAnimation { duration: Animations.normal} }
     }

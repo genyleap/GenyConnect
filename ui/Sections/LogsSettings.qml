@@ -52,7 +52,7 @@ ColumnLayout {
 
                     Text {
                         Layout.fillWidth: true
-                        text: "Logs & Diagnostics"
+                        text: I18n.t("Logs & Diagnostics")
                         color: Colors.dsText
                         font.family: FontSystem.getContentFontBold.name
                         font.pixelSize: Typography.uiTitle
@@ -63,8 +63,8 @@ ColumnLayout {
                     Text {
                         Layout.fillWidth: true
                         text: vpnController.loggingEnabled
-                              ? "Captured lines: " + vpnController.recentLogs.length
-                              : "Enable logging to capture connection diagnostics."
+                              ? I18n.t("Captured lines: %1", [I18n.ltr(vpnController.recentLogs.length)])
+                              : I18n.t("Enable logging to capture connection diagnostics.")
                         color: Colors.dsTextMuted
                         font.family: FontSystem.contentFontFamily
                         font.pixelSize: Typography.uiBody
@@ -73,7 +73,7 @@ ColumnLayout {
                 }
 
                 Controls.StatusPill {
-                    text: vpnController.loggingEnabled ? "Enabled" : "Disabled"
+                    text: I18n.t(vpnController.loggingEnabled ? "Enabled" : "Disabled")
                     pillColor: vpnController.loggingEnabled ? Colors.dsPrimarySolid : Colors.dsSurface
                     borderColor: vpnController.loggingEnabled ? Colors.dsPrimarySolid : Colors.dsBorder
                     textColor: vpnController.loggingEnabled ? Colors.dsPrimaryText : Colors.dsTextMuted
@@ -97,7 +97,7 @@ ColumnLayout {
                     Layout.preferredWidth: 1
                     Layout.columnSpan: root.compact ? 2 : 1
                     compact: true
-                    text: "Open Viewer"
+                    text: I18n.t("Open Viewer")
                     onClicked: logsPopup.open()
                 }
 
@@ -105,7 +105,7 @@ ColumnLayout {
                     Layout.fillWidth: true
                     Layout.preferredWidth: 1
                     compact: true
-                    text: "Copy"
+                    text: I18n.t("Copy")
                     enabled: vpnController.loggingEnabled && vpnController.recentLogs.length > 0
                     onClicked: vpnController.copyLogsToClipboard()
                 }
@@ -114,7 +114,7 @@ ColumnLayout {
                     Layout.fillWidth: true
                     Layout.preferredWidth: 1
                     compact: true
-                    text: "Clear"
+                    text: I18n.t("Clear")
                     enabled: vpnController.recentLogs.length > 0
                     onClicked: vpnController.clearLogs()
                 }

@@ -13,7 +13,7 @@ T.Button {
     padding: 6
 
     contentItem: Text {
-        text: control.text
+        text: I18n.t(control.text)
         font.family: FontSystem.getContentFont.name
         font.pixelSize: Typography.t3
         color: control.enabled ? control.textColor : Colors.textMuted

@@ -44,7 +44,7 @@ Rectangle {
             spacing: 2
 
             Text {
-                text: "You are donating"
+                text: I18n.t("You are donating")
                 color: Colors.dsTextMuted
                 font.family: FontSystem.contentFontFamily
                 font.pixelSize: compact ? Typography.uiTitleSm : Typography.uiTitle
@@ -52,7 +52,7 @@ Rectangle {
 
             Text {
                 Layout.fillWidth: true
-                text: root.amountText + " " + root.tokenSymbol
+                text: I18n.localizeDigits(root.amountText) + " " + root.tokenSymbol
                 color: Colors.dsText
                 font.family: FontSystem.getContentFontBold.name
                 font.pixelSize: compact ? 22 : 28
@@ -74,7 +74,7 @@ Rectangle {
                 id: estimatedValueLabel
                 Layout.alignment: Qt.AlignRight
                 Layout.fillWidth: true
-                text: root.estimatedValueText
+                text: I18n.localizeDigits(root.estimatedValueText)
                 color: Colors.dsText
                 font.family: FontSystem.getContentFontBold.name
                 font.pixelSize: compact ? Typography.uiBody : Typography.uiTitleSm
@@ -87,7 +87,7 @@ Rectangle {
                 id: estimatedValueCaption
                 Layout.alignment: Qt.AlignRight
                 Layout.fillWidth: true
-                text: "Est. value"
+                text: I18n.t("Est. value")
                 color: Colors.dsTextSubtle
                 font.family: FontSystem.contentFontFamily
                 font.pixelSize: compact ? Typography.uiBodySm : Typography.uiTitleSm
@@ -127,7 +127,7 @@ Rectangle {
 
                 Text {
                     Layout.fillWidth: true
-                    text: "You are donating"
+                    text: I18n.t("You are donating")
                     color: Colors.dsTextMuted
                     font.family: FontSystem.contentFontFamily
                     font.pixelSize: compact ? Typography.uiTitleSm : Typography.uiTitle
@@ -136,7 +136,7 @@ Rectangle {
 
                 Text {
                     Layout.fillWidth: true
-                    text: root.amountText + " " + root.tokenSymbol
+                    text: I18n.localizeDigits(root.amountText) + " " + root.tokenSymbol
                     color: Colors.dsText
                     font.family: FontSystem.getContentFontBold.name
                     font.pixelSize: compact ? 22 : 28
@@ -152,7 +152,7 @@ Rectangle {
             spacing: 8
 
             Text {
-                text: "Est. value"
+                text: I18n.t("Est. value")
                 color: Colors.dsTextSubtle
                 font.family: FontSystem.contentFontFamily
                 font.pixelSize: Typography.uiTitleSm
@@ -160,7 +160,7 @@ Rectangle {
 
             Text {
                 Layout.fillWidth: true
-                text: root.estimatedValueText
+                text: I18n.localizeDigits(root.estimatedValueText)
                 color: Colors.dsText
                 font.family: FontSystem.getContentFontBold.name
                 font.pixelSize: Typography.uiTitleSm

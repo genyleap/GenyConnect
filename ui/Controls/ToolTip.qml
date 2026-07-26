@@ -6,7 +6,7 @@ import GenyConnect 1.0 as Core
 ToolTip {
     id: control
     height: 40
-    text: qsTr("A descriptive tool tip of what the button does")
+    text: Core.I18n.t("A descriptive tool tip of what the button does")
     contentItem: Text {
         text: control.text
         font: control.font

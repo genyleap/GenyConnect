@@ -5,9 +5,9 @@ import GenyConnect 1.0
 T.Menu {
     id: menu
 
-    T.Action { text: qsTr("Tool Bar"); checkable: true }
-    T.Action { text: qsTr("Side Bar"); checkable: true; checked: true }
-    T.Action { text: qsTr("Status Bar"); checkable: true; checked: true }
+    T.Action { text: I18n.t("Tool Bar"); checkable: true }
+    T.Action { text: I18n.t("Side Bar"); checkable: true; checked: true }
+    T.Action { text: I18n.t("Status Bar"); checkable: true; checked: true }
 
     T.MenuSeparator {
         contentItem: Rectangle {
@@ -18,7 +18,7 @@ T.Menu {
     }
 
     T.Menu {
-        title: qsTr("Advanced")
+        title: I18n.t("Advanced")
         // ...
     }
 

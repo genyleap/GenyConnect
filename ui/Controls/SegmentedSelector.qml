@@ -42,7 +42,7 @@ Item {
 
                 Text {
                     anchors.centerIn: parent
-                    text: parent.labelValue
+                    text: I18n.t(parent.labelValue)
                     color: parent.active ? Colors.dsPrimarySolid : Colors.dsTextMuted
                     font.family: parent.active ? FontSystem.getContentFontBold.name : FontSystem.contentFontFamily
                     font.pixelSize: Typography.uiBodyLg

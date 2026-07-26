@@ -33,7 +33,7 @@ Item {
 
         Text {
             anchors.centerIn: parent
-            text: root.text
+            text: I18n.t(root.text)
             color: "#ffffff"
             font.family: FontSystem.contentFontFamily
             font.pixelSize: 44 * 0.4

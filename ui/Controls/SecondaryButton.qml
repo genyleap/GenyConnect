@@ -13,7 +13,7 @@ T.Button {
     hoverEnabled: true
 
     contentItem: Text {
-        text: control.text
+        text: I18n.t(control.text)
         color: control.enabled ? Colors.dsText : Colors.dsTextSubtle
         font.family: FontSystem.getContentFontBold.name
         font.pixelSize: compact ? Typography.uiBodyLg : Typography.uiTitleSm

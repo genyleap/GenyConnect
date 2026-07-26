@@ -6,9 +6,11 @@ import QtQuick
 import QtQuick.Controls.Basic
 import QtQuick.Layouts
 
+import GenyConnect 1.0
+
 ColumnLayout {
 
-    property string title : "Unknown"
+    property string title : I18n.t("Unknown")
     property string note;
 
 
@@ -34,7 +36,7 @@ ColumnLayout {
             font.pixelSize: appStyle.h6
             font.weight: Font.Bold
             color: appStyle.foregroundActivated
-            text: title
+            text: I18n.t(title)
         }
 
         Rectangle {
@@ -56,7 +58,7 @@ ColumnLayout {
         HorizontalSpacer { }
 
         Text {
-            text: note
+            text: I18n.t(note)
             Layout.alignment: Qt.AlignHCenter | Qt.AlignVCenter
             fontSizeMode: Text.Fit
             font.family: fontSystem.getContentFont.name

@@ -105,7 +105,7 @@ ColumnLayout {
         Text {
             font.family: fontSystem.getContentFont.name
             font.pixelSize: appStyle.t1
-            text: title
+            text: I18n.t(title)
             opacity: isEnable ? 1.0 : 0.3
             color: {
                 if(isEnable) {
@@ -151,7 +151,7 @@ ColumnLayout {
         Item { width: 1; }
 
         Text {
-            text: note
+            text: I18n.t(note)
             fontSizeMode: Text.Fit
             font.family: fontSystem.getContentFont.name
             Layout.fillWidth: true;

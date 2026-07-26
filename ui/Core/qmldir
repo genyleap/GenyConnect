@@ -1,6 +1,7 @@
 module GenyConnect
 
 singleton AppGlobals 1.0 AppGlobals.qml
+singleton I18n 1.0 I18n.qml
 singleton Colors 1.0 Colors.qml
 singleton Metrics 1.0 Metrics.qml
 singleton Typography 1.0 Typography.qml

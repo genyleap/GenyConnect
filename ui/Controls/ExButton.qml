@@ -5,6 +5,8 @@
 import QtQuick
 import QtQuick.Layouts
 
+import GenyConnect 1.0
+
 ColumnLayout {
 
     property string title : ""
@@ -14,7 +16,7 @@ ColumnLayout {
     Layout.alignment: Qt.AlignHCenter | Qt.AlignVCenter
 
     Text {
-        text: qsTr(value)
+        text: I18n.t(value)
         Layout.alignment: Qt.AlignHCenter | Qt.AlignVCenter
         font.family: fontSystem.getContentFontBold.name
         font.pixelSize: appStyle.h4
@@ -22,7 +24,7 @@ ColumnLayout {
         font.weight: Font.Bold
     }
     Text {
-        text: qsTr(title)
+        text: I18n.t(title)
         font.family: fontSystem.getContentFont.name
         font.pixelSize: appStyle.t1
         color: appStyle.foregroundDeactivated

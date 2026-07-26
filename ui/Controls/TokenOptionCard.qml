@@ -82,7 +82,7 @@ Rectangle {
 
             Text {
                 Layout.fillWidth: true
-                text: root.title
+                text: I18n.t(root.title)
                 color: Colors.dsText
                 font.family: FontSystem.getContentFontBold.name
                 font.pixelSize: root.compactWidth ? 13 : 15
@@ -92,7 +92,7 @@ Rectangle {
 
             Text {
                 Layout.fillWidth: true
-                text: root.subtitle
+                text: I18n.t(root.subtitle)
                 color: Colors.dsTextMuted
                 font.family: FontSystem.contentFontFamily
                 font.pixelSize: root.compactWidth ? 11 : Typography.uiBody
@@ -115,7 +115,7 @@ Rectangle {
                 id: badgeLabel
                 anchors.centerIn: parent
                 width: parent.width - 10
-                text: root.resolvedBadgeText
+                text: I18n.t(root.resolvedBadgeText)
                 color: Colors.lightMode ? Colors.dsPrimarySolid : "#c8bbff"
                 font.family: FontSystem.getContentFontBold.name
                 font.pixelSize: root.compactWidth ? 10 : 11

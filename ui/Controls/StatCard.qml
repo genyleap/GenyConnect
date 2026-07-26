@@ -23,7 +23,7 @@ GlassCard {
 
         Text {
             Layout.fillWidth: true
-            text: root.label
+            text: I18n.t(root.label)
             color: Colors.dsTextSubtle
             font.family: FontSystem.contentFontFamily
             font.pixelSize: Typography.uiBodySm
@@ -45,7 +45,7 @@ GlassCard {
         Text {
             Layout.fillWidth: true
             visible: root.hint.length > 0
-            text: root.hint
+            text: I18n.t(root.hint)
             color: Colors.dsTextMuted
             font.family: FontSystem.contentFontFamily
             font.pixelSize: Typography.uiCaption

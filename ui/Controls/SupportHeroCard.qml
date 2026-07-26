@@ -33,7 +33,7 @@ GlassCard {
 
             Text {
                 Layout.fillWidth: true
-                text: root.title
+                text: I18n.t(root.title)
                 color: Colors.dsText
                 font.family: FontSystem.getContentFontBold.name
                 font.pixelSize: root.compact ? 16 : 18
@@ -43,7 +43,7 @@ GlassCard {
 
             Text {
                 Layout.fillWidth: true
-                text: root.description
+                text: I18n.t(root.description)
                 color: Colors.dsTextMuted
                 font.family: FontSystem.contentFontFamily
                 font.pixelSize: Typography.uiBody
@@ -75,7 +75,7 @@ GlassCard {
 
                     Text {
                         id: networkLabel
-                        text: root.networkName
+                        text: I18n.t(root.networkName)
                         color: Colors.dsText
                         font.family: FontSystem.getContentFontBold.name
                         font.pixelSize: Typography.uiBodyLg

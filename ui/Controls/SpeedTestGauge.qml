@@ -1,4 +1,5 @@
 import QtQuick
+import GenyConnect 1.0
 
 Item {
     id: root
@@ -661,9 +662,10 @@ Item {
         readonly property real ang: root.startAngle * Math.PI / 180
         readonly property real lr: root._rOuter * 1.14
 
-        text: Math.round(root.minimumValue).toString()
+        text: I18n.localizeDigits(Math.round(root.minimumValue).toString())
         color: root.scaleTextColor
 
+        font.family: FontSystem.contentFontFamily
         font.pixelSize: Math.max(14, root._R * 0.095)
         font.weight: Font.Medium
 
@@ -675,9 +677,10 @@ Item {
         readonly property real ang: (root.startAngle + root.sweepAngle) * Math.PI / 180
         readonly property real lr: root._rOuter * 1.14
 
-        text: Math.round(root.maximumValue).toString()
+        text: I18n.localizeDigits(Math.round(root.maximumValue).toString())
         color: root.scaleTextColor
 
+        font.family: FontSystem.contentFontFamily
         font.pixelSize: Math.max(14, root._R * 0.095)
         font.weight: Font.Medium
 
@@ -690,10 +693,11 @@ Item {
 
         y: root._cy - root._rInner * 0.90
 
-        text: root.unit
+        text: I18n.localizeDisplay(root.unit)
         color: root.unitTextColor
         opacity: 0.80
 
+        font.family: FontSystem.contentFontFamily
         font.pixelSize: Math.max(12, root._R * 0.080)
         font.weight: Font.Normal
         font.letterSpacing: 0.5
@@ -704,9 +708,10 @@ Item {
 
         y: root._cy - root._rInner * 0.48
 
-        text: Math.round(root.value)
+        text: I18n.localizeDigits(Math.round(root.value))
         color: root.valueTextColor
 
+        font.family: FontSystem.getContentFontBold.name
         font.pixelSize: Math.max(60, root._rInner * 0.88)
         font.weight: Font.Bold
         font.letterSpacing: -1

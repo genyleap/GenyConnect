@@ -33,9 +33,9 @@ Item {
 
     Text {
         id: previousLabel
-        text: root.previousText
+        text: I18n.localizeDisplay(root.previousText)
         color: root.color
-        font.family: FontSystem.contentFontFamily
+        font.family: FontSystem.usePersianArabicFont ? FontSystem.contentFontFamily : FontSystem.technicalFontFamily
         font.pixelSize: root.fontSize
         font.bold: root.bold
         opacity: 0.0
@@ -44,9 +44,9 @@ Item {
 
     Text {
         id: currentLabel
-        text: root.currentText
+        text: I18n.localizeDisplay(root.currentText)
         color: root.color
-        font.family: FontSystem.contentFontFamily
+        font.family: FontSystem.usePersianArabicFont ? FontSystem.contentFontFamily : FontSystem.technicalFontFamily
         font.pixelSize: root.fontSize
         font.bold: root.bold
         opacity: 1.0

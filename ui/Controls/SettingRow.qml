@@ -47,7 +47,7 @@ GlassCard {
 
             Text {
                 Layout.fillWidth: true
-                text: root.title
+                text: I18n.t(root.title)
                 color: Colors.dsText
                 font.family: FontSystem.getContentFontBold.name
                 font.pixelSize: compact ? Typography.uiTitleSm : Typography.uiTitle
@@ -58,7 +58,7 @@ GlassCard {
             Text {
                 Layout.fillWidth: true
                 visible: root.subtitle.length > 0
-                text: root.subtitle
+                text: I18n.t(root.subtitle)
                 color: Colors.dsTextMuted
                 font.family: FontSystem.contentFontFamily
                 font.pixelSize: Typography.uiBody
@@ -68,7 +68,7 @@ GlassCard {
 
         Text {
             visible: root.showChevron
-            text: "\uf054"
+            text: I18n.isRtl ? "\uf053" : "\uf054"
             color: Colors.dsTextSubtle
             font.family: FontSystem.getAwesomeSolid.name
             font.pixelSize: 14

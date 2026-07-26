@@ -62,7 +62,7 @@ Rectangle {
 
                 Text {
                     Layout.fillWidth: true
-                    text: sectionCard.title
+                    text: I18n.t(sectionCard.title)
                     color: Colors.dsText
                     font.family: FontSystem.getContentFontBold.name
                     font.pixelSize: Typography.uiTitleSm
@@ -73,7 +73,7 @@ Rectangle {
                 Text {
                     Layout.fillWidth: true
                     visible: sectionCard.subtitle.length > 0
-                    text: sectionCard.subtitle
+                    text: I18n.t(sectionCard.subtitle)
                     color: Colors.dsTextMuted
                     font.family: FontSystem.contentFontFamily
                     font.pixelSize: Typography.uiBody

@@ -6,6 +6,8 @@ import QtQuick
 import QtQuick.Layouts
 import QtQuick.Controls.Basic
 
+import GenyConnect 1.0
+
 Item {
     property string name : "unknown"
     property int size : 76
@@ -46,7 +48,7 @@ Item {
             font.pixelSize: appStyle.t1
             font.bold: true
             font.weight: Font.Normal
-            text: isSelf ? "Your Story" : name
+            text: isSelf ? I18n.t("Your Story") : name
             color: isSelf ? appStyle.foregroundDeactivated : appStyle.foregroundActivated
             wrapMode: Text.WordWrap
             elide: Text.ElideRight
@@ -91,7 +93,7 @@ Item {
             horizontalAlignment: Text.AlignHCenter
             font.pixelSize: appStyle.t3
             font.weight: Font.Bold
-            text: "LIVE"
+            text: I18n.t("LIVE")
             color: appStyle.accent
         }
     }

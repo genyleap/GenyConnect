@@ -6,6 +6,8 @@ import QtQuick
 import QtQuick.Controls.Basic
 import QtQuick.Layouts
 
+import GenyConnect 1.0
+
 Rectangle {
     id: control
     width: 80
@@ -13,7 +15,7 @@ Rectangle {
     radius: appStyle.radius
     color: appStyle.backgroundItemActivated
     property string icon : ""
-    property string title : "Link"
+    property string title : I18n.t("Link")
     signal click();
     ColumnLayout {
         anchors.centerIn: parent
@@ -52,7 +54,7 @@ Rectangle {
             font.bold: false
             font.weight: Font.Normal
             color: appStyle.foregroundActivated
-            text: title
+            text: I18n.t(title)
         }
         Item { height: 5; }
     }

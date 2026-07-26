@@ -87,7 +87,7 @@ Item {
                 horizontalAlignment: Text.AlignHCenter
                 verticalAlignment: Text.AlignVCenter
                 font.pixelSize: 14
-                text: qsTr("Unknown")
+                text: I18n.t("Unknown")
                 color: "#ffffff"
             }
         }

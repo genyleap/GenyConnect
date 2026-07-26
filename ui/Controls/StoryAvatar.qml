@@ -6,6 +6,8 @@ import QtQuick
 import QtQuick.Layouts
 import QtQuick.Controls.Basic
 
+import GenyConnect 1.0
+
 import "../Pages" as Pages
 
 Rectangle {
@@ -227,7 +229,7 @@ Rectangle {
                     horizontalAlignment: Text.AlignHCenter
                     verticalAlignment: Text.AlignVCenter
                     font.pixelSize: 14
-                    text: qsTr("Unknown")
+                    text: I18n.t("Unknown")
                     color: "#ffffff"
                 }
             }

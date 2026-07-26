@@ -27,7 +27,7 @@ RowLayout {
     FootButton {
         id: discover_button
         icon: "\uf015";
-        title: "Home";
+        title: I18n.t("Home");
         isSelected: userStackLayout.currentIndex === 0 ? true : false
         Layout.alignment: Qt.AlignHCenter | Qt.AlignVCenter
 
@@ -46,7 +46,7 @@ RowLayout {
     FootButton {
         id:category_button
         icon: "\uf002";
-        title: "Explorer";
+        title: I18n.t("Explorer");
         isSelected: userStackLayout.currentIndex === 1 ? true : false
 
         onClick: {
@@ -64,7 +64,7 @@ RowLayout {
     FootButton {
         id:create_button
         icon: "\uf055";
-        title: "Create";
+        title: I18n.t("Create");
         isSelected: userStackLayout.currentIndex === 2 ? true : false
 
         onClick: {
@@ -82,7 +82,7 @@ RowLayout {
     FootButton {
         id:connection_button
         icon: "\uf004";
-        title: "Likes";
+        title: I18n.t("Likes");
         isSelected: userStackLayout.currentIndex === 3 ? true : false
 
         onClick: {
@@ -100,7 +100,7 @@ RowLayout {
     FootButton {
         id: profile_button
         icon: "\uf406";
-        title: "Profile";
+        title: I18n.t("Profile");
         isSelected: userStackLayout.currentIndex === 4 ? true : false
 
         onClick: {
@@ -115,5 +115,4 @@ RowLayout {
 
     Item { Layout.fillWidth: true; }
 }
-
 

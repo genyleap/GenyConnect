@@ -100,7 +100,7 @@ ColumnLayout {
 
                 Text {
                     Layout.fillWidth: true
-                    text: modeCard.modeName
+                    text: I18n.t(modeCard.modeName)
                     color: Colors.dsText
                     font.family: FontSystem.getContentFontBold.name
                     font.pixelSize: compact ? Typography.uiBodyLg : Typography.uiTitleSm
@@ -110,7 +110,7 @@ ColumnLayout {
 
                 Controls.StatusPill {
                     visible: modeCard.badgeText.length > 0
-                    text: modeCard.badgeText
+                    text: I18n.t(modeCard.badgeText)
                     glyph: "\uf0a3"
                     bold: true
                     pillColor: Qt.rgba(modeCard.accentColor.r, modeCard.accentColor.g, modeCard.accentColor.b, Colors.lightMode ? 0.12 : 0.20)
@@ -120,7 +120,7 @@ ColumnLayout {
 
                 Text {
                     Layout.fillWidth: true
-                    text: modeCard.summary
+                    text: I18n.t(modeCard.summary)
                     color: Colors.dsTextMuted
                     font.family: FontSystem.contentFontFamily
                     font.pixelSize: compact ? Typography.uiBody : Typography.uiBodyLg
@@ -197,7 +197,7 @@ ColumnLayout {
 
                 Text {
                     Layout.fillWidth: true
-                    text: metricChip.label
+                    text: I18n.t(metricChip.label)
                     color: Colors.dsTextMuted
                     font.family: FontSystem.contentFontFamily
                     font.pixelSize: Typography.uiCaption
@@ -206,7 +206,7 @@ ColumnLayout {
 
                 Text {
                     Layout.fillWidth: true
-                    text: metricChip.value
+                    text: I18n.localizeDigits(I18n.t(metricChip.value))
                     color: Colors.dsText
                     font.family: FontSystem.getContentFontBold.name
                     font.pixelSize: Typography.uiBodyLg
@@ -247,7 +247,7 @@ ColumnLayout {
             }
 
             Text {
-                text: statusBadge.status
+                text: I18n.t(statusBadge.status)
                 color: statusBadge.badgeColor
                 font.family: FontSystem.getContentFontBold.name
                 font.pixelSize: Typography.uiBody
@@ -263,8 +263,8 @@ ColumnLayout {
 
         PowerSectionCard {
             root: surface.root
-            title: "Power Mode"
-            subtitle: "Choose how GenyConnect balances battery use, stats refresh, reconnect pressure, and visual effects. The tunnel lifecycle stays owned by the existing VPN runtime."
+            title: I18n.t("Power Mode")
+            subtitle: I18n.t("Choose how GenyConnect balances battery use, stats refresh, reconnect pressure, and visual effects. The tunnel lifecycle stays owned by the existing VPN runtime.")
             glyph: "\uf0e7"
             accentColor: root.powerModeAccent(vpnController.powerMode)
             animated: root.powerVisualAnimationsEnabled
@@ -300,7 +300,7 @@ ColumnLayout {
 
                     Text {
                         Layout.fillWidth: true
-                        text: root.powerModeSummary(vpnController.powerMode)
+                        text: I18n.t(root.powerModeSummary(vpnController.powerMode))
                         color: Colors.dsText
                         font.family: FontSystem.contentFontFamily
                         font.pixelSize: Typography.uiBodyLg
@@ -324,7 +324,7 @@ ColumnLayout {
                     Layout.fillWidth: true
                     compact: root.compact
                     animated: root.powerVisualAnimationsEnabled
-                    modeName: modelData
+                    modeName: modelData === "Save" ? I18n.t("Power Saver") : I18n.t(modelData)
                     glyph: root.powerModeGlyph(modelData)
                     accentColor: root.powerModeAccent(modelData)
                     summary: root.powerModeSummary(modelData)
@@ -336,8 +336,8 @@ ColumnLayout {
 
         PowerSectionCard {
             root: surface.root
-            title: "Active Policy"
-            subtitle: "Effective runtime and UI intervals after mode and adaptive tuning."
+            title: I18n.t("Active Policy")
+            subtitle: I18n.t("Effective runtime and UI intervals after mode and adaptive tuning.")
             glyph: "\uf085"
             accentColor: Colors.dsPrimarySolid
             animated: root.powerVisualAnimationsEnabled
@@ -349,44 +349,44 @@ ColumnLayout {
                 rowSpacing: 8
 
                 PowerMetricChip {
-                    label: "Stats Poll"
+                    label: I18n.t("Stats Poll")
                     value: root.powerMsText((vpnController.powerPolicy || {}).statsPollIntervalMs || 1000)
                     glyph: "\uf201"
                     accentColor: Colors.dsPrimarySolid
                 }
 
                 PowerMetricChip {
-                    label: "UI Refresh"
+                    label: I18n.t("UI Refresh")
                     value: root.powerMsText(root.powerUiStatsIntervalMs)
                     glyph: "\uf2f1"
                     accentColor: Colors.dsSuccess
                 }
 
                 PowerMetricChip {
-                    label: "Gauge"
+                    label: I18n.t("Gauge")
                     value: root.powerMsText(root.powerGaugeRefreshIntervalMs)
                     glyph: "\uf3fd"
                     accentColor: Colors.dsWarning
                 }
 
                 PowerMetricChip {
-                    label: "Reconnect"
+                    label: I18n.t("Reconnect")
                     value: ((vpnController.powerPolicy || {}).conservativeReconnect === true) ? "Backoff" : "Standard"
                     glyph: "\uf2f1"
                     accentColor: ((vpnController.powerPolicy || {}).conservativeReconnect === true) ? Colors.dsSuccess : Colors.dsPrimarySolid
                 }
 
                 PowerMetricChip {
-                    label: "Visuals"
+                    label: I18n.t("Visuals")
                     value: root.powerVisualAnimationsEnabled ? "Enabled" : "Reduced"
                     glyph: "\uf53f"
                     accentColor: root.powerVisualAnimationsEnabled ? Colors.dsPrimarySolid : Colors.dsSuccess
                 }
 
                 PowerMetricChip {
-                    label: "FakeDNS Sniff"
+                    label: I18n.t("FakeDNS Sniff")
                     value: ((vpnController.powerPolicy || {}).reduceFakeDnsSniffing === true) ? "Reduced" : "Standard"
-                    glyph: "\uf1eb"
+                    glyph: "\uf57d"
                     accentColor: ((vpnController.powerPolicy || {}).reduceFakeDnsSniffing === true) ? Colors.dsSuccess : Colors.dsPrimarySolid
                 }
             }
@@ -394,8 +394,8 @@ ColumnLayout {
 
         PowerSectionCard {
             root: surface.root
-            title: "Transport Power Profile"
-            subtitle: vpnController.transportPowerDescription(vpnController.currentProfileTransportPowerClass())
+            title: I18n.t("Transport Power Profile")
+            subtitle: I18n.t(vpnController.transportPowerDescription(vpnController.currentProfileTransportPowerClass()))
             glyph: "\uf362"
             accentColor: root.powerModeAccent(vpnController.powerMode)
             animated: root.powerVisualAnimationsEnabled
@@ -411,7 +411,7 @@ ColumnLayout {
                 Item { Layout.fillWidth: true }
 
                 Text {
-                    text: "Metadata only"
+                    text: I18n.t("Metadata only")
                     color: Colors.dsTextSubtle
                     font.family: FontSystem.contentFontFamily
                     font.pixelSize: Typography.uiCaption
@@ -422,8 +422,8 @@ ColumnLayout {
 
         PowerSectionCard {
             root: surface.root
-            title: "Diagnostics"
-            subtitle: "Clean counters for wakeups, reconnect pressure, and adaptive state."
+            title: I18n.t("Diagnostics")
+            subtitle: I18n.t("Clean counters for wakeups, reconnect pressure, and adaptive state.")
             glyph: "\uf7d9"
             accentColor: Colors.dsPrimarySolid
             animated: root.powerVisualAnimationsEnabled
@@ -435,37 +435,37 @@ ColumnLayout {
                 rowSpacing: 8
 
                 PowerMetricChip {
-                    label: "Wakeups"
+                    label: I18n.t("Wakeups")
                     value: String(root.powerDiagnosticValue("timerWakeups", 0))
                     glyph: "\uf017"
                     accentColor: Colors.dsPrimarySolid
                 }
 
                 PowerMetricChip {
-                    label: "Reconnects"
+                    label: I18n.t("Reconnects")
                     value: String(root.powerDiagnosticValue("reconnectAttempts", 0))
                     glyph: "\uf2f1"
                     accentColor: Colors.dsWarning
                 }
 
                 PowerMetricChip {
-                    label: "Instability"
+                    label: I18n.t("Instability")
                     value: String(root.powerDiagnosticValue("instabilityCount", 0))
                     glyph: "\uf071"
                     accentColor: Number(root.powerDiagnosticValue("instabilityCount", 0)) > 0 ? Colors.dsDanger : Colors.dsSuccess
                 }
 
                 PowerMetricChip {
-                    label: "Battery"
+                    label: I18n.t("Battery")
                     value: root.powerBatteryText()
                     glyph: "\uf240"
                     accentColor: Colors.dsSuccess
                 }
 
                 PowerMetricChip {
-                    label: "Network"
+                    label: I18n.t("Network")
                     value: root.powerNetworkText()
-                    glyph: "\uf1eb"
+                    glyph: "\uf6ff"
                     accentColor: Colors.dsPrimarySolid
                 }
             }
@@ -474,8 +474,8 @@ ColumnLayout {
         PowerSectionCard {
             root: surface.root
             visible: vpnController.isMobile
-            title: "Android Battery"
-            subtitle: "Keep Android from suspending the VPN foreground service during long sessions."
+            title: I18n.t("Android Battery")
+            subtitle: I18n.t("Keep Android from suspending the VPN foreground service during long sessions.")
             glyph: "\uf5df"
             accentColor: ((vpnController.powerDiagnostics || {}).batteryOptimizationIgnored !== false) ? Colors.dsSuccess : Colors.dsWarning
             animated: root.powerVisualAnimationsEnabled
@@ -486,7 +486,7 @@ ColumnLayout {
 
                 PowerMetricChip {
                     Layout.fillWidth: true
-                    label: "Optimization"
+                    label: I18n.t("Optimization")
                     value: ((vpnController.powerDiagnostics || {}).batteryOptimizationIgnored !== false) ? "Exempt" : "Restricted"
                     glyph: "\uf3ed"
                     accentColor: ((vpnController.powerDiagnostics || {}).batteryOptimizationIgnored !== false) ? Colors.dsSuccess : Colors.dsWarning
@@ -497,7 +497,7 @@ ColumnLayout {
                     compact: true
                     strokeColor: Colors.dsWarning
                     textColor: Colors.dsWarning
-                    text: "Open"
+                    text: I18n.t("Open")
                     onClicked: {
                         const opened = vpnController.openBatteryOptimizationSettings()
                         root.settingsFeedbackText = opened ? "Opened Android battery settings." : "Battery settings are unavailable."
@@ -509,8 +509,8 @@ ColumnLayout {
         PowerSectionCard {
             root: surface.root
             visible: root.powerAdaptiveInputsAvailable()
-            title: "Adaptive Inputs"
-            subtitle: "Signals that can tune intervals at runtime without reconnecting."
+            title: I18n.t("Adaptive Inputs")
+            subtitle: I18n.t("Signals that can tune intervals at runtime without reconnecting.")
             glyph: "\uf1da"
             accentColor: Colors.dsSuccess
             animated: root.powerVisualAnimationsEnabled
@@ -522,28 +522,28 @@ ColumnLayout {
                 rowSpacing: 8
 
                 PowerMetricChip {
-                    label: "Screen"
+                    label: I18n.t("Screen")
                     value: (vpnController.powerDiagnostics || {}).screenOn === false ? "Off" : "On"
                     glyph: "\uf108"
                     accentColor: (vpnController.powerDiagnostics || {}).screenOn === false ? Colors.dsSuccess : Colors.dsPrimarySolid
                 }
 
                 PowerMetricChip {
-                    label: "Charging"
+                    label: I18n.t("Charging")
                     value: (vpnController.powerDiagnostics || {}).charging === true ? "Yes" : "No"
                     glyph: "\uf1e6"
                     accentColor: (vpnController.powerDiagnostics || {}).charging === true ? Colors.dsSuccess : Colors.dsTextSubtle
                 }
 
                 PowerMetricChip {
-                    label: "Battery Saver"
+                    label: I18n.t("Battery Saver")
                     value: (vpnController.powerDiagnostics || {}).batterySaver === true ? "On" : "Off"
                     glyph: "\uf06c"
                     accentColor: (vpnController.powerDiagnostics || {}).batterySaver === true ? Colors.dsSuccess : Colors.dsTextSubtle
                 }
 
                 PowerMetricChip {
-                    label: "App State"
+                    label: I18n.t("App State")
                     value: (vpnController.powerDiagnostics || {}).backgrounded === true ? "Background" : "Foreground"
                     glyph: "\uf2d0"
                     accentColor: (vpnController.powerDiagnostics || {}).backgrounded === true ? Colors.dsSuccess : Colors.dsPrimarySolid

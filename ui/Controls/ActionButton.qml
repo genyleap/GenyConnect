@@ -29,7 +29,7 @@ T.Button {
         spacing: 10
 
         Text {
-            text: control.text
+            text: I18n.t(control.text)
             Layout.alignment: Qt.AlignHCenter | Qt.AlignVCenter
             Layout.fillWidth: false
             font.family: FontSystem.getContentFont.name

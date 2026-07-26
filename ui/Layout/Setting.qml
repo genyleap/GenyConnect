@@ -5,6 +5,8 @@
 import QtQuick
 import QtQuick.Controls.Basic
 import QtQuick.Layouts
+
+import GenyConnect 1.0
 import "../Controls" as Controls
 
 Drawer {
@@ -92,7 +94,7 @@ Drawer {
                     font.pixelSize: Typography.h4
                     font.weight: Font.Bold
                     color: Colors.foregroundActivated
-                    text: qsTr("Settings")
+                    text: I18n.t("Settings")
                 }
 
                 Item { Layout.fillWidth: true; }
@@ -203,7 +205,7 @@ Drawer {
                             font.family: FontSystem.getContentFont.name
                             font.pixelSize: Typography.h6
                             font.weight: Font.Light
-                            text: model.name
+                            text: I18n.t(model.name)
                             color: mouseAreaTwo.containsMouse ? Colors.primary : Colors.foregroundActivated
                             verticalAlignment: Text.AlignVCenter
                             Behavior on color { ColorAnimation { duration: 200} }
@@ -319,7 +321,7 @@ Drawer {
                     font.pixelSize: Typography.h6
                     font.weight: Font.Bold
                     color: Colors.foregroundFocused
-                    text: qsTr("Gorfeh")
+                    text: I18n.t("Gorfeh")
                 }
             }
 
@@ -329,7 +331,7 @@ Drawer {
                 font.pixelSize: Typography.t2
                 font.weight: Font.Light
                 color: Colors.foregroundDeactivated
-                text: qsTr("Software Version : 0.542.23")
+                text: I18n.t("Software Version : 0.542.23")
             }
 
             Item { width: 5; }

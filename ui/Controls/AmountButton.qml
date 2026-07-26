@@ -18,7 +18,7 @@ Rectangle {
 
     Text {
         anchors.centerIn: parent
-        text: root.label
+        text: I18n.localizeDigits(I18n.t(root.label))
         color: selected ? Colors.dsPrimaryText : Colors.dsText
         font.family: FontSystem.getContentFontBold.name
         font.pixelSize: Typography.uiTitleSm

@@ -25,9 +25,10 @@ T.Button {
             visible: glyph.length > 0 || glyphFallback.length > 0
         }
         Text {
-            text: control.text
-            font.family: FontSystem.getContentFont.name
+            text: I18n.t(control.text)
+            font.family: FontSystem.getContentFontBold.name
             font.pixelSize: Typography.t3
+            font.bold: true
             color: Colors.textPrimary
         }
         Text {

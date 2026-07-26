@@ -16,7 +16,7 @@ T.TabButton {
     property string description
     property string setIcon : ""
 
-    text: title
+    text: I18n.t(title)
 
     contentItem: ColumnLayout {
         Text {
@@ -48,7 +48,7 @@ T.TabButton {
             color: checked
                    ? Colors.staticPrimary
                    : (enabled ? Colors.textPrimary : Colors.textMuted)
-            text: control.text
+            text: I18n.t(control.text)
         }
     }
 
