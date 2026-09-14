@@ -38,7 +38,7 @@ ApplicationWindow {
     readonly property real androidFallbackSafeBottomInset: (mobilePlatform && Qt.platform.os === "android" && reportedSafeBottomInset <= 0.5) ? Math.round(40 * androidDensityScale) : 0
     readonly property real safeTopInset: mobilePlatform ? Math.max((Qt.platform.os === "ios" ? 14 : androidFallbackSafeTopInset), reportedSafeTopInset) : 0
     readonly property real safeBottomInset: mobilePlatform ? Math.max((Qt.platform.os === "ios" ? 22 : androidFallbackSafeBottomInset), reportedSafeBottomInset) : 0
-    readonly property real compactBottomNavVisualHeight: mobilePlatform ? (mobileLandscape ? 44 : 48) : 60
+    readonly property real compactBottomNavVisualHeight: mobilePlatform ? (mobileLandscape ? 52 : 56) : 60
     readonly property real compactBottomNavInset: safeBottomInset
     readonly property real compactBottomNavHeight: compactBottomNavVisualHeight + compactBottomNavInset
     readonly property real compactBottomNavSafeFillHeight: mobilePlatform ? Math.max(mobileLandscape ? 4 : 8, compactBottomNavInset + (mobileLandscape ? 2 : 4)) : Math.max(34, safeBottomInset + 18)
@@ -371,8 +371,10 @@ ApplicationWindow {
         settingsPageShift = 0
         settingsPageOpacity = 0.0
         settingsSectionTransition.restart()
-        if (settingsFlick)
+        if (settingsFlick) {
             settingsFlick.contentY = 0
+            settingsFlick.forceActiveFocus()
+        }
     }
 
     function handleMobileBackPressed() {
@@ -1020,11 +1022,11 @@ ApplicationWindow {
     }
 
     function isAppSuggestionSelected(itemOrName) {
-        const key = appSuggestionRuleKey(itemOrName).toLowerCase()
+        const key = appSuggestionRuleKey(itemOrName)
         if (key.length === 0)
             return false
         for (let i = 0; i < selectedAppRuleTargets.length; ++i) {
-            if ((selectedAppRuleTargets[i] || "").toLowerCase() === key)
+            if ((selectedAppRuleTargets[i] || "") === key)
                 return true
         }
         return false
@@ -1032,7 +1034,7 @@ ApplicationWindow {
 
     function toggleAppSuggestionSelection(itemOrName) {
         const raw = appSuggestionRuleKey(itemOrName)
-        const key = raw.toLowerCase()
+        const key = raw
         if (key.length === 0)
             return
         const current = selectedAppRuleTargets.slice(0)
@@ -1040,7 +1042,7 @@ ApplicationWindow {
         let removed = false
         for (let i = 0; i < current.length; ++i) {
             const valueRaw = (current[i] || "").trim()
-            const value = valueRaw.toLowerCase()
+            const value = valueRaw
             if (!removed && value === key) {
                 removed = true
                 continue
@@ -1083,7 +1085,7 @@ ApplicationWindow {
         const seen = {}
         for (let i = 0; i < items.length; ++i) {
             const keyRaw = appSuggestionRuleKey(items[i])
-            const key = keyRaw.toLowerCase()
+            const key = keyRaw
             if (key.length === 0 || seen[key] === true)
                 continue
             seen[key] = true
@@ -1646,7 +1648,7 @@ ApplicationWindow {
             return false
         }
         const normalizedType = (validation.type || routingRuleDraftType || "").toLowerCase()
-        const normalizedValue = (validation.value || routingRuleDraftValue || "").toString().toLowerCase()
+        const normalizedValue = (validation.value || routingRuleDraftValue || "").toString()
         const normalizedProfile = (routingRuleDraftProfileId || "").trim().toLowerCase()
         const draftAction = (validation.action || routingRuleDraftAction || "").toLowerCase()
         const rules = root.currentRoutingRules() || []
@@ -1657,7 +1659,7 @@ ApplicationWindow {
                 continue
             if (((item.targetType || "").toLowerCase()) !== normalizedType)
                 continue
-            if (((item.targetValue || "").toString().toLowerCase()) !== normalizedValue)
+            if (((item.targetValue || "").toString()) !== normalizedValue)
                 continue
             if ((((item.profileId || "").trim().toLowerCase())) !== normalizedProfile)
                 continue
@@ -2116,8 +2118,8 @@ ApplicationWindow {
 
     function openSettingsSection(section) {
         const nextSection = (section || "").trim().length > 0 ? section : "main"
-        if (root.contentItem && typeof root.contentItem.forceActiveFocus === "function")
-            root.contentItem.forceActiveFocus()
+        if (settingsFlick)
+            settingsFlick.forceActiveFocus()
         if (Qt.inputMethod && Qt.inputMethod.visible)
             Qt.inputMethod.hide()
         if (!settingsPopup.opened) {

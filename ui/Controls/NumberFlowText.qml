@@ -10,6 +10,7 @@ Item {
     property int duration: 220
     property int fontSize: 18
     property bool animated: true
+    property int horizontalAlignment: Text.AlignLeft
     property string currentText: text
     property string previousText: text
 
@@ -33,6 +34,8 @@ Item {
 
     Text {
         id: previousLabel
+        width: parent.width
+        horizontalAlignment: root.horizontalAlignment
         text: I18n.localizeDisplay(root.previousText)
         color: root.color
         font.family: FontSystem.usePersianArabicFont ? FontSystem.contentFontFamily : FontSystem.technicalFontFamily
@@ -44,6 +47,8 @@ Item {
 
     Text {
         id: currentLabel
+        width: parent.width
+        horizontalAlignment: root.horizontalAlignment
         text: I18n.localizeDisplay(root.currentText)
         color: root.color
         font.family: FontSystem.usePersianArabicFont ? FontSystem.contentFontFamily : FontSystem.technicalFontFamily

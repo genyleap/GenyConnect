@@ -81,6 +81,7 @@ extern "C" {
 #include <windows.h>
 #include <psapi.h>
 #include <shellapi.h>
+#include <tlhelp32.h>
 }
 #if defined(_MSC_VER)
 #pragma comment(lib, "psapi.lib")
@@ -1249,8 +1250,8 @@ QString validateGeneratedRuntimeConfig(const QJsonObject& config,
             }
             foundTunIn = true;
             const QJsonObject settings = inbound.value(QString::fromUtf8("settings")).toObject();
-            if (!settings.value(QString::fromUtf8("address")).isArray()) {
-                return QString::fromUtf8("Generated Xray TUN config is invalid: tun-in settings.address must be an array.");
+            if (!settings.value(QString::fromUtf8("gateway")).isArray()) {
+                return QString::fromUtf8("Generated Xray TUN config is invalid: tun-in settings.gateway must be an array.");
             }
             const QJsonValue mtu = settings.value(QString::fromUtf8("mtu"));
             if (expectTunMtuArray) {
@@ -3043,6 +3044,10 @@ VpnController::VpnController(QObject *parent)
 
     updateMemoryUsage();
 
+    // Availability is part of each exposed rule, so refresh the model when the
+    // selected core changes even if no stored rule was edited.
+    connect(this, &VpnController::processRoutingSupportChanged,
+            this, &VpnController::routingRulesChanged);
     loadSettings();
     applyPowerPolicy();
     if (!m_runtimeSupportsSystemProxy) {
@@ -4373,9 +4378,7 @@ void VpnController::setProxyDomainRules(const QString& value)
         return;
     }
 
-    m_proxyDomainRules = value;
-    emit routingRulesChanged();
-    saveSettings();
+    setLegacyRoutingRules(value, QString::fromUtf8("proxy"), false);
 }
 
 QString VpnController::directDomainRules() const
@@ -4389,9 +4392,7 @@ void VpnController::setDirectDomainRules(const QString& value)
         return;
     }
 
-    m_directDomainRules = value;
-    emit routingRulesChanged();
-    saveSettings();
+    setLegacyRoutingRules(value, QString::fromUtf8("direct"), false);
 }
 
 QString VpnController::blockDomainRules() const
@@ -4440,9 +4441,7 @@ void VpnController::setBlockDomainRules(const QString& value)
         return;
     }
 
-    m_blockDomainRules = value;
-    emit routingRulesChanged();
-    saveSettings();
+    setLegacyRoutingRules(value, QString::fromUtf8("block"), false);
 }
 
 void VpnController::setCustomDnsServers(const QString& value)
@@ -4562,9 +4561,7 @@ void VpnController::setProxyAppRules(const QString& value)
         return;
     }
 
-    m_proxyAppRules = value;
-    emit appRulesChanged();
-    saveSettings();
+    setLegacyRoutingRules(value, QString::fromUtf8("proxy"), true);
 }
 
 QString VpnController::directAppRules() const
@@ -4578,9 +4575,7 @@ void VpnController::setDirectAppRules(const QString& value)
         return;
     }
 
-    m_directAppRules = value;
-    emit appRulesChanged();
-    saveSettings();
+    setLegacyRoutingRules(value, QString::fromUtf8("direct"), true);
 }
 
 QString VpnController::blockAppRules() const
@@ -4594,9 +4589,7 @@ void VpnController::setBlockAppRules(const QString& value)
         return;
     }
 
-    m_blockAppRules = value;
-    emit appRulesChanged();
-    saveSettings();
+    setLegacyRoutingRules(value, QString::fromUtf8("block"), true);
 }
 
 QString VpnController::currentProfileUsageHour() const
@@ -6512,6 +6505,12 @@ void VpnController::connectToProfile(int row)
     }
 
     if (m_runtimeIsDesktop) {
+        // Probe the binary that will actually be launched, after Linux staging
+        // and executable-permission repair. Also pick up core replacements at
+        // the same path instead of keeping startup's capability result forever.
+        m_processRoutingSupportChecked = false;
+        detectProcessRoutingSupport();
+
         // Defensive cleanup for orphan xray instances that survived previous
         // crashes/forced stops and still reference the same runtime config.
         cleanupOrphanManagedRuntimeProcesses();
@@ -9378,7 +9377,7 @@ bool VpnController::detectProcessRoutingSupport()
     const QRegularExpression regex(QString::fromUtf8("Xray\\s+(\\d+)\\.(\\d+)\\.(\\d+)"));
     const QRegularExpressionMatch match = regex.match(output);
 
-    if (match.hasMatch()) {
+    if (process.exitStatus() == QProcess::NormalExit && process.exitCode() == 0 && match.hasMatch()) {
         m_xrayVersion = QString::fromUtf8("%1.%2.%3")
             .arg(match.captured(1), match.captured(2), match.captured(3));
 
@@ -9396,7 +9395,7 @@ bool VpnController::detectProcessRoutingSupport()
 #else
         m_processRoutingSupported = false;
 #endif
-    } else if (process.exitCode() == 0) {
+    } else if (process.exitStatus() == QProcess::NormalExit && process.exitCode() == 0) {
         m_xrayVersion = QString::fromUtf8("Detected");
     } else {
         m_xrayVersion = QString::fromUtf8("Unavailable");
@@ -9460,9 +9459,61 @@ void VpnController::syncLegacyRoutingFieldsFromRules()
     m_proxyDomainRules = parseRules(proxyDomains.join('\n')).join('\n');
     m_directDomainRules = parseRules(directDomains.join('\n')).join('\n');
     m_blockDomainRules = parseRules(blockDomains.join('\n')).join('\n');
-    m_proxyAppRules = parseRules(proxyApps.join('\n')).join('\n');
-    m_directAppRules = parseRules(directApps.join('\n')).join('\n');
-    m_blockAppRules = parseRules(blockApps.join('\n')).join('\n');
+    m_proxyAppRules = RoutingRuleService::parseProcessRules(proxyApps.join('\n')).join('\n');
+    m_directAppRules = RoutingRuleService::parseProcessRules(directApps.join('\n')).join('\n');
+    m_blockAppRules = RoutingRuleService::parseProcessRules(blockApps.join('\n')).join('\n');
+}
+
+void VpnController::setLegacyRoutingRules(const QString& value, const QString& action, bool processRules)
+{
+    const QStringList entries = processRules ? RoutingRuleService::parseProcessRules(value) : parseRules(value);
+    QList<RoutingRule> replacements;
+    for (const QString& entry : entries) {
+        const QVariantMap validation = validateRoutingRuleData(
+            processRules ? QString::fromUtf8("process") : QString::fromUtf8("domain"),
+            entry, action, QString(), true);
+        if (!validation.value(QString::fromUtf8("ok")).toBool()) {
+            setLastError(validation.value(QString::fromUtf8("error")).toString());
+            return;
+        }
+        RoutingRule rule;
+        rule.id = QUuid::createUuid().toString(QUuid::WithoutBraces);
+        rule.targetType = validation.value(QString::fromUtf8("type")).toString();
+        rule.targetValue = validation.value(QString::fromUtf8("value")).toString();
+        rule.action = action;
+        rule.enabled = true;
+        replacements.append(rule);
+    }
+
+    QList<RoutingRule> next;
+    int insertionIndex = -1;
+    for (const RoutingRule& rule : std::as_const(m_routingRules)) {
+        const bool matchesType = processRules
+            ? (rule.targetType == QString::fromUtf8("process") || rule.targetType == QString::fromUtf8("app"))
+            : rule.targetType == QString::fromUtf8("domain");
+        if (matchesType && rule.action == action && rule.profileId.isEmpty() && rule.enabled) {
+            // Keep surviving rules in place, including their IDs and precedence
+            // relative to other actions, disabled rules, and profile scopes.
+            for (int i = 0; i < replacements.size(); ++i) {
+                if (replacements.at(i).targetValue == rule.targetValue) {
+                    next.append(rule);
+                    replacements.removeAt(i);
+                    break;
+                }
+            }
+            insertionIndex = next.size();
+            continue;
+        }
+        next.append(rule);
+    }
+    if (insertionIndex < 0) {
+        insertionIndex = next.size();
+    }
+    for (const RoutingRule& rule : std::as_const(replacements)) {
+        next.insert(insertionIndex++, rule);
+    }
+    setRoutingRules(next, true, true, true);
+    setLastError(QString());
 }
 
 QVariantMap VpnController::routingRuleToVariantMap(const RoutingRule& rule) const
@@ -9474,6 +9525,17 @@ QVariantMap VpnController::routingRuleToVariantMap(const RoutingRule& rule) cons
     out.insert(QString::fromUtf8("action"), rule.action);
     out.insert(QString::fromUtf8("profileId"), rule.profileId);
     out.insert(QString::fromUtf8("enabled"), rule.enabled);
+    const bool processRule = rule.targetType == QString::fromUtf8("app")
+        || rule.targetType == QString::fromUtf8("process");
+    const QVariantMap validation = validateRoutingRuleData(
+        rule.targetType, rule.targetValue, rule.action, rule.profileId, false);
+    const bool valid = validation.value(QString::fromUtf8("ok")).toBool();
+    const bool available = valid && (!processRule || m_processRoutingSupported);
+    out.insert(QString::fromUtf8("available"), available);
+    out.insert(QString::fromUtf8("unavailableReason"), !valid
+        ? validation.value(QString::fromUtf8("error")).toString()
+        : available ? QString() : QString::fromUtf8(
+            "This rule requires process routing on Windows or Linux with Xray 26.1.23+. Disable it to connect with this runtime."));
 
     QString profileName = QString::fromUtf8("All Profiles");
     if (!rule.profileId.trimmed().isEmpty()) {
@@ -9494,7 +9556,8 @@ QVariantMap VpnController::validateRoutingRuleData(
     const QString& targetValue,
     const QString& action,
     const QString& profileId,
-    bool enforceProfileExists) const
+    bool enforceProfileExists,
+    bool enforceRuntimeSupport) const
 {
     QString normalizedProfileId = profileId.trimmed();
     if (normalizedProfileId.compare(QString::fromUtf8("all"), Qt::CaseInsensitive) == 0
@@ -9512,7 +9575,8 @@ QVariantMap VpnController::validateRoutingRuleData(
             normalizedProfileId.isEmpty()
                 || (d->profileModel && d->profileModel->indexOfId(normalizedProfileId) >= 0),
             m_runtimeSupportsPerAppRouting && m_runtimeIsDesktop,
-            m_processRoutingSupportChecked && !m_processRoutingSupported
+            m_processRoutingSupportChecked && !m_processRoutingSupported,
+            enforceRuntimeSupport
         });
 }
 
@@ -9541,6 +9605,7 @@ bool VpnController::parseRoutingRuleFromVariantMap(
         map.value(QString::fromUtf8("targetValue")).toString(),
         map.value(QString::fromUtf8("action")).toString(),
         map.value(QString::fromUtf8("profileId")).toString(),
+        false,
         false);
     if (!validation.value(QString::fromUtf8("ok")).toBool()) {
         if (errorMessage) {
@@ -9618,11 +9683,13 @@ void VpnController::reconnectActiveProfileForRoutingChange(const QString& reason
 void VpnController::loadRoutingRulesFromSettings(const QString& rawRulesJson)
 {
     QList<RoutingRule> loaded;
+    bool hasStructuredData = false;
     const QString text = rawRulesJson.trimmed();
     if (!text.isEmpty()) {
         QJsonParseError parseError;
         const QJsonDocument doc = QJsonDocument::fromJson(text.toUtf8(), &parseError);
         if (parseError.error == QJsonParseError::NoError && doc.isArray()) {
+            hasStructuredData = true;
             const QJsonArray array = doc.array();
             for (const QJsonValue& value : array) {
                 if (!value.isObject()) {
@@ -9631,15 +9698,27 @@ void VpnController::loadRoutingRulesFromSettings(const QString& rawRulesJson)
                 RoutingRule rule;
                 QString error;
                 if (!parseRoutingRuleFromVariantMap(value.toObject().toVariantMap(), &rule, &error)) {
-                    continue;
+                    // Preserve stored rules even when newer validation rejects
+                    // a matcher. They stay visible for editing or disabling;
+                    // startup must not silently discard a routing decision.
+                    const QJsonObject stored = value.toObject();
+                    rule.id = stored.value(QString::fromUtf8("id")).toString().trimmed();
+                    if (rule.id.isEmpty()) {
+                        rule.id = QUuid::createUuid().toString(QUuid::WithoutBraces);
+                    }
+                    rule.targetType = stored.value(QString::fromUtf8("targetType")).toString().trimmed().toLower();
+                    rule.targetValue = stored.value(QString::fromUtf8("targetValue")).toString();
+                    rule.action = stored.value(QString::fromUtf8("action")).toString().trimmed().toLower();
+                    rule.profileId = stored.value(QString::fromUtf8("profileId")).toString().trimmed();
+                    rule.enabled = stored.value(QString::fromUtf8("enabled")).toBool(true);
                 }
                 loaded.append(rule);
             }
         }
     }
 
-    if (loaded.isEmpty()) {
-        auto appendLegacy = [&loaded, this](const QStringList& values, const QString& action, const QString& type) {
+    if (!hasStructuredData) {
+        auto appendLegacy = [&loaded](const QStringList& values, const QString& action, const QString& type) {
             for (const QString& value : values) {
                 RoutingRule rule;
                 rule.id = QUuid::createUuid().toString(QUuid::WithoutBraces);
@@ -9653,12 +9732,13 @@ void VpnController::loadRoutingRulesFromSettings(const QString& rawRulesJson)
             }
         };
 
-        appendLegacy(parseRules(m_proxyDomainRules), QString::fromUtf8("proxy"), QString::fromUtf8("domain"));
-        appendLegacy(parseRules(m_directDomainRules), QString::fromUtf8("direct"), QString::fromUtf8("domain"));
+        // Match the old builder's block/direct/proxy precedence on migration.
         appendLegacy(parseRules(m_blockDomainRules), QString::fromUtf8("block"), QString::fromUtf8("domain"));
-        appendLegacy(parseRules(m_proxyAppRules), QString::fromUtf8("proxy"), QString::fromUtf8("process"));
-        appendLegacy(parseRules(m_directAppRules), QString::fromUtf8("direct"), QString::fromUtf8("process"));
-        appendLegacy(parseRules(m_blockAppRules), QString::fromUtf8("block"), QString::fromUtf8("process"));
+        appendLegacy(RoutingRuleService::parseProcessRules(m_blockAppRules), QString::fromUtf8("block"), QString::fromUtf8("process"));
+        appendLegacy(parseRules(m_directDomainRules), QString::fromUtf8("direct"), QString::fromUtf8("domain"));
+        appendLegacy(RoutingRuleService::parseProcessRules(m_directAppRules), QString::fromUtf8("direct"), QString::fromUtf8("process"));
+        appendLegacy(parseRules(m_proxyDomainRules), QString::fromUtf8("proxy"), QString::fromUtf8("domain"));
+        appendLegacy(RoutingRuleService::parseProcessRules(m_proxyAppRules), QString::fromUtf8("proxy"), QString::fromUtf8("process"));
     }
 
     setRoutingRules(loaded, false, true, false);
@@ -9739,42 +9819,11 @@ bool VpnController::appendRoutingRuleToConfig(
             }
             return false;
         }
-        QString processRule = value;
-#if defined(Q_OS_WIN)
-        processRule.replace('\\', '/');
-#endif
-
-        QJsonArray processRules;
-        QSet<QString> seenProcessRules;
-        auto appendProcessMatcher = [&processRules, &seenProcessRules](const QString& rawMatcher) {
-            const QString matcher = rawMatcher.trimmed();
-            if (matcher.isEmpty()) {
-                return;
-            }
-            const QString key = matcher.toLower();
-            if (seenProcessRules.contains(key)) {
-                return;
-            }
-            seenProcessRules.insert(key);
-            processRules.append(matcher);
-        };
-
-        appendProcessMatcher(processRule);
-
-        const QString shortName = QFileInfo(processRule).fileName().trimmed();
-        if (!shortName.isEmpty()) {
-            appendProcessMatcher(shortName);
-        }
-
-        if (shortName.endsWith(QString::fromUtf8(".exe"), Qt::CaseInsensitive)) {
-            appendProcessMatcher(shortName.left(shortName.size() - 4));
-        }
-
-        if (!processRule.contains('/') && processRule.contains('.')) {
-            appendProcessMatcher(processRule.section('.', -1));
-        }
-
-        jsonRule.insert(QString::fromUtf8("process"), processRules);
+        // Xray distinguishes names, absolute paths and folders. Adding a basename
+        // to an absolute-path rule would silently route unrelated executables too.
+        // Xray itself removes a lowercase .exe suffix for process-name matches.
+        jsonRule.insert(QString::fromUtf8("process"),
+                        QJsonArray {RoutingRuleService::normalizeProcessMatcher(value)});
     } else if (type == QString::fromUtf8("protocol")) {
         QStringList tokens = value.split(QRegularExpression(QString::fromUtf8("[,\\s]+")), Qt::SkipEmptyParts);
         for (QString& token : tokens) {
@@ -10849,11 +10898,8 @@ QString VpnController::createRoutingRule(
             || type == QString::fromUtf8("protocol")) {
             sameValue = existing.targetValue.compare(candidate.targetValue, Qt::CaseInsensitive) == 0;
         } else {
-#if defined(Q_OS_WIN)
-            sameValue = existing.targetValue.compare(candidate.targetValue, Qt::CaseInsensitive) == 0;
-#else
+            // Xray process matching is case-sensitive on every supported OS.
             sameValue = existing.targetValue == candidate.targetValue;
-#endif
         }
         if (existing.targetType == candidate.targetType
             && sameValue
@@ -11105,10 +11151,9 @@ void VpnController::requestAvailableAppRuleItems()
 
     const QPointer<VpnController> guard(this);
     [[maybe_unused]] auto appScanFuture = QtConcurrent::run([guard, requestId]() {
-        QVariantList discovered;
-        if (guard) {
-            discovered = guard->collectAvailableAppRuleItems();
-        }
+        // Discovery reads only OS state; it must not dereference the controller
+        // from a worker that can outlive the QObject.
+        const QVariantList discovered = collectAvailableAppRuleItems();
         if (!guard) {
             return;
         }
@@ -11131,24 +11176,21 @@ void VpnController::requestAvailableAppRuleItems()
     });
 }
 
-QVariantList VpnController::collectAvailableAppRuleItems() const
+QVariantList VpnController::collectAvailableAppRuleItems()
 {
     QVariantList out;
 
 #if defined(Q_OS_IOS)
     return out;
 #else
-    if (!m_runtimeIsDesktop || !m_runtimeSupportsPerAppRouting) {
-        return out;
-    }
-
+    constexpr qsizetype maxRunningApps = 1024;
     QSet<QString> seen;
     auto appendEntry = [&out, &seen](const QString& rawDisplayName,
                                      const QString& rawRuleTarget,
                                      const QString& source,
                                      const QString& bundleId = QString()) {
         QString displayName = rawDisplayName.trimmed();
-        QString ruleTarget = rawRuleTarget.trimmed();
+        QString ruleTarget = RoutingRuleService::normalizeProcessMatcher(rawRuleTarget);
         if (displayName.isEmpty() && ruleTarget.isEmpty()) {
             return;
         }
@@ -11167,10 +11209,7 @@ QVariantList VpnController::collectAvailableAppRuleItems() const
         if (ruleTarget.isEmpty()) {
             ruleTarget = displayName;
         }
-#if defined(Q_OS_WIN)
-        ruleTarget.replace('\\', '/');
-#endif
-        const QString key = (ruleTarget + QString::fromUtf8("::") + displayName).toLower();
+        const QString key = ruleTarget;
         if (seen.contains(key)) {
             return;
         }
@@ -11195,44 +11234,68 @@ QVariantList VpnController::collectAvailableAppRuleItems() const
         out.append(item);
     };
 
-    // Running processes provide immediate high-signal candidates.
-    QProcess process;
+    // Prefer the actual running executable, since launchers, display icons and
+    // truncated process names are not reliable matchers for the game's traffic.
 #if defined(Q_OS_WIN)
-    process.start(QString::fromUtf8("tasklist"),
-                  {QString::fromUtf8("/FO"), QString::fromUtf8("CSV"), QString::fromUtf8("/NH")});
+    const HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+    if (snapshot != INVALID_HANDLE_VALUE) {
+        PROCESSENTRY32W entry {};
+        entry.dwSize = sizeof(entry);
+        if (Process32FirstW(snapshot, &entry)) {
+            do {
+                const QString imageName = QString::fromWCharArray(entry.szExeFile);
+                QString executablePath;
+                const HANDLE handle = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, entry.th32ProcessID);
+                if (handle) {
+                    std::array<wchar_t, 32768> buffer {};
+                    DWORD length = static_cast<DWORD>(buffer.size());
+                    if (QueryFullProcessImageNameW(handle, 0, buffer.data(), &length)) {
+                        executablePath = QString::fromWCharArray(buffer.data(), static_cast<int>(length));
+                    }
+                    CloseHandle(handle);
+                }
+                appendEntry(imageName, executablePath.isEmpty() ? imageName : executablePath,
+                            QString::fromUtf8("running"));
+            } while (out.size() < maxRunningApps && Process32NextW(snapshot, &entry));
+        }
+        CloseHandle(snapshot);
+    }
+#elif defined(Q_OS_LINUX)
+    const QFileInfoList processDirs = QDir(QString::fromUtf8("/proc")).entryInfoList(
+        QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name);
+    for (const QFileInfo& processDir : processDirs) {
+        bool numericPid = false;
+        processDir.fileName().toUInt(&numericPid);
+        if (!numericPid) {
+            continue;
+        }
+        const QString executablePath = QFileInfo(
+            QDir(processDir.absoluteFilePath()).filePath(QString::fromUtf8("exe"))).symLinkTarget();
+        if (executablePath.isEmpty()) {
+            continue;
+        }
+        appendEntry(QFileInfo(executablePath).fileName(), executablePath, QString::fromUtf8("running"));
+        if (out.size() >= maxRunningApps) {
+            break;
+        }
+    }
 #elif defined(Q_OS_MACOS)
+    QProcess process;
     process.start(QString::fromUtf8("/bin/ps"),
                   {QString::fromUtf8("-axo"), QString::fromUtf8("comm=")});
-#else
-    process.start(QString::fromUtf8("ps"),
-                  {QString::fromUtf8("-eo"), QString::fromUtf8("comm=")});
-#endif
     if (process.waitForStarted(1500) && process.waitForFinished(4000)) {
         const QStringList lines = QString::fromUtf8(process.readAllStandardOutput()).split(
             QRegularExpression(QString::fromUtf8("[\\r\\n]+")), Qt::SkipEmptyParts);
         for (const QString& line : lines) {
-#if defined(Q_OS_WIN)
-            QString trimmed = line.trimmed();
-            if (!trimmed.startsWith('\"')) {
-                continue;
-            }
-            trimmed.remove(0, 1);
-            const int quoteIndex = trimmed.indexOf('\"');
-            if (quoteIndex <= 0) {
-                continue;
-            }
-            const QString imageName = trimmed.left(quoteIndex).trimmed();
-            appendEntry(imageName, imageName, QString::fromUtf8("running"));
-#else
             const QString executablePath = line.trimmed();
             const QString display = QFileInfo(executablePath).fileName().trimmed();
             appendEntry(display, executablePath, QString::fromUtf8("running"));
-#endif
-            if (out.size() >= 260) {
+            if (out.size() >= maxRunningApps) {
                 break;
             }
         }
     }
+#endif
 
 #if defined(Q_OS_MACOS)
     const QStringList macAppDirs {
@@ -11285,8 +11348,11 @@ QVariantList VpnController::collectAvailableAppRuleItems() const
             if (right.startsWith('\"') && right.endsWith('\"') && right.size() > 1) {
                 right = right.mid(1, right.size() - 2);
             }
-            if (right.contains(QString::fromUtf8(",0"))) {
-                right = right.left(right.lastIndexOf(',')).trimmed();
+            right = RoutingRuleService::normalizeProcessMatcher(right);
+            const QFileInfo executableInfo(right);
+            if (!executableInfo.isFile()
+                || executableInfo.suffix().compare(QString::fromUtf8("exe"), Qt::CaseInsensitive) != 0) {
+                continue;
             }
             appendEntry(left, right, sourceTag);
         }
@@ -11298,6 +11364,7 @@ QVariantList VpnController::collectAvailableAppRuleItems() const
                              QString::fromUtf8("-NoProfile"),
                              QString::fromUtf8("-Command"),
                              QString::fromUtf8(
+                                 "[Console]::OutputEncoding=New-Object System.Text.UTF8Encoding;"
                                  "$paths=@($env:APPDATA+'\\Microsoft\\Windows\\Start Menu\\Programs',$env:ProgramData+'\\Microsoft\\Windows\\Start Menu\\Programs');"
                                  "$w=New-Object -ComObject WScript.Shell;"
                                  "Get-ChildItem $paths -Recurse -Filter *.lnk -ErrorAction SilentlyContinue | "
@@ -11307,23 +11374,8 @@ QVariantList VpnController::collectAvailableAppRuleItems() const
         parsePipePairs(QString::fromUtf8(startMenuProbe.readAllStandardOutput()), QString::fromUtf8("start-menu"));
     }
 
-    QProcess registryProbe;
-    registryProbe.start(QString::fromUtf8("powershell"),
-                        {
-                            QString::fromUtf8("-NoProfile"),
-                            QString::fromUtf8("-Command"),
-                            QString::fromUtf8(
-                                "$roots='HKLM:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall',"
-                                "'HKLM:\\Software\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall',"
-                                "'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall';"
-                                "foreach($r in $roots){Get-ChildItem $r -ErrorAction SilentlyContinue | "
-                                "ForEach-Object { $p=Get-ItemProperty $_.PSPath -ErrorAction SilentlyContinue; "
-                                "if($p.DisplayName){$icon=$p.DisplayIcon; if($icon){$icon=$icon -replace ',\\d+$','';}; "
-                                "Write-Output ($p.DisplayName + '|' + $icon) }}}")
-                        });
-    if (registryProbe.waitForStarted(1800) && registryProbe.waitForFinished(9000)) {
-        parsePipePairs(QString::fromUtf8(registryProbe.readAllStandardOutput()), QString::fromUtf8("registry"));
-    }
+    // Uninstall DisplayIcon values are often icons or uninstallers, not the
+    // application's executable. Do not offer them as routing targets.
 
     const QStringList installRoots {
         qEnvironmentVariable("ProgramFiles"),
@@ -11372,13 +11424,22 @@ QVariantList VpnController::collectAvailableAppRuleItems() const
             }
             QString name;
             QString exec;
+            bool desktopEntry = false;
             while (!file.atEnd()) {
                 const QString line = QString::fromUtf8(file.readLine()).trimmed();
+                if (line.startsWith('[')) {
+                    desktopEntry = line == QString::fromUtf8("[Desktop Entry]");
+                    continue;
+                }
+                if (!desktopEntry) {
+                    continue;
+                }
                 if (line.startsWith(QString::fromUtf8("Name="))) {
                     name = line.mid(5).trimmed();
                 } else if (line.startsWith(QString::fromUtf8("Exec="))) {
                     exec = line.mid(5).trimmed();
-                } else if (line.startsWith(QString::fromUtf8("NoDisplay=true"), Qt::CaseInsensitive)) {
+                } else if (line.compare(QString::fromUtf8("NoDisplay=true"), Qt::CaseInsensitive) == 0
+                           || line.compare(QString::fromUtf8("Hidden=true"), Qt::CaseInsensitive) == 0) {
                     name.clear();
                     exec.clear();
                     break;
@@ -11387,22 +11448,52 @@ QVariantList VpnController::collectAvailableAppRuleItems() const
             if (name.isEmpty() || exec.isEmpty()) {
                 continue;
             }
-            exec.remove(QRegularExpression(QString::fromUtf8("\\s+%[a-zA-Z]")));
-            const QString executable = exec.split(QRegularExpression(QString::fromUtf8("\\s+")),
-                                                  Qt::SkipEmptyParts).value(0).trimmed();
-            appendEntry(name, executable, QString::fromUtf8("desktop-file"));
+            // Quoted executable paths can contain spaces. Complex shell/env or
+            // sandbox launcher commands do not identify the eventual process;
+            // those applications can be selected from the running list instead.
+            if (exec.contains('\\') || exec.contains(QString::fromUtf8("://"))) {
+                continue;
+            }
+            const QString executable = QProcess::splitCommand(exec).value(0);
+            const QString launcherName = QFileInfo(executable).fileName();
+            const QStringList wrappers {
+                QString::fromUtf8("env"), QString::fromUtf8("sh"), QString::fromUtf8("bash"),
+                QString::fromUtf8("flatpak"), QString::fromUtf8("snap"), QString::fromUtf8("gtk-launch")
+            };
+            if (executable.isEmpty() || wrappers.contains(launcherName)) {
+                continue;
+            }
+            const QString resolved = QStandardPaths::findExecutable(executable);
+            const QFileInfo executableInfo(resolved);
+            if (!executableInfo.isFile() || !executableInfo.isExecutable()) {
+                continue;
+            }
+            QFile executableFile(resolved);
+            if (!executableFile.open(QIODevice::ReadOnly)
+                || executableFile.read(2) == QByteArray("#!")) {
+                continue;
+            }
+            appendEntry(name, executableInfo.canonicalFilePath(), QString::fromUtf8("desktop-file"));
             ++desktopCount;
         }
     }
 #endif
 
+    // Keep running apps ahead of installation candidates so a directory scan
+    // cannot push the actual game's process out of the bounded picker results.
     std::sort(out.begin(), out.end(), [](const QVariant& a, const QVariant& b) {
+        const bool aRunning = a.toMap().value(QString::fromUtf8("source")).toString() == QString::fromUtf8("running");
+        const bool bRunning = b.toMap().value(QString::fromUtf8("source")).toString() == QString::fromUtf8("running");
+        if (aRunning != bRunning) {
+            return aRunning;
+        }
         return a.toMap().value(QString::fromUtf8("process")).toString().toLower()
             < b.toMap().value(QString::fromUtf8("process")).toString().toLower();
     });
 
-    if (out.size() > 400) {
-        out.erase(out.begin() + 400, out.end());
+    constexpr qsizetype maxAppCandidates = maxRunningApps + 240;
+    if (out.size() > maxAppCandidates) {
+        out.erase(out.begin() + maxAppCandidates, out.end());
     }
 
     return out;
@@ -11411,57 +11502,26 @@ QVariantList VpnController::collectAvailableAppRuleItems() const
 
 void VpnController::appendAppRule(const QString& target, const QString& process)
 {
-    const QString normalizedProcess = process.trimmed();
-    if (normalizedProcess.isEmpty()) {
+    const QVariantMap validation = validateRoutingRuleData(
+        QString::fromUtf8("app"), process, target, QString(), true);
+    if (!validation.value(QString::fromUtf8("ok")).toBool()) {
+        setLastError(validation.value(QString::fromUtf8("error")).toString());
         return;
     }
 
-    if (!detectProcessRoutingSupport()) {
-        appendSystemLog(QString::fromUtf8(
-            "[System] App rule update ignored: process routing is unsupported on this platform/runtime."));
-        return;
-    }
-
-    const QString bucket = target.trimmed().toLower();
-    QString normalizedAction;
-    if (bucket == QString::fromUtf8("proxy") || bucket == QString::fromUtf8("tunnel") || bucket == QString::fromUtf8("vpn")) {
-        normalizedAction = QString::fromUtf8("proxy");
-    } else if (bucket == QString::fromUtf8("direct")) {
-        normalizedAction = QString::fromUtf8("direct");
-    } else if (bucket == QString::fromUtf8("block")) {
-        normalizedAction = QString::fromUtf8("block");
-    } else {
-        return;
-    }
-
-    QList<RoutingRule> nextRules;
-    nextRules.reserve(m_routingRules.size());
-    const QString compareKey = normalizedProcess;
-    for (const RoutingRule& rule : m_routingRules) {
-        const QString type = rule.targetType.trimmed().toLower();
-        if ((type == QString::fromUtf8("app") || type == QString::fromUtf8("process"))
-            && rule.profileId.trimmed().isEmpty()) {
-#if defined(Q_OS_WIN)
-            if (rule.targetValue.compare(compareKey, Qt::CaseInsensitive) == 0) {
-                continue;
-            }
-#else
-            if (rule.targetValue == compareKey) {
-                continue;
-            }
-#endif
+    const QString normalizedProcess = validation.value(QString::fromUtf8("value")).toString();
+    const QString normalizedAction = validation.value(QString::fromUtf8("action")).toString();
+    for (const RoutingRule& rule : std::as_const(m_routingRules)) {
+        if (rule.enabled && rule.profileId.isEmpty()
+            && (rule.targetType == QString::fromUtf8("app") || rule.targetType == QString::fromUtf8("process"))
+            && RoutingRuleService::normalizeProcessMatcher(rule.targetValue) == normalizedProcess) {
+            // Change the effective rule in place, preserving its identity and
+            // precedence. Xray comparisons are case-sensitive on Windows too.
+            updateRoutingRule(rule.id, rule.targetType, normalizedProcess, normalizedAction, QString(), true);
+            return;
         }
-        nextRules.append(rule);
     }
-
-    RoutingRule newRule;
-    newRule.id = QUuid::createUuid().toString(QUuid::WithoutBraces);
-    newRule.targetType = QString::fromUtf8("app");
-    newRule.targetValue = normalizedProcess;
-    newRule.action = normalizedAction;
-    newRule.enabled = true;
-    nextRules.append(newRule);
-    setRoutingRules(nextRules, true, true, true);
+    createRoutingRule(QString::fromUtf8("app"), normalizedProcess, normalizedAction, QString(), true);
 }
 
 QVariantList VpnController::availableLanHostAddresses() const
@@ -13035,27 +13095,20 @@ bool VpnController::writeRuntimeConfig(const ServerProfile& profile, QString *er
     options.lanSharingBindAddress = options.lanSharingEnabled
                                         ? sanitizedLanBindAddress(m_lanSharingBindAddress, m_lanSharingAllowAnyBind)
                                         : QString();
-    options.proxyDomains = parseRules(m_proxyDomainRules);
-    options.directDomains = parseRules(m_directDomainRules);
-    options.blockDomains = parseRules(m_blockDomainRules);
-    options.proxyProcesses = parseRules(m_proxyAppRules);
-    options.directProcesses = parseRules(m_directAppRules);
-    options.blockProcesses = parseRules(m_blockAppRules);
+    // Legacy properties are compatibility views of the ordered model. Never
+    // generate a second set of rules from those views, including an empty model.
+    options.proxyDomains.clear();
+    options.directDomains.clear();
+    options.blockDomains.clear();
+    options.proxyProcesses.clear();
+    options.directProcesses.clear();
+    options.blockProcesses.clear();
 
-    bool requiresDomainAwareRouting = !options.proxyDomains.isEmpty()
-                                      || !options.directDomains.isEmpty()
-                                      || !options.blockDomains.isEmpty();
+    bool hasAppRules = false;
+    bool requiresDomainAwareRouting = false;
 
     const bool hasStructuredRules = !m_routingRules.isEmpty();
     if (hasStructuredRules) {
-        // Unified routing rules become the source of truth when available.
-        options.proxyDomains.clear();
-        options.directDomains.clear();
-        options.blockDomains.clear();
-        options.proxyProcesses.clear();
-        options.directProcesses.clear();
-        options.blockProcesses.clear();
-
         const QString activeProfileId = profile.id.trimmed();
         for (const RoutingRule& rule : m_routingRules) {
             if (!rule.enabled) {
@@ -13067,7 +13120,8 @@ bool VpnController::writeRuntimeConfig(const ServerProfile& profile, QString *er
             }
             if (rule.targetType.compare(QString::fromUtf8("domain"), Qt::CaseInsensitive) == 0) {
                 requiresDomainAwareRouting = true;
-                break;
+            } else if (rule.targetType == QString::fromUtf8("app") || rule.targetType == QString::fromUtf8("process")) {
+                hasAppRules = true;
             }
         }
     }
@@ -13083,18 +13137,19 @@ bool VpnController::writeRuntimeConfig(const ServerProfile& profile, QString *er
         }
     }
 
-    const bool hasAppRules = !options.proxyProcesses.isEmpty()
-                             || !options.directProcesses.isEmpty()
-                             || !options.blockProcesses.isEmpty();
-
     options.enableProcessRouting = hasAppRules
                                        ? detectProcessRoutingSupport()
                                        : (m_processRoutingSupportChecked && m_processRoutingSupported);
     options.tunMtuArray = xrayTunMtuRequiresArray(m_xrayVersion);
     if (hasAppRules && !options.enableProcessRouting) {
-        appendSystemLog(QString::fromUtf8(
-            "[System] App rules ignored: current xray-core does not support process routing (requires Xray 26.1.23+)."
-            ));
+        const QString message = QString::fromUtf8(
+            "An enabled app/process rule cannot be applied by this runtime. Disable that rule in Settings > Routing, "
+            "or use Xray 26.1.23+ on Windows or Linux. The connection was stopped to preserve your routing choices.");
+        if (errorMessage) {
+            *errorMessage = message;
+        }
+        appendSystemLog(QString::fromUtf8("[Routing] %1").arg(message));
+        return false;
     }
 
     ServerProfile runtimeProfile = profile;
@@ -13146,11 +13201,8 @@ bool VpnController::writeRuntimeConfig(const ServerProfile& profile, QString *er
         QJsonObject routing = config.value(QString::fromUtf8("routing")).toObject();
         QJsonArray existingRules = routing.value(QString::fromUtf8("rules")).toArray();
         QJsonArray userRules;
-        int skippedRules = 0;
         int skippedDisabled = 0;
         int skippedProfileScope = 0;
-        int skippedInvalid = 0;
-        int skippedProcessUnsupported = 0;
         const QString activeProfileId = profile.id.trimmed();
         for (const RoutingRule& rule : m_routingRules) {
             if (!rule.enabled) {
@@ -13163,32 +13215,33 @@ bool VpnController::writeRuntimeConfig(const ServerProfile& profile, QString *er
                 continue;
             }
 
-            QString appendError;
-            if (!appendRoutingRuleToConfig(&userRules,
+            const QVariantMap validation = validateRoutingRuleData(
+                rule.targetType, rule.targetValue, rule.action, rule.profileId, false);
+            QString appendError = validation.value(QString::fromUtf8("error")).toString();
+            if (!validation.value(QString::fromUtf8("ok")).toBool()
+                || !appendRoutingRuleToConfig(&userRules,
                                            rule,
                                            activeProfileId,
                                            options.enableProcessRouting,
                                            &appendError)) {
-                if (!appendError.trimmed().isEmpty()) {
-                    ++skippedRules;
-                    if (appendError.contains(QString::fromUtf8("Process routing"), Qt::CaseInsensitive)) {
-                        ++skippedProcessUnsupported;
-                    } else {
-                        ++skippedInvalid;
-                    }
+                const QString message = QString::fromUtf8(
+                    "Routing rule '%1' cannot be applied: %2. Edit or disable it in Settings > Routing before connecting.")
+                    .arg(rule.targetValue, appendError.isEmpty() ? QString::fromUtf8("invalid matcher") : appendError);
+                if (errorMessage) {
+                    *errorMessage = message;
                 }
+                appendSystemLog(QString::fromUtf8("[Routing] %1").arg(message));
+                return false;
             }
         }
 
         appendSystemLog(QString::fromUtf8(
-                            "[Routing] Structured rules for profile id '%1': total=%2 applied=%3 skipped(disabled=%4,scope=%5,invalid=%6,process=%7).")
+                            "[Routing] Structured rules for profile id '%1': total=%2 applied=%3 skipped(disabled=%4,scope=%5).")
                             .arg(activeProfileId.isEmpty() ? QString::fromUtf8("unknown") : activeProfileId)
                             .arg(m_routingRules.size())
                             .arg(userRules.size())
                             .arg(skippedDisabled)
-                            .arg(skippedProfileScope)
-                            .arg(skippedInvalid)
-                            .arg(skippedProcessUnsupported));
+                            .arg(skippedProfileScope));
 
         if (!userRules.isEmpty()) {
             QStringList appliedRuleDebug;
@@ -13261,10 +13314,6 @@ bool VpnController::writeRuntimeConfig(const ServerProfile& profile, QString *er
             }
         } else {
             appendSystemLog(QString::fromUtf8("[Routing] No structured rule matched current profile/config. Runtime is using baseline routing only."));
-        }
-        if (skippedRules > 0 && !options.enableProcessRouting) {
-            appendSystemLog(QString::fromUtf8("[Routing] Skipped %1 app/process rule(s): process routing is unavailable on this core/runtime.")
-                                .arg(skippedRules));
         }
     }
 

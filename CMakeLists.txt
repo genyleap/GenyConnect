@@ -32,7 +32,7 @@ if(APPLE AND NOT IOS)
   set(CMAKE_OSX_DEPLOYMENT_TARGET "${GENYCONNECT_MACOS_DEPLOYMENT_TARGET}" CACHE STRING "Minimum macOS version" FORCE)
 endif()
 
-project(${PROJECT_NAME} VERSION 1.4.894 LANGUAGES CXX)
+project(${PROJECT_NAME} VERSION 1.4.950 LANGUAGES CXX)
 
 # -------------------------
 # Detect Android generator architecture
@@ -100,7 +100,7 @@ set(GENY_IS_RELEASE "$<OR:$<CONFIG:Release>,$<CONFIG:RelWithDebInfo>>")
 # -------------------------
 # Options
 # -------------------------
-option(GENYCONNECT_USE_MODULES          "Enable C++20 modules" ON)
+option(GENYCONNECT_USE_MODULES          "Build the required C++ modules" ON)
 option(GENYCONNECT_LLVM_AUTO_SCAN       "Auto-detect LLVM/clang for modules" ON)
 option(GENYCONNECT_QT_AUTO_SCAN         "Auto-detect Qt installation prefix" ON)
 option(GENYCONNECT_AUTO_DOWNLOAD_XRAY   "Automatically download and bundle xray-core" ON)
@@ -111,6 +111,36 @@ option(GENYCONNECT_BUILD_IOS "Build iOS mobile runtime layer" OFF)
 option(GENYCONNECT_ENABLE_DESKTOP_HELPERS "Build desktop helper binaries" ON)
 option(GENYCONNECT_ENABLE_MOBILE_VPN "Enable mobile VPN runtime bridge stubs" ON)
 set(GENYCONNECT_ANDROID_OPENSSL_ROOT "" CACHE PATH "Android OpenSSL root containing ABI folders with libssl_3.so/libcrypto_3.so (e.g. <sdk>/android_openssl/ssl_3)")
+
+# The implementation units import these modules on every platform; there is no
+# header-based fallback. Diagnose an incompatible kit before downloading assets
+# or preparing packages, rather than failing at the end of CMake generation.
+if(NOT GENYCONNECT_USE_MODULES)
+  message(FATAL_ERROR
+    "GenyConnect requires C++ modules; GENYCONNECT_USE_MODULES=OFF is not supported.\n"
+    "Keep modules enabled and use Ninja (1.11 or newer), Ninja Multi-Config, "
+    "or a supported Visual Studio generator. See docs/building.md."
+  )
+endif()
+
+set(_geny_module_generators
+  "Ninja"
+  "Ninja Multi-Config"
+  "Visual Studio 17 2022"
+  "Visual Studio 18 2026"
+)
+if(NOT CMAKE_GENERATOR IN_LIST _geny_module_generators)
+  message(FATAL_ERROR
+    "GenyConnect uses C++ modules, which '${CMAKE_GENERATOR}' cannot build.\n"
+    "In Qt Creator, open Projects > Build Settings > Kit Configuration, "
+    "change the CMake generator to Ninja, then choose a NEW build directory.\n"
+    "For an existing build configuration, also check Initial Configuration: "
+    "its saved CMAKE_GENERATOR must be Ninja, not Unix Makefiles.\n"
+    "For command-line builds, configure with -G Ninja and a NEW -B directory.\n"
+    "Ninja 1.11 or newer is required. Do not disable module scanning or reuse "
+    "a Makefiles/Xcode build directory. See docs/building.md."
+  )
+endif()
 
 if(ANDROID)
   set(GENYCONNECT_BUILD_DESKTOP OFF CACHE BOOL "Build desktop runtime and packaging flow" FORCE)
@@ -435,11 +465,24 @@ find_program(GENYCONNECT_CLANGXX
   NO_DEFAULT_PATH
 )
 
-find_program(GENYCONNECT_CLANG_SCAN_DEPS
-  NAMES clang-scan-deps
-  HINTS ${GENYCONNECT_LLVM_HINTS}
-  NO_DEFAULT_PATH
-)
+# Prefer the scanner shipped with the active compiler. In particular, Android
+# must use the NDK toolchain's scanner instead of an unrelated host LLVM install.
+if(CMAKE_CXX_COMPILER)
+  get_filename_component(GENYCONNECT_CXX_DIR "${CMAKE_CXX_COMPILER}" DIRECTORY)
+  find_program(GENYCONNECT_CLANG_SCAN_DEPS
+    NAMES clang-scan-deps
+    HINTS "${GENYCONNECT_CXX_DIR}"
+    NO_DEFAULT_PATH
+  )
+endif()
+
+if(NOT GENYCONNECT_CLANG_SCAN_DEPS)
+  find_program(GENYCONNECT_CLANG_SCAN_DEPS
+    NAMES clang-scan-deps
+    HINTS ${GENYCONNECT_LLVM_HINTS}
+    NO_DEFAULT_PATH
+  )
+endif()
 
 if(NOT GENYCONNECT_CLANG)
   find_program(GENYCONNECT_CLANG NAMES clang)
@@ -451,13 +494,6 @@ endif()
 
 if(NOT GENYCONNECT_CLANG_SCAN_DEPS)
   find_program(GENYCONNECT_CLANG_SCAN_DEPS NAMES clang-scan-deps)
-endif()
-
-if(NOT GENYCONNECT_CLANG_SCAN_DEPS AND CMAKE_CXX_COMPILER)
-  get_filename_component(GENYCONNECT_CXX_DIR "${CMAKE_CXX_COMPILER}" DIRECTORY)
-  if(GENYCONNECT_CXX_DIR)
-    find_program(GENYCONNECT_CLANG_SCAN_DEPS NAMES clang-scan-deps HINTS "${GENYCONNECT_CXX_DIR}")
-  endif()
 endif()
 
 set(GENYCONNECT_CLANGXX_IS_APPLE_PATH FALSE)
@@ -472,10 +508,29 @@ if(CMAKE_CXX_COMPILER MATCHES "^/usr/bin/clang\\+\\+$" OR
   set(GENYCONNECT_ACTIVE_CXX_IS_APPLE_PATH TRUE)
 endif()
 
-if(GENYCONNECT_CLANG_SCAN_DEPS AND NOT DEFINED CMAKE_CXX_COMPILER_CLANG_SCAN_DEPS)
+if(ANDROID AND CMAKE_CXX_COMPILER_ID STREQUAL "Clang" AND NOT CMAKE_CXX_COMPILER_CLANG_SCAN_DEPS)
+  find_program(_geny_android_scan_deps
+    NAMES clang-scan-deps
+    HINTS "${GENYCONNECT_CXX_DIR}"
+    NO_DEFAULT_PATH
+    NO_CACHE
+  )
+  if(NOT _geny_android_scan_deps)
+    message(FATAL_ERROR
+      "The Android NDK compiler has no matching clang-scan-deps in ${GENYCONNECT_CXX_DIR}.\n"
+      "Use an NDK toolchain that includes its module scanner, or explicitly set "
+      "CMAKE_CXX_COMPILER_CLANG_SCAN_DEPS to the matching NDK scanner. "
+      "Do not substitute a scanner from Homebrew or another host LLVM installation."
+    )
+  endif()
+  set(CMAKE_CXX_COMPILER_CLANG_SCAN_DEPS
+      "${_geny_android_scan_deps}"
+      CACHE FILEPATH "clang-scan-deps from the active Android NDK" FORCE
+  )
+elseif(GENYCONNECT_CLANG_SCAN_DEPS AND NOT CMAKE_CXX_COMPILER_CLANG_SCAN_DEPS)
   set(CMAKE_CXX_COMPILER_CLANG_SCAN_DEPS
       "${GENYCONNECT_CLANG_SCAN_DEPS}"
-      CACHE FILEPATH "clang-scan-deps for C++20 modules"
+      CACHE FILEPATH "clang-scan-deps for C++20 modules" FORCE
   )
 endif()
 
@@ -794,6 +849,11 @@ if(GENYCONNECT_BUILD_DESKTOP AND GENYCONNECT_ENABLE_DESKTOP_HELPERS)
     src/tunhelper/main.cpp
   )
   target_link_libraries(GenyConnectTunHelper PRIVATE Qt6::Core Qt6::Network)
+  set(GENYCONNECT_LINUX_IP_EXECUTABLE "" CACHE FILEPATH "Absolute iproute2 executable for the privileged Linux TUN helper")
+  if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND GENYCONNECT_LINUX_IP_EXECUTABLE)
+    target_compile_definitions(GenyConnectTunHelper PRIVATE
+      GENYCONNECT_LINUX_IP_EXECUTABLE="${GENYCONNECT_LINUX_IP_EXECUTABLE}")
+  endif()
   set_target_properties(GenyConnectTunHelper PROPERTIES OUTPUT_NAME "GenyConnectTunHelper")
 endif()
 
@@ -997,6 +1057,8 @@ qt_add_resources(${PROJECT_NAME} GenyConnectAssets
   PREFIX /
   FILES
     ui/Resources/fonts/Inter-Regular.ttf
+    ui/Resources/fonts/Inter-Medium.ttf
+    ui/Resources/fonts/Inter-SemiBold.ttf
     ui/Resources/fonts/Inter-Bold.ttf
     ui/Resources/fonts/Vazirmatn-Regular.ttf
     ui/Resources/fonts/Vazirmatn-Medium.ttf

@@ -8,6 +8,7 @@ if [[ ! -d "${ROOT}" ]]; then
   echo "AppImage extraction root not found: ${ROOT}" >&2
   exit 2
 fi
+ROOT="$(cd -- "${ROOT}" && pwd)"
 
 fail=0
 
@@ -20,48 +21,63 @@ require_file_glob() {
   fi
 }
 
-require_dir_glob() {
-  local label="$1"
-  local pattern="$2"
-  if ! find "${ROOT}" -type d -path "${pattern}" -print -quit | grep -q .; then
-    echo "Missing ${label}: ${pattern}" >&2
+require_file_glob "relocatable Qt configuration" "*/usr/bin/qt.conf"
+require_file_glob "isolated AppImage Qt environment" "*/apprun-hooks/99-genyconnect-qt.sh"
+require_file_glob "Qt xcb platform plugin" "*/plugins/platforms/libqxcb.so"
+require_file_glob "Qt Wayland platform plugin" "*/plugins/platforms/libqwayland*.so"
+require_file_glob "Qt SVG image plugin" "*/plugins/imageformats/libqsvg.so"
+for integration in wayland-decoration-client wayland-graphics-integration-client wayland-shell-integration xcbglintegrations; do
+  require_file_glob "Qt ${integration} plugin" "*/plugins/${integration}/*.so"
+done
+require_file_glob "Qt Wayland client library" "*/usr/lib/libQt6WaylandClient.so.*"
+
+# Empty directories do not prove a QML module was deployed. Require its import
+# metadata and a plugin as well as checking the plugin's dependencies below.
+for module in QtCore QtQml QtQuick QtQuick/Window QtQuick/Controls QtQuick/Controls/Basic QtQuick/Templates QtQuick/Layouts QtQuick/Dialogs QtQuick/Effects QtQuick/Particles; do
+  require_file_glob "${module} QML import metadata" "*/qml/${module}/qmldir"
+  require_file_glob "${module} QML plugin" "*/qml/${module}/*.so"
+done
+
+# Resolve plugin dependencies using only the bundle and normal system libraries,
+# never the SDK LD_LIBRARY_PATH used during deployment. Reject host Qt libraries
+# that would hide an incomplete image on the build machine.
+while IFS= read -r -d '' plugin; do
+  if ! dependencies="$(env -u LD_PRELOAD -u LD_AUDIT LC_ALL=C LD_LIBRARY_PATH="${ROOT}/usr/lib" ldd "${plugin}" 2>&1)"; then
+    echo "Cannot inspect plugin dependencies: ${plugin}" >&2
+    printf '%s\n' "${dependencies}" >&2
+    fail=1
+    continue
+  fi
+  if [[ "${dependencies}" == *"not found"* ]]; then
+    echo "Missing plugin dependencies: ${plugin}" >&2
+    printf '%s\n' "${dependencies}" >&2
     fail=1
   fi
-}
+  if printf '%s\n' "${dependencies}" | awk -v root="${ROOT}/" '
+      $1 ~ /^libQt6/ && $2 == "=>" && index($3, root) != 1 { external = 1 }
+      END { exit !external }'; then
+    echo "Plugin resolves Qt outside the AppImage: ${plugin}" >&2
+    printf '%s\n' "${dependencies}" >&2
+    fail=1
+  fi
+done < <(find "${ROOT}/usr" -type f -name '*.so' \( -path '*/plugins/*' -o -path '*/qml/*' \) -print0)
 
-require_file_glob "Qt xcb platform plugin" "*/plugins/platforms/libqxcb.so"
-if ! find "${ROOT}" -path "*/plugins/platforms/libqwayland*.so" -type f | grep -q .; then
-  echo "WARNING: Qt Wayland platform plugin not bundled; continuing with xcb-only AppImage."
-fi
-require_file_glob "Qt SVG image plugin" "*/plugins/imageformats/libqsvg.so"
-
-require_dir_glob "QtQuick QML import" "*/qml/QtQuick"
-require_dir_glob "QtQuick.Controls QML import" "*/qml/QtQuick/Controls"
-require_dir_glob "QtQuick.Controls.Basic QML import" "*/qml/QtQuick/Controls/Basic"
-require_dir_glob "QtQuick.Layouts QML import" "*/qml/QtQuick/Layouts"
-require_dir_glob "QtQuick.Dialogs QML import" "*/qml/QtQuick/Dialogs"
-require_dir_glob "QtQuick.Effects QML import" "*/qml/QtQuick/Effects"
-
-if [[ -n "${SOURCE_ROOT}" && -d "${SOURCE_ROOT}" ]]; then
-  if command -v rg >/dev/null 2>&1; then
-    forbidden_patterns=(
-      'Rectangular''Shadow'
-      'Rectangular''Glow'
-      'Drop''Shadow'
-      'Qt5''Compat[.]Graphical''Effects'
-      'Qt''Graphical''Effects'
-      'org[.]kde[.]''breeze'
-    )
-    forbidden_regex="$(IFS='|'; printf '%s' "${forbidden_patterns[*]}")"
-    if rg --hidden -n \
-      --glob '!.git/**' \
-      --glob '!build/**' \
-      --glob '!cmake-build-*/**' \
-      --glob '!*.AppDir/**' \
-      "${forbidden_regex}" "${SOURCE_ROOT}" >/tmp/genyconnect-forbidden-qml-effects.txt 2>/dev/null; then
-      echo "Forbidden legacy or host-specific QML effect/style dependency found:" >&2
-      cat /tmp/genyconnect-forbidden-qml-effects.txt >&2
+if [[ -n "${SOURCE_ROOT}" ]]; then
+  if [[ ! -d "${SOURCE_ROOT}/ui" ]]; then
+    echo "QML source directory not found: ${SOURCE_ROOT}/ui" >&2
+    fail=1
+  else
+    forbidden_regex='RectangularShadow|RectangularGlow|DropShadow|Qt5Compat[.]GraphicalEffects|QtGraphicalEffects|org[.]kde[.]breeze'
+    if matches="$(grep -RInE --include='*.qml' "${forbidden_regex}" "${SOURCE_ROOT}/ui")"; then
+      echo "Unsupported QML effect or host style dependency found:" >&2
+      printf '%s\n' "${matches}" >&2
       fail=1
+    else
+      search_status=$?
+      if [[ "${search_status}" -ne 1 ]]; then
+        echo "Unable to inspect QML sources for unsupported dependencies." >&2
+        fail=1
+      fi
     fi
   fi
 fi

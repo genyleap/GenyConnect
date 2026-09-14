@@ -37,22 +37,23 @@ module;
 #include <QVariantList>
 #include <QVariantMap>
 #include <atomic>
+#include "powermodemanager.hpp"
 #include "securitystatus.hpp"
 #include "runtime/vpnruntimebackend.hpp"
 #if !defined(Q_OS_IOS)
 #include <QProcess>
 #endif
 
-class PowerModeManager;
+// Module declarations must remain outside preprocessing conditionals, including
+// Q_MOC_RUN. Keep moc-only type shims separate from the module boundary.
+export module genyconnect.backend.vpncontroller;
 
 #ifndef Q_MOC_RUN
-export module genyconnect.backend.vpncontroller;
 import genyconnect.backend.serverprofile;
 import genyconnect.backend.xrayconfigbuilder;
-struct VpnControllerPrivate;
-#else
-struct VpnControllerPrivate;
 #endif
+
+struct VpnControllerPrivate;
 
 namespace App {
 Q_NAMESPACE
@@ -1120,6 +1121,7 @@ private:
      */
     bool detectProcessRoutingSupport();
     void syncLegacyRoutingFieldsFromRules();
+    void setLegacyRoutingRules(const QString& value, const QString& action, bool processRules);
     bool parseRoutingRuleFromVariantMap(const QVariantMap& map, RoutingRule *rule, QString *errorMessage = nullptr) const;
     QVariantMap routingRuleToVariantMap(const RoutingRule& rule) const;
     QVariantMap validateRoutingRuleData(
@@ -1127,7 +1129,8 @@ private:
         const QString& targetValue,
         const QString& action,
         const QString& profileId,
-        bool enforceProfileExists) const;
+        bool enforceProfileExists,
+        bool enforceRuntimeSupport = false) const;
     bool setRoutingRules(const QList<RoutingRule>& rules, bool persist, bool syncLegacyFields, bool emitChangeSignal);
     void loadRoutingRulesFromSettings(const QString& rawRulesJson);
     QString routingRulesJson() const;
@@ -1137,7 +1140,7 @@ private:
                                    bool processRoutingAllowed,
                                    QString *errorMessage = nullptr) const;
     void reconnectActiveProfileForRoutingChange(const QString& reason);
-    QVariantList collectAvailableAppRuleItems() const;
+    static QVariantList collectAvailableAppRuleItems();
     QString usageScopeProfileId() const;
 
     /**

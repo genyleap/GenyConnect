@@ -25,11 +25,9 @@ Rectangle {
     signal clicked()
 
     radius: 18
-    color: selected
-           ? (Colors.lightMode ? Colors.dsPrimaryTint : "#121d35")
-           : (Colors.lightMode ? Colors.dsSurface : "#080f1f")
+    color: selected ? Colors.dsPrimaryTint : Colors.dsSurface
     border.width: 1
-    border.color: selected ? Colors.dsPrimarySolid : (Colors.lightMode ? Colors.dsBorder : "#26324a")
+    border.color: selected ? Colors.dsPrimarySolid : Colors.dsBorder
     implicitHeight: compactWidth ? 72 : 82
     clip: true
 
@@ -106,9 +104,9 @@ Rectangle {
             Layout.preferredWidth: root.compactWidth ? 46 : Math.min(92, Math.max(64, badgeLabel.implicitWidth + 14))
             Layout.preferredHeight: root.compactWidth ? 20 : 24
             Layout.alignment: Qt.AlignTop
-            color: Colors.lightMode ? Colors.dsPrimaryTint : "#2a2053"
+            color: Colors.dsLinkIconBgPurple
             border.width: 1
-            border.color: Colors.lightMode ? Colors.dsPrimarySolid : "#6b55ff"
+            border.color: Colors.dsLinkIconPurple
             radius: height / 2
 
             Text {
@@ -116,7 +114,7 @@ Rectangle {
                 anchors.centerIn: parent
                 width: parent.width - 10
                 text: I18n.t(root.resolvedBadgeText)
-                color: Colors.lightMode ? Colors.dsPrimarySolid : "#c8bbff"
+                color: Colors.dsLinkIconPurple
                 font.family: FontSystem.getContentFontBold.name
                 font.pixelSize: root.compactWidth ? 10 : 11
                 font.bold: true

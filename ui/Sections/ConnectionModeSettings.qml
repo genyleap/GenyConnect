@@ -9,6 +9,7 @@
 
 import QtQuick
 import QtQuick.Controls
+import QtQuick.Controls.Basic as T
 import QtQuick.Layouts
 
 import GenyConnect 1.0
@@ -29,7 +30,6 @@ ColumnLayout {
     Rectangle {
         Layout.fillWidth: true
         visible: root.settingsSection === "connection"
-        Layout.maximumWidth: settingsFlick.width
         implicitHeight: modeColumn.implicitHeight + 24
         Layout.preferredHeight: implicitHeight
         radius: Colors.innerRadius
@@ -53,13 +53,13 @@ ColumnLayout {
 
             Text {
                 text: vpnController.useSystemProxy
-                      ? I18n.t("Global mode: %1 routes compatible apps through GenyConnect automatically.", [osNameText()])
+                      ? I18n.t("Global mode: %1 routes compatible apps through GenyConnect automatically.", [root.osNameText()])
                       : (vpnController.tunMode
-                         ? I18n.t("TUN mode: %1 routes system traffic through Xray TUN without changing proxy settings.", [osNameText()])
+                         ? I18n.t("TUN mode: %1 routes system traffic through Xray TUN without changing proxy settings.", [root.osNameText()])
                          : (vpnController.isMobile
                             ? I18n.t("Mobile mode: runtime uses platform VPN APIs and ignores desktop proxy helpers.")
                             : I18n.t("Clean mode: %1 proxy stays untouched. Only apps set to %2 use the tunnel.",
-                                     [osNameText(), I18n.ltr("127.0.0.1:" + String(vpnController.socksPort))])))
+                                     [root.osNameText(), I18n.ltr("127.0.0.1:" + String(vpnController.socksPort))])))
                 color: root.themeColorToken("mainHex_7c8697", "mainHex_9bb0cb")
                 font.family: FontSystem.contentFontFamily
                 font.pixelSize: 13
@@ -109,77 +109,72 @@ ColumnLayout {
                         }
                     ]
 
-                    delegate: Rectangle {
+                    delegate: T.ItemDelegate {
+                        id: modeOption
                         required property var modelData
                         Layout.fillWidth: true
-                        Layout.preferredHeight: root.compact ? 66 : 56
-                        radius: 8
-                        opacity: modelData.enabled ? 1.0 : 0.58
-                        color: modelData.checked
-                               ? root.themeColorToken("mainHex_edf4ff", "mainHex_274062")
-                               : root.themeColorToken("mainHex_ffffff", "mainHex_22324a")
-                        border.width: 0
-                        border.color: modelData.checked
-                                      ? root.themeColorToken("mainHex_6da2ff", "mainHex_4f86e6")
-                                      : root.themeColorToken("mainHex_d9e0ec", "mainHex_3a5470")
+                        implicitHeight: Math.max(72, contentItem.implicitHeight + 24)
+                        padding: 12
+                        enabled: modelData.enabled
+                        hoverEnabled: true
+                        focusPolicy: Qt.StrongFocus
+                        text: I18n.t(modelData.title)
+                        Accessible.description: I18n.t(modelData.subtitle)
+                        Accessible.role: Accessible.RadioButton
+                        Accessible.checkable: true
+                        Accessible.checked: modelData.checked
+                        onClicked: modelData.apply()
 
-                        RowLayout {
-                            anchors.fill: parent
-                            anchors.leftMargin: 12
-                            anchors.rightMargin: 12
-                            spacing: 10
-
-                            Rectangle {
-                                Layout.preferredWidth: 18
-                                Layout.preferredHeight: 18
-                                radius: 9
-                                color: "transparent"
-                                border.width: 2
-                                border.color: modelData.checked
-                                              ? root.themeColorToken("mainHex_2f6ff1", "mainHex_7eb1ff")
-                                              : root.themeColorToken("mainHex_9aa6ba", "mainHex_90a6c2")
-
-                                Rectangle {
-                                    visible: modelData.checked
-                                    anchors.centerIn: parent
-                                    width: 8
-                                    height: 8
-                                    radius: 4
-                                    color: root.themeColorToken("mainHex_2f6ff1", "mainHex_7eb1ff")
-                                }
-                            }
-
-                            ColumnLayout {
-                                Layout.fillWidth: true
-                                spacing: 1
-
-                                Text {
-                                    Layout.fillWidth: true
-                                    text: I18n.t(modelData.title)
-                                    color: root.themeColorToken("mainHex_2a3240", "mainHex_d7e4f6")
-                                    font.family: FontSystem.contentFontFamily
-                                    font.pixelSize: 13
-                                    font.bold: true
-                                }
-
-                                Text {
-                                    Layout.fillWidth: true
-                                    text: I18n.t(modelData.subtitle)
-                                    color: root.themeColorToken("mainHex_7c8697", "mainHex_9bb0cb")
-                                    font.family: FontSystem.contentFontFamily
-                                    font.pixelSize: 11
-                                    wrapMode: root.compact ? Text.WordWrap : Text.NoWrap
-                                    elide: root.compact ? Text.ElideNone : Text.ElideRight
-                                    maximumLineCount: root.compact ? 2 : 1
-                                }
-                            }
+                        background: Rectangle {
+                            radius: Metrics.radiusSm
+                            color: modeOption.modelData.checked || modeOption.down ? Colors.dsPrimaryTint
+                                   : (modeOption.hovered ? Colors.dsSurfaceSoft : Colors.dsSurface)
+                            border.width: modeOption.activeFocus || modeOption.modelData.checked ? 2 : 1
+                            border.color: modeOption.activeFocus || modeOption.modelData.checked
+                                          ? Colors.dsPrimarySolid : Colors.dsBorderSoft
+                            opacity: modeOption.enabled ? 1 : 0.55
                         }
 
-                        MouseArea {
-                            anchors.fill: parent
-                            enabled: modelData.enabled
-                            cursorShape: modelData.enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
-                            onClicked: modelData.apply()
+                        contentItem: RowLayout {
+                            spacing: Metrics.gap12
+                            Rectangle {
+                                Layout.preferredWidth: 20
+                                Layout.preferredHeight: 20
+                                radius: 10
+                                color: "transparent"
+                                border.width: 2
+                                border.color: modeOption.modelData.checked ? Colors.dsPrimarySolid : Colors.dsTextSubtle
+                                Rectangle {
+                                    anchors.centerIn: parent
+                                    width: 10
+                                    height: 10
+                                    radius: 5
+                                    color: Colors.dsPrimarySolid
+                                    visible: modeOption.modelData.checked
+                                }
+                            }
+                            ColumnLayout {
+                                Layout.fillWidth: true
+                                Layout.minimumWidth: 0
+                                spacing: Metrics.gap4
+                                Text {
+                                    Layout.fillWidth: true
+                                    text: modeOption.text
+                                    color: Colors.dsText
+                                    font.family: FontSystem.contentFontFamily
+                                    font.pixelSize: Typography.uiBodyLg
+                                    font.weight: Font.DemiBold
+                                    wrapMode: Text.WordWrap
+                                }
+                                Text {
+                                    Layout.fillWidth: true
+                                    text: I18n.t(modeOption.modelData.subtitle)
+                                    color: Colors.dsTextMuted
+                                    font.family: FontSystem.contentFontFamily
+                                    font.pixelSize: Typography.uiBody
+                                    wrapMode: Text.WordWrap
+                                }
+                            }
                         }
                     }
                 }
@@ -279,9 +274,11 @@ ColumnLayout {
         visible: root.settingsSection === "connection"
         spacing: 8
 
-        RowLayout {
+        GridLayout {
             Layout.fillWidth: true
-            spacing: 10
+            columns: section.width < 460 ? 1 : 2
+            columnSpacing: 12
+            rowSpacing: 12
 
             ColumnLayout {
                 Layout.fillWidth: true
@@ -314,7 +311,9 @@ ColumnLayout {
 
             Controls.ComboBox {
                 id: latencyModeCombo
-                Layout.preferredWidth: root.compact ? 156 : 190
+                Layout.fillWidth: true
+                Layout.preferredWidth: 190
+                Layout.maximumWidth: section.width < 460 ? Number.POSITIVE_INFINITY : 200
                 Layout.preferredHeight: 40
                 model: ["Auto (Recommended)", "Route Latency", "Endpoint Latency"]
                 currentIndex: vpnController.latencyMeasurementMode === "Route Latency"
@@ -361,7 +360,7 @@ ColumnLayout {
         wrapMode: Text.WordWrap
     }
 
-    Button {
+    Controls.Button {
         visible: root.settingsSection === "connection" && vpnController.supportsSystemProxy
         isDefault: false
         text: I18n.t("Reset System Proxy Now")

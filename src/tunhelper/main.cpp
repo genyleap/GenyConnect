@@ -10,21 +10,30 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QLockFile>
 #include <QNetworkInterface>
 #include <QProcess>
 #include <QRegularExpression>
+#include <QScopeGuard>
+#include <QSocketNotifier>
+#include <QTemporaryFile>
 #include <QSet>
 #include <QStandardPaths>
 #include <QTcpServer>
 #include <QTcpSocket>
 #include <QThread>
 #include <QTimer>
+#include <QUrl>
 #include <QVector>
 #include <climits>
 #if !defined(Q_OS_WIN)
 #include <cerrno>
 #include <csignal>
 #include <unistd.h>
+#endif
+#if defined(Q_OS_LINUX)
+#include <fcntl.h>
+#include <sys/prctl.h>
 #endif
 #if defined(Q_OS_WIN)
 #include <windows.h>
@@ -33,6 +42,23 @@
 using namespace Qt::StringLiterals;
 
 namespace {
+
+#if defined(Q_OS_LINUX)
+volatile sig_atomic_t linuxTerminationWriteFd = -1;
+
+void requestLinuxTermination(int)
+{
+    const int savedErrno = errno;
+    const int fd = linuxTerminationWriteFd;
+    if (fd >= 0) {
+        const char byte = 1;
+        // Only async-signal-safe work here. The Qt event loop performs cleanup.
+        const ssize_t written = ::write(fd, &byte, sizeof(byte));
+        (void)written;
+    }
+    errno = savedErrno;
+}
+#endif
 
 QString quoteForSh(const QString& value)
 {
@@ -210,6 +236,7 @@ qint64 readPidFromFile(const QString& pidPath)
 bool isProcessAlive(qint64 pid);
 bool isIpv4(const QString& address);
 bool isIpv6(const QString& address);
+QString resolveIpForHost(const QString& hostOrIp);
 
 #if defined(Q_OS_WIN)
 struct WindowsTunAdapterInfo
@@ -1049,11 +1076,14 @@ bool validateWindowsTunRouting(
 #if defined(Q_OS_LINUX)
 QString linuxIpTool()
 {
-    const QString ipFromPath = QStandardPaths::findExecutable(u"ip"_s);
-    if (!ipFromPath.trimmed().isEmpty()) {
-        return ipFromPath;
+#ifdef GENYCONNECT_LINUX_IP_EXECUTABLE
+    const QString packagedIp = QString::fromUtf8(GENYCONNECT_LINUX_IP_EXECUTABLE);
+    if (QFileInfo(packagedIp).isExecutable()) {
+        return packagedIp;
     }
+#endif
     const QStringList candidates {
+        u"/run/current-system/sw/bin/ip"_s,
         u"/sbin/ip"_s,
         u"/usr/sbin/ip"_s,
         u"/bin/ip"_s,
@@ -1067,8 +1097,11 @@ QString linuxIpTool()
     return {};
 }
 
-QString linuxRouteDeviceFor(const QString& destination, bool ipv6, QString* errorOut)
+QString linuxRouteDeviceFor(const QString& destination, bool ipv6, QString* errorOut, quint32 mark = 0)
 {
+    if (errorOut != nullptr) {
+        errorOut->clear();
+    }
     const QString target = destination.trimmed();
     if (target.isEmpty()) {
         return {};
@@ -1089,7 +1122,8 @@ QString linuxRouteDeviceFor(const QString& destination, bool ipv6, QString* erro
         {ipv6 ? u"-6"_s : u"-4"_s,
          u"route"_s,
          u"get"_s,
-         target},
+         target,
+         u"mark"_s, QString::number(mark)},
         1200,
         &stdoutText,
         &stderrText);
@@ -1117,6 +1151,9 @@ QString linuxRouteDeviceFor(const QString& destination, bool ipv6, QString* erro
 
 QString linuxIpOutput(const QStringList& args, int timeoutMs, QString* errorOut)
 {
+    if (errorOut != nullptr) {
+        errorOut->clear();
+    }
     const QString ipTool = linuxIpTool();
     if (ipTool.trimmed().isEmpty()) {
         if (errorOut != nullptr) {
@@ -1136,41 +1173,6 @@ QString linuxIpOutput(const QStringList& args, int timeoutMs, QString* errorOut)
     return stdoutText.trimmed();
 }
 
-QStringList linuxTunAddressesFromConfig(const QString& configPath)
-{
-    QFile file(configPath);
-    if (!file.open(QIODevice::ReadOnly)) {
-        return {};
-    }
-
-    QJsonParseError parseError;
-    const QJsonDocument doc = QJsonDocument::fromJson(file.readAll(), &parseError);
-    if (parseError.error != QJsonParseError::NoError || !doc.isObject()) {
-        return {};
-    }
-
-    const QJsonArray inbounds = doc.object().value(u"inbounds"_s).toArray();
-    for (const QJsonValue& value : inbounds) {
-        const QJsonObject inbound = value.toObject();
-        if (inbound.value(u"tag"_s).toString().compare(u"tun-in"_s, Qt::CaseInsensitive) != 0
-            && inbound.value(u"protocol"_s).toString().compare(u"tun"_s, Qt::CaseInsensitive) != 0) {
-            continue;
-        }
-
-        QStringList addresses;
-        const QJsonArray addressArray = inbound.value(u"settings"_s).toObject().value(u"address"_s).toArray();
-        addresses.reserve(addressArray.size());
-        for (const QJsonValue& address : addressArray) {
-            const QString normalized = address.toString().trimmed();
-            if (!normalized.isEmpty()) {
-                addresses.append(normalized);
-            }
-        }
-        return addresses;
-    }
-    return {};
-}
-
 QString linuxTunDiagnostics()
 {
     QString ignored;
@@ -1178,8 +1180,9 @@ QString linuxTunDiagnostics()
     const QString routes = linuxIpOutput({u"route"_s, u"show"_s, u"table"_s, u"all"_s}, 3000, &ignored);
     const QString routes6 = linuxIpOutput({u"-6"_s, u"route"_s, u"show"_s, u"table"_s, u"all"_s}, 3000, &ignored);
     const QString rules = linuxIpOutput({u"rule"_s}, 3000, &ignored);
-    return u"ip addr:\n%1\nip route table all:\n%2\nip -6 route table all:\n%3\nip rule:\n%4"_s
-        .arg(addr, routes, routes6, rules);
+    const QString rules6 = linuxIpOutput({u"-6"_s, u"rule"_s}, 3000, &ignored);
+    return u"ip addr:\n%1\nip route table all:\n%2\nip -6 route table all:\n%3\nip rule:\n%4\nip -6 rule:\n%5"_s
+        .arg(addr, routes, routes6, rules, rules6);
 }
 
 bool linuxRunIpIdempotent(
@@ -1244,18 +1247,371 @@ bool linuxEnsureTunAddresses(
 
         QStringList args;
         if (normalized.contains(u":"_s)) {
-            args = {u"-6"_s, u"addr"_s, u"add"_s, normalized, u"dev"_s, requiredTun};
+            // A point-to-point TUN has no link-layer peers for duplicate-address
+            // detection; make its owned address usable before route readiness.
+            args = {u"-6"_s, u"addr"_s, u"add"_s, normalized, u"dev"_s, requiredTun, u"nodad"_s};
         } else {
             args = {u"addr"_s, u"add"_s, normalized, u"dev"_s, requiredTun};
         }
-        QString addressError;
-        Q_UNUSED(linuxRunIpIdempotent(args, 1200, logPath, &addressError));
+        if (!linuxRunIpIdempotent(args, 1200, logPath, errorOut)) {
+            return false;
+        }
     }
 
     if (errorOut != nullptr) {
-        // Address add failures are logged and readiness below decides whether
-        // enough configured address state exists to proceed.
         errorOut->clear();
+    }
+    return true;
+}
+
+// Keep routing ownership in the privileged helper. Older supported Xray Linux
+// runtimes create a device but never install host routes.
+struct LinuxTunRoutingState
+{
+    QLockFile lock {u"/run/genyconnect-tun-routing.lock"_s};
+    int table = 0;
+    int priority = 0;
+    quint32 mark = 0;
+    QVector<QStringList> undoCommands;
+    QHash<QString, QByteArray> reversePathValues;
+};
+
+bool linuxRunIp(const QStringList& args, QString* errorOut)
+{
+    if (errorOut != nullptr) {
+        errorOut->clear();
+    }
+    QString output;
+    QString error;
+    const QString executable = linuxIpTool();
+    if (!executable.isEmpty() && runProcess(executable, args, 1500, &output, &error)) {
+        return true;
+    }
+    if (errorOut != nullptr) {
+        *errorOut = executable.isEmpty()
+            ? u"Linux TUN requires iproute2 (`ip`)."_s
+            : u"ip %1 failed: %2"_s.arg(args.join(u" "_s), error.isEmpty() ? output : error);
+    }
+    return false;
+}
+
+bool linuxReserveRouting(LinuxTunRoutingState& state, QString* errorOut)
+{
+    // A live session may last much longer than QLockFile's default stale age.
+    state.lock.setStaleLockTime(0);
+    if (!state.lock.tryLock()) {
+        if (errorOut != nullptr) {
+            *errorOut = u"Another GenyConnect TUN session owns system routing, or /run is not writable by the privileged helper."_s;
+        }
+        return false;
+    }
+    QSet<int> tables;
+    QSet<int> priorities;
+    QList<QPair<quint32, quint32>> marks;
+    // A kernel booted with ipv6.disable=1 has no IPv6 rule family to inspect.
+    const QStringList families = QDir(u"/proc/sys/net/ipv6"_s).exists()
+        ? QStringList{u"-4"_s, u"-6"_s} : QStringList{u"-4"_s};
+    for (const QString& family : families) {
+        for (const QString& kind : {u"rule"_s, u"route"_s}) {
+            QString error;
+            QStringList args {u"-N"_s, u"-j"_s, family, kind, u"show"_s};
+            if (kind == u"route"_s) {
+                args << u"table"_s << u"all"_s;
+            }
+            const QString output = linuxIpOutput(args, 1500, &error);
+            QJsonParseError parseError;
+            const QJsonDocument doc = QJsonDocument::fromJson(output.toUtf8(), &parseError);
+            if (!error.isEmpty() || parseError.error != QJsonParseError::NoError || !doc.isArray()) {
+                if (errorOut != nullptr) {
+                    *errorOut = u"Unable to inspect existing Linux routing: %1"_s.arg(error.isEmpty() ? output : error);
+                }
+                return false;
+            }
+            for (const QJsonValue& value : doc.array()) {
+                const QJsonObject entry = value.toObject();
+                tables.insert(entry.value(u"table"_s).toVariant().toInt());
+                if (kind == u"rule"_s) {
+                    priorities.insert(entry.value(u"priority"_s).toInt());
+                    if (entry.contains(u"fwmark"_s)) {
+                        const quint32 mark = entry.value(u"fwmark"_s).toVariant().toString().toUInt(nullptr, 0);
+                        const quint32 mask = entry.contains(u"fwmask"_s)
+                            ? entry.value(u"fwmask"_s).toVariant().toString().toUInt(nullptr, 0)
+                            : 0xffffffffU;
+                        marks.append({mark, mask});
+                    }
+                }
+            }
+        }
+    }
+    for (int candidate = 20000; candidate < 30000; ++candidate) {
+        const quint32 mark = 0x47430000U + static_cast<quint32>(candidate);
+        bool markUsed = false;
+        for (const auto& existing : marks) {
+            if ((mark & existing.second) == (existing.first & existing.second)) {
+                markUsed = true;
+                break;
+            }
+        }
+        if (!tables.contains(candidate) && !markUsed) {
+            state.table = candidate;
+            state.mark = mark;
+            break;
+        }
+    }
+    for (int candidate = 10000; candidate < 15000; candidate += 4) {
+        if (!priorities.contains(candidate) && !priorities.contains(candidate + 1)
+            && !priorities.contains(candidate + 2) && !priorities.contains(candidate + 3)) {
+            state.priority = candidate;
+            break;
+        }
+    }
+    if (state.table == 0 || state.priority == 0) {
+        if (errorOut != nullptr) {
+            *errorOut = u"No unused Linux policy routing table, socket mark, or rule priorities are available."_s;
+        }
+        return false;
+    }
+    return true;
+}
+
+bool linuxPrepareRuntimeConfig(const QString& sourcePath, QTemporaryFile& output, quint32 mark,
+                               const QString& serverHost, const QString& serverIp,
+                               QStringList* expectedAddresses, QString* errorOut)
+{
+    QFile source(sourcePath);
+    if (!source.open(QIODevice::ReadOnly)) {
+        if (errorOut != nullptr) {
+            *errorOut = u"Cannot read Linux TUN runtime configuration."_s;
+        }
+        return false;
+    }
+    QJsonParseError parseError;
+    const QJsonDocument doc = QJsonDocument::fromJson(source.readAll(), &parseError);
+    if (parseError.error != QJsonParseError::NoError || !doc.isObject()) {
+        if (errorOut != nullptr) {
+            *errorOut = u"Invalid Linux TUN runtime configuration."_s;
+        }
+        return false;
+    }
+    QJsonObject root = doc.object();
+    QJsonArray outbounds = root.value(u"outbounds"_s).toArray();
+    if (outbounds.isEmpty()) {
+        if (errorOut != nullptr) {
+            *errorOut = u"Linux TUN requires an outbound configuration."_s;
+        }
+        return false;
+    }
+    // Mark every dispatched outbound, including freedom/direct and DNS. Resolve
+    // transport domains through Xray's DNS client so system DNS cannot recurse
+    // through TUN while bootstrapping the proxy connection.
+    for (qsizetype i = 0; i < outbounds.size(); ++i) {
+        QJsonObject outbound = outbounds.at(i).toObject();
+        QJsonObject stream = outbound.value(u"streamSettings"_s).toObject();
+        QJsonObject sockopt = stream.value(u"sockopt"_s).toObject();
+        sockopt.insert(u"mark"_s, static_cast<qint64>(mark));
+        if (!sockopt.contains(u"domainStrategy"_s)) {
+            sockopt.insert(u"domainStrategy"_s, u"ForceIP"_s);
+        }
+        stream.insert(u"sockopt"_s, sockopt);
+        outbound.insert(u"streamSettings"_s, stream);
+        outbounds[i] = outbound;
+    }
+    root.insert(u"outbounds"_s, outbounds);
+    QJsonObject dns = root.value(u"dns"_s).toObject();
+    QJsonObject hosts = dns.value(u"hosts"_s).toObject();
+    if (!serverHost.isEmpty() && !isIpv4(serverHost) && !isIpv6(serverHost)) {
+        if (serverIp.isEmpty()) {
+            if (errorOut != nullptr) {
+                *errorOut = u"Cannot resolve the VPN server before enabling Linux TUN. Check the server hostname and system DNS."_s;
+            }
+            return false;
+        }
+        // Keep the transport hostname (SNI/Host) intact; pin only its DNS answer
+        // for this connection, before the helper changes system routing.
+        hosts.insert(u"full:%1"_s.arg(serverHost), serverIp);
+    }
+    QJsonArray dnsServers = dns.value(u"servers"_s).toArray();
+    for (qsizetype i = 0; i < dnsServers.size(); ++i) {
+        const bool objectServer = dnsServers.at(i).isObject();
+        QJsonObject server = dnsServers.at(i).toObject();
+        const QString address = (objectServer ? server.value(u"address"_s).toString() : dnsServers.at(i).toString()).trimmed();
+        if (address == u"fakedns"_s || isIpv4(address) || isIpv6(address)) {
+            continue;
+        }
+        if (address == u"localhost"_s || address.contains(u"+local://"_s)) {
+            if (errorOut != nullptr) {
+                *errorOut = u"Linux TUN cannot safely capture DNS with a local-only Xray resolver (%1). Choose an explicit DNS server address in Settings > DNS."_s.arg(address);
+            }
+            return false;
+        }
+        // The app accepts plain resolver hostnames. Resolve those before TUN
+        // captures DNS, using the user's existing resolver configuration.
+        if (!address.contains(u"://"_s)) {
+            const QString resolved = resolveIpForHost(address);
+            if (resolved.isEmpty()) {
+                if (errorOut != nullptr) {
+                    *errorOut = u"Cannot resolve DNS server %1 before enabling Linux TUN."_s.arg(address);
+                }
+                return false;
+            }
+            if (objectServer) {
+                server.insert(u"address"_s, resolved);
+                dnsServers[i] = server;
+            } else {
+                dnsServers[i] = resolved;
+            }
+        } else {
+            const QUrl url(address);
+            const QString host = url.host();
+            if (!host.isEmpty() && !isIpv4(host) && !isIpv6(host)) {
+                const QString resolved = resolveIpForHost(host);
+                if (resolved.isEmpty()) {
+                    if (errorOut != nullptr) {
+                        *errorOut = u"Cannot resolve DNS server %1 before enabling Linux TUN."_s.arg(host);
+                    }
+                    return false;
+                }
+                // Preserve HTTPS certificate/SNI names while avoiding a resolver
+                // trying to resolve its own hostname after TUN is enabled.
+                hosts.insert(u"full:%1"_s.arg(host), resolved);
+            }
+        }
+    }
+    dns.insert(u"servers"_s, dnsServers);
+    dns.insert(u"hosts"_s, hosts);
+    root.insert(u"dns"_s, dns);
+    // Routes belong to this helper even when a newer core supports automatic
+    // routing. Preserve the source configuration used by the unprivileged UI.
+    QJsonArray inbounds = root.value(u"inbounds"_s).toArray();
+    for (qsizetype i = 0; i < inbounds.size(); ++i) {
+        QJsonObject inbound = inbounds.at(i).toObject();
+        if (inbound.value(u"protocol"_s).toString() == u"tun"_s) {
+            QJsonObject settings = inbound.value(u"settings"_s).toObject();
+            const QJsonArray gateways = settings.value(u"gateway"_s).isArray()
+                ? settings.value(u"gateway"_s).toArray() : settings.value(u"address"_s).toArray();
+            for (const QJsonValue& gateway : gateways) {
+                expectedAddresses->append(gateway.toString().trimmed());
+            }
+            // Newer cores add gateway addresses during Start. The helper must
+            // own this step on all versions to avoid racing duplicate adds.
+            settings.remove(u"gateway"_s);
+            settings.remove(u"address"_s);
+            settings.remove(u"autoSystemRoutingTable"_s);
+            settings.remove(u"autoOutboundsInterface"_s);
+            inbound.insert(u"settings"_s, settings);
+            inbounds[i] = inbound;
+        }
+    }
+    root.insert(u"inbounds"_s, inbounds);
+    const QByteArray bytes = QJsonDocument(root).toJson(QJsonDocument::Compact);
+    // /run is root-owned; QTemporaryFile creates atomically with mode 0600.
+    if (!output.open() || output.write(bytes) != bytes.size() || !output.flush()) {
+        if (errorOut != nullptr) {
+            *errorOut = u"Cannot create private Linux TUN runtime configuration."_s;
+        }
+        return false;
+    }
+    return true;
+}
+
+void linuxCleanupRouting(LinuxTunRoutingState& state, const QString& logPath)
+{
+    // Delete exact entries in reverse order. Never flush a system/shared table.
+    for (auto it = state.undoCommands.crbegin(); it != state.undoCommands.crend(); ++it) {
+        QString error;
+        if (!linuxRunIp(*it, &error) && !error.contains(u"No such"_s, Qt::CaseInsensitive)) {
+            appendLineToFile(logPath, u"[System] Linux TUN cleanup: %1"_s.arg(error));
+        }
+    }
+    state.undoCommands.clear();
+    for (auto it = state.reversePathValues.cbegin(); it != state.reversePathValues.cend(); ++it) {
+        QFile current(it.key());
+        if (!current.open(QIODevice::ReadOnly)) {
+            continue; // Interface may have disappeared on disconnect.
+        }
+        const QByteArray value = current.readAll().trimmed();
+        current.close();
+        // Do not overwrite a setting an administrator changed during the session.
+        if (value == "2" && (!current.open(QIODevice::WriteOnly) || current.write(it.value()) != it.value().size())) {
+            appendLineToFile(logPath, u"[System] Unable to restore %1."_s.arg(it.key()));
+        }
+    }
+    state.reversePathValues.clear();
+    state.table = 0;
+    state.priority = 0;
+    state.mark = 0;
+    state.lock.unlock();
+}
+
+bool linuxAllowAsymmetricReplies(LinuxTunRoutingState& state, QString* errorOut)
+{
+    const QString base = u"/proc/sys/net/ipv4/conf/"_s;
+    QFile global(base + u"all/rp_filter"_s);
+    if (!global.open(QIODevice::ReadOnly)) {
+        if (errorOut != nullptr) {
+            *errorOut = u"Cannot inspect Linux reverse-path filtering."_s;
+        }
+        return false;
+    }
+    const int globalValue = global.readAll().trimmed().toInt();
+    for (const QString& name : QDir(base).entryList(QDir::Dirs | QDir::NoDotAndDotDot)) {
+        if (name == u"all"_s || name == u"default"_s || name == u"lo"_s) {
+            continue;
+        }
+        QFile setting(base + name + u"/rp_filter"_s);
+        if (!setting.open(QIODevice::ReadOnly)) {
+            if (errorOut != nullptr) {
+                *errorOut = u"Cannot inspect reverse-path filtering for %1."_s.arg(name);
+            }
+            return false;
+        }
+        const QByteArray original = setting.readAll().trimmed();
+        setting.close();
+        if (qMax(globalValue, original.toInt()) != 1) {
+            continue;
+        }
+        // The kernel uses max(all, interface). Set only interfaces whose
+        // effective mode is strict; leave globally disabled/loose policy alone.
+        if (!setting.open(QIODevice::WriteOnly) || setting.write("2\n") != 2) {
+            if (errorOut != nullptr) {
+                *errorOut = u"Cannot enable loose reverse-path filtering for %1."_s.arg(name);
+            }
+            return false;
+        }
+        state.reversePathValues.insert(setting.fileName(), original + '\n');
+    }
+    return true;
+}
+
+bool linuxApplyRouting(LinuxTunRoutingState& state, const QString& tunIf, bool ipv6, QString* errorOut)
+{
+    if (!linuxAllowAsymmetricReplies(state, errorOut)) {
+        return false;
+    }
+    const QString table = QString::number(state.table);
+    const QString mark = QString::number(state.mark);
+    auto add = [&](const QStringList& args) {
+        if (!linuxRunIp(args, errorOut)) {
+            return false;
+        }
+        QStringList undo = args;
+        undo[2] = u"del"_s;
+        state.undoCommands.append(undo);
+        return true;
+    };
+    const QStringList families = ipv6 ? QStringList{u"-4"_s, u"-6"_s} : QStringList{u"-4"_s};
+    for (const QString& family : families) {
+        if (!add({family, u"route"_s, u"add"_s, u"default"_s, u"dev"_s, tunIf, u"table"_s, table})
+            || !add({family, u"rule"_s, u"add"_s, u"pref"_s, QString::number(state.priority),
+                     u"fwmark"_s, mark, u"lookup"_s, u"main"_s})
+            || !add({family, u"rule"_s, u"add"_s, u"pref"_s, QString::number(state.priority + 1),
+                     u"fwmark"_s, mark, u"unreachable"_s})
+            || !add({family, u"rule"_s, u"add"_s, u"pref"_s, QString::number(state.priority + 2),
+                     u"lookup"_s, u"main"_s, u"suppress_prefixlength"_s, u"0"_s})
+            || !add({family, u"rule"_s, u"add"_s, u"pref"_s, QString::number(state.priority + 3),
+                     u"not"_s, u"fwmark"_s, mark, u"lookup"_s, table})) {
+            return false;
+        }
     }
     return true;
 }
@@ -1263,137 +1619,111 @@ bool linuxEnsureTunAddresses(
 bool validateLinuxTunRouting(
     const QString& requestedTunIf,
     const QString& serverIp,
-    qint64 runtimePid,
+    QProcess& runtime,
     const QString& logPath,
-    const QStringList& expectedAddresses,
+    QStringList expectedAddresses,
+    LinuxTunRoutingState& routing,
     QString* errorOut)
 {
     QString lastError;
     const QString requiredTun = requestedTunIf.trimmed().isEmpty() ? u"xray0"_s : requestedTunIf.trimmed();
+    bool interfaceReady = false;
     for (int i = 0; i < 80; ++i) {
-        if (runtimePid > 0 && !isProcessAlive(runtimePid)) {
-            const QString tailLine = lastNonEmptyLogLine(logPath);
-            lastError = tailLine.trimmed().isEmpty()
-                ? u"Xray exited before Linux TUN routes became active."_s
-                : tailLine.trimmed();
+        runtime.waitForFinished(1);
+        if (runtime.state() == QProcess::NotRunning) {
+            lastError = lastNonEmptyLogLine(logPath);
+            if (lastError.isEmpty()) {
+                lastError = u"Xray exited before Linux TUN routes became active."_s;
+            }
             break;
         }
-
-        QString linkError;
-        const QString linkOutput = linuxIpOutput({u"-o"_s, u"link"_s, u"show"_s, u"dev"_s, requiredTun}, 1200, &linkError);
-        if (linkOutput.isEmpty()) {
-            lastError = linkError.trimmed().isEmpty()
-                ? u"Linux TUN interface %1 is not present yet."_s.arg(requiredTun)
-                : linkError.trimmed();
-            QThread::msleep(150);
-            continue;
+        const QString link = linuxIpOutput({u"-o"_s, u"link"_s, u"show"_s, u"dev"_s, requiredTun}, 1200, &lastError);
+        if (!link.isEmpty()) {
+            interfaceReady = true;
+            break;
         }
-
-        QString setupError;
-        if (!linuxEnsureTunAddresses(requiredTun, expectedAddresses, logPath, &setupError)) {
-            lastError = setupError.trimmed().isEmpty()
-                ? u"Failed to ensure Linux TUN addresses."_s
-                : setupError.trimmed();
-            QThread::msleep(150);
-            continue;
-        }
-
-        if (!linkOutput.contains(u"<"_s) || !linkOutput.contains(u"UP"_s)) {
-            QString refreshedLinkError;
-            const QString refreshedLinkOutput = linuxIpOutput({u"-o"_s, u"link"_s, u"show"_s, u"dev"_s, requiredTun}, 1200, &refreshedLinkError);
-            if (!refreshedLinkOutput.contains(u"<"_s) || !refreshedLinkOutput.contains(u"UP"_s)) {
-                lastError = u"Linux TUN interface %1 exists but is not UP: %2"_s
-                                .arg(requiredTun,
-                                     refreshedLinkOutput.isEmpty() ? refreshedLinkError.trimmed() : refreshedLinkOutput);
-                QThread::msleep(150);
-                continue;
-            }
-        }
-
-        QString addrError;
-        QString addrOutput = linuxIpOutput({u"-o"_s, u"addr"_s, u"show"_s, u"dev"_s, requiredTun}, 1200, &addrError);
-        bool addressReady = expectedAddresses.isEmpty();
-        for (const QString& expectedAddress : expectedAddresses) {
-            if (addrOutput.contains(expectedAddress)) {
-                addressReady = true;
-                break;
-            }
-        }
-        if (!addressReady) {
-            QString retrySetupError;
-            Q_UNUSED(linuxEnsureTunAddresses(requiredTun, expectedAddresses, logPath, &retrySetupError));
-            addrOutput = linuxIpOutput({u"-o"_s, u"addr"_s, u"show"_s, u"dev"_s, requiredTun}, 1200, &addrError);
-            for (const QString& expectedAddress : expectedAddresses) {
-                if (addrOutput.contains(expectedAddress)) {
-                    addressReady = true;
+        QThread::msleep(150);
+    }
+    if (interfaceReady) {
+        lastError.clear();
+        QFile ipv6Setting(u"/proc/sys/net/ipv6/conf/%1/disable_ipv6"_s.arg(requiredTun));
+        const bool tunIpv6Enabled = ipv6Setting.open(QIODevice::ReadOnly)
+            && ipv6Setting.readAll().trimmed() == "0";
+        if (!tunIpv6Enabled) {
+            bool otherIpv6Enabled = false;
+            const QString base = u"/proc/sys/net/ipv6/conf/"_s;
+            for (const QString& name : QDir(base).entryList(QDir::Dirs | QDir::NoDotAndDotDot)) {
+                if (name == u"all"_s || name == u"default"_s || name == u"lo"_s || name == requiredTun) {
+                    continue;
+                }
+                QFile setting(base + name + u"/disable_ipv6"_s);
+                if (!setting.open(QIODevice::ReadOnly) || setting.readAll().trimmed() != "1") {
+                    otherIpv6Enabled = true;
                     break;
                 }
             }
-        }
-        if (!addressReady) {
-            lastError = u"Linux TUN interface %1 is missing configured address/range. Expected one of [%2]. Current: %3"_s
-                            .arg(requiredTun,
-                                 expectedAddresses.join(u", "_s),
-                                 addrOutput.isEmpty() ? addrError.trimmed() : addrOutput);
-            QThread::msleep(150);
-            continue;
-        }
-
-        QString routeError;
-        const QString routeOutput = linuxIpOutput({u"route"_s, u"show"_s, u"table"_s, u"all"_s}, 1500, &routeError);
-        QString route6Error;
-        const QString route6Output = linuxIpOutput({u"-6"_s, u"route"_s, u"show"_s, u"table"_s, u"all"_s}, 1500, &route6Error);
-        QString ruleError;
-        const QString ruleOutput = linuxIpOutput({u"rule"_s}, 1500, &ruleError);
-        const bool routeMentionsTun = routeOutput.contains(u"dev %1"_s.arg(requiredTun))
-                                      || route6Output.contains(u"dev %1"_s.arg(requiredTun));
-        if (!routeMentionsTun) {
-            lastError = u"Linux TUN interface %1 is up, but route tables do not reference it yet. routeError=%2 ruleError=%3"_s
-                            .arg(requiredTun,
-                                 routeError.trimmed(),
-                                 ruleError.trimmed());
-            QThread::msleep(150);
-            continue;
-        }
-
-        if (!serverIp.trimmed().isEmpty() && isIpv4(serverIp)) {
-            QString serverErr;
-            const QString serverDev = linuxRouteDeviceFor(serverIp.trimmed(), false, &serverErr);
-            if (!serverDev.isEmpty() && serverDev.compare(requiredTun, Qt::CaseInsensitive) == 0) {
-                lastError = u"VPN server endpoint route is still pointed at TUN."_s;
-                QThread::msleep(150);
-                continue;
-            }
-        } else if (!serverIp.trimmed().isEmpty() && isIpv6(serverIp)) {
-            QString serverErr;
-            const QString serverDev = linuxRouteDeviceFor(serverIp.trimmed(), true, &serverErr);
-            if (!serverDev.isEmpty() && serverDev.compare(requiredTun, Qt::CaseInsensitive) == 0) {
-                lastError = u"VPN server endpoint IPv6 route is still pointed at TUN."_s;
-                QThread::msleep(150);
-                continue;
+            if (otherIpv6Enabled) {
+                lastError = u"IPv6 is disabled on the TUN interface but enabled on another interface. Enable IPv6 for TUN or disable it system-wide before connecting."_s;
+            } else {
+                expectedAddresses.removeIf([](const QString& address) { return address.contains(u':'); });
+                appendLineToFile(logPath, u"[System] IPv6 is disabled system-wide; installing IPv4 TUN routes only."_s);
             }
         }
-
-        appendLineToFile(logPath, u"[System] Linux TUN readiness OK: interface=%1 addresses=%2 routeState=%3 ruleState=%4"_s
-                                      .arg(requiredTun,
-                                           expectedAddresses.join(u", "_s),
-                                           u"tun-routes"_s,
-                                           ruleOutput.left(160)));
-        return true;
+        if (!lastError.isEmpty()) {
+            if (errorOut != nullptr) {
+                *errorOut = lastError;
+            }
+            return false;
+        }
+        if (expectedAddresses.isEmpty()) {
+            lastError = u"Linux TUN configuration has no gateway addresses."_s;
+        } else if (linuxEnsureTunAddresses(requiredTun, expectedAddresses, logPath, &lastError)) {
+            const QString addresses = linuxIpOutput({u"-o"_s, u"addr"_s, u"show"_s, u"dev"_s, requiredTun}, 1500, &lastError);
+            bool ipv6 = false;
+            for (const QString& expected : expectedAddresses) {
+                ipv6 = ipv6 || expected.contains(u':');
+                if (!addresses.contains(expected)) {
+                    lastError = u"Linux TUN interface %1 is missing address %2."_s.arg(requiredTun, expected);
+                    break;
+                }
+            }
+            if (lastError.isEmpty() && linuxApplyRouting(routing, requiredTun, ipv6, &lastError)) {
+                QStringList probes {u"1.1.1.1"_s, u"129.0.0.1"_s};
+                if (ipv6) {
+                    probes << u"2606:4700:4700::1111"_s << u"2001:4860:4860::8888"_s;
+                }
+                for (const QString& probe : probes) {
+                    const QString device = linuxRouteDeviceFor(probe, isIpv6(probe), &lastError);
+                    if (device != requiredTun) {
+                        lastError = u"Linux public route for %1 uses %2 instead of %3. Check other VPN or policy routing rules. %4"_s
+                                        .arg(probe, device.isEmpty() ? u"no interface"_s : device, requiredTun, lastError);
+                        break;
+                    }
+                }
+                if (lastError.isEmpty()) {
+                    const QString endpoint = serverIp.isEmpty() ? u"1.1.1.1"_s : serverIp;
+                    const QString serverDevice = linuxRouteDeviceFor(endpoint, isIpv6(endpoint), &lastError, routing.mark);
+                    if (serverDevice.isEmpty() || serverDevice == requiredTun) {
+                        lastError = u"Linux TUN outbound bypass route is unavailable or loops through %1. %2"_s.arg(requiredTun, lastError);
+                    }
+                }
+                runtime.waitForFinished(1);
+                if (lastError.isEmpty() && runtime.state() != QProcess::NotRunning) {
+                    appendLineToFile(logPath, u"[System] Linux TUN readiness OK: interface=%1 table=%2 mark=%3; public IPv4%4 routes and marked server bypass verified."_s
+                        .arg(requiredTun).arg(routing.table).arg(routing.mark).arg(ipv6 ? u"/IPv6"_s : QString()));
+                    return true;
+                }
+            }
+        }
     }
-
     const QString diagnostics = linuxTunDiagnostics();
-    if (!diagnostics.trimmed().isEmpty()) {
-        appendLineToFile(logPath, u"[System] Linux TUN readiness diagnostics:\n%1"_s.arg(diagnostics));
-    }
-
+    appendLineToFile(logPath, u"[System] Linux TUN readiness diagnostics:\n%1"_s.arg(diagnostics));
     if (errorOut != nullptr) {
-        *errorOut = lastError.trimmed().isEmpty()
-            ? u"Linux TUN routes were not applied correctly."_s
-            : u"%1\n%2"_s.arg(lastError.trimmed(), diagnostics);
+        *errorOut = lastError.isEmpty() ? u"Linux TUN routing did not become ready."_s : lastError;
     }
     return false;
 }
+
 #endif
 
 #if defined(Q_OS_MACOS)
@@ -1763,8 +2093,27 @@ public:
         });
         m_ownerWatchdogTimer.setInterval(2000);
         connect(&m_ownerWatchdogTimer, &QTimer::timeout, this, [this]() {
-            if (m_ownerPid <= 0 || !m_runtimeActive) {
+            if (!m_runtimeActive) {
                 m_ownerWatchdogMissCount = 0;
+                return;
+            }
+#if defined(Q_OS_LINUX)
+            if (m_linuxRuntime.state() == QProcess::NotRunning) {
+                stopTrackedRuntimeBestEffort(u"TUN runtime exited unexpectedly."_s);
+                return;
+            }
+            QString reversePathError;
+            if (!linuxAllowAsymmetricReplies(m_linuxRouting, &reversePathError)) {
+                appendLineToFile(m_runtimeLogPath, u"[System] %1"_s.arg(reversePathError));
+                stopTrackedRuntimeBestEffort(u"Unable to preserve Linux TUN routing."_s);
+                return;
+            }
+#endif
+            if (m_ownerPid <= 0) {
+                return;
+            }
+            if (m_runtimePid > 0 && !isProcessAlive(m_runtimePid)) {
+                stopTrackedRuntimeBestEffort(u"TUN runtime exited unexpectedly."_s);
                 return;
             }
             if (isProcessAlive(m_ownerPid)) {
@@ -1787,6 +2136,11 @@ public:
             qFatal("Failed to listen on 127.0.0.1:%hu", port);
         }
         m_idleTimer.start();
+    }
+
+    ~TunHelperServer() override
+    {
+        stopTrackedRuntimeBestEffort(u"Helper exit cleanup."_s);
     }
 
 private:
@@ -1872,6 +2226,7 @@ private:
         m_runtimePidPath.clear();
         m_runtimeTunIf.clear();
         m_runtimeServerIp.clear();
+        m_runtimeLogPath.clear();
         m_ownerPid = 0;
         m_ownerWatchdogMissCount = 0;
         m_ownerWatchdogTimer.stop();
@@ -1940,16 +2295,78 @@ private:
             }, &cleanupError));
         }
 
-#if defined(Q_OS_WIN)
+        QString launchConfigPath = configPath;
+#if defined(Q_OS_LINUX)
+        if (::geteuid() != 0) {
+            if (errorOut != nullptr) {
+                *errorOut = u"Linux TUN requires the privileged helper. Check polkit and your desktop authentication agent."_s;
+            }
+            return false;
+        }
+        const QString requiredTun = tunIf.isEmpty() ? u"xray0"_s : tunIf;
+        static const QRegularExpression interfaceName(u"^[A-Za-z0-9_.-]{1,15}$"_s);
+        if (!interfaceName.match(requiredTun).hasMatch() || requiredTun == u"."_s || requiredTun == u".."_s
+            || QFileInfo::exists(u"/sys/class/net/%1"_s.arg(requiredTun))) {
+            if (errorOut != nullptr) {
+                *errorOut = u"Linux TUN interface name is invalid or already in use: %1. Disconnect the existing tunnel before retrying."_s.arg(requiredTun);
+            }
+            return false;
+        }
+        QString resolvedServerIp = resolveIpForHost(serverIpRequested);
+        if (resolvedServerIp.isEmpty()) {
+            resolvedServerIp = resolveIpForHost(serverHostRequested);
+        }
+        QStringList expectedTunAddresses;
+        QTemporaryFile linuxRuntimeConfig(u"/run/genyconnect-xray-XXXXXX.json"_s);
+        const auto startupCleanup = qScopeGuard([this, &pidPath, &logPath]() {
+            if (!m_runtimeActive) {
+                linuxCleanupRouting(m_linuxRouting, logPath);
+                if (m_linuxRuntime.state() != QProcess::NotRunning) {
+                    m_linuxRuntime.terminate();
+                    if (!m_linuxRuntime.waitForFinished(2000)) {
+                        m_linuxRuntime.kill();
+                        m_linuxRuntime.waitForFinished(1000);
+                    }
+                }
+                QFile::remove(pidPath);
+            }
+        });
+        if (!linuxReserveRouting(m_linuxRouting, errorOut)
+            || !linuxPrepareRuntimeConfig(configPath, linuxRuntimeConfig, m_linuxRouting.mark,
+                                          serverHostRequested, resolvedServerIp, &expectedTunAddresses, errorOut)) {
+            return false;
+        }
+        launchConfigPath = linuxRuntimeConfig.fileName();
+        m_runtimeLogPath = logPath;
+#endif
+
+#if defined(Q_OS_WIN) || defined(Q_OS_LINUX)
         const QString workingDir = QFileInfo(xrayPath).absolutePath();
         qint64 pidValue = 0;
+#if defined(Q_OS_LINUX)
+        QProcess& detachedProcess = m_linuxRuntime;
+#else
         QProcess detachedProcess;
+#endif
         detachedProcess.setProgram(xrayPath);
-        detachedProcess.setArguments({u"run"_s, u"-config"_s, configPath});
+        detachedProcess.setArguments({u"run"_s, u"-config"_s, launchConfigPath});
         detachedProcess.setWorkingDirectory(workingDir);
         detachedProcess.setStandardOutputFile(logPath, QIODevice::Append);
         detachedProcess.setStandardErrorFile(logPath, QIODevice::Append);
+#if defined(Q_OS_LINUX)
+        // If the helper is killed abruptly, the child must not outlive it.
+        const pid_t helperPid = ::getpid();
+        detachedProcess.setChildProcessModifier([helperPid]() {
+            if (::prctl(PR_SET_PDEATHSIG, SIGKILL) != 0 || ::getppid() != helperPid) {
+                ::_exit(127);
+            }
+        });
+        detachedProcess.start();
+        const bool started = detachedProcess.waitForStarted(5000);
+        pidValue = detachedProcess.processId();
+#else
         const bool started = detachedProcess.startDetached(&pidValue);
+#endif
         if (!started || pidValue <= 0) {
             if (errorOut != nullptr) {
                 *errorOut = u"Failed to start Xray in privileged helper."_s;
@@ -2088,30 +2505,8 @@ private:
             appendLineToFile(logPath, u"[System] Windows route probe warning: %1"_s.arg(routeError.trimmed()));
         }
 #elif defined(Q_OS_LINUX)
-        QString resolvedServerIp = resolveIpForHost(serverIpRequested);
-        if (resolvedServerIp.isEmpty()) {
-            resolvedServerIp = resolveIpForHost(serverHostRequested);
-        }
-        qint64 runtimePid = -1;
-        for (int i = 0; i < 25 && runtimePid <= 0; ++i) {
-            runtimePid = readPidFromFile(pidPath);
-            if (runtimePid > 0) {
-                break;
-            }
-            QThread::msleep(80);
-        }
-        if (runtimePid <= 0) {
-            const QString startupLogLine = lastNonEmptyLogLine(logPath);
-            if (errorOut != nullptr) {
-                *errorOut = startupLogLine.trimmed().isEmpty()
-                    ? u"TUN start failed: pid file not created."_s
-                    : startupLogLine.trimmed();
-            }
-            return false;
-        }
         QString routeError;
-        const QStringList expectedTunAddresses = linuxTunAddressesFromConfig(configPath);
-        if (!validateLinuxTunRouting(tunIf, resolvedServerIp, runtimePid, logPath, expectedTunAddresses, &routeError)) {
+        if (!validateLinuxTunRouting(tunIf, resolvedServerIp, m_linuxRuntime, logPath, expectedTunAddresses, m_linuxRouting, &routeError)) {
             QString cleanupErr;
             Q_UNUSED(stopTun(QJsonObject{
                 {u"pid_path"_s, pidPath},
@@ -2131,6 +2526,15 @@ private:
         Q_UNUSED(serverHostRequested)
 #endif
 
+#if defined(Q_OS_LINUX)
+        const qint64 pid = m_linuxRuntime.processId();
+        if (m_linuxRuntime.state() == QProcess::NotRunning || pid <= 0) {
+            if (errorOut != nullptr) {
+                *errorOut = u"Xray exited before Linux TUN startup completed."_s;
+            }
+            return false;
+        }
+#else
         QFile pidFile(pidPath);
         if (!pidFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
             if (errorOut != nullptr) {
@@ -2153,18 +2557,27 @@ private:
             }
             return false;
         }
+#endif
 
         m_runtimeActive = true;
         m_runtimePid = pid;
         m_runtimePidPath = pidPath;
         m_runtimeTunIf = tunIf;
+#if defined(Q_OS_LINUX)
+        m_runtimeServerIp = resolvedServerIp;
+#else
         m_runtimeServerIp = resolveIpForHost(serverIpRequested);
         if (m_runtimeServerIp.isEmpty()) {
             m_runtimeServerIp = resolveIpForHost(serverHostRequested);
         }
+#endif
         m_ownerPid = ownerPid;
         m_ownerWatchdogMissCount = 0;
-        if (m_ownerPid > 0) {
+        if (m_ownerPid > 0
+#if defined(Q_OS_LINUX)
+            || m_runtimeActive
+#endif
+        ) {
             m_ownerWatchdogTimer.start();
         } else {
             m_ownerWatchdogTimer.stop();
@@ -2216,6 +2629,23 @@ private:
         if (!cleanupWindowsTunRoutes(serverIp, &cleanupError) && errorOut != nullptr && errorOut->trimmed().isEmpty()) {
             *errorOut = cleanupError.trimmed();
         }
+#elif defined(Q_OS_LINUX)
+        linuxCleanupRouting(m_linuxRouting, m_runtimeLogPath);
+        // This helper owns its child directly; a user-writable pid file must
+        // never determine which process a root helper terminates.
+        if (m_linuxRuntime.state() != QProcess::NotRunning) {
+            m_linuxRuntime.terminate();
+            if (!m_linuxRuntime.waitForFinished(2000)) {
+                m_linuxRuntime.kill();
+                if (!m_linuxRuntime.waitForFinished(1000)) {
+                    if (errorOut != nullptr) {
+                        *errorOut = u"Failed to stop the Linux TUN runtime."_s;
+                    }
+                    return false;
+                }
+            }
+        }
+        QFile::remove(pidPath);
 #else
         const QString cmd = QString::fromUtf8("if [ -f %1 ]; then "
             "PID=$(cat %1); "
@@ -2252,6 +2682,11 @@ private:
     QString m_runtimePidPath;
     QString m_runtimeTunIf;
     QString m_runtimeServerIp;
+    QString m_runtimeLogPath;
+#if defined(Q_OS_LINUX)
+    LinuxTunRoutingState m_linuxRouting;
+    QProcess m_linuxRuntime;
+#endif
 };
 
 } // namespace
@@ -2296,6 +2731,46 @@ int main(int argc, char* argv[])
     if (port == 0 || token.isEmpty()) {
         return 2;
     }
+
+#if defined(Q_OS_LINUX)
+    // SIGTERM/SIGINT must unwind the server so private routing and sysctl
+    // changes are restored. A self-pipe safely transfers signals into Qt.
+    int terminationPipe[2] {-1, -1};
+    if (::pipe2(terminationPipe, O_CLOEXEC | O_NONBLOCK) != 0) {
+        return 3;
+    }
+    const auto closeTerminationPipe = qScopeGuard([&terminationPipe]() {
+        linuxTerminationWriteFd = -1;
+        ::close(terminationPipe[0]);
+        ::close(terminationPipe[1]);
+    });
+    QSocketNotifier terminationNotifier(terminationPipe[0], QSocketNotifier::Read);
+    QObject::connect(&terminationNotifier, &QSocketNotifier::activated, &app, [&app, &terminationPipe]() {
+        char buffer[32];
+        while (::read(terminationPipe[0], buffer, sizeof(buffer)) > 0) {
+        }
+        app.quit();
+    });
+    struct sigaction terminationAction {};
+    terminationAction.sa_handler = requestLinuxTermination;
+    ::sigemptyset(&terminationAction.sa_mask);
+    terminationAction.sa_flags = SA_RESTART;
+    struct sigaction previousTerm {};
+    struct sigaction previousInt {};
+    linuxTerminationWriteFd = terminationPipe[1];
+    if (::sigaction(SIGTERM, &terminationAction, &previousTerm) != 0) {
+        return 3;
+    }
+    const auto restoreTerm = qScopeGuard([&previousTerm]() {
+        ::sigaction(SIGTERM, &previousTerm, nullptr);
+    });
+    if (::sigaction(SIGINT, &terminationAction, &previousInt) != 0) {
+        return 3;
+    }
+    const auto restoreInt = qScopeGuard([&previousInt]() {
+        ::sigaction(SIGINT, &previousInt, nullptr);
+    });
+#endif
 
     TunHelperServer server(token, port, idleTimeoutMs);
     return app.exec();

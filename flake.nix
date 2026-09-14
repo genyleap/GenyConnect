@@ -9,6 +9,9 @@
       forAllSystems = nixpkgs.lib.genAttrs supportedSystems;
     in
     {
+      nixosModules.genyconnect = import ./nix/module.nix;
+      nixosModules.default = self.nixosModules.genyconnect;
+
       packages = forAllSystems (system:
         let
           pkgs = import nixpkgs { inherit system; };

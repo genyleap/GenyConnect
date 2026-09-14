@@ -21,8 +21,8 @@ T.ComboBox {
     readonly property bool darkMode: Theme.mode === Theme.Dark
     property color fillColor: Colors.gcControlBg
     property color strokeColor: Colors.gcControlBorder
-    property color focusColor: Colors.secondry
-    property int cornerRadius: 15
+    property color focusColor: Colors.dsPrimarySolid
+    property int cornerRadius: Metrics.radiusSm
     property color popupFillColor: Colors.gcPopupBg
     property color popupBorderColor: Colors.gcPopupBorder
     property color popupHoverColor: Colors.gcPopupHover
@@ -71,10 +71,13 @@ T.ComboBox {
 
         Canvas {
             anchors.fill: parent
+            readonly property color strokeColor: Colors.gcControlMuted
+            opacity: control.enabled ? 1 : 0.45
+            onStrokeColorChanged: requestPaint()
             onPaint: {
                 const ctx = getContext("2d")
                 ctx.reset()
-                ctx.strokeStyle = Colors.gcControlMuted
+                ctx.strokeStyle = strokeColor
                 ctx.lineWidth = 1.8
                 ctx.lineCap = "round"
                 ctx.beginPath()
@@ -90,7 +93,7 @@ T.ComboBox {
         radius: control.cornerRadius
         color: control.fillColor
         border.color: control.activeFocus ? control.focusColor : control.strokeColor
-        border.width: 2
+        border.width: control.activeFocus ? 2 : 1
     }
 
     delegate: T.ItemDelegate {

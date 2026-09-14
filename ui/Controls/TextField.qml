@@ -10,12 +10,20 @@ T.TextField {
     property color focusColor: Colors.dsPrimarySolid
     property int cornerRadius: Metrics.radiusSm
 
+    // Keep the typed value and Basic's placeholder on the same leading edge,
+    // including Latin names entered on an RTL page. Callers can override this
+    // alignment for technical values without inherited mirroring reversing it.
+    LayoutMirroring.enabled: false
+    LayoutMirroring.childrenInherit: true
+    horizontalAlignment: I18n.isRtl ? TextInput.AlignRight : TextInput.AlignLeft
+    verticalAlignment: TextInput.AlignVCenter
+
     font.family: FontSystem.contentFontFamily
     font.pixelSize: Typography.uiBodyLg
     color: Colors.dsText
     placeholderTextColor: Colors.dsTextSubtle
     selectionColor: Colors.dsPrimarySolid
-    selectedTextColor: Colors.staticPrimary
+    selectedTextColor: Colors.dsPrimaryText
 
     leftPadding: 12
     rightPadding: 12

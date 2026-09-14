@@ -363,6 +363,7 @@ jobs:
             wget curl gnupg lsb-release software-properties-common ca-certificates \
             unzip zip file tar gzip patchelf desktop-file-utils fakeroot fuse libfuse2 imagemagick \
             libgl1 libgl1-mesa-dev libegl1 libegl1-mesa-dev \
+            libwayland-client0 libwayland-cursor0 libwayland-egl1 \
             libxkbcommon0 libxkbcommon-dev libxkbcommon-x11-0 libxkbcommon-x11-dev \
             libxcb1 libxcb1-dev libxcb-cursor0 libxcb-cursor-dev libxcb-icccm4 libxcb-icccm4-dev \
             libxcb-image0 libxcb-image0-dev libxcb-keysyms1 libxcb-keysyms1-dev \
@@ -540,49 +541,11 @@ jobs:
 
           chmod +x tools/linuxdeploy.AppImage tools/linuxdeploy-plugin-qt.AppImage
 
-          QMAKE_BIN="${QT_ROOT_DIR}/bin/qmake6"
-          if [[ ! -x "${QMAKE_BIN}" ]]; then
-            QMAKE_BIN="${QT_ROOT_DIR}/bin/qmake"
-          fi
-          if [[ -z "${QMAKE_BIN}" || ! -x "${QMAKE_BIN}" ]]; then
-            echo "qmake/qmake6 not found."
-            exit 1
-          fi
-
-          QT_PREFIX="$("${QMAKE_BIN}" -query QT_INSTALL_PREFIX)"
-          QT_LIB_DIR="$("${QMAKE_BIN}" -query QT_INSTALL_LIBS)"
-          QT_PLUGIN_DIR="$("${QMAKE_BIN}" -query QT_INSTALL_PLUGINS)"
-          export LD_LIBRARY_PATH="${QT_LIB_DIR}:${QT_PREFIX}/lib:${LD_LIBRARY_PATH:-}"
-
-          mkdir -p AppDir/usr/plugins/platforms AppDir/usr/plugins/imageformats
-          cp -av "${QT_PLUGIN_DIR}/platforms/libqxcb.so" AppDir/usr/plugins/platforms/ || true
-          cp -av "${QT_PLUGIN_DIR}"/platforms/libqwayland*.so AppDir/usr/plugins/platforms/ || true
-          cp -av "${QT_PLUGIN_DIR}/imageformats/libqsvg.so" AppDir/usr/plugins/imageformats/ || true
-
-          if [[ ! -f "AppDir/usr/plugins/platforms/libqxcb.so" ]]; then
-            echo "ERROR: Qt xcb platform plugin is required but was not found under ${QT_PLUGIN_DIR}/platforms."
-            find "${QT_PLUGIN_DIR}/platforms" -maxdepth 1 -type f -print || true
-            exit 1
-          fi
-
-          if ! compgen -G "AppDir/usr/plugins/platforms/libqwayland*.so" >/dev/null; then
-            echo "WARNING: Qt Wayland platform plugins were not found under ${QT_PLUGIN_DIR}/platforms."
-            echo "Continuing with xcb-only AppImage for this architecture."
-            find "${QT_PLUGIN_DIR}/platforms" -maxdepth 1 -type f -print || true
-          fi
-
-          export QMAKE="${QMAKE_BIN}"
-          export QML_SOURCES_PATHS="${PWD}/ui"
-          export EXTRA_QT_PLUGINS="platforms/libqxcb.so,platforms/libqwayland-egl.so,platforms/libqwayland-generic.so,imageformats/libqsvg.so"
           export OUTPUT="GenyConnect-${VERSION}-linux-${TARGET_ARCH}.AppImage"
-          export APPIMAGE_EXTRACT_AND_RUN=1
-
-          ./tools/linuxdeploy.AppImage \
-            --appdir AppDir \
-            --desktop-file AppDir/usr/share/applications/genyconnect.desktop \
-            --icon-file AppDir/usr/share/icons/hicolor/512x512/apps/genyconnect.png \
-            --plugin qt \
-            --output appimage
+          bash scripts/bundle_appimage_qt.sh \
+            "${PWD}/AppDir" \
+            "${QT_ROOT_DIR}" \
+            "${PWD}/tools/linuxdeploy.AppImage"
 
           test -f "${OUTPUT}"
           mv "${OUTPUT}" "${OUT_DIR}/${OUTPUT}"
@@ -716,6 +679,7 @@ jobs:
             wget curl gnupg lsb-release software-properties-common ca-certificates \
             unzip zip p7zip-full file tar gzip patchelf desktop-file-utils fakeroot fuse libfuse2 \
             libgl1 libgl1-mesa-dev libegl1 libegl1-mesa-dev \
+            libwayland-client0 libwayland-cursor0 libwayland-egl1 \
             libxkbcommon0 libxkbcommon-dev libxkbcommon-x11-0 libxkbcommon-x11-dev \
             libxcb1 libxcb1-dev libxcb-cursor0 libxcb-cursor-dev libxcb-icccm4 libxcb-icccm4-dev \
             libxcb-image0 libxcb-image0-dev libxcb-keysyms1 libxcb-keysyms1-dev \
@@ -876,50 +840,11 @@ jobs:
 
           chmod +x tools/linuxdeploy.AppImage tools/linuxdeploy-plugin-qt.AppImage
 
-          QMAKE_BIN="${QT_ROOT_DIR}/bin/qmake6"
-          if [[ ! -x "${QMAKE_BIN}" ]]; then
-            QMAKE_BIN="${QT_ROOT_DIR}/bin/qmake"
-          fi
-          if [[ ! -x "${QMAKE_BIN}" ]]; then
-            echo "qmake/qmake6 not found."
-            find "${QT_ROOT_DIR}" -type f \( -name qmake6 -o -name qmake \) || true
-            exit 1
-          fi
-
-          QT_PREFIX="$("${QMAKE_BIN}" -query QT_INSTALL_PREFIX)"
-          QT_LIB_DIR="$("${QMAKE_BIN}" -query QT_INSTALL_LIBS)"
-          QT_PLUGIN_DIR="$("${QMAKE_BIN}" -query QT_INSTALL_PLUGINS)"
-          export LD_LIBRARY_PATH="${QT_LIB_DIR}:${QT_PREFIX}/lib:${LD_LIBRARY_PATH:-}"
-
-          mkdir -p AppDir/usr/plugins/platforms AppDir/usr/plugins/imageformats
-          cp -av "${QT_PLUGIN_DIR}/platforms/libqxcb.so" AppDir/usr/plugins/platforms/ || true
-          cp -av "${QT_PLUGIN_DIR}"/platforms/libqwayland*.so AppDir/usr/plugins/platforms/ || true
-          cp -av "${QT_PLUGIN_DIR}/imageformats/libqsvg.so" AppDir/usr/plugins/imageformats/ || true
-
-          if [[ ! -f "AppDir/usr/plugins/platforms/libqxcb.so" ]]; then
-            echo "ERROR: Qt xcb platform plugin is required but was not found under ${QT_PLUGIN_DIR}/platforms."
-            find "${QT_PLUGIN_DIR}/platforms" -maxdepth 1 -type f -print || true
-            exit 1
-          fi
-
-          if ! compgen -G "AppDir/usr/plugins/platforms/libqwayland*.so" >/dev/null; then
-            echo "WARNING: Qt Wayland platform plugins were not found under ${QT_PLUGIN_DIR}/platforms."
-            echo "Continuing with xcb-only AppImage for this architecture."
-            find "${QT_PLUGIN_DIR}/platforms" -maxdepth 1 -type f -print || true
-          fi
-
-          export QMAKE="${QMAKE_BIN}"
-          export QML_SOURCES_PATHS="${PWD}/ui"
-          export EXTRA_QT_PLUGINS="platforms/libqxcb.so,platforms/libqwayland-egl.so,platforms/libqwayland-generic.so,imageformats/libqsvg.so"
           export OUTPUT="GenyConnect-${VERSION}-linux-${TARGET_ARCH}.AppImage"
-          export APPIMAGE_EXTRACT_AND_RUN=1
-
-          ./tools/linuxdeploy.AppImage \
-            --appdir AppDir \
-            --desktop-file AppDir/usr/share/applications/genyconnect.desktop \
-            --icon-file AppDir/usr/share/icons/hicolor/512x512/apps/genyconnect.png \
-            --plugin qt \
-            --output appimage
+          bash scripts/bundle_appimage_qt.sh \
+            "${PWD}/AppDir" \
+            "${QT_ROOT_DIR}" \
+            "${PWD}/tools/linuxdeploy.AppImage"
 
           test -f "${OUTPUT}"
           mv "${OUTPUT}" "${OUT_DIR}/${OUTPUT}"

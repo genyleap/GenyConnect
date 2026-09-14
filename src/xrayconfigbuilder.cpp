@@ -7,6 +7,7 @@ module;
 #include <QtGlobal>
 
 module genyconnect.backend.xrayconfigbuilder;
+import genyconnect.backend.routingruleservice;
 
 namespace {
 QStringList defaultDnsServers()
@@ -145,20 +146,14 @@ QString normalizedLanMixedListenAddress(const XrayConfigBuilder::BuildOptions& o
 
 QJsonObject buildTunInbound(const XrayConfigBuilder::BuildOptions& options)
 {
-QString tunStack = QString::fromUtf8("system");
-#if defined(Q_OS_LINUX) || defined(Q_OS_ANDROID)
-    tunStack = QString::fromUtf8("gvisor");
-#endif
-
+    // Xray uses gateway for interface addresses. address/stack/autoRoute/
+    // strictRoute belong to a different core and are silently ignored here.
+    // Platform helpers own system routes; do not also enable Xray auto routing.
     QJsonObject settings {
-        {QString::fromUtf8("address"), QJsonArray {
+        {QString::fromUtf8("gateway"), QJsonArray {
             QString::fromUtf8("172.19.0.1/30"),
             QString::fromUtf8("fd00:1234:5678::1/126")
-        }},
-        {QString::fromUtf8("stack"), tunStack},
-        {QString::fromUtf8("autoRoute"), options.tunAutoRoute},
-        {QString::fromUtf8("strictRoute"), options.tunStrictRoute},
-        {QString::fromUtf8("sniff"), true}
+        }}
     };
     if (options.tunMtuArray) {
         settings.insert(QString::fromUtf8("mtu"), QJsonArray {defaultTunMtu()});
@@ -187,10 +182,6 @@ QString tunStack = QString::fromUtf8("system");
     // Mirror Xray's documented Windows TUN options so the adapter gets DNS
     // servers assigned and Xray keeps its own outbound sockets on the
     // physical interface instead of chasing the tunnel.
-    settings.insert(QString::fromUtf8("gateway"), QJsonArray {
-        QString::fromUtf8("172.19.0.1/30"),
-        QString::fromUtf8("fd00:1234:5678::1/126")
-    });
     settings.insert(QString::fromUtf8("dns"), toStringArray(tunDnsServers(options.dnsServers)));
 #elif defined(Q_OS_LINUX) && !defined(Q_OS_ANDROID)
     const QString tunName = options.tunInterfaceName.trimmed().isEmpty()
@@ -325,10 +316,12 @@ QJsonArray toDomainArray(const QStringList& values)
 QJsonArray toProcessArray(const QStringList& values)
 {
     QJsonArray out;
+    QSet<QString> seen;
     for (const QString& value : values) {
-        const QString trimmed = value.trimmed();
-        if (!trimmed.isEmpty()) {
-            out.append(trimmed);
+        const QString matcher = RoutingRuleService::normalizeProcessMatcher(value);
+        if (!matcher.isEmpty() && !seen.contains(matcher)) {
+            seen.insert(matcher);
+            out.append(matcher);
         }
     }
     return out;
@@ -436,7 +429,7 @@ QJsonObject buildRouting(const XrayConfigBuilder::BuildOptions& options)
         });
     };
 
-    auto appendProcessRule = [&rules,& options](const QStringList& entries, const QString& outboundTag) {
+    auto appendProcessRule = [&rules, &options](const QStringList& entries, const QString& outboundTag) {
         if (!options.enableProcessRouting) {
             return;
         }

@@ -18,8 +18,9 @@ module;
 #include <QStringList>
 #include <QtTypes>
 
-#ifndef Q_MOC_RUN
 export module genyconnect.backend.xrayconfigbuilder;
+
+#ifndef Q_MOC_RUN
 import genyconnect.backend.serverprofile;
 #endif
 

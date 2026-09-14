@@ -9,6 +9,7 @@
 
 import QtQuick
 import QtQuick.Controls
+import QtQuick.Controls.Basic as Basic
 import QtQuick.Layouts
 import QtCore
 
@@ -44,6 +45,100 @@ Item {
     property alias speedTestPopup: speedTestPopup
     property alias importPopup: importPopup
     property alias settingsFlickRef: settingsFlick
+
+    component ProfileStatusChip: Rectangle {
+        id: statusChip
+        property string label: ""
+        property color textColor: Colors.dsTextMuted
+        property color fillColor: Colors.dsSurfaceSoft
+        property real maximumWidth: 10000
+
+        implicitWidth: Math.min(maximumWidth, statusLabel.implicitWidth + 20)
+        implicitHeight: Math.max(26, statusLabel.implicitHeight + 8)
+        width: implicitWidth
+        height: implicitHeight
+        radius: 8
+        color: fillColor
+        border.width: 1
+        border.color: Qt.rgba(textColor.r, textColor.g, textColor.b, 0.12)
+
+        Text {
+            id: statusLabel
+            anchors.fill: parent
+            anchors.leftMargin: 10
+            anchors.rightMargin: 10
+            text: statusChip.label
+            textFormat: Text.PlainText
+            color: statusChip.textColor
+            font.family: FontSystem.contentFontFamily
+            font.pixelSize: Typography.uiCaption
+            horizontalAlignment: Text.AlignHCenter
+            verticalAlignment: Text.AlignVCenter
+            elide: Text.ElideRight
+        }
+    }
+
+    component ProfileToolButton: Controls.CircleIconButton {
+        diameter: root.compact ? 34 : 30
+        elevated: false
+        backgroundColor: "transparent"
+        borderColor: "transparent"
+        iconColor: Colors.dsTextMuted
+        iconFontFamily: root.faSolid
+        iconPixelSize: 13
+    }
+
+    component BottomNavigationButton: Basic.Button {
+        id: navigationButton
+        property string glyph: ""
+        property bool selected: false
+
+        Layout.fillWidth: true
+        Layout.preferredWidth: 1
+        Layout.minimumWidth: 0
+        Layout.fillHeight: true
+        padding: 4
+        focusPolicy: Qt.StrongFocus
+        hoverEnabled: !root.mobilePlatform
+        Accessible.name: text
+        Accessible.checkable: true
+        Accessible.checked: selected
+
+        background: Rectangle {
+            radius: Metrics.radiusSm
+            color: navigationButton.down || navigationButton.hovered ? Colors.dsSurfaceSoft : "transparent"
+            border.width: navigationButton.visualFocus ? 2 : 0
+            border.color: Colors.dsPrimarySolid
+        }
+        contentItem: ColumnLayout {
+            spacing: 2
+            Rectangle {
+                Layout.alignment: Qt.AlignHCenter
+                Layout.preferredWidth: 44
+                Layout.preferredHeight: 26
+                radius: 13
+                color: navigationButton.selected ? Colors.dsPrimaryTint : "transparent"
+                Text {
+                    anchors.centerIn: parent
+                    text: navigationButton.glyph
+                    font.family: root.faSolid
+                    font.pixelSize: 18
+                    color: navigationButton.selected ? Colors.dsLinkIconBlue : Colors.dsTextMuted
+                }
+            }
+            Text {
+                Layout.fillWidth: true
+                Layout.minimumWidth: 0
+                text: navigationButton.text
+                color: navigationButton.selected ? Colors.dsLinkIconBlue : Colors.dsTextMuted
+                font.family: FontSystem.contentFontFamily
+                font.pixelSize: Typography.uiCaption
+                font.weight: navigationButton.selected ? Font.DemiBold : Font.Normal
+                horizontalAlignment: Text.AlignHCenter
+                wrapMode: Text.WordWrap
+            }
+        }
+    }
 
     component PowerHomeBadge: Rectangle {
         id: homeBadge
@@ -112,127 +207,73 @@ Item {
         }
     }
 
-    component ProfileActionChip: Rectangle {
+    component ProfileActionChip: Basic.Button {
         id: chip
-    
+
         property string label: ""
         property string glyph: ""
         property bool compactStyle: root.compact
-        readonly property bool denseStyle: surface.profilePopup.height < 720
-        readonly property bool ultraDenseStyle: surface.profilePopup.height < 520
         property color accentColor: Colors.dsPrimarySolid
-        property color fillColor: compactStyle ? Colors.dsSurfaceSoft : Colors.dsSurface
-        property color hoverFillColor: compactStyle ? Colors.dsSurface : Colors.dsSurfaceSoft
+        property color fillColor: Colors.dsSurface
+        property color hoverFillColor: Colors.dsSurfaceSoft
         property color strokeColor: Colors.dsBorder
         property color labelColor: Colors.dsText
-        property color iconBubbleColor: Qt.rgba(accentColor.r, accentColor.g, accentColor.b, Colors.lightMode ? 0.14 : 0.22)
-        readonly property color disabledFillColor: Colors.dsSurfaceSoft
-        readonly property color disabledStrokeColor: Colors.dsBorderSoft
-        readonly property color disabledLabelColor: Colors.dsTextSubtle
-        readonly property color disabledAccentColor: Colors.dsTextSubtle
-        readonly property color disabledIconBubbleColor: Qt.rgba(Colors.dsTextSubtle.r, Colors.dsTextSubtle.g, Colors.dsTextSubtle.b, Colors.lightMode ? 0.10 : 0.18)
-    
-        signal clicked()
-    
+
         Layout.fillWidth: true
-        Layout.preferredHeight: compactStyle
-                                ? (ultraDenseStyle ? 50 : (denseStyle ? 58 : 70))
-                                : (ultraDenseStyle ? 36 : (denseStyle ? 40 : 46))
-        radius: compactStyle ? (denseStyle ? 15 : 18) : (denseStyle ? 12 : 14)
-        color: !enabled
-               ? disabledFillColor
-               : chipMouse.pressed
-                 ? (Colors.lightMode ? Qt.darker(hoverFillColor, 1.03) : Qt.lighter(hoverFillColor, 1.08))
-                 : (chipMouse.containsMouse ? hoverFillColor : fillColor)
-        border.width: 1
-        border.color: enabled ? strokeColor : disabledStrokeColor
-        opacity: 1.0
-        scale: enabled && chipMouse.pressed ? 0.985 : 1.0
-        antialiasing: true
-    
-        Behavior on color { ColorAnimation { duration: 120 } }
-        Behavior on border.color { ColorAnimation { duration: 120 } }
-        Behavior on scale { NumberAnimation { duration: 90 } }
-    
-        ColumnLayout {
-            anchors.fill: parent
-            anchors.margins: compactStyle ? (denseStyle ? 5 : 8) : 0
-            spacing: compactStyle ? (denseStyle ? 3 : 6) : 0
-            visible: compactStyle
-    
-            Rectangle {
-                Layout.alignment: Qt.AlignHCenter
-                Layout.preferredWidth: denseStyle ? 24 : 30
-                Layout.preferredHeight: denseStyle ? 24 : 30
-                radius: width / 2
-                color: chip.enabled ? chip.iconBubbleColor : chip.disabledIconBubbleColor
-                border.width: 0
-    
-                Text {
-                    anchors.centerIn: parent
-                    text: chip.glyph
-                    color: chip.enabled ? chip.accentColor : chip.disabledAccentColor
-                    font.family: root.faSolid
-                    font.pixelSize: denseStyle ? 11 : 13
-                }
-            }
-    
+        Layout.minimumWidth: 0
+        implicitWidth: compactStyle ? 148 : 180
+        implicitHeight: Math.max(compactStyle ? 52 : 44, implicitContentHeight + topPadding + bottomPadding)
+        leftPadding: 10
+        rightPadding: 10
+        topPadding: 9
+        bottomPadding: 9
+        hoverEnabled: !root.mobilePlatform
+        focusPolicy: Qt.StrongFocus
+        Accessible.name: I18n.t(label)
+        Basic.ToolTip.visible: hovered && !root.mobilePlatform && !compactStyle
+        Basic.ToolTip.text: I18n.t(label)
+        Basic.ToolTip.delay: 600
+        LayoutMirroring.enabled: false
+        LayoutMirroring.childrenInherit: true
+
+        background: Rectangle {
+            radius: 12
+            color: !chip.enabled ? Colors.dsSurfaceSoft
+                : chip.down || chip.checked ? Colors.dsPrimaryTint
+                : chip.hovered ? chip.hoverFillColor : chip.fillColor
+            border.width: chip.visualFocus ? 2 : 1
+            border.color: chip.visualFocus ? Colors.dsPrimarySolid
+                : chip.enabled ? chip.strokeColor : Colors.dsBorderSoft
+            Behavior on color { ColorAnimation { duration: 120 } }
+        }
+
+        contentItem: RowLayout {
+            spacing: 8
+            layoutDirection: I18n.isRtl ? Qt.RightToLeft : Qt.LeftToRight
+
             Text {
-                Layout.fillWidth: true
-                text: I18n.t(chip.label)
-                color: chip.enabled ? chip.labelColor : chip.disabledLabelColor
-                font.family: FontSystem.getContentFontBold.name
-                font.pixelSize: denseStyle ? 10 : 11
-                font.bold: true
+                Layout.preferredWidth: 20
+                Layout.minimumWidth: 20
+                text: chip.glyph
+                color: chip.enabled ? chip.accentColor : Colors.dsTextSubtle
+                font.family: root.faSolid
+                font.weight: Font.Black
+                font.pixelSize: 14
                 horizontalAlignment: Text.AlignHCenter
-                wrapMode: Text.WordWrap
-                maximumLineCount: 2
-                elide: Text.ElideRight
             }
-        }
-    
-        RowLayout {
-            anchors.fill: parent
-            anchors.leftMargin: denseStyle ? 9 : 12
-            anchors.rightMargin: denseStyle ? 9 : 12
-            spacing: denseStyle ? 7 : 10
-            visible: !compactStyle
-    
-            Rectangle {
-                Layout.preferredWidth: denseStyle ? 24 : 28
-                Layout.preferredHeight: denseStyle ? 24 : 28
-                radius: width / 2
-                color: chip.enabled ? chip.iconBubbleColor : chip.disabledIconBubbleColor
-                border.width: 0
-    
-                Text {
-                    anchors.centerIn: parent
-                    text: chip.glyph
-                    color: chip.enabled ? chip.accentColor : chip.disabledAccentColor
-                    font.family: root.faSolid
-                    font.pixelSize: denseStyle ? 11 : 12
-                }
-            }
-    
+
             Text {
                 Layout.fillWidth: true
+                Layout.minimumWidth: 0
                 text: I18n.t(chip.label)
-                color: chip.enabled ? chip.labelColor : chip.disabledLabelColor
-                font.family: FontSystem.getContentFontBold.name
-                font.pixelSize: denseStyle ? 12 : 13
-                font.bold: true
-                elide: Text.ElideRight
+                color: chip.enabled ? chip.labelColor : Colors.dsTextSubtle
+                font.family: FontSystem.contentFontFamily
+                font.pixelSize: Typography.uiBodySm
+                font.weight: Font.Medium
+                horizontalAlignment: I18n.isRtl ? Text.AlignRight : Text.AlignLeft
                 verticalAlignment: Text.AlignVCenter
+                wrapMode: Text.WrapAtWordBoundaryOrAnywhere
             }
-        }
-    
-        MouseArea {
-            id: chipMouse
-            anchors.fill: parent
-            enabled: chip.enabled
-            hoverEnabled: true
-            cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
-            onClicked: chip.clicked()
         }
     }
 
@@ -750,13 +791,38 @@ Item {
 
     Popup {
         id: profilePopup
+        property bool showProfileActions: false
         readonly property bool denseLayout: height < 720
         readonly property bool ultraDenseLayout: height < 520
+
+        function revealFocusedControl() {
+            const item = root.activeFocusItem
+            if (!opened || !item)
+                return
+            let ancestor = item.parent
+            while (ancestor) {
+                if (ancestor === listView || ancestor === profileContentFlick) {
+                    const point = item.mapToItem(ancestor.contentItem, 0, 0)
+                    const margin = 8
+                    const minimumY = ancestor.originY
+                    const maximumY = minimumY + Math.max(0, ancestor.contentHeight - ancestor.height)
+                    let nextY = ancestor.contentY
+                    if (point.y - margin < nextY)
+                        nextY = point.y - margin
+                    else if (point.y + item.height + margin > nextY + ancestor.height)
+                        nextY = point.y + item.height + margin - ancestor.height
+                    ancestor.contentY = Math.max(minimumY, Math.min(maximumY, nextY))
+                }
+                ancestor = ancestor.parent
+            }
+        }
 
         modal: true
         focus: true
         closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
         onAboutToShow: {
+            showProfileActions = false
+            profileContentFlick.contentY = 0
             root.profileSearchQuery = ""
             if (vpnController.currentProfileIndex >= 0)
                 vpnController.pingProfile(vpnController.currentProfileIndex)
@@ -799,7 +865,7 @@ Item {
             topRightRadius: root.compact || (root.desktopMode && !I18n.isRtl) ? 0 : 22
             bottomLeftRadius: root.desktopMode && !I18n.isRtl ? 22 : 0
             bottomRightRadius: root.desktopMode && I18n.isRtl ? 22 : 0
-            color: root.themeColorToken("mainHex_ffffff", "mainHex_090b14")
+            color: Colors.dsWindow
             border.width: 0
             border.color: root.themeColorToken("mainHex_dbe2ee", "mainHex_30435d")
         }
@@ -807,1179 +873,1032 @@ Item {
         contentItem: Item {
             id: profilePopupContent
             clip: true
-            implicitHeight: 16
-                            + searchBar.implicitHeight
-                            + 8
-                            + (root.compact ? compactActionGrid.implicitHeight : actionsRow.implicitHeight)
-                            + 8
-                            + groupRow.implicitHeight
-                            + (groupOptionsRow.visible ? (8 + groupOptionsRow.implicitHeight) : 0)
-                            + 8
-                            + statsFlow.implicitHeight
-                            + 10
-                            + Math.min(Math.max(listView.contentHeight, 96), 310)
-                            + 16
+            implicitHeight: profileContentColumn.implicitHeight + profileContentColumn.topInset + profileContentColumn.bottomInset
 
-            ColumnLayout {
+            Connections {
+                target: root
+                function onActiveFocusItemChanged() {
+                    if (profilePopup.opened)
+                        Qt.callLater(profilePopup.revealFocusedControl)
+                }
+            }
+
+            Flickable {
+                id: profileContentFlick
                 anchors.fill: parent
-                anchors.leftMargin: root.compact ? 14 : 10
-                anchors.rightMargin: root.compact ? 14 : 10
-                anchors.topMargin: root.compact ? (10 + root.safeTopInset) : (profilePopup.denseLayout ? 7 : 10)
-                anchors.bottomMargin: root.compact ? Math.max(12, root.safeBottomInset + 8) : (profilePopup.denseLayout ? 7 : 10)
-                spacing: profilePopup.denseLayout ? 6 : (root.compact ? 12 : 8)
+                anchors.topMargin: root.compact ? root.safeTopInset : 0
+                anchors.bottomMargin: root.compact ? root.safeBottomInset : 0
+                clip: true
+                contentWidth: width
+                contentHeight: profileContentColumn.y + profileContentColumn.height + profileContentColumn.bottomInset
+                flickableDirection: Flickable.VerticalFlick
+                boundsBehavior: Flickable.StopAtBounds
+                onContentHeightChanged: contentY = Math.max(0, Math.min(contentY, Math.max(0, contentHeight - height)))
+                ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
 
-                Rectangle {
-                    Layout.alignment: Qt.AlignHCenter
-                    Layout.preferredWidth: 42
-                    Layout.preferredHeight: 4
-                    radius: 2
-                    color: root.themeColorToken("mainHex_d6dde8", "mainHex_151c32")
-                    visible: !root.compact
-                }
+                ColumnLayout {
+                    id: profileContentColumn
+                    readonly property real topInset: 10
+                    readonly property real bottomInset: 12
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.leftMargin: root.compact ? 14 : 18
+                    anchors.rightMargin: root.compact ? 14 : 18
+                    y: topInset
+                    height: implicitHeight
+                    spacing: profilePopup.denseLayout ? 6 : (root.compact ? 12 : 8)
 
-                RowLayout {
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: 40
-                    spacing: 12
-                    visible: root.compact
-
-                    Controls.CircleIconButton {
-                        Layout.preferredWidth: 38
-                        Layout.preferredHeight: 38
-                        diameter: 38
-                        elevated: false
-                        backgroundColor: root.themeColorToken("mainHex_faf9ff", "mainHex_1a2b42")
-                        borderColor: root.themeColorToken("mainHex_f0eef8", "mainHex_355173")
-                        iconText: I18n.isRtl ? "\uf061" : "\uf060"
-                        iconFontFamily: root.faSolid
-                        iconColor: root.themeColorToken("mainHex_050505", "mainHex_d8e1f0")
-                        iconPixelSize: 15
-                        onClicked: profilePopup.close()
-                    }
-
-                    Text {
+                    RowLayout {
                         Layout.fillWidth: true
-                        text: I18n.t("Server Location")
-                        color: root.themeColorToken("mainHex_090909", "mainHex_e7eefb")
-                        font.family: FontSystem.getContentFontBold.name
-                        font.pixelSize: 18
-                        font.bold: true
-                        elide: Text.ElideRight
-                    }
-
-                    Controls.CircleIconButton {
-                        Layout.preferredWidth: 38
-                        Layout.preferredHeight: 38
-                        diameter: 38
-                        elevated: false
-                        backgroundColor: root.themeColorToken("mainHex_ffffff", "mainHex_1a2b42")
-                        borderColor: root.themeColorToken("mainHex_e8edf5", "mainHex_355173")
-                        iconText: root.iconPlus
-                        iconFontFamily: root.faSolid
-                        iconColor: root.brandBlue
-                        iconPixelSize: 14
-                        onClicked: {
-                            profilePopup.close()
-                            importPopup.open()
-                        }
-                    }
-                }
-
-                Rectangle {
-                    id: searchBar
-                    Layout.fillWidth: true
-                    implicitHeight: profilePopup.ultraDenseLayout ? 40
-                                                                  : (profilePopup.denseLayout ? 44
-                                                                                              : (root.compact ? 48 : 58))
-                    radius: 14
-                    color: Colors.dsSurface
-                    border.width: 0
-                    border.color: profileSearchField.activeFocus
-                                  ? Colors.dsPrimarySolid
-                                  : Colors.dsBorder
-                    Behavior on border.color { ColorAnimation { duration: 120 } }
-
-                    Text {
-                        anchors.left: parent.left
-                        anchors.leftMargin: 12
-                        anchors.verticalCenter: parent.verticalCenter
-                        text: "\uf002"
-                        color: root.themeColorToken("mainHex_9aa6ba", "mainHex_9db1ca")
-                        font.family: root.faSolid
-                        font.pixelSize: 13
-                    }
-
-                    TextField {
-                        id: profileSearchField
-                        anchors.left: parent.left
-                        anchors.right: clearSearchButton.left
-                        anchors.top: parent.top
-                        anchors.bottom: parent.bottom
-                        anchors.leftMargin: 34
-                        anchors.rightMargin: 4
-                        padding: 0
-                        placeholderText: I18n.t(root.compact ? "Search location..." : "Search by profile, country, or IP")
-                        placeholderTextColor: root.themeColorToken("mainHex_8c8f98", "mainHex_9cb0c8")
-                        text: root.profileSearchQuery
-                        color: root.themeColorToken("mainHex_1f2a3a", "mainHex_d8e1f0")
-                        font.family: FontSystem.contentFontFamily
-                        font.pixelSize: 14
-                        selectByMouse: true
-                        background: null
-                        onTextChanged: {
-                            root.profileSearchQuery = text
-                            Qt.callLater(root.positionProfilePopup)
-                        }
-                    }
-
-                    Text {
-                        id: clearSearchButton
-                        anchors.right: parent.right
-                        anchors.rightMargin: 12
-                        anchors.verticalCenter: parent.verticalCenter
-                        text: root.profileSearchQuery.length > 0 ? root.iconClose : ""
-                        color: root.themeColorToken("mainHex_a0acbe", "mainHex_9fb4cd")
-                        font.family: root.faSolid
-                        font.pixelSize: 12
-
-                        MouseArea {
-                            anchors.fill: parent
-                            cursorShape: Qt.PointingHandCursor
-                            enabled: root.profileSearchQuery.length > 0
-                            onClicked: {
-                                profileSearchField.clear()
-                                if (!root.compact)
-                                    profileSearchField.forceActiveFocus()
-                            }
-                        }
-                    }
-                }
-
-                GridLayout {
-                    id: compactActionGrid
-                    Layout.fillWidth: true
-                    columns: profilePopup.width >= 340 ? 4 : 3
-                    columnSpacing: profilePopup.denseLayout ? 6 : 8
-                    rowSpacing: profilePopup.denseLayout ? 6 : 8
-                    visible: root.compact
-
-                    ProfileActionChip {
-                        compactStyle: true
-                        enabled: listView.count > 0
-                        label: I18n.t((vpnController.currentProfileGroup || "All").toLowerCase() === "all" ? "Ping" : "Ping Group")
-                        glyph: root.iconPing
-                        accentColor: Colors.dsPrimarySolid
-                        onClicked: vpnController.pingAllProfiles()
-                    }
-
-                    ProfileActionChip {
-                        compactStyle: true
-                        enabled: listView.count > 0 && !vpnController.busy
-                        label: I18n.t("Best")
-                        glyph: "\uf521"
-                        accentColor: Colors.dsSuccess
-                        onClicked: vpnController.connectBestProfileInCurrentGroup()
-                    }
-
-                    ProfileActionChip {
-                        compactStyle: true
-                        enabled: listView.count > 1
-                        label: I18n.t("Sort Ping")
-                        glyph: "\uf160"
-                        accentColor: Colors.dsPrimarySolid
-                        onClicked: vpnController.sortProfilesByPing(vpnController.currentProfileGroup || "All")
-                    }
-
-                    ProfileActionChip {
-                        compactStyle: true
-                        enabled: vpnController.subscriptions.length > 0 && !vpnController.subscriptionBusy
-                        label: I18n.t((vpnController.currentProfileGroup || "All") === "All" ? "Refresh" : "Refresh Group")
-                        glyph: "\uf021"
-                        accentColor: Colors.dsPrimarySolid
-                        onClicked: {
-                            const current = (vpnController.currentProfileGroup || "All")
-                            if (current === "All")
-                                vpnController.refreshSubscriptions()
-                            else
-                                vpnController.refreshSubscriptionsByGroup(current)
-                        }
-                    }
-
-                    ProfileActionChip {
-                        compactStyle: true
-                        enabled: listView.count > 0 && !vpnController.busy
-                        label: I18n.t("Cleanup")
-                        glyph: root.iconShield
-                        accentColor: Colors.dsWarning
-                        onClicked: {
-                            const removed = vpnController.removeDeadProfiles()
-                            if (removed > 0) {
-                                root.syncSelectedProfileFromController()
-                                root.showSettingsFeedback("Removed " + removed + " dead profile(s).")
-                                Qt.callLater(root.positionProfilePopup)
-                            } else if ((vpnController.lastError || "").trim().length > 0) {
-                                root.showSettingsFeedback(vpnController.lastError)
-                            } else {
-                                root.showSettingsFeedback("No dead profiles to remove.")
-                            }
-                        }
-                    }
-
-                    ProfileActionChip {
-                        compactStyle: true
-                        enabled: listView.count > 0
-                        label: I18n.t("Export")
-                        glyph: root.iconFileLines
-                        accentColor: Colors.dsTextMuted
-                        onClicked: {
-                            const payload = vpnController.exportProfiles([])
-                            if ((payload || "").trim().length === 0) {
-                                root.showSettingsFeedback("No profiles available to export.")
-                                return
-                            }
-                            const shared = vpnController.shareText("GenyConnect Profiles Export", payload)
-                            if (!shared)
-                                vpnController.copyTextToClipboard(payload)
-                            root.showSettingsFeedback(shared
-                                                      ? "Export opened in share sheet."
-                                                      : "Export copied to clipboard.")
-                        }
-                    }
-
-                    ProfileActionChip {
-                        compactStyle: true
-                        enabled: listView.count > 1
-                        label: I18n.t("Delete Rest")
-                        glyph: root.iconTrash
-                        accentColor: Colors.dsDanger
-                        onClicked: clearProfilesPopup.open()
-                    }
-
-                    ProfileActionChip {
-                        compactStyle: true
-                        enabled: vpnController.subscriptions.length > 0 && !vpnController.subscriptionBusy && !vpnController.busy
-                        label: I18n.t("Remove Subs")
-                        glyph: root.iconMinus
-                        accentColor: Colors.dsDanger
-                        onClicked: {
-                            const current = (vpnController.currentProfileGroup || "All")
-                            const removed = vpnController.removeSubscriptionsByGroup(current)
-                            if (removed > 0) {
-                                root.syncSelectedProfileFromController()
-                                root.showSettingsFeedback(current === "All"
-                                                              ? "Removed " + removed + " subscription(s)."
-                                                              : "Removed " + removed + " subscription(s) from " + current + ".")
-                                Qt.callLater(root.positionProfilePopup)
-                            } else if ((vpnController.lastError || "").trim().length > 0) {
-                                root.showSettingsFeedback(vpnController.lastError)
-                            } else {
-                                root.showSettingsFeedback("No subscriptions removed.")
-                            }
-                        }
-                    }
-                }
-
-                GridLayout {
-                    id: actionsRow
-                    Layout.fillWidth: true
-                    columns: profilePopup.denseLayout && profilePopup.width >= 620 ? 4 : 3
-                    columnSpacing: profilePopup.denseLayout ? 7 : 10
-                    rowSpacing: profilePopup.denseLayout ? 7 : 10
-                    visible: !root.compact
-
-                    ProfileActionChip {
-                        enabled: true
-                        label: I18n.t("Add Profile")
-                        glyph: root.iconPlus
-                        accentColor: Colors.dsPrimarySolid
-                        onClicked: {
-                            profilePopup.close()
-                            importPopup.open()
-                        }
-                    }
-
-                    ProfileActionChip {
-                        enabled: listView.count > 0
-                        label: I18n.t((vpnController.currentProfileGroup || "All").toLowerCase() === "all"
-                               ? "Ping Profiles"
-                               : "Ping Group")
-                        glyph: root.iconPing
-                        accentColor: Colors.dsPrimarySolid
-                        onClicked: vpnController.pingAllProfiles()
-                    }
-
-                    ProfileActionChip {
-                        enabled: listView.count > 0 && !vpnController.busy
-                        label: I18n.t("Best in Group")
-                        glyph: "\uf521"
-                        accentColor: Colors.dsSuccess
-                        onClicked: vpnController.connectBestProfileInCurrentGroup()
-                    }
-
-                    ProfileActionChip {
-                        enabled: listView.count > 1
-                        label: I18n.t("Sort by Ping")
-                        glyph: "\uf160"
-                        accentColor: Colors.dsPrimarySolid
-                        onClicked: vpnController.sortProfilesByPing(vpnController.currentProfileGroup || "All")
-                    }
-
-                    ProfileActionChip {
-                        enabled: listView.count > 1
-                        label: I18n.t("Sort by Name")
-                        glyph: "\uf15d"
-                        accentColor: Colors.dsTextMuted
-                        onClicked: vpnController.sortProfilesByName(vpnController.currentProfileGroup || "All")
-                    }
-
-                    ProfileActionChip {
-                        enabled: listView.count > 1
-                        label: I18n.t("Sort Stable")
-                        glyph: "\uf0ae"
-                        accentColor: Colors.dsTextMuted
-                        onClicked: vpnController.sortProfilesByLastSuccess(vpnController.currentProfileGroup || "All")
-                    }
-
-                    ProfileActionChip {
-                        enabled: vpnController.subscriptions.length > 0 && !vpnController.subscriptionBusy
-                        label: I18n.t((vpnController.currentProfileGroup || "All") === "All"
-                               ? "Refresh Subscriptions"
-                               : "Refresh Group")
-                        glyph: "\uf021"
-                        accentColor: Colors.dsPrimarySolid
-                        onClicked: {
-                            const current = (vpnController.currentProfileGroup || "All")
-                            if (current === "All")
-                                vpnController.refreshSubscriptions()
-                            else
-                                vpnController.refreshSubscriptionsByGroup(current)
-                        }
-                    }
-
-                    ProfileActionChip {
-                        enabled: listView.count > 0 && !vpnController.busy
-                        label: I18n.t("Remove Dead")
-                        glyph: root.iconShield
-                        accentColor: Colors.dsWarning
-                        onClicked: {
-                            const removed = vpnController.removeDeadProfiles()
-                            if (removed > 0) {
-                                root.syncSelectedProfileFromController()
-                                root.showSettingsFeedback("Removed " + removed + " dead profile(s).")
-                                Qt.callLater(root.positionProfilePopup)
-                            } else if ((vpnController.lastError || "").trim().length > 0) {
-                                root.showSettingsFeedback(vpnController.lastError)
-                            } else {
-                                root.showSettingsFeedback("No dead profiles to remove.")
-                            }
-                        }
-                    }
-
-                    ProfileActionChip {
-                        enabled: listView.count > 0
-                        label: I18n.t("Export All")
-                        glyph: root.iconFileLines
-                        accentColor: Colors.dsTextMuted
-                        onClicked: {
-                            const payload = vpnController.exportProfiles([])
-                            if ((payload || "").trim().length === 0) {
-                                root.showSettingsFeedback("No profiles available to export.")
-                                return
-                            }
-                            const shared = vpnController.shareText("GenyConnect Profiles Export", payload)
-                            if (!shared)
-                                vpnController.copyTextToClipboard(payload)
-                            root.showSettingsFeedback(shared
-                                                      ? "Export opened in share sheet."
-                                                      : "Export copied to clipboard.")
-                        }
-                    }
-
-                    ProfileActionChip {
-                        enabled: listView.count > 1
-                        label: I18n.t("Delete Others")
-                        glyph: root.iconTrash
-                        accentColor: Colors.dsDanger
-                        onClicked: clearProfilesPopup.open()
-                    }
-
-                    ProfileActionChip {
-                        enabled: vpnController.subscriptions.length > 0 && !vpnController.subscriptionBusy && !vpnController.busy
-                        label: I18n.t("Remove Subs")
-                        glyph: root.iconMinus
-                        accentColor: Colors.dsDanger
-                        onClicked: {
-                            const current = (vpnController.currentProfileGroup || "All")
-                            const removed = vpnController.removeSubscriptionsByGroup(current)
-                            if (removed > 0) {
-                                root.syncSelectedProfileFromController()
-                                root.showSettingsFeedback(current === "All"
-                                                              ? "Removed " + removed + " subscription(s)."
-                                                              : "Removed " + removed + " subscription(s) from " + current + ".")
-                                Qt.callLater(root.positionProfilePopup)
-                            } else if ((vpnController.lastError || "").trim().length > 0) {
-                                root.showSettingsFeedback(vpnController.lastError)
-                            } else {
-                                root.showSettingsFeedback("No subscriptions removed.")
-                            }
-                        }
-                    }
-                }
-
-                RowLayout {
-                    id: compactProfileSegmentRow
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: 38
-                    spacing: 10
-                    visible: root.compact
-
-                    Rectangle {
-                        Layout.fillWidth: true
-                        Layout.preferredHeight: 36
-                        radius: 16
-                        color: root.compactProfileFilterSelected("All")
-                               ? root.brandBlue
-                               : root.themeColorToken("mainHex_ffffff", "mainHex_5a2b4462")
-                        border.width: 0
-                        border.color: root.compactProfileFilterSelected("All")
-                                      ? root.brandBlue
-                                      : root.themeColorToken("mainHex_e7e9ee", "mainHex_4f6b8b")
-                        Behavior on color { ColorAnimation { duration: 150 } }
-                        Behavior on border.color { ColorAnimation { duration: 150 } }
+                        Layout.preferredHeight: 44
+                        spacing: 12
+                        visible: !root.compact
 
                         Text {
-                            anchors.centerIn: parent
-                            text: I18n.t("All")
-                            color: root.compactProfileFilterSelected("All")
-                                   ? Colors.mainHex_ffffff
-                                   : root.themeColorToken("mainHex_111111", "mainHex_e2ecf9")
+                            Layout.fillWidth: true
+                            text: I18n.t("Profiles")
+                            color: Colors.dsText
+                            font.family: FontSystem.contentFontFamily
+                            font.pixelSize: Typography.uiTitle
+                            font.weight: Font.DemiBold
+                        }
+
+                        Controls.CircleIconButton {
+                            diameter: 36
+                            elevated: false
+                            iconText: root.iconClose
+                            iconFontFamily: root.faSolid
+                            iconPixelSize: 14
+                            accessibleName: I18n.t("Close")
+                            onClicked: profilePopup.close()
+                        }
+                    }
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 40
+                        spacing: 12
+                        visible: root.compact
+
+                        Controls.CircleIconButton {
+                            Layout.preferredWidth: 38
+                            Layout.preferredHeight: 38
+                            diameter: 38
+                            elevated: false
+                            backgroundColor: root.themeColorToken("mainHex_faf9ff", "mainHex_1a2b42")
+                            borderColor: root.themeColorToken("mainHex_f0eef8", "mainHex_355173")
+                            iconText: I18n.isRtl ? "\uf061" : "\uf060"
+                            iconFontFamily: root.faSolid
+                            iconColor: root.themeColorToken("mainHex_050505", "mainHex_d8e1f0")
+                            iconPixelSize: 15
+                            onClicked: profilePopup.close()
+                        }
+
+                        Text {
+                            Layout.fillWidth: true
+                            text: I18n.t("Server Location")
+                            color: root.themeColorToken("mainHex_090909", "mainHex_e7eefb")
                             font.family: FontSystem.getContentFontBold.name
-                            font.pixelSize: 12
+                            font.pixelSize: 18
                             font.bold: true
+                            elide: Text.ElideRight
                         }
 
-                        MouseArea {
-                            anchors.fill: parent
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: root.selectCompactProfileFilter("All")
-                        }
-                    }
-
-                    Rectangle {
-                        Layout.fillWidth: true
-                        Layout.preferredHeight: 36
-                        radius: 16
-                        color: root.compactProfileFilterSelected("Free")
-                               ? root.brandCyan
-                               : root.themeColorToken("mainHex_ffffff", "mainHex_5a2b4462")
-                        border.width: 0
-                        border.color: root.compactProfileFilterSelected("Free")
-                                      ? root.brandCyan
-                                      : root.themeColorToken("mainHex_e7e9ee", "mainHex_4f6b8b")
-                        Behavior on color { ColorAnimation { duration: 150 } }
-                        Behavior on border.color { ColorAnimation { duration: 150 } }
-
-                        Text {
-                            anchors.centerIn: parent
-                            text: I18n.t("Free")
-                            color: root.compactProfileFilterSelected("Free")
-                                   ? Colors.mainHex_ffffff
-                                   : root.themeColorToken("mainHex_111111", "mainHex_e2ecf9")
-                            font.family: FontSystem.contentFontFamily
-                            font.pixelSize: 12
-                            font.bold: root.compactProfileFilterSelected("Free")
-                        }
-
-                        MouseArea {
-                            anchors.fill: parent
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: root.selectCompactProfileFilter("Free")
-                        }
-                    }
-
-                    Rectangle {
-                        Layout.fillWidth: true
-                        Layout.preferredHeight: 36
-                        radius: 16
-                        color: root.compactProfileFilterSelected("Premium")
-                               ? root.brandViolet
-                               : root.themeColorToken("mainHex_ffffff", "mainHex_5a2b4462")
-                        border.width: 0
-                        border.color: root.compactProfileFilterSelected("Premium")
-                                      ? root.brandViolet
-                                      : root.themeColorToken("mainHex_e7e9ee", "mainHex_4f6b8b")
-                        Behavior on color { ColorAnimation { duration: 150 } }
-                        Behavior on border.color { ColorAnimation { duration: 150 } }
-
-                        Text {
-                            anchors.centerIn: parent
-                            text: I18n.t("Premium")
-                            color: root.compactProfileFilterSelected("Premium")
-                                   ? Colors.mainHex_ffffff
-                                   : root.themeColorToken("mainHex_111111", "mainHex_e2ecf9")
-                            font.family: FontSystem.contentFontFamily
-                            font.pixelSize: 12
-                            font.bold: root.compactProfileFilterSelected("Premium")
-                        }
-
-                        MouseArea {
-                            anchors.fill: parent
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: root.selectCompactProfileFilter("Premium")
-                        }
-                    }
-                }
-
-                RowLayout {
-                    id: groupRow
-                    Layout.fillWidth: true
-                    spacing: 8
-                    visible: !root.compact
-
-                    Text {
-                        text: I18n.t("Group")
-                        color: root.themeColorToken("mainHex_6b778a", "mainHex_9cb0c8")
-                        font.family: FontSystem.contentFontFamily
-                        font.pixelSize: 12
-                    }
-
-                    Controls.ComboBox {
-                        id: groupFilterCombo
-                        Layout.preferredWidth: Math.min(profilePopup.width * 0.45, 320)
-                        Layout.preferredHeight: 34
-                        model: vpnController.profileGroupItems
-                        leftPadding: 10
-                        rightPadding: 30
-
-                        function groupNameAt(i) {
-                            const items = vpnController.profileGroupItems || []
-                            if (i < 0 || i >= items.length)
-                                return ""
-                            const item = items[i]
-                            return (item && item.name) ? item.name : ""
-                        }
-
-                        function syncIndexFromController() {
-                            const groups = vpnController.profileGroupItems || []
-                            const current = (vpnController.currentProfileGroup || "All").toLowerCase()
-                            for (let i = 0; i < groups.length; ++i) {
-                                const name = ((groups[i] && groups[i].name) ? groups[i].name : "").toLowerCase()
-                                if (name === current) {
-                                    if (currentIndex !== i)
-                                        currentIndex = i
-                                    return
-                                }
+                        Controls.CircleIconButton {
+                            Layout.preferredWidth: 38
+                            Layout.preferredHeight: 38
+                            diameter: 38
+                            elevated: false
+                            backgroundColor: root.themeColorToken("mainHex_ffffff", "mainHex_1a2b42")
+                            borderColor: root.themeColorToken("mainHex_e8edf5", "mainHex_355173")
+                            iconText: root.iconPlus
+                            iconFontFamily: root.faSolid
+                            iconColor: root.brandBlue
+                            iconPixelSize: 14
+                            onClicked: {
+                                profilePopup.close()
+                                importPopup.open()
                             }
-                            if (groups.length > 0 && currentIndex !== 0)
-                                currentIndex = 0
-                        }
-
-                        onActivated: function(activatedIndex) {
-                            const name = groupNameAt(activatedIndex)
-                            if (name.length > 0)
-                                vpnController.currentProfileGroup = name
-                            Qt.callLater(root.positionProfilePopup)
-                        }
-
-                        Component.onCompleted: syncIndexFromController()
-
-                        Connections {
-                            target: vpnController
-                            function onProfileGroupsChanged() { groupFilterCombo.syncIndexFromController() }
-                            function onProfileGroupOptionsChanged() { groupFilterCombo.syncIndexFromController() }
-                            function onCurrentProfileGroupChanged() { groupFilterCombo.syncIndexFromController() }
                         }
                     }
 
                     Rectangle {
-                        radius: 10
-                        Layout.preferredHeight: 30
-                        Layout.preferredWidth: visibleProfilesText.implicitWidth + 16
-                        color: root.themeColorToken("mainHex_eef4ff", "mainHex_223753")
-                        border.width: 0
-                        border.color: root.themeColorToken("mainHex_d8e4f8", "mainHex_151c32")
-
-                        Text {
-                            id: visibleProfilesText
-                            anchors.centerIn: parent
-                            text: I18n.t("Visible %1", [I18n.ltr(vpnController.filteredProfileCount)])
-                            color: root.themeColorToken("mainHex_5f6f86", "mainHex_9bb0cb")
-                            font.family: FontSystem.contentFontFamily
-                            font.pixelSize: 11
-                        }
-                    }
-
-                    Item { Layout.fillWidth: true }
-                }
-
-                RowLayout {
-                    id: groupOptionsRow
-                    Layout.fillWidth: true
-                    spacing: 8
-                    visible: !root.compact && (groupFilterCombo.groupNameAt(groupFilterCombo.currentIndex) || "All").toLowerCase() !== "all"
-
-                    Rectangle {
+                        id: searchBar
                         Layout.fillWidth: true
-                        implicitHeight: 38
+                        implicitHeight: profilePopup.ultraDenseLayout ? 40 : 46
                         radius: 12
-                        color: root.themeColorToken("mainHex_f7f9fd", "mainHex_151c32")
-                        border.width: 0
-                        border.color: root.themeColorToken("mainHex_dce4f2", "mainHex_151c32")
+                        color: Colors.dsSurface
+                        border.width: 1
+                        border.color: profileSearchField.activeFocus ? Colors.dsPrimarySolid : Colors.dsBorder
 
                         RowLayout {
                             anchors.fill: parent
-                            anchors.leftMargin: 10
-                            anchors.rightMargin: 10
+                            anchors.leftMargin: 12
+                            anchors.rightMargin: 8
                             spacing: 10
 
                             Text {
-                                text: I18n.t("Enabled")
-                                color: root.themeColorToken("mainHex_5f6f86", "mainHex_9bb0cb")
-                                font.family: FontSystem.contentFontFamily
-                                font.pixelSize: 12
+                                text: "\uf002"
+                                color: Colors.dsTextSubtle
+                                font.family: root.faSolid
+                                font.weight: Font.Black
+                                font.pixelSize: 14
                             }
 
-                            Controls.Switch {
-                                checked: root.profileGroupEnabled(groupFilterCombo.groupNameAt(groupFilterCombo.currentIndex))
-                                onToggled: vpnController.setProfileGroupEnabled(groupFilterCombo.groupNameAt(groupFilterCombo.currentIndex), checked)
-                            }
-
-                            Text {
-                                text: I18n.t("Exclusive")
-                                color: root.themeColorToken("mainHex_5f6f86", "mainHex_9bb0cb")
-                                font.family: FontSystem.contentFontFamily
-                                font.pixelSize: 12
-                            }
-
-                            Controls.Switch {
-                                checked: root.profileGroupExclusive(groupFilterCombo.groupNameAt(groupFilterCombo.currentIndex))
-                                onToggled: vpnController.setProfileGroupExclusive(groupFilterCombo.groupNameAt(groupFilterCombo.currentIndex), checked)
-                            }
-
-                            Text {
-                                text: I18n.t("Mode")
-                                color: root.themeColorToken("mainHex_5f6f86", "mainHex_9bb0cb")
-                                font.family: FontSystem.contentFontFamily
-                                font.pixelSize: 12
-                            }
-
-                            Controls.ComboBox {
-                                id: groupModeCombo
-                                Layout.preferredWidth: 134
-                                Layout.preferredHeight: 30
-                                model: ["Manual", "Best Latency", "Fallback"]
-                                font.pixelSize: 11
-                                leftPadding: 8
-                                rightPadding: 24
-
-                                function syncMode() {
-                                    const mode = vpnController.profileGroupMode(groupFilterCombo.groupNameAt(groupFilterCombo.currentIndex)) || "Manual"
-                                    for (let i = 0; i < model.length; ++i) {
-                                        if (String(model[i]).toLowerCase() === String(mode).toLowerCase()) {
-                                            if (currentIndex !== i)
-                                                currentIndex = i
-                                            return
-                                        }
-                                    }
-                                    currentIndex = 0
-                                }
-
-                                onActivated: function(activatedIndex) {
-                                    vpnController.setProfileGroupMode(groupFilterCombo.groupNameAt(groupFilterCombo.currentIndex), model[activatedIndex])
-                                }
-                                Component.onCompleted: syncMode()
-
-                                Connections {
-                                    target: vpnController
-                                    function onProfileGroupOptionsChanged() { groupModeCombo.syncMode() }
-                                    function onCurrentProfileGroupChanged() { groupModeCombo.syncMode() }
+                            Controls.TextField {
+                                id: profileSearchField
+                                Layout.fillWidth: true
+                                Layout.fillHeight: true
+                                Layout.minimumWidth: 0
+                                padding: 0
+                                placeholderText: I18n.t(root.compact ? "Search location..." : "Search by profile, country, or IP")
+                                Accessible.name: placeholderText
+                                text: root.profileSearchQuery
+                                font.pixelSize: Typography.uiBodyLg
+                                selectByMouse: true
+                                background: null
+                                onTextChanged: {
+                                    root.profileSearchQuery = text
+                                    Qt.callLater(root.positionProfilePopup)
                                 }
                             }
 
-                            Rectangle {
-                                Layout.preferredWidth: 132
-                                Layout.preferredHeight: 28
-                                radius: 9
-                                color: root.themeColorToken("mainHex_ffffff", "mainHex_22324a")
-                                border.width: 0
-                                border.color: root.themeColorToken("mainHex_d5deec", "mainHex_151c32")
-
-                                TextField {
-                                    id: groupBadgeField
-                                    anchors.fill: parent
-                                    anchors.leftMargin: 8
-                                    anchors.rightMargin: 8
-                                    padding: 0
-                                    clip: true
-                                    placeholderText: I18n.t("Badge")
-                                    text: root.profileGroupBadgeText(groupFilterCombo.groupNameAt(groupFilterCombo.currentIndex))
-                                    color: root.themeColorToken("mainHex_3b4a61", "mainHex_d0ddf0")
-                                    font.family: FontSystem.contentFontFamily
-                                    font.pixelSize: 12
-                                    background: null
-                                    onEditingFinished: {
-                                        vpnController.setProfileGroupBadge(groupFilterCombo.groupNameAt(groupFilterCombo.currentIndex), text)
-                                    }
-                                }
-                            }
-
-                            Text {
-                                visible: root.profileGroupBadgeText(groupFilterCombo.groupNameAt(groupFilterCombo.currentIndex)).length > 0
-                                text: "• " + root.profileGroupBadgeText(groupFilterCombo.groupNameAt(groupFilterCombo.currentIndex))
-                                color: root.themeColorToken("mainHex_4d6691", "mainHex_9fc3f2")
-                                font.family: FontSystem.contentFontFamily
-                                font.pixelSize: 12
-                                font.bold: true
-                            }
-
-                            Item { Layout.fillWidth: true }
-                        }
-                    }
-                }
-
-                Flow {
-                    id: statsFlow
-                    Layout.fillWidth: true
-                    spacing: 6
-                    visible: !root.compact && !profilePopup.denseLayout
-
-                    Rectangle {
-                        radius: 11
-                        height: 24
-                        color: vpnController.autoPingProfiles ? Colors.mainHex_e8f7ef : Colors.mainHex_eef2f8
-                        border.width: 0
-                        border.color: vpnController.autoPingProfiles ? Colors.mainHex_b9e3c8 : Colors.mainHex_d9e0ed
-                        width: autoPingText.implicitWidth + 18
-
-                        Text {
-                            id: autoPingText
-                            anchors.centerIn: parent
-                            text: I18n.t(vpnController.autoPingProfiles ? "Auto Ping ON" : "Auto Ping OFF")
-                            color: vpnController.autoPingProfiles ? Colors.mainHex_278c59 : Colors.mainHex_7b8799
-                            font.family: FontSystem.contentFontFamily
-                            font.pixelSize: 11
-                            font.bold: false
-                        }
-                    }
-
-                    Rectangle {
-                        radius: 11
-                        height: 24
-                        color: root.themeColorToken("mainHex_f3f6fb", "mainHex_20314b")
-                        border.width: 0
-                        border.color: root.themeColorToken("mainHex_d9e0ed", "mainHex_151c32")
-                        width: subsText.implicitWidth + 18
-
-                        Text {
-                            id: subsText
-                            anchors.centerIn: parent
-                            text: I18n.t("Subscriptions %1/%2", [I18n.ltr(subscriptionsInCurrentGroup()), I18n.ltr(vpnController.subscriptions.length)])
-                            color: root.themeColorToken("mainHex_667487", "mainHex_9bb0cb")
-                            font.family: FontSystem.contentFontFamily
-                            font.pixelSize: 11
-                            font.bold: false
-                        }
-                    }
-
-                    Rectangle {
-                        radius: 11
-                        height: 24
-                        color: root.themeColorToken("mainHex_edf5ff", "mainHex_213655")
-                        border.width: 0
-                        border.color: root.themeColorToken("mainHex_d9e6fb", "mainHex_47638c")
-                        width: groupText.implicitWidth + 18
-
-                        Text {
-                            id: groupText
-                            anchors.centerIn: parent
-                            text: I18n.t("Group %1", [I18n.ltr(vpnController.currentProfileGroup || I18n.t("All"))])
-                            color: root.themeColorToken("mainHex_5f7290", "mainHex_9cb2cf")
-                            font.family: FontSystem.contentFontFamily
-                            font.pixelSize: 11
-                            font.bold: false
-                        }
-                    }
-
-                    Rectangle {
-                        radius: 11
-                        height: 24
-                        color: root.themeColorToken("mainHex_f3f6fb", "mainHex_20314b")
-                        border.width: 0
-                        border.color: root.themeColorToken("mainHex_d9e0ed", "mainHex_151c32")
-                        width: profilesText.implicitWidth + 18
-
-                        Text {
-                            id: profilesText
-                            anchors.centerIn: parent
-                            text: I18n.t("Profiles %1", [I18n.ltr(vpnController.profileCount)])
-                            color: root.themeColorToken("mainHex_667487", "mainHex_9bb0cb")
-                            font.family: FontSystem.contentFontFamily
-                            font.pixelSize: 11
-                            font.bold: false
-                        }
-                    }
-
-                    Rectangle {
-                        radius: 11
-                        height: 24
-                        color: root.themeColorToken("mainHex_f3f6fb", "mainHex_20314b")
-                        border.width: 0
-                        border.color: root.themeColorToken("mainHex_d9e0ed", "mainHex_151c32")
-                        width: bestText.implicitWidth + 18
-
-                        Text {
-                            id: bestText
-                            anchors.centerIn: parent
-                            text: I18n.t("Best %1", [I18n.ltr(vpnController.bestPingMs >= 0 ? (vpnController.bestPingMs + " ms") : "--")])
-                            color: root.themeColorToken("mainHex_667487", "mainHex_9bb0cb")
-                            font.family: FontSystem.contentFontFamily
-                            font.pixelSize: 11
-                            font.bold: false
-                        }
-                    }
-
-                    Rectangle {
-                        radius: 11
-                        height: 24
-                        color: root.themeColorToken("mainHex_f3f6fb", "mainHex_20314b")
-                        border.width: 0
-                        border.color: root.themeColorToken("mainHex_d9e0ed", "mainHex_151c32")
-                        width: worstText.implicitWidth + 18
-
-                        Text {
-                            id: worstText
-                            anchors.centerIn: parent
-                            text: I18n.t("Worst %1", [I18n.ltr(vpnController.worstPingMs >= 0 ? (vpnController.worstPingMs + " ms") : "--")])
-                            color: root.themeColorToken("mainHex_667487", "mainHex_9bb0cb")
-                            font.family: FontSystem.contentFontFamily
-                            font.pixelSize: 11
-                            font.bold: false
-                        }
-                    }
-
-                    Rectangle {
-                        radius: 11
-                        height: 24
-                        color: root.themeColorToken("mainHex_fff5e9", "mainHex_3b311d")
-                        border.width: 0
-                        border.color: root.themeColorToken("mainHex_f4d9b1", "mainHex_866333")
-                        width: scoreText.implicitWidth + 18
-
-                        Text {
-                            id: scoreText
-                            anchors.centerIn: parent
-                            text: I18n.t("Score %1", [I18n.ltr(root.profileScoreStars())])
-                            color: root.themeColorToken("mainHex_9c6b1f", "mainHex_f4c56a")
-                            font.family: FontSystem.contentFontFamily
-                            font.pixelSize: 11
-                            font.bold: false
-                        }
-                    }
-                }
-
-                Item {
-                    id: listContainer
-                    Layout.fillWidth: true
-                    Layout.fillHeight: true
-                    Layout.preferredHeight: Math.min(Math.max(listView.contentHeight, 100), 300)
-                    Layout.minimumHeight: profilePopup.ultraDenseLayout ? 96
-                                                                        : (profilePopup.denseLayout ? 140 : 100)
-
-                    ListView {
-                        id: listView
-                        anchors.fill: parent
-                        anchors.margins: root.compact ? 0 : 6
-                        clip: true
-                        model: vpnController.profileModel
-                        spacing: root.compact ? 4 : 0
-                        boundsBehavior: Flickable.DragAndOvershootBounds
-                        flickDeceleration: 2800
-                        ScrollBar.vertical: ScrollBar {
-                            policy: ScrollBar.AlwaysOff
-                        }
-                        onContentHeightChanged: Qt.callLater(root.positionProfilePopup)
-                        onCountChanged: Qt.callLater(root.positionProfilePopup)
-
-                        delegate: Item {
-                            required property int index
-                            required property string displayLabel
-                            required property string protocol
-                            required property string address
-                            required property int port
-                            required property string security
-                            required property string groupName
-                            required property string sourceName
-                            required property string originalLink
-                            required property string pingText
-                            required property bool pinging
-                            required property int pingMs
-                            required property real packetLossPct
-                            required property string packetLossText
-
-                            readonly property bool selected: index === vpnController.currentProfileIndex
-                            readonly property string normalizedGroup: root.normalizeProfileGroup(groupName)
-                            readonly property string groupBadge: root.profileGroupBadgeText(groupName)
-                            readonly property bool groupExclusive: root.profileGroupExclusive(groupName)
-                            readonly property bool matched: root.profileGroupVisible(groupName)
-                                                            && root.profileMatchesSearch(displayLabel, protocol, address, security, groupName, sourceName)
-                            width: listView.width
-                            height: matched ? (root.compact ? (profilePopup.denseLayout ? 56 : 62)
-                                                            : (profilePopup.denseLayout ? 68 : 80)) : 0
-                            visible: matched
-
-                            Rectangle {
-                                id: rowBg
-                                anchors.left: parent.left
-                                anchors.right: parent.right
-                                anchors.top: parent.top
-                                anchors.bottom: parent.bottom
-                                anchors.topMargin: root.compact ? 0 : 2
-                                anchors.bottomMargin: root.compact ? 0 : 2
-                                radius: root.compact ? 12 : 14
-                                color: selected
-                                       ? root.themeColorToken("mainHex_eef3ff", "mainHex_8a35527a")
-                                       : (hoverArea.containsMouse
-                                          ? root.themeColorToken("mainHex_f8fbff", "mainHex_7a2b4461")
-                                          : root.themeColorToken("mainHex_ffffff", "mainHex_66263c56"))
-                                border.width: selected ? 1.35 : 1
-                                border.color: selected ? Colors.dsPrimarySolid : Colors.dsBorder
-                                Behavior on color { ColorAnimation { duration: 120 } }
-                                Behavior on border.color { ColorAnimation { duration: 120 } }
-                            }
-
-                            MouseArea {
-                                id: hoverArea
-                                anchors.fill: rowBg
-                                hoverEnabled: true
-                                cursorShape: Qt.PointingHandCursor
+                            Controls.CircleIconButton {
+                                diameter: 28
+                                visible: root.profileSearchQuery.length > 0
+                                elevated: false
+                                backgroundColor: "transparent"
+                                borderColor: "transparent"
+                                iconText: root.iconClose
+                                iconFontFamily: root.faSolid
+                                iconPixelSize: 12
+                                accessibleName: I18n.t("Clear")
                                 onClicked: {
-                                    vpnController.currentProfileIndex = index
-                                    root.updateProfileSelection(displayLabel, protocol, address, port, security)
-                                    profilePopup.close()
+                                    profileSearchField.clear()
+                                    profileSearchField.forceActiveFocus()
+                                }
+                            }
+                        }
+                    }
+
+                    GridLayout {
+                        id: compactActionGrid
+                        Layout.fillWidth: true
+                        columns: width >= 480 ? 3 : 2
+                        columnSpacing: profilePopup.denseLayout ? 6 : 8
+                        rowSpacing: profilePopup.denseLayout ? 6 : 8
+                        visible: root.compact
+
+                        ProfileActionChip {
+                            compactStyle: true
+                            enabled: listView.count > 0
+                            label: I18n.t((vpnController.currentProfileGroup || "All").toLowerCase() === "all" ? "Ping" : "Ping Group")
+                            glyph: root.iconPing
+                            accentColor: Colors.dsPrimarySolid
+                            onClicked: vpnController.pingAllProfiles()
+                        }
+
+                        ProfileActionChip {
+                            compactStyle: true
+                            enabled: listView.count > 0 && !vpnController.busy
+                            label: I18n.t("Best")
+                            glyph: "\uf521"
+                            accentColor: Colors.dsSuccess
+                            onClicked: vpnController.connectBestProfileInCurrentGroup()
+                        }
+
+
+                        ProfileActionChip {
+                            compactStyle: true
+                            enabled: vpnController.subscriptions.length > 0 && !vpnController.subscriptionBusy
+                            label: I18n.t((vpnController.currentProfileGroup || "All") === "All" ? "Refresh" : "Refresh Group")
+                            glyph: "\uf021"
+                            accentColor: Colors.dsPrimarySolid
+                            onClicked: {
+                                const current = (vpnController.currentProfileGroup || "All")
+                                if (current === "All")
+                                    vpnController.refreshSubscriptions()
+                                else
+                                    vpnController.refreshSubscriptionsByGroup(current)
+                            }
+                        }
+
+                        ProfileActionChip {
+                            compactStyle: true
+                            label: I18n.t("Actions")
+                            glyph: profilePopup.showProfileActions ? "\uf077" : "\uf141"
+                            checkable: true
+                            checked: profilePopup.showProfileActions
+                            onToggled: profilePopup.showProfileActions = checked
+                        }
+
+                        ProfileActionChip {
+                            visible: profilePopup.showProfileActions
+                            compactStyle: true
+                            enabled: listView.count > 1
+                            label: I18n.t("Sort Ping")
+                            glyph: "\uf160"
+                            accentColor: Colors.dsPrimarySolid
+                            onClicked: vpnController.sortProfilesByPing(vpnController.currentProfileGroup || "All")
+                        }
+
+                        ProfileActionChip {
+                            visible: profilePopup.showProfileActions
+                            compactStyle: true
+                            enabled: listView.count > 0 && !vpnController.busy
+                            label: I18n.t("Cleanup")
+                            glyph: root.iconShield
+                            accentColor: Colors.dsWarning
+                            onClicked: {
+                                const removed = vpnController.removeDeadProfiles()
+                                if (removed > 0) {
+                                    root.syncSelectedProfileFromController()
+                                    root.showSettingsFeedback("Removed " + removed + " dead profile(s).")
+                                    Qt.callLater(root.positionProfilePopup)
+                                } else if ((vpnController.lastError || "").trim().length > 0) {
+                                    root.showSettingsFeedback(vpnController.lastError)
+                                } else {
+                                    root.showSettingsFeedback("No dead profiles to remove.")
+                                }
+                            }
+                        }
+
+                        ProfileActionChip {
+                            visible: profilePopup.showProfileActions
+                            compactStyle: true
+                            enabled: listView.count > 0
+                            label: I18n.t("Export")
+                            glyph: root.iconFileLines
+                            accentColor: Colors.dsTextMuted
+                            onClicked: {
+                                const payload = vpnController.exportProfiles([])
+                                if ((payload || "").trim().length === 0) {
+                                    root.showSettingsFeedback("No profiles available to export.")
+                                    return
+                                }
+                                const shared = vpnController.shareText("GenyConnect Profiles Export", payload)
+                                if (!shared)
+                                    vpnController.copyTextToClipboard(payload)
+                                root.showSettingsFeedback(shared
+                                                          ? "Export opened in share sheet."
+                                                          : "Export copied to clipboard.")
+                            }
+                        }
+
+                        ProfileActionChip {
+                            visible: profilePopup.showProfileActions
+                            compactStyle: true
+                            enabled: listView.count > 1
+                            label: I18n.t("Delete Rest")
+                            glyph: root.iconTrash
+                            accentColor: Colors.dsDanger
+                            onClicked: clearProfilesPopup.open()
+                        }
+
+                        ProfileActionChip {
+                            visible: profilePopup.showProfileActions
+                            compactStyle: true
+                            enabled: vpnController.subscriptions.length > 0 && !vpnController.subscriptionBusy && !vpnController.busy
+                            label: I18n.t("Remove Subs")
+                            glyph: root.iconMinus
+                            accentColor: Colors.dsDanger
+                            onClicked: {
+                                const current = (vpnController.currentProfileGroup || "All")
+                                const removed = vpnController.removeSubscriptionsByGroup(current)
+                                if (removed > 0) {
+                                    root.syncSelectedProfileFromController()
+                                    root.showSettingsFeedback(current === "All"
+                                                                  ? "Removed " + removed + " subscription(s)."
+                                                                  : "Removed " + removed + " subscription(s) from " + current + ".")
+                                    Qt.callLater(root.positionProfilePopup)
+                                } else if ((vpnController.lastError || "").trim().length > 0) {
+                                    root.showSettingsFeedback(vpnController.lastError)
+                                } else {
+                                    root.showSettingsFeedback("No subscriptions removed.")
+                                }
+                            }
+                        }
+                    }
+
+                    GridLayout {
+                        id: actionsRow
+                        Layout.fillWidth: true
+                        columns: 3
+                        columnSpacing: profilePopup.denseLayout ? 7 : 10
+                        rowSpacing: profilePopup.denseLayout ? 7 : 10
+                        visible: !root.compact
+
+                        ProfileActionChip {
+                            enabled: true
+                            label: I18n.t("Add Profile")
+                            glyph: root.iconPlus
+                            accentColor: Colors.dsPrimarySolid
+                            onClicked: {
+                                profilePopup.close()
+                                importPopup.open()
+                            }
+                        }
+
+                        ProfileActionChip {
+                            enabled: listView.count > 0
+                            label: I18n.t((vpnController.currentProfileGroup || "All").toLowerCase() === "all"
+                                   ? "Ping Profiles"
+                                   : "Ping Group")
+                            glyph: root.iconPing
+                            accentColor: Colors.dsPrimarySolid
+                            onClicked: vpnController.pingAllProfiles()
+                        }
+
+                        ProfileActionChip {
+                            enabled: listView.count > 0 && !vpnController.busy
+                            label: I18n.t("Best in Group")
+                            glyph: "\uf521"
+                            accentColor: Colors.dsSuccess
+                            onClicked: vpnController.connectBestProfileInCurrentGroup()
+                        }
+
+                        ProfileActionChip {
+                            visible: profilePopup.showProfileActions
+                            enabled: listView.count > 1
+                            label: I18n.t("Sort by Ping")
+                            glyph: "\uf160"
+                            accentColor: Colors.dsPrimarySolid
+                            onClicked: vpnController.sortProfilesByPing(vpnController.currentProfileGroup || "All")
+                        }
+
+                        ProfileActionChip {
+                            visible: profilePopup.showProfileActions
+                            enabled: listView.count > 1
+                            label: I18n.t("Sort by Name")
+                            glyph: "\uf15d"
+                            accentColor: Colors.dsTextMuted
+                            onClicked: vpnController.sortProfilesByName(vpnController.currentProfileGroup || "All")
+                        }
+
+                        ProfileActionChip {
+                            visible: profilePopup.showProfileActions
+                            enabled: listView.count > 1
+                            label: I18n.t("Sort Stable")
+                            glyph: "\uf0ae"
+                            accentColor: Colors.dsTextMuted
+                            onClicked: vpnController.sortProfilesByLastSuccess(vpnController.currentProfileGroup || "All")
+                        }
+
+                        ProfileActionChip {
+                            visible: profilePopup.showProfileActions
+                            enabled: vpnController.subscriptions.length > 0 && !vpnController.subscriptionBusy
+                            label: I18n.t((vpnController.currentProfileGroup || "All") === "All"
+                                   ? "Refresh Subscriptions"
+                                   : "Refresh Group")
+                            glyph: "\uf021"
+                            accentColor: Colors.dsPrimarySolid
+                            onClicked: {
+                                const current = (vpnController.currentProfileGroup || "All")
+                                if (current === "All")
+                                    vpnController.refreshSubscriptions()
+                                else
+                                    vpnController.refreshSubscriptionsByGroup(current)
+                            }
+                        }
+
+                        ProfileActionChip {
+                            visible: profilePopup.showProfileActions
+                            enabled: listView.count > 0 && !vpnController.busy
+                            label: I18n.t("Remove Dead")
+                            glyph: root.iconShield
+                            accentColor: Colors.dsWarning
+                            onClicked: {
+                                const removed = vpnController.removeDeadProfiles()
+                                if (removed > 0) {
+                                    root.syncSelectedProfileFromController()
+                                    root.showSettingsFeedback("Removed " + removed + " dead profile(s).")
+                                    Qt.callLater(root.positionProfilePopup)
+                                } else if ((vpnController.lastError || "").trim().length > 0) {
+                                    root.showSettingsFeedback(vpnController.lastError)
+                                } else {
+                                    root.showSettingsFeedback("No dead profiles to remove.")
+                                }
+                            }
+                        }
+
+                        ProfileActionChip {
+                            visible: profilePopup.showProfileActions
+                            enabled: listView.count > 0
+                            label: I18n.t("Export All")
+                            glyph: root.iconFileLines
+                            accentColor: Colors.dsTextMuted
+                            onClicked: {
+                                const payload = vpnController.exportProfiles([])
+                                if ((payload || "").trim().length === 0) {
+                                    root.showSettingsFeedback("No profiles available to export.")
+                                    return
+                                }
+                                const shared = vpnController.shareText("GenyConnect Profiles Export", payload)
+                                if (!shared)
+                                    vpnController.copyTextToClipboard(payload)
+                                root.showSettingsFeedback(shared
+                                                          ? "Export opened in share sheet."
+                                                          : "Export copied to clipboard.")
+                            }
+                        }
+
+                        ProfileActionChip {
+                            visible: profilePopup.showProfileActions
+                            enabled: listView.count > 1
+                            label: I18n.t("Delete Others")
+                            glyph: root.iconTrash
+                            accentColor: Colors.dsDanger
+                            onClicked: clearProfilesPopup.open()
+                        }
+
+                        ProfileActionChip {
+                            visible: profilePopup.showProfileActions
+                            enabled: vpnController.subscriptions.length > 0 && !vpnController.subscriptionBusy && !vpnController.busy
+                            label: I18n.t("Remove Subs")
+                            glyph: root.iconMinus
+                            accentColor: Colors.dsDanger
+                            onClicked: {
+                                const current = (vpnController.currentProfileGroup || "All")
+                                const removed = vpnController.removeSubscriptionsByGroup(current)
+                                if (removed > 0) {
+                                    root.syncSelectedProfileFromController()
+                                    root.showSettingsFeedback(current === "All"
+                                                                  ? "Removed " + removed + " subscription(s)."
+                                                                  : "Removed " + removed + " subscription(s) from " + current + ".")
+                                    Qt.callLater(root.positionProfilePopup)
+                                } else if ((vpnController.lastError || "").trim().length > 0) {
+                                    root.showSettingsFeedback(vpnController.lastError)
+                                } else {
+                                    root.showSettingsFeedback("No subscriptions removed.")
+                                }
+                            }
+                        }
+                    }
+
+                    Controls.SegmentedSelector {
+                        id: compactProfileSegmentRow
+                        Layout.fillWidth: true
+                        visible: root.compact
+                        compact: true
+                        model: ["All", "Free", "Premium"]
+                        currentKey: root.compactProfileFilterSelected("Free") ? "Free"
+                            : root.compactProfileFilterSelected("Premium") ? "Premium" : "All"
+                        onActivated: function(key) { root.selectCompactProfileFilter(key) }
+                    }
+
+                    RowLayout {
+                        id: groupRow
+                        Layout.fillWidth: true
+                        spacing: 8
+                        visible: !root.compact
+
+                        Text {
+                            text: I18n.t("Group")
+                            color: root.themeColorToken("mainHex_6b778a", "mainHex_9cb0c8")
+                            font.family: FontSystem.contentFontFamily
+                            font.pixelSize: 12
+                        }
+
+                        Controls.ComboBox {
+                            id: groupFilterCombo
+                            Layout.fillWidth: true
+                            Layout.minimumWidth: 80
+                            Layout.preferredWidth: 260
+                            Layout.preferredHeight: 36
+                            model: vpnController.profileGroupItems
+
+                            function groupNameAt(i) {
+                                const items = vpnController.profileGroupItems || []
+                                if (i < 0 || i >= items.length)
+                                    return ""
+                                const item = items[i]
+                                return (item && item.name) ? item.name : ""
+                            }
+
+                            function syncIndexFromController() {
+                                const groups = vpnController.profileGroupItems || []
+                                const current = (vpnController.currentProfileGroup || "All").toLowerCase()
+                                for (let i = 0; i < groups.length; ++i) {
+                                    const name = ((groups[i] && groups[i].name) ? groups[i].name : "").toLowerCase()
+                                    if (name === current) {
+                                        if (currentIndex !== i)
+                                            currentIndex = i
+                                        return
+                                    }
+                                }
+                                if (groups.length > 0 && currentIndex !== 0)
+                                    currentIndex = 0
+                            }
+
+                            onActivated: function(activatedIndex) {
+                                const name = groupNameAt(activatedIndex)
+                                if (name.length > 0)
+                                    vpnController.currentProfileGroup = name
+                                Qt.callLater(root.positionProfilePopup)
+                            }
+
+                            Component.onCompleted: syncIndexFromController()
+
+                            Connections {
+                                target: vpnController
+                                function onProfileGroupsChanged() { groupFilterCombo.syncIndexFromController() }
+                                function onProfileGroupOptionsChanged() { groupFilterCombo.syncIndexFromController() }
+                                function onCurrentProfileGroupChanged() { groupFilterCombo.syncIndexFromController() }
+                            }
+                        }
+
+                        Rectangle {
+                            radius: 10
+                            Layout.preferredHeight: 30
+                            Layout.preferredWidth: visibleProfilesText.implicitWidth + 16
+                            color: root.themeColorToken("mainHex_eef4ff", "mainHex_223753")
+                            border.width: 0
+                            border.color: root.themeColorToken("mainHex_d8e4f8", "mainHex_151c32")
+
+                            Text {
+                                id: visibleProfilesText
+                                anchors.centerIn: parent
+                                text: I18n.t("Visible %1", [I18n.ltr(vpnController.filteredProfileCount)])
+                                color: root.themeColorToken("mainHex_5f6f86", "mainHex_9bb0cb")
+                                font.family: FontSystem.contentFontFamily
+                                font.pixelSize: 11
+                            }
+                        }
+
+                        Basic.Button {
+                            id: profileActionsToggle
+                            text: I18n.t("Actions")
+                            checkable: true
+                            checked: profilePopup.showProfileActions
+                            onToggled: profilePopup.showProfileActions = checked
+                            implicitHeight: 36
+                            implicitWidth: profileActionsContent.implicitWidth + leftPadding + rightPadding
+                            leftPadding: 14
+                            rightPadding: 14
+                            font.family: FontSystem.contentFontFamily
+                            font.pixelSize: Typography.uiBody
+                            contentItem: RowLayout {
+                                id: profileActionsContent
+                                spacing: 8
+                                Text {
+                                    text: profileActionsToggle.text
+                                    font: profileActionsToggle.font
+                                    color: profileActionsToggle.checked ? Colors.dsLinkIconBlue : Colors.dsTextMuted
+                                }
+                                Text {
+                                    text: profileActionsToggle.checked ? "\uf077" : "\uf078"
+                                    font.family: root.faSolid
+                                    font.weight: Font.Black
+                                    font.pixelSize: 10
+                                    color: Colors.dsTextMuted
+                                }
+                            }
+                            background: Rectangle {
+                                radius: 10
+                                color: profileActionsToggle.checked || profileActionsToggle.down ? Colors.dsPrimaryTint : Colors.dsSurface
+                                border.width: 1
+                                border.color: profileActionsToggle.visualFocus ? Colors.dsPrimarySolid : Colors.dsBorder
+                            }
+                        }
+                    }
+
+                    Rectangle {
+                        id: groupOptionsRow
+                        Layout.fillWidth: true
+                        implicitHeight: groupOptionsGrid.implicitHeight + 24
+                        radius: 12
+                        color: Colors.dsSurfaceSoft
+                        border.width: 1
+                        border.color: Colors.dsBorderSoft
+                        visible: !root.compact && (groupFilterCombo.groupNameAt(groupFilterCombo.currentIndex) || "All").toLowerCase() !== "all"
+                        LayoutMirroring.enabled: false
+                        LayoutMirroring.childrenInherit: true
+
+                        GridLayout {
+                            id: groupOptionsGrid
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+                            anchors.top: parent.top
+                            anchors.margins: 12
+                            columns: width >= 600 ? 4 : 2
+                            uniformCellWidths: true
+                            columnSpacing: 16
+                            rowSpacing: 12
+                            layoutDirection: I18n.isRtl ? Qt.RightToLeft : Qt.LeftToRight
+
+                            ColumnLayout {
+                                Layout.fillWidth: true
+                                Layout.minimumWidth: 0
+                                spacing: 6
+
+                                Text {
+                                    Layout.fillWidth: true
+                                    text: I18n.t("Enabled")
+                                    color: Colors.dsTextMuted
+                                    font.family: FontSystem.contentFontFamily
+                                    font.pixelSize: Typography.uiBodySm
+                                    horizontalAlignment: I18n.isRtl ? Text.AlignRight : Text.AlignLeft
+                                }
+
+                                Controls.Switch {
+                                    Layout.preferredHeight: 36
+                                    Layout.alignment: I18n.isRtl ? Qt.AlignRight : Qt.AlignLeft
+                                    Accessible.name: I18n.t("Enabled")
+                                    checked: root.profileGroupEnabled(groupFilterCombo.groupNameAt(groupFilterCombo.currentIndex))
+                                    onToggled: vpnController.setProfileGroupEnabled(groupFilterCombo.groupNameAt(groupFilterCombo.currentIndex), checked)
                                 }
                             }
 
-                                RowLayout {
-                                    anchors.fill: rowBg
-                                    anchors.leftMargin: root.compact ? 8 : 12
-                                    anchors.rightMargin: root.compact ? 8 : 12
-                                    spacing: root.compact ? 6 : 10
+                            ColumnLayout {
+                                Layout.fillWidth: true
+                                Layout.minimumWidth: 0
+                                spacing: 6
 
-                                    Rectangle {
-                                        Layout.preferredWidth: root.compact ? 30 : 38
-                                        Layout.preferredHeight: root.compact ? 30 : 38
-                                        radius: width / 2
-                                        color: root.themeColorToken("mainHex_f3f6fb", "mainHex_20314b")
-                                        border.width: 0
-                                        border.color: root.themeColorToken("mainHex_dde4ef", "mainHex_151c32")
+                                Text {
+                                    Layout.fillWidth: true
+                                    text: I18n.t("Exclusive")
+                                    color: Colors.dsTextMuted
+                                    font.family: FontSystem.contentFontFamily
+                                    font.pixelSize: Typography.uiBodySm
+                                    horizontalAlignment: I18n.isRtl ? Text.AlignRight : Text.AlignLeft
+                                }
 
-                                        Text {
-                                            anchors.centerIn: parent
-                                            text: root.guessFlag(displayLabel)
-                                            font.pixelSize: root.compact ? 17 : 21
-                                        }
-                                    }
+                                Controls.Switch {
+                                    Layout.preferredHeight: 36
+                                    Layout.alignment: I18n.isRtl ? Qt.AlignRight : Qt.AlignLeft
+                                    Accessible.name: I18n.t("Exclusive")
+                                    checked: root.profileGroupExclusive(groupFilterCombo.groupNameAt(groupFilterCombo.currentIndex))
+                                    onToggled: vpnController.setProfileGroupExclusive(groupFilterCombo.groupNameAt(groupFilterCombo.currentIndex), checked)
+                                }
+                            }
 
-                                ColumnLayout {
+                            ColumnLayout {
+                                Layout.fillWidth: true
+                                Layout.minimumWidth: 0
+                                spacing: 6
+
+                                Text {
+                                    Layout.fillWidth: true
+                                    text: I18n.t("Mode")
+                                    color: Colors.dsTextMuted
+                                    font.family: FontSystem.contentFontFamily
+                                    font.pixelSize: Typography.uiBodySm
+                                    horizontalAlignment: I18n.isRtl ? Text.AlignRight : Text.AlignLeft
+                                }
+
+                                Controls.ComboBox {
+                                    id: groupModeCombo
                                     Layout.fillWidth: true
                                     Layout.minimumWidth: 0
-                                    spacing: root.compact ? 3 : 4
+                                    Layout.preferredHeight: 36
+                                    model: ["Manual", "Best Latency", "Fallback"]
+                                    font.pixelSize: Typography.uiBody
 
-                                    Text {
-                                        Layout.fillWidth: true
-                                        text: displayLabel
-                                        font.family: FontSystem.getContentFontBold.name
-                                        font.weight: Font.Bold
-                                        font.pixelSize: root.compact ? 12 : 14
-                                        color: root.themeColorToken("mainHex_202634", "mainHex_d7e4f6")
-                                        elide: Text.ElideRight
-                                        wrapMode: Text.WordWrap
-                                        maximumLineCount: 1
+                                    function syncMode() {
+                                        const mode = vpnController.profileGroupMode(groupFilterCombo.groupNameAt(groupFilterCombo.currentIndex)) || "Manual"
+                                        for (let i = 0; i < model.length; ++i) {
+                                            if (String(model[i]).toLowerCase() === String(mode).toLowerCase()) {
+                                                if (currentIndex !== i)
+                                                    currentIndex = i
+                                                return
+                                            }
+                                        }
+                                        currentIndex = 0
                                     }
+
+                                    onActivated: function(activatedIndex) {
+                                        vpnController.setProfileGroupMode(groupFilterCombo.groupNameAt(groupFilterCombo.currentIndex), model[activatedIndex])
+                                    }
+                                    Component.onCompleted: syncMode()
+
+                                    Connections {
+                                        target: vpnController
+                                        function onProfileGroupOptionsChanged() { groupModeCombo.syncMode() }
+                                        function onCurrentProfileGroupChanged() { groupModeCombo.syncMode() }
+                                    }
+                                }
+                            }
+
+                            ColumnLayout {
+                                Layout.fillWidth: true
+                                Layout.minimumWidth: 0
+                                spacing: 6
+
+                                Text {
+                                    Layout.fillWidth: true
+                                    text: I18n.t("Badge")
+                                    color: Colors.dsTextMuted
+                                    font.family: FontSystem.contentFontFamily
+                                    font.pixelSize: Typography.uiBodySm
+                                    horizontalAlignment: I18n.isRtl ? Text.AlignRight : Text.AlignLeft
+                                }
+
+                                Controls.TextField {
+                                    id: groupBadgeField
+                                    Layout.fillWidth: true
+                                    Layout.minimumWidth: 0
+                                    Layout.preferredHeight: 36
+                                    cornerRadius: 10
+                                    placeholderText: I18n.t("Optional")
+                                    Accessible.name: I18n.t("Badge")
+                                    text: root.profileGroupBadgeText(groupFilterCombo.groupNameAt(groupFilterCombo.currentIndex))
+                                    font.pixelSize: Typography.uiBody
+                                    selectByMouse: true
+                                    onEditingFinished: vpnController.setProfileGroupBadge(groupFilterCombo.groupNameAt(groupFilterCombo.currentIndex), text)
+                                }
+                            }
+                        }
+                    }
+
+                    Flow {
+                        id: statsFlow
+                        Layout.fillWidth: true
+                        spacing: 6
+                        visible: !root.compact && !profilePopup.denseLayout
+                        LayoutMirroring.enabled: false
+                        LayoutMirroring.childrenInherit: true
+                        layoutDirection: I18n.isRtl ? Qt.RightToLeft : Qt.LeftToRight
+
+                        ProfileStatusChip {
+                            label: I18n.t(vpnController.autoPingProfiles ? "Auto Ping ON" : "Auto Ping OFF")
+                            textColor: vpnController.autoPingProfiles ? (Colors.lightMode ? Colors.mainHex_15803d : Colors.dsSuccess) : Colors.dsTextMuted
+                            fillColor: vpnController.autoPingProfiles ? Colors.successBack : Colors.dsSurfaceSoft
+                        }
+                        ProfileStatusChip {
+                            label: I18n.t("Subscriptions %1/%2", [I18n.ltr(root.subscriptionsInCurrentGroup()), I18n.ltr(vpnController.subscriptions.length)])
+                        }
+                        ProfileStatusChip {
+                            label: I18n.t("Group %1", [I18n.ltr(I18n.t(vpnController.currentProfileGroup || "All"))])
+                            maximumWidth: statsFlow.width
+                        }
+                        ProfileStatusChip {
+                            label: I18n.t("Profiles %1", [I18n.ltr(vpnController.profileCount)])
+                        }
+                        ProfileStatusChip {
+                            label: I18n.t("Best %1", [I18n.ltr(vpnController.bestPingMs >= 0 ? (vpnController.bestPingMs + " ms") : "--")])
+                        }
+                        ProfileStatusChip {
+                            label: I18n.t("Worst %1", [I18n.ltr(vpnController.worstPingMs >= 0 ? (vpnController.worstPingMs + " ms") : "--")])
+                        }
+                        ProfileStatusChip {
+                            label: I18n.t("Score %1", [I18n.ltr(root.profileScoreStars())])
+                            textColor: Colors.lightMode ? Colors.mainHex_9c6b1f : Colors.dsWarning
+                            fillColor: Colors.warningBack
+                        }
+                    }
+
+                    Item {
+                        id: listContainer
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: root.compact
+                            ? Math.min(Math.max(listView.contentHeight, 120), Math.max(180, profileContentFlick.height * 0.55))
+                            : Math.min(Math.max(listView.contentHeight, 100), 440)
+                        Layout.minimumHeight: profilePopup.ultraDenseLayout ? 96
+                                                                            : (profilePopup.denseLayout ? 140 : 100)
+
+                        ListView {
+                            id: listView
+                            anchors.fill: parent
+                            anchors.margins: 0
+                            clip: true
+                            model: vpnController.profileModel
+                            spacing: 0
+                            boundsBehavior: Flickable.StopAtBounds
+                            flickDeceleration: 2800
+                            interactive: contentHeight > height
+                            ScrollBar.vertical: ScrollBar {
+                                id: profileScrollBar
+                                policy: ScrollBar.AsNeeded
+                            }
+                            onContentHeightChanged: Qt.callLater(root.positionProfilePopup)
+                            onCountChanged: Qt.callLater(root.positionProfilePopup)
+
+                            delegate: Item {
+                                id: profileCard
+                                required property int index
+                                required property string displayLabel
+                                required property string protocol
+                                required property string address
+                                required property int port
+                                required property string security
+                                required property string groupName
+                                required property string sourceName
+                                required property string originalLink
+                                required property string pingText
+                                required property bool pinging
+                                required property int pingMs
+                                required property real packetLossPct
+                                required property string packetLossText
+
+                                readonly property bool selected: index === vpnController.currentProfileIndex
+                                readonly property string groupBadge: root.profileGroupBadgeText(groupName)
+                                readonly property bool matched: root.profileGroupVisible(groupName)
+                                                                && root.profileMatchesSearch(displayLabel, protocol, address, security, groupName, sourceName)
+                                readonly property bool stackActions: width < 620
+                                readonly property real scrollInset: !root.compact && listView.contentHeight > listView.height
+                                    ? profileScrollBar.width + 6 : 0
+                                readonly property color latencyColor: pingMs < 0 ? Colors.dsTextMuted
+                                    : pingMs < 250 ? (Colors.lightMode ? Colors.mainHex_15803d : Colors.dsSuccess)
+                                    : pingMs < 500 ? (Colors.lightMode ? Colors.mainHex_9c6b1f : Colors.dsWarning) : Colors.dsDanger
+                                readonly property string latencyLabel: I18n.localizeDisplay(pinging ? "..." : (pingMs >= 0
+                                    ? pingMs + " ms" + (packetLossPct > 0 ? " / " + packetLossText : "") : "--"))
+
+                                x: I18n.isRtl ? scrollInset : 0
+                                width: Math.max(0, listView.width - scrollInset)
+                                height: matched ? Math.max(84, profileCardLayout.implicitHeight + 32) : 0
+                                visible: matched
+                                // Physical text alignment and row order are handled together.
+                                // Latin names must share the same leading edge as RTL metadata.
+                                LayoutMirroring.enabled: false
+                                LayoutMirroring.childrenInherit: true
+
+                                Basic.ItemDelegate {
+                                    id: profileSelectButton
+                                    anchors.fill: parent
+                                    anchors.topMargin: 4
+                                    anchors.bottomMargin: 4
+                                    text: profileCard.displayLabel
+                                    Accessible.name: profileCard.displayLabel + ", " + profileCard.latencyLabel
+                                    Accessible.description: I18n.t(profileCard.selected ? "Selected Profile" : "Profile")
+                                    hoverEnabled: !root.mobilePlatform
+                                    focusPolicy: Qt.StrongFocus
+                                    onActiveFocusChanged: {
+                                        if (activeFocus)
+                                            listView.positionViewAtIndex(profileCard.index, ListView.Contain)
+                                    }
+                                    onClicked: {
+                                        vpnController.currentProfileIndex = profileCard.index
+                                        root.updateProfileSelection(profileCard.displayLabel, profileCard.protocol, profileCard.address, profileCard.port, profileCard.security)
+                                        profilePopup.close()
+                                    }
+                                    contentItem: Item {}
+                                    background: Rectangle {
+                                        radius: 14
+                                        color: profileCard.selected ? Colors.dsPrimaryTint
+                                            : (profileSelectButton.down || profileSelectButton.hovered ? Colors.dsSurfaceSoft : Colors.dsSurface)
+                                        border.width: profileSelectButton.visualFocus ? 2 : 1
+                                        border.color: profileCard.selected || profileSelectButton.visualFocus ? Colors.dsPrimarySolid : Colors.dsBorder
+                                        Behavior on color { ColorAnimation { duration: 120 } }
+                                    }
+                                }
+
+                                GridLayout {
+                                    id: profileCardLayout
+                                    anchors.left: parent.left
+                                    anchors.right: parent.right
+                                    anchors.top: parent.top
+                                    anchors.margins: 12
+                                    anchors.topMargin: 16
+                                    columns: profileCard.stackActions ? 1 : 2
+                                    columnSpacing: 14
+                                    rowSpacing: 8
+                                    layoutDirection: I18n.isRtl ? Qt.RightToLeft : Qt.LeftToRight
 
                                     RowLayout {
                                         Layout.fillWidth: true
-                                        spacing: root.compact ? 4 : 8
-
-                                        Item {
-                                            Layout.preferredWidth: root.compact ? 24 : 34
-                                            Layout.preferredHeight: root.compact ? 20 : 22
-
-                                            Controls.SignalBars {
-                                                anchors.centerIn: parent
-                                                level: pinging ? 2 : (pingMs >= 0 ? (pingMs < 250 ? 4 : (pingMs < 500 ? 2 : 1)) : 0)
-                                                activeColor: pingMs >= 0 ? (pingMs < 250 ? Colors.mainHex_36d984 : (pingMs < 500 ? Colors.mainHex_dfbf22 : Colors.mainHex_ef4444)) : Colors.mainHex_9aa4b6
-                                                inactiveColor: Colors.mainHex_d9dee8
-                                            }
-
-                                            MouseArea {
-                                                anchors.fill: parent
-                                                cursorShape: Qt.PointingHandCursor
-                                                onClicked: vpnController.pingProfile(index)
-                                            }
-                                        }
-
-                                        Text {
-                                            text: I18n.localizeDisplay(pinging ? "..." : (pingMs >= 0 ? (pingMs + " ms" + (packetLossPct > 0 ? (" / " + packetLossText) : "")) : "--"))
-                                            color: pingMs >= 0 ? (pingMs < 250 ? Colors.mainHex_36d984 : (pingMs < 500 ? Colors.mainHex_d0ad19 : Colors.mainHex_ef4444)) : Colors.mainHex_9aa4b6
-                                            font.family: FontSystem.getContentFontBold.name
-                                            font.pixelSize: root.compact ? 11 : 12
-                                            font.bold: true
-
-                                            MouseArea {
-                                                anchors.fill: parent
-                                                cursorShape: Qt.PointingHandCursor
-                                                onClicked: vpnController.pingProfile(index)
-                                            }
-                                        }
+                                        Layout.minimumWidth: 0
+                                        layoutDirection: I18n.isRtl ? Qt.RightToLeft : Qt.LeftToRight
+                                        spacing: 10
 
                                         Rectangle {
-                                            Layout.preferredWidth: Math.min(compactBadgeText.implicitWidth + (root.compact ? 12 : 16), root.compact ? 72 : 92)
-                                            Layout.preferredHeight: root.compact ? 17 : 21
-                                            radius: root.compact ? 8 : 10
-                                            color: root.themeColorToken("mainHex_edf2ff", "mainHex_223654")
-                                            opacity: 0.92
-
+                                            Layout.preferredWidth: root.compact ? 34 : 40
+                                            Layout.preferredHeight: root.compact ? 34 : 40
+                                            Layout.alignment: Qt.AlignTop
+                                            radius: 12
+                                            color: Colors.dsSurfaceSoft
                                             Text {
-                                                id: compactBadgeText
                                                 anchors.centerIn: parent
-                                                text: groupBadge.length > 0
-                                                      ? groupBadge
-                                                      : (((vpnController.connected ? vpnController.runtimeTunActive : vpnController.tunMode)
-                                                          ? "TUN" : "PROXY"))
-                                                color: root.brandBlue
-                                                font.family: FontSystem.contentFontFamily
-                                                font.pixelSize: root.compact ? 9 : 11
-                                                font.bold: true
-                                                elide: Text.ElideRight
+                                                text: root.guessFlag(profileCard.displayLabel)
+                                                font.pixelSize: root.compact ? 19 : 22
                                             }
                                         }
 
-                                        Rectangle {
-                                            Layout.preferredWidth: 1
-                                            Layout.preferredHeight: root.compact ? 12 : 18
-                                            color: root.themeColorToken("mainHex_c8d1e0", "mainHex_4e6686")
-                                            opacity: 0.9
-                                        }
+                                        ColumnLayout {
+                                            Layout.fillWidth: true
+                                            Layout.minimumWidth: 0
+                                            spacing: 6
 
-                                        Text {
-                                            text: root.iconPing
-                                            color: pinging
-                                                   ? root.brandBlue
-                                                   : root.themeColorToken("mainHex_7e8ea8", "mainHex_9eb4ce")
-                                            font.family: root.faSolid
-                                            font.pixelSize: root.compact ? 12 : 14
-                                            verticalAlignment: Text.AlignVCenter
+                                            RowLayout {
+                                                Layout.fillWidth: true
+                                                layoutDirection: I18n.isRtl ? Qt.RightToLeft : Qt.LeftToRight
+                                                spacing: 6
 
-                                            MouseArea {
-                                                anchors.fill: parent
-                                                cursorShape: Qt.PointingHandCursor
-                                                onClicked: vpnController.pingProfile(index)
+                                                Text {
+                                                    Layout.fillWidth: true
+                                                    Layout.minimumWidth: 0
+                                                    text: I18n.ltr(profileCard.displayLabel)
+                                                    textFormat: Text.PlainText
+                                                    font.family: FontSystem.contentFontFamily
+                                                    font.weight: Font.DemiBold
+                                                    font.pixelSize: Typography.uiBodyLg
+                                                    color: Colors.dsText
+                                                    horizontalAlignment: I18n.isRtl ? Text.AlignRight : Text.AlignLeft
+                                                    wrapMode: Text.WrapAtWordBoundaryOrAnywhere
+                                                    maximumLineCount: root.compact ? 3 : 2
+                                                    elide: Text.ElideRight
+                                                }
+
+                                                Text {
+                                                    visible: profileCard.selected
+                                                    text: "\uf058"
+                                                    color: Colors.dsLinkIconBlue
+                                                    font.family: root.faSolid
+                                                    font.weight: Font.Black
+                                                    font.pixelSize: 14
+                                                }
+                                            }
+
+                                            Flow {
+                                                id: profileMetadata
+                                                Layout.fillWidth: true
+                                                Layout.minimumWidth: 0
+                                                spacing: 6
+                                                layoutDirection: I18n.isRtl ? Qt.RightToLeft : Qt.LeftToRight
+
+                                                Basic.Button {
+                                                    id: latencyButton
+                                                    width: Math.min(implicitWidth, profileMetadata.width)
+                                                    implicitWidth: latencyContent.implicitWidth + leftPadding + rightPadding
+                                                    implicitHeight: root.compact ? 36 : 28
+                                                    leftPadding: 4
+                                                    rightPadding: 6
+                                                    topPadding: 0
+                                                    bottomPadding: 0
+                                                    hoverEnabled: !root.mobilePlatform
+                                                    Accessible.name: I18n.t("Ping") + ", " + profileCard.latencyLabel
+                                                    onClicked: vpnController.pingProfile(profileCard.index)
+                                                    background: Rectangle {
+                                                        radius: 6
+                                                        color: latencyButton.hovered || latencyButton.down ? Colors.dsSurfaceSoft : "transparent"
+                                                        border.width: latencyButton.visualFocus ? 1 : 0
+                                                        border.color: Colors.dsPrimarySolid
+                                                    }
+                                                    contentItem: RowLayout {
+                                                        id: latencyContent
+                                                        spacing: 6
+                                                        layoutDirection: I18n.isRtl ? Qt.RightToLeft : Qt.LeftToRight
+                                                        Controls.SignalBars {
+                                                            Layout.preferredWidth: 24
+                                                            Layout.minimumWidth: 24
+                                                            Layout.preferredHeight: 26
+                                                            level: profileCard.pinging ? 2 : (profileCard.pingMs >= 0 ? (profileCard.pingMs < 250 ? 4 : (profileCard.pingMs < 500 ? 2 : 1)) : 0)
+                                                            activeColor: profileCard.latencyColor
+                                                            inactiveColor: Colors.dsBorderStrong
+                                                        }
+                                                        Text {
+                                                            Layout.fillWidth: true
+                                                            Layout.minimumWidth: 0
+                                                            text: profileCard.latencyLabel
+                                                            color: profileCard.latencyColor
+                                                            font.family: FontSystem.contentFontFamily
+                                                            font.pixelSize: Typography.uiBodySm
+                                                            font.weight: Font.Medium
+                                                            elide: Text.ElideRight
+                                                        }
+                                                    }
+                                                    Basic.ToolTip.visible: hovered && !root.mobilePlatform
+                                                    Basic.ToolTip.text: I18n.t("Ping")
+                                                    Basic.ToolTip.delay: 600
+                                                }
+
+                                                ProfileStatusChip {
+                                                    label: profileCard.groupBadge.length > 0 ? profileCard.groupBadge
+                                                        : ((vpnController.connected ? vpnController.runtimeTunActive : vpnController.tunMode) ? "TUN" : "PROXY")
+                                                    textColor: Colors.dsLinkIconBlue
+                                                    fillColor: Colors.dsSurfaceSoft
+                                                    maximumWidth: profileMetadata.width
+                                                }
                                             }
                                         }
-
-                                        Item { Layout.fillWidth: true }
                                     }
 
-                                    Text {
-                                        visible: false
-                                        text: root.privacyMaskedEndpointText(protocol.toUpperCase() + " " + address + ":" + port + ((security || "").length ? " | " + security : ""))
-                                        font.family: FontSystem.contentFontFamily
-                                        font.pixelSize: 12
-                                        color: root.themeColorToken("mainHex_8c95a4", "mainHex_9fb4cd")
-                                        elide: Text.ElideRight
-                                        wrapMode: Text.NoWrap
-                                        maximumLineCount: 1
-                                    }
+                                    RowLayout {
+                                        Layout.alignment: (I18n.isRtl ? Qt.AlignLeft : Qt.AlignRight) | Qt.AlignVCenter
+                                        layoutDirection: I18n.isRtl ? Qt.RightToLeft : Qt.LeftToRight
+                                        spacing: 2
 
-                                    Text {
-                                        visible: false
-                                        text: sourceName || I18n.t("Manual import")
-                                              + " • " + normalizedGroup
-                                              + (groupExclusive ? " • Exclusive" : "")
-                                              + (groupBadge.length > 0 ? " • " + groupBadge : "")
-                                        font.family: FontSystem.contentFontFamily
-                                        font.pixelSize: 11
-                                        color: root.themeColorToken("mainHex_7b889d", "mainHex_9eb3cc")
-                                        elide: Text.ElideRight
-                                    }
-                                }
-
-                                RowLayout {
-                                    Layout.preferredWidth: root.compact ? 122 : 172
-                                    Layout.alignment: Qt.AlignVCenter
-                                    spacing: root.compact ? 2 : 10
-
-                                    Text {
-                                        Layout.preferredWidth: root.compact ? 17 : 20
-                                        text: "\uf062"
-                                        color: index > 0
-                                               ? root.themeColorToken("mainHex_5b6f8e", "mainHex_a5bbd8")
-                                               : root.themeColorToken("mainHex_c9d1dc", "mainHex_4a5b72")
-                                        opacity: index > 0 ? 1.0 : 0.45
-                                        font.family: root.faSolid
-                                        font.pixelSize: root.compact ? 12 : 14
-                                        horizontalAlignment: Text.AlignHCenter
-                                        verticalAlignment: Text.AlignVCenter
-
-                                        MouseArea {
-                                            anchors.fill: parent
-                                            enabled: index > 0
-                                            cursorShape: Qt.PointingHandCursor
-                                            onClicked: vpnController.moveProfile(index, index - 1)
+                                        ProfileToolButton {
+                                            iconText: "\uf062"
+                                            accessibleName: I18n.t("Move up")
+                                            enabled: profileCard.index > 0
+                                            onClicked: vpnController.moveProfile(profileCard.index, profileCard.index - 1)
                                         }
-                                    }
-
-                                    Text {
-                                        Layout.preferredWidth: root.compact ? 17 : 20
-                                        text: "\uf063"
-                                        color: index < listView.count - 1
-                                               ? root.themeColorToken("mainHex_5b6f8e", "mainHex_a5bbd8")
-                                               : root.themeColorToken("mainHex_c9d1dc", "mainHex_4a5b72")
-                                        opacity: index < listView.count - 1 ? 1.0 : 0.45
-                                        font.family: root.faSolid
-                                        font.pixelSize: root.compact ? 12 : 14
-                                        horizontalAlignment: Text.AlignHCenter
-                                        verticalAlignment: Text.AlignVCenter
-
-                                        MouseArea {
-                                            anchors.fill: parent
-                                            enabled: index < listView.count - 1
-                                            cursorShape: Qt.PointingHandCursor
-                                            onClicked: vpnController.moveProfile(index, index + 1)
+                                        ProfileToolButton {
+                                            iconText: "\uf063"
+                                            accessibleName: I18n.t("Move down")
+                                            enabled: profileCard.index < listView.count - 1
+                                            onClicked: vpnController.moveProfile(profileCard.index, profileCard.index + 1)
                                         }
-                                    }
-
-                                    Text {
-                                        Layout.preferredWidth: root.compact ? 17 : 20
-                                        text: "\uf044"
-                                        color: root.brandViolet
-                                        font.family: root.faSolid
-                                        font.pixelSize: root.compact ? 12 : 15
-                                        horizontalAlignment: Text.AlignHCenter
-                                        verticalAlignment: Text.AlignVCenter
-
-                                        MouseArea {
-                                            anchors.fill: parent
-                                            cursorShape: Qt.PointingHandCursor
-                                            onClicked: root.openEditProfile(index, displayLabel, groupName, originalLink)
+                                        ProfileToolButton {
+                                            iconText: "\uf044"
+                                            accessibleName: I18n.t("Edit")
+                                            onClicked: root.openEditProfile(profileCard.index, profileCard.displayLabel, profileCard.groupName, profileCard.originalLink)
                                         }
-                                    }
-
-                                    Text {
-                                        Layout.preferredWidth: root.compact ? 17 : 20
-                                        text: root.iconFileLines
-                                        color: root.themeColorToken("mainHex_5b6f8e", "mainHex_a5bbd8")
-                                        font.family: root.faSolid
-                                        font.pixelSize: root.compact ? 12 : 15
-                                        horizontalAlignment: Text.AlignHCenter
-                                        verticalAlignment: Text.AlignVCenter
-
-                                        MouseArea {
-                                            anchors.fill: parent
-                                            cursorShape: Qt.PointingHandCursor
+                                        ProfileToolButton {
+                                            iconText: root.iconFileLines
+                                            accessibleName: I18n.t("Copy")
                                             onClicked: {
-                                                const payload = vpnController.exportProfileLink(index)
+                                                const payload = vpnController.exportProfileLink(profileCard.index)
                                                 if ((payload || "").trim().length === 0) {
                                                     root.showSettingsFeedback("Profile link unavailable.")
                                                     return
@@ -1988,71 +1907,41 @@ Item {
                                                 root.showSettingsFeedback("Profile link copied to clipboard.")
                                             }
                                         }
-                                    }
-
-                                    Text {
-                                        Layout.preferredWidth: root.compact ? 17 : 20
-                                        text: "\uf029"
-                                        color: root.themeColorToken("mainHex_5b6f8e", "mainHex_a5bbd8")
-                                        font.family: root.faSolid
-                                        font.pixelSize: root.compact ? 12 : 15
-                                        horizontalAlignment: Text.AlignHCenter
-                                        verticalAlignment: Text.AlignVCenter
-
-                                        MouseArea {
-                                            anchors.fill: parent
-                                            cursorShape: Qt.PointingHandCursor
-                                            onClicked: root.openProfileQrPopup(displayLabel, vpnController.exportProfile(index))
+                                        ProfileToolButton {
+                                            iconText: "\uf029"
+                                            accessibleName: I18n.t("Profile QR Code")
+                                            onClicked: root.openProfileQrPopup(profileCard.displayLabel, vpnController.exportProfile(profileCard.index))
                                         }
-                                    }
-
-                                    Text {
-                                        Layout.preferredWidth: root.compact ? 17 : 20
-                                        text: root.iconTrash
-                                        color: root.themeColorToken("mainHex_cb4f4f", "mainHex_ff8e8e")
-                                        font.family: root.faSolid
-                                        font.pixelSize: root.compact ? 12 : 15
-                                        horizontalAlignment: Text.AlignHCenter
-                                        verticalAlignment: Text.AlignVCenter
-
-                                        MouseArea {
-                                            anchors.fill: parent
-                                            cursorShape: Qt.PointingHandCursor
+                                        ProfileToolButton {
+                                            iconText: root.iconTrash
+                                            iconColor: Colors.dsDanger
+                                            accessibleName: I18n.t("Remove")
                                             onClicked: {
-                                                if (vpnController.removeProfile(index)) {
+                                                if (vpnController.removeProfile(profileCard.index)) {
                                                     root.syncSelectedProfileFromController()
                                                     Qt.callLater(root.positionProfilePopup)
                                                 }
                                             }
                                         }
                                     }
-
-                                    Text {
-                                        Layout.preferredWidth: selected ? (root.compact ? 17 : 20) : 0
-                                        text: "\uf00c"
-                                        color: root.themeColorToken("mainHex_1f6fe0", "mainHex_9fc4ff")
-                                        font.family: root.faSolid
-                                        font.pixelSize: root.compact ? 12 : 15
-                                        horizontalAlignment: Text.AlignHCenter
-                                        verticalAlignment: Text.AlignVCenter
-                                        visible: selected
-                                    }
-
                                 }
                             }
                         }
-                    }
 
-                    Text {
-                        id: emptyState
-                        anchors.centerIn: parent
-                        visible: listView.count === 0 || (listView.count > 0 && listView.contentHeight < 2)
-                        text: listView.count === 0
-                              ? "No profiles. Import one first."
-                              : "No matching profile found."
-                        color: root.themeColorToken("mainHex_8f9bad", "mainHex_9eb3cc")
-                        font.family: FontSystem.contentFontFamily
-                        font.pixelSize: 14
+                        Text {
+                            id: emptyState
+                            anchors.centerIn: parent
+                            width: Math.max(0, parent.width - 24)
+                            wrapMode: Text.WordWrap
+                            horizontalAlignment: Text.AlignHCenter
+                            visible: listView.count === 0 || (listView.count > 0 && listView.contentHeight < 2)
+                            text: I18n.t(listView.count === 0
+                                  ? "No profiles. Import one first."
+                                  : "No matching profile found.")
+                            color: root.themeColorToken("mainHex_8f9bad", "mainHex_9eb3cc")
+                            font.family: FontSystem.contentFontFamily
+                            font.pixelSize: 14
+                        }
                     }
                 }
             }
@@ -2609,6 +2498,8 @@ Item {
         focus: true
         closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
         onOpened: {
+            settingsMainList.resetSearch()
+            settingsFlick.contentY = 0
             root.settingsSection = "main"
             root.settingsSectionStack = ["main"]
             if (root.pendingSettingsSection.length > 0) {
@@ -2624,13 +2515,14 @@ Item {
                 root.refreshLanHostCandidates()
             }
             root.syncCustomDnsDraftFromController()
+            settingsFlick.forceActiveFocus()
         }
         onClosed: {
             root.settingsSection = "main"
             root.settingsSectionStack = ["main"]
             root.pendingSettingsSection = ""
         }
-        width: root.sheetWidth(430)
+        width: root.desktopMode ? Math.min(root.width, 560) : root.width
         height: root.compact ? root.height : root.sheetHeight(620)
         x: root.sheetX(width)
         y: root.desktopMode ? 0 : (root.compact ? 0 : root.drawerY(height))
@@ -2674,68 +2566,65 @@ Item {
                 anchors.fill: parent
                 anchors.leftMargin: root.compact ? 12 : 16
                 anchors.rightMargin: root.compact ? 12 : 16
-                anchors.topMargin: root.compact ? (12 + root.safeTopInset) : 16
+                anchors.topMargin: root.compact ? (8 + root.safeTopInset) : 16
                 anchors.bottomMargin: root.compact ? 12 : 16
-                spacing: root.compact ? 16 : 10
-
-                Rectangle {
-                    Layout.alignment: Qt.AlignHCenter
-                    Layout.preferredWidth: 42
-                    Layout.preferredHeight: 4
-                    radius: 2
-                    color: root.themeColorToken("mainHex_d6dde8", "mainHex_151c32")
-                    visible: !root.compact
-                }
+                spacing: root.compact ? Metrics.gap12 : Metrics.gap16
 
                 RowLayout {
                     Layout.fillWidth: true
-                    spacing: root.compact ? 12 : 8
+                    spacing: Metrics.gap12
 
                     Controls.CircleIconButton {
-                        visible: root.compact
-                        diameter: 38
+                        visible: root.settingsSection !== "main"
+                        diameter: 44
                         elevated: false
-                        backgroundColor: root.themeColorToken("mainHex_faf9ff", "mainHex_151c32")
-                        borderColor: root.themeColorToken("mainHex_f0eef8", "mainHex_151c32")
                         iconText: I18n.isRtl ? "\uf061" : "\uf060"
                         iconFontFamily: root.faSolid
-                        iconColor: root.themeColorToken("mainHex_050505", "mainHex_d8e1f0")
-                        iconPixelSize: 15
+                        iconPixelSize: 16
+                        accessibleName: I18n.t("Back")
                         onClicked: root.stepBackSettingsSection()
                     }
 
-                    Text {
-                        text: I18n.t(root.settingsTitle())
-                        font.family: FontSystem.getContentFontBold.name
-                        font.weight: Font.Bold
-                        font.pixelSize: root.compact ? 18 : 24
-                        color: Colors.dsText
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        Layout.minimumWidth: 0
+                        spacing: Metrics.gap4
+
+                        Text {
+                            Layout.fillWidth: true
+                            visible: root.settingsSection !== "main"
+                            text: I18n.t("Settings")
+                            color: Colors.dsTextMuted
+                            font.family: FontSystem.contentFontFamily
+                            font.pixelSize: Typography.uiBody
+                        }
+
+                        Text {
+                            Layout.fillWidth: true
+                            text: root.settingsTitle()
+                            font.family: FontSystem.contentFontFamily
+                            font.weight: Font.Bold
+                            font.pixelSize: root.compact ? 20 : 24
+                            color: Colors.dsText
+                            wrapMode: Text.WrapAtWordBoundaryOrAnywhere
+                        }
                     }
-                    Item { Layout.fillWidth: true }
 
                     Controls.CircleIconButton {
-                        visible: root.compact && root.settingsSection === "donate"
-                        diameter: 38
+                        diameter: 44
                         elevated: false
-                        backgroundColor: root.themeColorToken("mainHex_faf9ff", "mainHex_151c32")
-                        borderColor: root.themeColorToken("mainHex_f0eef8", "mainHex_151c32")
-                        iconText: "\uf3ed"
+                        iconText: "\uf00d"
                         iconFontFamily: root.faSolid
-                        iconColor: root.themeColorToken("mainHex_2f6ff1", "mainHex_7faeff")
-                        iconPixelSize: 15
-                        enabled: false
-                    }
-
-                    Controls.CircleIconButton {
-                        visible: !root.compact
-                        diameter: 34
-                        iconText: "×"
-                        iconPixelSize: 20
-                        iconColor: root.themeColorToken("mainHex_8d96a5", "mainHex_9db0ca")
-                        backgroundColor: root.themeColorToken("mainHex_f7f8fb", "mainHex_151c32")
-                        borderColor: root.themeColorToken("mainHex_e1e5ed", "mainHex_151c32")
+                        iconPixelSize: 17
+                        accessibleName: I18n.t("Close")
                         onClicked: settingsPopup.close()
                     }
+                }
+
+                Rectangle {
+                    Layout.fillWidth: true
+                    implicitHeight: 1
+                    color: Colors.dsBorderSoft
                 }
 
                 Flickable {
@@ -2745,8 +2634,60 @@ Item {
                     clip: true
                     contentWidth: width
                     contentHeight: settingsContent.implicitHeight + (root.compact ? (root.safeBottomInset + 12) : 0)
-                    boundsBehavior: Flickable.DragAndOvershootBounds
+                    boundsBehavior: Flickable.StopAtBounds
                     flickableDirection: Flickable.VerticalFlick
+                    activeFocusOnTab: true
+
+                    function revealFocusedItem() {
+                        const item = root.activeFocusItem
+                        if (!item || !settingsPopup.opened)
+                            return
+                        let ancestor = item
+                        while (ancestor && ancestor !== settingsContent)
+                            ancestor = ancestor.parent
+                        if (!ancestor)
+                            return
+                        // Reveal inner lists first, then the drawer itself, so
+                        // keyboard navigation never leaves focus behind a clip.
+                        ancestor = item.parent
+                        while (ancestor) {
+                            if (typeof ancestor.contentY === "number" && ancestor.contentItem
+                                    && typeof ancestor.contentHeight === "number") {
+                                const top = item.mapToItem(ancestor.contentItem, 0, 0).y
+                                const bottom = top + item.height
+                                const origin = Number(ancestor.originY || 0)
+                                const limit = origin + Math.max(0, ancestor.contentHeight - ancestor.height)
+                                if (top < ancestor.contentY + 8)
+                                    ancestor.contentY = Math.min(limit, Math.max(origin, top - 8))
+                                else if (bottom > ancestor.contentY + ancestor.height - 8)
+                                    ancestor.contentY = Math.max(origin, Math.min(limit, bottom - ancestor.height + 8))
+                            }
+                            if (ancestor === settingsFlick)
+                                break
+                            ancestor = ancestor.parent
+                        }
+                    }
+
+                    onContentHeightChanged: contentY = Math.max(0, Math.min(contentY, Math.max(0, contentHeight - height)))
+                    onHeightChanged: Qt.callLater(revealFocusedItem)
+                    Keys.onPressed: function(event) {
+                        if (event.key === Qt.Key_PageDown || event.key === Qt.Key_PageUp) {
+                            const direction = event.key === Qt.Key_PageDown ? 1 : -1
+                            contentY = Math.max(0, Math.min(Math.max(0, contentHeight - height), contentY + direction * height * 0.8))
+                            event.accepted = true
+                        }
+                    }
+
+                    Connections {
+                        target: root
+                        function onActiveFocusItemChanged() { Qt.callLater(settingsFlick.revealFocusedItem) }
+                    }
+
+                    ScrollBar.vertical: ScrollBar {
+                        id: settingsScrollBar
+                        policy: ScrollBar.AsNeeded
+                        minimumSize: 0.08
+                    }
 
                     WheelHandler {
                         acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
@@ -2757,16 +2698,20 @@ Item {
 
                     ColumnLayout {
                         id: settingsContent
-                        width: settingsFlick.width
-                        x: 0
+                        readonly property real scrollInset: !root.compact && settingsFlick.contentHeight > settingsFlick.height
+                            ? settingsScrollBar.width + Metrics.gap4 : 0
+                        width: Math.max(0, settingsFlick.width - scrollInset)
+                        x: I18n.isRtl ? scrollInset : 0
                         opacity: root.settingsPageOpacity
-                        spacing: root.compact ? 14 : 10
+                        spacing: Metrics.gap16
                         clip: true
 
                         SettingsMainList {
+                            id: settingsMainList
                             Layout.fillWidth: true
                             visible: root.settingsSection === "main"
                             root: surface.root
+                            vpnController: surface.vpnController
                         }
 
                         InterfaceSettings {
@@ -3139,6 +3084,7 @@ Item {
                                                 text: aboutPopup.aboutSoftwareValue("appVersion")
                                                 color: root.themeColorToken("mainHex_2a3240", "mainHex_d7e4f6")
                                                 font.family: FontSystem.getContentFontBold.name
+                                                font.weight: Font.Bold
                                                 font.pixelSize: 12
                                                 elide: Text.ElideRight
                                                 Layout.fillWidth: true
@@ -3155,6 +3101,7 @@ Item {
                                                 text: aboutPopup.aboutSoftwareValue("xrayVersion")
                                                 color: root.themeColorToken("mainHex_2a3240", "mainHex_d7e4f6")
                                                 font.family: FontSystem.getContentFontBold.name
+                                                font.weight: Font.Bold
                                                 font.pixelSize: 12
                                                 elide: Text.ElideRight
                                                 Layout.fillWidth: true
@@ -3171,6 +3118,7 @@ Item {
                                                 text: aboutPopup.aboutSoftwareValue("qtVersion")
                                                 color: root.themeColorToken("mainHex_2a3240", "mainHex_d7e4f6")
                                                 font.family: FontSystem.getContentFontBold.name
+                                                font.weight: Font.Bold
                                                 font.pixelSize: 12
                                                 elide: Text.ElideRight
                                                 Layout.fillWidth: true
@@ -3187,6 +3135,7 @@ Item {
                                                 text: aboutPopup.aboutSoftwareValue("platformMode")
                                                 color: root.themeColorToken("mainHex_2a3240", "mainHex_d7e4f6")
                                                 font.family: FontSystem.getContentFontBold.name
+                                                font.weight: Font.Bold
                                                 font.pixelSize: 12
                                                 elide: Text.ElideRight
                                                 Layout.fillWidth: true
@@ -3203,6 +3152,7 @@ Item {
                                                 text: aboutPopup.aboutSoftwareValue("platform")
                                                 color: root.themeColorToken("mainHex_2a3240", "mainHex_d7e4f6")
                                                 font.family: FontSystem.getContentFontBold.name
+                                                font.weight: Font.Bold
                                                 font.pixelSize: 12
                                                 elide: Text.ElideRight
                                                 Layout.fillWidth: true
@@ -3219,6 +3169,7 @@ Item {
                                                 text: aboutPopup.aboutSoftwareValue("osName")
                                                 color: root.themeColorToken("mainHex_2a3240", "mainHex_d7e4f6")
                                                 font.family: FontSystem.getContentFontBold.name
+                                                font.weight: Font.Bold
                                                 font.pixelSize: 12
                                                 elide: Text.ElideRight
                                                 Layout.fillWidth: true
@@ -3235,6 +3186,7 @@ Item {
                                                 text: aboutPopup.aboutSoftwareValue("apiText")
                                                 color: root.themeColorToken("mainHex_2a3240", "mainHex_d7e4f6")
                                                 font.family: FontSystem.getContentFontBold.name
+                                                font.weight: Font.Bold
                                                 font.pixelSize: 12
                                                 elide: Text.ElideRight
                                                 Layout.fillWidth: true
@@ -3251,6 +3203,7 @@ Item {
                                                 text: aboutPopup.aboutSoftwareValue("sdkText")
                                                 color: root.themeColorToken("mainHex_2a3240", "mainHex_d7e4f6")
                                                 font.family: FontSystem.getContentFontBold.name
+                                                font.weight: Font.Bold
                                                 font.pixelSize: 12
                                                 elide: Text.ElideRight
                                                 Layout.fillWidth: true
@@ -3267,6 +3220,7 @@ Item {
                                                 text: aboutPopup.aboutSoftwareValue("languageStandard")
                                                 color: root.themeColorToken("mainHex_2a3240", "mainHex_d7e4f6")
                                                 font.family: FontSystem.getContentFontBold.name
+                                                font.weight: Font.Bold
                                                 font.pixelSize: 12
                                                 elide: Text.ElideRight
                                                 Layout.fillWidth: true
@@ -3283,6 +3237,7 @@ Item {
                                                 text: I18n.t("Genyleap LLC")
                                                 color: root.themeColorToken("mainHex_2a3240", "mainHex_d7e4f6")
                                                 font.family: FontSystem.getContentFontBold.name
+                                                font.weight: Font.Bold
                                                 font.pixelSize: 12
                                                 elide: Text.ElideRight
                                                 Layout.fillWidth: true
@@ -3339,6 +3294,7 @@ Item {
                                                 text: aboutPopup.aboutHardwareValue("cpuName")
                                                 color: root.themeColorToken("mainHex_2a3240", "mainHex_d7e4f6")
                                                 font.family: FontSystem.getContentFontBold.name
+                                                font.weight: Font.Bold
                                                 font.pixelSize: 12
                                                 elide: Text.ElideRight
                                                 Layout.fillWidth: true
@@ -3355,6 +3311,7 @@ Item {
                                                 text: aboutPopup.aboutHardwareValue("cpuArchitecture")
                                                 color: root.themeColorToken("mainHex_2a3240", "mainHex_d7e4f6")
                                                 font.family: FontSystem.getContentFontBold.name
+                                                font.weight: Font.Bold
                                                 font.pixelSize: 12
                                                 elide: Text.ElideRight
                                                 Layout.fillWidth: true
@@ -3371,6 +3328,7 @@ Item {
                                                 text: aboutPopup.aboutMemoryValue()
                                                 color: root.themeColorToken("mainHex_2a3240", "mainHex_d7e4f6")
                                                 font.family: FontSystem.getContentFontBold.name
+                                                font.weight: Font.Bold
                                                 font.pixelSize: 12
                                                 elide: Text.ElideRight
                                                 Layout.fillWidth: true
@@ -3387,6 +3345,7 @@ Item {
                                                 text: aboutPopup.aboutHardwareValue("processMemoryText")
                                                 color: root.themeColorToken("mainHex_2a3240", "mainHex_d7e4f6")
                                                 font.family: FontSystem.getContentFontBold.name
+                                                font.weight: Font.Bold
                                                 font.pixelSize: 12
                                                 elide: Text.ElideRight
                                                 Layout.fillWidth: true
@@ -3403,6 +3362,7 @@ Item {
                                                 text: aboutPopup.aboutHardwareValue("deviceName")
                                                 color: root.themeColorToken("mainHex_2a3240", "mainHex_d7e4f6")
                                                 font.family: FontSystem.getContentFontBold.name
+                                                font.weight: Font.Bold
                                                 font.pixelSize: 12
                                                 elide: Text.ElideRight
                                                 Layout.fillWidth: true
@@ -3419,6 +3379,7 @@ Item {
                                                 text: aboutPopup.aboutHardwareValue("displayText")
                                                 color: root.themeColorToken("mainHex_2a3240", "mainHex_d7e4f6")
                                                 font.family: FontSystem.getContentFontBold.name
+                                                font.weight: Font.Bold
                                                 font.pixelSize: 12
                                                 elide: Text.ElideRight
                                                 Layout.fillWidth: true
@@ -4854,6 +4815,7 @@ Item {
                         text: I18n.t("Total: %1", [I18n.ltr((vpnController.usageSummaryForProfile(vpnController.selectedUsageProfileId || "").totalText) || "0 B")])
                         color: root.themeColorToken("mainHex_334155", "mainHex_d2def0")
                         font.family: FontSystem.getContentFontBold.name
+                        font.weight: Font.Bold
                         font.pixelSize: 11
                         horizontalAlignment: root.compact ? Text.AlignLeft : Text.AlignRight
                         elide: Text.ElideRight
@@ -5273,6 +5235,7 @@ Item {
                         text: I18n.t("Logging is disabled")
                         color: root.themeColorToken("mainHex_2a3240", "mainHex_d7e4f6")
                         font.family: FontSystem.getContentFontBold.name
+                        font.weight: Font.Bold
                         font.pixelSize: 16
                         horizontalAlignment: Text.AlignHCenter
                     }
@@ -5975,14 +5938,21 @@ Item {
             }
         }
 
-        contentItem: Flickable {
+        contentItem: Item {
+            clip: true
+
+        Flickable {
             id: importFlick
             anchors.fill: parent
+            // Keep the scrolling viewport out of system bars, including after
+            // scrolling far enough to move the drawer heading off screen.
+            anchors.topMargin: root.compact ? root.safeTopInset : 0
+            anchors.bottomMargin: root.compact ? root.safeBottomInset : 0
             clip: true
             contentWidth: width
             contentHeight: importContentColumn.implicitHeight
                            + importContentColumn.y
-                           + (root.compact ? Math.max(14, root.safeBottomInset + 10) : 16)
+                           + (root.compact ? 12 : 16)
             boundsBehavior: Flickable.StopAtBounds
             flickableDirection: Flickable.VerticalFlick
             interactive: contentHeight > height
@@ -6004,7 +5974,7 @@ Item {
             ColumnLayout {
                 id: importContentColumn
                 x: root.compact ? 12 : 16
-                y: root.compact ? (10 + root.safeTopInset) : 16
+                y: root.compact ? 10 : 16
                 width: importFlick.width - (root.compact ? 24 : 32)
                 spacing: importPopup.shortViewport ? 8 : 10
 
@@ -6021,14 +5991,15 @@ Item {
                 spacing: 8
 
                 Text {
+                    Layout.fillWidth: true
+                    Layout.minimumWidth: 0
+                    wrapMode: Text.WrapAtWordBoundaryOrAnywhere
                     text: I18n.t("Import Profiles")
                     font.family: FontSystem.getContentFontBold.name
                     font.weight: Font.Bold
                     font.pixelSize: 23
                     color: root.themeColorToken("mainHex_1f2530", "mainHex_d8e1f0")
                 }
-
-                Item { Layout.fillWidth: true }
 
                 Controls.CircleIconButton {
                     diameter: 32
@@ -6181,270 +6152,173 @@ Item {
                 }
             }
 
-            RowLayout {
+            Controls.SegmentedSelector {
                 Layout.fillWidth: true
-                spacing: 8
-
-                Text {
-                    text: I18n.t("Badge")
-                    color: root.themeColorToken("mainHex_6b778a", "mainHex_9cb0c8")
-                    font.family: FontSystem.contentFontFamily
-                    font.pixelSize: 12
+                compact: root.compact
+                model: [{ key: "", label: "None" }, { key: "Free", label: "Free" }, { key: "Premium", label: "Premium" }]
+                currentKey: {
+                    const badge = root.profileGroupBadgeText(subscriptionGroupField.text).toLowerCase()
+                    return badge === "free" ? "Free" : badge === "premium" ? "Premium" : badge
                 }
-
-                Rectangle {
-                    Layout.preferredWidth: root.compact ? 58 : 76
-                    Layout.preferredHeight: 32
-                    radius: 16
-                    color: root.profileGroupBadgeText(subscriptionGroupField.text).length === 0
-                           ? root.themeColorToken("mainHex_eaf2ff", "mainHex_223753")
-                           : root.themeColorToken("mainHex_ffffff", "mainHex_22324a")
-                    border.width: 0
-                    border.color: root.profileGroupBadgeText(subscriptionGroupField.text).length === 0
-                                  ? root.brandBlue
-                                  : root.themeColorToken("mainHex_dfe7f2", "mainHex_151c32")
-
-                    Text {
-                        anchors.centerIn: parent
-                        text: I18n.t("None")
-                        color: root.profileGroupBadgeText(subscriptionGroupField.text).length === 0
-                               ? root.brandBlue
-                               : root.themeColorToken("mainHex_667487", "mainHex_9bb0cb")
-                        font.family: FontSystem.contentFontFamily
-                        font.pixelSize: 12
-                        font.bold: root.profileGroupBadgeText(subscriptionGroupField.text).length === 0
-                    }
-
-                    MouseArea {
-                        anchors.fill: parent
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: {
-                            const groupName = root.normalizeImportGroupName(subscriptionGroupField.text)
-                            vpnController.ensureProfileGroup(groupName)
-                            vpnController.setProfileGroupBadge(groupName, "")
-                        }
-                    }
+                onActivated: function(key) {
+                    const groupName = root.normalizeImportGroupName(subscriptionGroupField.text)
+                    vpnController.ensureProfileGroup(groupName)
+                    vpnController.setProfileGroupBadge(groupName, key)
                 }
-
-                Rectangle {
-                    Layout.preferredWidth: root.compact ? 62 : 76
-                    Layout.preferredHeight: 32
-                    radius: 16
-                    color: root.profileGroupBadgeText(subscriptionGroupField.text).toLowerCase() === "free"
-                           ? root.themeColorToken("mainHex_eaf2ff", "mainHex_223753")
-                           : root.themeColorToken("mainHex_ffffff", "mainHex_22324a")
-                    border.width: 0
-                    border.color: root.profileGroupBadgeText(subscriptionGroupField.text).toLowerCase() === "free"
-                                  ? root.brandBlue
-                                  : root.themeColorToken("mainHex_dfe7f2", "mainHex_151c32")
-
-                    Text {
-                        anchors.centerIn: parent
-                        text: I18n.t("Free")
-                        color: root.profileGroupBadgeText(subscriptionGroupField.text).toLowerCase() === "free"
-                               ? root.brandBlue
-                               : root.themeColorToken("mainHex_667487", "mainHex_9bb0cb")
-                        font.family: FontSystem.contentFontFamily
-                        font.pixelSize: 12
-                        font.bold: root.profileGroupBadgeText(subscriptionGroupField.text).toLowerCase() === "free"
-                    }
-
-                    MouseArea {
-                        anchors.fill: parent
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: {
-                            const groupName = root.normalizeImportGroupName(subscriptionGroupField.text)
-                            vpnController.ensureProfileGroup(groupName)
-                            vpnController.setProfileGroupBadge(groupName, "Free")
-                        }
-                    }
-                }
-
-                Rectangle {
-                    Layout.preferredWidth: root.compact ? 78 : 92
-                    Layout.preferredHeight: 32
-                    radius: 16
-                    color: root.profileGroupBadgeText(subscriptionGroupField.text).toLowerCase() === "premium"
-                           ? root.themeColorToken("mainHex_efeaff", "mainHex_2a2450")
-                           : root.themeColorToken("mainHex_ffffff", "mainHex_22324a")
-                    border.width: 0
-                    border.color: root.profileGroupBadgeText(subscriptionGroupField.text).toLowerCase() === "premium"
-                                  ? root.themeColor(root.brandViolet, Colors.mainHex_7568d5)
-                                  : root.themeColorToken("mainHex_dfe7f2", "mainHex_151c32")
-
-                    Text {
-                        anchors.centerIn: parent
-                        text: I18n.t("Premium")
-                        color: root.profileGroupBadgeText(subscriptionGroupField.text).toLowerCase() === "premium"
-                               ? root.themeColor(root.brandViolet, Colors.mainHex_b8acff)
-                               : root.themeColorToken("mainHex_667487", "mainHex_9bb0cb")
-                        font.family: FontSystem.contentFontFamily
-                        font.pixelSize: 12
-                        font.bold: root.profileGroupBadgeText(subscriptionGroupField.text).toLowerCase() === "premium"
-                    }
-
-                    MouseArea {
-                        anchors.fill: parent
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: {
-                            const groupName = root.normalizeImportGroupName(subscriptionGroupField.text)
-                            vpnController.ensureProfileGroup(groupName)
-                            vpnController.setProfileGroupBadge(groupName, "Premium")
-                        }
-                    }
-                }
-
-                Item { Layout.fillWidth: true }
             }
 
-            RowLayout {
+            ColumnLayout {
                 Layout.fillWidth: true
-                spacing: 8
-                visible: root.width >= 620
+                spacing: 10
 
-                Rectangle {
-                    radius: 10
-                    Layout.preferredHeight: 28
-                    Layout.preferredWidth: groupStateText.implicitWidth + 18
-                    color: root.profileGroupEnabled(subscriptionGroupField.text)
-                           ? root.themeColorToken("mainHex_e8f7ef", "mainHex_173c2f")
-                           : root.themeColorToken("mainHex_fff0f0", "mainHex_3b2631")
-                    border.width: 0
-                    border.color: root.profileGroupEnabled(subscriptionGroupField.text)
-                                  ? root.themeColorToken("mainHex_b7e4cb", "mainHex_3f8569")
-                                  : root.themeColorToken("mainHex_f2c6c6", "mainHex_7d5062")
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 8
+
+                    ProfileStatusChip {
+                        label: I18n.t(root.profileGroupEnabled(importPopup.targetGroupName) ? "Group Enabled" : "Group Disabled")
+                        textColor: root.profileGroupEnabled(importPopup.targetGroupName)
+                            ? (Colors.lightMode ? Colors.mainHex_15803d : Colors.dsSuccess) : Colors.dsTextMuted
+                        fillColor: root.profileGroupEnabled(importPopup.targetGroupName) ? Colors.successBack : Colors.dsSurfaceSoft
+                    }
+
+                    Item { Layout.fillWidth: true }
 
                     Text {
-                        id: groupStateText
-                        anchors.centerIn: parent
-                        text: I18n.t(root.profileGroupEnabled(subscriptionGroupField.text) ? "Group Enabled" : "Group Disabled")
-                        color: root.profileGroupEnabled(subscriptionGroupField.text)
-                               ? root.themeColorToken("mainHex_2c8b57", "mainHex_5adf97")
-                               : root.themeColorToken("mainHex_bf4d4d", "mainHex_ff8e8e")
+                        text: I18n.t("Groups: %1", [I18n.ltr(root.importSelectableGroups().length)])
+                        color: Colors.dsTextMuted
                         font.family: FontSystem.contentFontFamily
-                        font.pixelSize: 11
+                        font.pixelSize: Typography.uiBodySm
                     }
                 }
 
                 Rectangle {
                     Layout.fillWidth: true
-                    implicitHeight: 38
+                    implicitHeight: importGroupOptionsGrid.implicitHeight + 24
                     radius: 12
-                    color: root.themeColorToken("mainHex_f7f9fd", "mainHex_151c32")
-                    border.width: 0
-                    border.color: root.themeColorToken("mainHex_dce4f2", "mainHex_151c32")
+                    color: Colors.dsSurfaceSoft
+                    border.width: 1
+                    border.color: Colors.dsBorderSoft
+                    LayoutMirroring.enabled: false
+                    LayoutMirroring.childrenInherit: true
 
-                    RowLayout {
-                        Layout.fillWidth: true
-                        anchors.leftMargin: 10
-                        anchors.rightMargin: 10
-                        spacing: 10
+                    GridLayout {
+                        id: importGroupOptionsGrid
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        anchors.top: parent.top
+                        anchors.margins: 12
+                        columns: width >= 520 ? 3 : (width >= 280 ? 2 : 1)
+                        uniformCellWidths: true
+                        layoutDirection: I18n.isRtl ? Qt.RightToLeft : Qt.LeftToRight
+                        columnSpacing: 12
+                        rowSpacing: 8
 
                         Controls.Switch {
-                            checked: root.profileGroupEnabled(subscriptionGroupField.text)
-                            onToggled: {
-                                const groupName = root.normalizeImportGroupName(subscriptionGroupField.text)
-                                vpnController.setProfileGroupEnabled(groupName, checked)
-                            }
-                            title: I18n.t("Enabled")
-
+                            Layout.fillWidth: true
+                            Layout.minimumWidth: 0
+                            Layout.minimumHeight: 44
+                            title: "Enabled"
+                            font.pixelSize: Typography.uiBodySm
+                            Accessible.name: I18n.t("Enabled")
+                            checked: root.profileGroupEnabled(importPopup.targetGroupName)
+                            onToggled: vpnController.setProfileGroupEnabled(importPopup.targetGroupName, checked)
                         }
 
                         Controls.Switch {
-                            checked: root.profileGroupExclusive(subscriptionGroupField.text)
-                            onToggled: {
-                                const groupName = root.normalizeImportGroupName(subscriptionGroupField.text)
-                                vpnController.setProfileGroupExclusive(groupName, checked)
-                            }
-                            title: I18n.t("Exclusive")
-
+                            Layout.fillWidth: true
+                            Layout.minimumWidth: 0
+                            Layout.minimumHeight: 44
+                            title: "Exclusive"
+                            font.pixelSize: Typography.uiBodySm
+                            Accessible.name: I18n.t("Exclusive")
+                            checked: root.profileGroupExclusive(importPopup.targetGroupName)
+                            enabled: root.profileGroupEnabled(importPopup.targetGroupName)
+                            onToggled: vpnController.setProfileGroupExclusive(importPopup.targetGroupName, checked)
                         }
 
-                        Rectangle {
-                            Layout.preferredWidth: 128
-                            Layout.preferredHeight: 28
-                            radius: 9
-                            color: root.themeColorToken("mainHex_ffffff", "mainHex_22324a")
-                            border.width: 0
-                            border.color: root.themeColorToken("mainHex_d5deec", "mainHex_151c32")
+                        RowLayout {
+                            Layout.fillWidth: true
+                            Layout.minimumWidth: 0
+                            Layout.columnSpan: importGroupOptionsGrid.columns === 2 ? 2 : 1
+                            layoutDirection: I18n.isRtl ? Qt.RightToLeft : Qt.LeftToRight
+                            spacing: 8
 
-                            TextField {
-                                id: importGroupBadgeField
-                                anchors.fill: parent
-                                anchors.leftMargin: 8
-                                anchors.rightMargin: 8
-                                padding: 0
-                                clip: true
-                                placeholderText: I18n.t("Badge")
-                                text: root.profileGroupBadgeText(subscriptionGroupField.text)
-                                color: root.themeColorToken("mainHex_3b4a61", "mainHex_d0ddf0")
+                            Text {
+                                text: I18n.t("Badge")
+                                color: Colors.dsTextMuted
                                 font.family: FontSystem.contentFontFamily
-                                font.pixelSize: 12
-                                background: null
-                                onEditingFinished: {
-                                    const groupName = root.normalizeImportGroupName(subscriptionGroupField.text)
-                                    vpnController.setProfileGroupBadge(groupName, text)
+                                font.pixelSize: Typography.uiBodySm
+                            }
+                            Controls.TextField {
+                                id: importGroupBadgeField
+                                Layout.fillWidth: true
+                                Layout.minimumWidth: 0
+                                Layout.minimumHeight: 44
+                                placeholderText: I18n.t("Optional")
+                                Accessible.name: I18n.t("Badge")
+                                text: root.profileGroupBadgeText(importPopup.targetGroupName)
+                                font.pixelSize: Typography.uiBody
+                                cornerRadius: 10
+                                selectByMouse: true
+                                onEditingFinished: vpnController.setProfileGroupBadge(importPopup.targetGroupName, text)
+                                onActiveFocusChanged: {
+                                    if (activeFocus)
+                                        Qt.callLater(function() { importFlick.revealItem(importGroupBadgeField) })
                                 }
                             }
                         }
-
-                        Text {
-                            visible: root.profileGroupBadgeText(subscriptionGroupField.text).length > 0
-                            text: "• " + root.profileGroupBadgeText(subscriptionGroupField.text)
-                            color: root.themeColorToken("mainHex_4d6691", "mainHex_9fc3f2")
-                            font.family: FontSystem.contentFontFamily
-                            font.pixelSize: 12
-                            font.bold: true
-                        }
                     }
-                }
-
-                Item { Layout.fillWidth: true }
-
-                Text {
-                    text: I18n.t("Groups: %1", [I18n.ltr(root.importSelectableGroups().length)])
-                    color: root.themeColorToken("mainHex_90a0b5", "mainHex_9fb4cd")
-                    font.family: FontSystem.contentFontFamily
-                    font.pixelSize: 11
                 }
             }
 
             Rectangle {
                 Layout.fillWidth: true
-                implicitHeight: 36
+                implicitHeight: importTargetColumn.implicitHeight + 20
                 radius: 10
-                color: root.themeColorToken("mainHex_eef4ff", "mainHex_223753")
-                border.width: 0
-                border.color: root.themeColorToken("mainHex_d2def4", "mainHex_151c32")
+                color: Colors.dsPrimaryTint
 
-                RowLayout {
-                    anchors.fill: parent
-                    anchors.leftMargin: 10
-                    anchors.rightMargin: 10
-                    spacing: 8
+                ColumnLayout {
+                    id: importTargetColumn
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.top: parent.top
+                    anchors.margins: 10
+                    spacing: 6
 
-                    Text {
-                        text: I18n.t("Import Target Group:")
-                        color: root.themeColorToken("mainHex_5f6f86", "mainHex_9bb0cb")
-                        font.family: FontSystem.contentFontFamily
-                        font.pixelSize: 12
-                    }
-
+                    // Let the drawer assign the width before the labels wrap;
+                    // neither label feeds a width limit back into its layout.
                     Text {
                         Layout.fillWidth: true
-                        text: importPopup.targetGroupName
-                        color: root.themeColorToken("mainHex_2c5eaf", "mainHex_8ab6ff")
-                        font.family: FontSystem.getContentFontBold.name
-                        font.pixelSize: 12
-                        elide: Text.ElideRight
-                    }
-
-                    Text {
-                        visible: root.width >= 620
-                        text: I18n.t("All pasted profiles/subscriptions will be saved here.")
-                        color: root.themeColorToken("mainHex_7d8ea7", "mainHex_9eb2cb")
+                        Layout.minimumWidth: 0
+                        text: I18n.t("Import Target Group:")
+                        color: Colors.dsTextMuted
                         font.family: FontSystem.contentFontFamily
-                        font.pixelSize: 11
+                        font.pixelSize: Typography.uiBodySm
+                        wrapMode: Text.WrapAtWordBoundaryOrAnywhere
+                        LayoutMirroring.enabled: false
+                        horizontalAlignment: I18n.isRtl ? Text.AlignRight : Text.AlignLeft
+                    }
+                    Text {
+                        Layout.fillWidth: true
+                        Layout.minimumWidth: 0
+                        text: I18n.ltr(I18n.t(importPopup.targetGroupName))
+                        textFormat: Text.PlainText
+                        color: Colors.dsLinkIconBlue
+                        font.family: FontSystem.contentFontFamily
+                        font.weight: Font.DemiBold
+                        font.pixelSize: Typography.uiBody
+                        wrapMode: Text.WrapAtWordBoundaryOrAnywhere
+                        LayoutMirroring.enabled: false
+                        horizontalAlignment: I18n.isRtl ? Text.AlignRight : Text.AlignLeft
+                    }
+                    Text {
+                        Layout.fillWidth: true
+                        text: I18n.t("All pasted profiles/subscriptions will be saved here.")
+                        color: Colors.dsTextMuted
+                        font.family: FontSystem.contentFontFamily
+                        font.pixelSize: Typography.uiBodySm
+                        wrapMode: Text.WordWrap
                     }
                 }
             }
@@ -6469,6 +6343,7 @@ Item {
                             text: I18n.t("Manage Groups")
                             color: root.themeColorToken("mainHex_5f6f86", "mainHex_9bb0cb")
                             font.family: FontSystem.getContentFontBold.name
+                            font.weight: Font.Bold
                             font.pixelSize: 12
                         }
                         Item { Layout.fillWidth: true }
@@ -6484,6 +6359,7 @@ Item {
                     }
 
                     ListView {
+                        id: importGroupList
                         Layout.fillWidth: true
                         Layout.fillHeight: true
                         clip: true
@@ -6493,23 +6369,19 @@ Item {
 
                         delegate: Rectangle {
                             required property var modelData
-                            readonly property string groupName: (typeof name !== "undefined" && name !== null
-                                                                 && String(name).trim().length > 0)
-                                                                ? String(name)
-                                                                : ((modelData && modelData.name) ? String(modelData.name) : "")
-                            readonly property bool groupEnabled: (typeof enabled !== "undefined")
-                                                                 ? (enabled !== false)
-                                                                 : !(modelData && modelData.enabled === false)
-                            readonly property bool groupExclusive: (typeof exclusive !== "undefined")
-                                                                   ? (exclusive === true)
-                                                                   : (modelData && modelData.exclusive === true)
-                            readonly property string groupBadge: (typeof badge !== "undefined" && badge !== null)
-                                                                 ? String(badge)
-                                                                 : ((modelData && modelData.badge) ? String(modelData.badge) : "")
+                            readonly property string groupName: modelData && modelData.name ? String(modelData.name) : ""
+                            readonly property bool groupEnabled: !(modelData && modelData.enabled === false)
+                            readonly property bool groupExclusive: !!(modelData && modelData.exclusive === true)
+                            readonly property string groupBadge: modelData && modelData.badge ? String(modelData.badge) : ""
+                            readonly property real scrollInset: !root.compact && importGroupList.contentHeight > importGroupList.height
+                                ? importGroupScrollBar.width + 6 : 0
                             readonly property bool selectedGroup: importPopup.selectedManageGroup.toLowerCase() === groupName.toLowerCase()
 
-                            width: ListView.view.width - 16
-                            height: groupName.toLowerCase() === "all" ? 0 : 64
+                            x: I18n.isRtl ? scrollInset : 0
+                            width: Math.max(0, ListView.view.width - scrollInset)
+                            height: groupName.toLowerCase() === "all" ? 0 : managedGroupGrid.implicitHeight + 20
+                            LayoutMirroring.enabled: false
+                            LayoutMirroring.childrenInherit: true
                             visible: groupName.toLowerCase() !== "all"
                             radius: 10
                             color: selectedGroup
@@ -6520,16 +6392,24 @@ Item {
                                           ? root.themeColorToken("mainHex_3d7ae6", "mainHex_5f95f2")
                                           : root.themeColorToken("mainHex_dee6f3", "mainHex_151c32")
 
-                            RowLayout {
-                                anchors.fill: parent
-                                anchors.leftMargin: 8
-                                anchors.rightMargin: 8
-                                spacing: 8
+                            GridLayout {
+                                id: managedGroupGrid
+                                readonly property bool wideRow: width >= 560
+                                anchors.left: parent.left
+                                anchors.right: parent.right
+                                anchors.top: parent.top
+                                anchors.margins: 10
+                                columns: wideRow ? 5 : (width < 360 ? 1 : 2)
+                                columnSpacing: 10
+                                rowSpacing: 8
+                                layoutDirection: I18n.isRtl ? Qt.RightToLeft : Qt.LeftToRight
 
                                 Item {
+                                    Layout.fillWidth: true
+                                    Layout.minimumWidth: 0
                                     Layout.preferredWidth: 128
-                                    Layout.fillHeight: true
-                                    implicitHeight: 28
+                                    Layout.preferredHeight: 36
+                                    Layout.columnSpan: managedGroupGrid.wideRow ? 1 : managedGroupGrid.columns
                                     MouseArea {
                                         anchors.fill: parent
                                         hoverEnabled: true
@@ -6543,7 +6423,8 @@ Item {
 
                                     Text {
                                         anchors.fill: parent
-                                        text: groupName
+                                        text: I18n.ltr(I18n.t(groupName))
+                                        horizontalAlignment: I18n.isRtl ? Text.AlignRight : Text.AlignLeft
                                         color: root.themeColorToken("mainHex_2b3648", "mainHex_d7e4f6")
                                         font.family: FontSystem.contentFontFamily
                                         font.pixelSize: 12
@@ -6567,27 +6448,24 @@ Item {
                                     onToggled: vpnController.setProfileGroupExclusive(groupName, checked)
                                 }
 
-                                Item { Layout.fillWidth: true }
-
-                                TextField {
+                                Controls.TextField {
                                     Layout.fillWidth: true
+                                    Layout.minimumWidth: 0
+                                    Layout.preferredWidth: 140
+                                    Layout.preferredHeight: 36
                                     placeholderText: I18n.t("Badge")
+                                    Accessible.name: I18n.t("Badge")
                                     text: groupBadge
                                     selectByMouse: true
-                                    color: root.themeColorToken("mainHex_3b4a61", "mainHex_d0ddf0")
-                                    font.family: FontSystem.contentFontFamily
-                                    font.pixelSize: 12
-                                    background: Rectangle {
-                                        radius: 8
-                                        color: root.themeColorToken("mainHex_f8fbff", "mainHex_22324a")
-                                        border.width: 0
-                                        border.color: root.themeColorToken("mainHex_d5deec", "mainHex_151c32")
-                                    }
+                                    font.pixelSize: Typography.uiBodySm
+                                    cornerRadius: 10
                                     onEditingFinished: vpnController.setProfileGroupBadge(groupName, text)
                                 }
 
                                 Controls.CircleIconButton {
-                                    diameter: 24
+                                    diameter: 30
+                                    Layout.alignment: I18n.isRtl ? Qt.AlignLeft : Qt.AlignRight
+                                    accessibleName: I18n.t("Remove")
                                     iconText: root.iconTrash
                                     iconFontFamily: root.faSolid
                                     iconPixelSize: 10
@@ -6599,31 +6477,57 @@ Item {
 
                         }
 
-                        ScrollBar.vertical: ScrollBar { }
+                        ScrollBar.vertical: ScrollBar {
+                            id: importGroupScrollBar
+                            policy: ScrollBar.AsNeeded
+                        }
                     }
                 }
             }
 
-            Controls.TextArea {
-                id: importTextArea
+            Basic.ScrollView {
+                id: importEditorScroll
                 Layout.fillWidth: true
-                Layout.preferredHeight: root.compact ? 180 : (importPopup.shortViewport ? 150 : 180)
+                Layout.minimumWidth: 0
+                // The viewport owns its size; the editor only determines the
+                // scrollable content size, never the viewport's implicit size.
+                implicitWidth: 240
+                implicitHeight: root.compact ? Math.max(128, Math.min(180, importFlick.height * 0.25))
+                                             : (importPopup.shortViewport ? 150 : 180)
+                Layout.preferredHeight: implicitHeight
                 Layout.minimumHeight: 128
-                fillColor: root.themeColorToken("mainHex_f8fbff", "mainHex_8a18283d")
-                strokeColor: root.themeColorToken("mainHex_d8e2f0", "mainHex_3f587a")
-                focusColor: root.themeColorToken("mainHex_8bb8ff", "mainHex_6ba0ff")
-                placeholderText: I18n.t("Paste links/configs here (multi-line supported)")
-                wrapMode: TextEdit.WrapAtWordBoundaryOrAnywhere
-                text: root.importDraft
-                onTextChanged: root.importDraft = text
-                onActiveFocusChanged: {
-                    if (activeFocus)
-                        Qt.callLater(function() { importFlick.revealItem(importTextArea) })
+                contentWidth: availableWidth
+                contentHeight: importTextArea.height
+                clip: true
+                ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
+
+                background: Rectangle {
+                    radius: Metrics.radiusMd
+                    color: Colors.dsSurface
+                    border.width: 1
+                    border.color: importTextArea.activeFocus ? Colors.dsPrimarySolid : Colors.dsBorder
+                }
+
+                Controls.TextArea {
+                    id: importTextArea
+                    width: importEditorScroll.availableWidth
+                    height: Math.max(implicitHeight, importEditorScroll.availableHeight)
+                    background: Item {}
+                    placeholderText: I18n.t("Paste links/configs here (multi-line supported)")
+                    wrapMode: TextEdit.WrapAtWordBoundaryOrAnywhere
+                    text: root.importDraft
+                    onTextChanged: root.importDraft = text
+                    onActiveFocusChanged: {
+                        if (activeFocus)
+                            Qt.callLater(function() { importFlick.revealItem(importEditorScroll) })
+                    }
                 }
             }
 
             RowLayout {
                 Layout.fillWidth: true
+                visible: vpnController.subscriptionBusy || root.importStatusText.length > 0
+                         || vpnController.subscriptionMessage.length > 0
                 spacing: 8
 
                 BusyIndicator {
@@ -6651,7 +6555,7 @@ Item {
                                  : root.themeColorToken("mainHex_6f7f95", "mainHex_9eb2cb")))
                     font.family: FontSystem.contentFontFamily
                     font.pixelSize: 12
-                    elide: Text.ElideRight
+                    wrapMode: Text.WrapAtWordBoundaryOrAnywhere
                 }
             }
 
@@ -6734,6 +6638,7 @@ Item {
         }
     }
     }
+    }
 
     Item {
         id: legacyWideDashboard
@@ -6754,6 +6659,7 @@ Item {
                 text: I18n.t("<strong>GENY</strong>CONNECT")
                 color: Colors.textPrimary
                 font.family: FontSystem.getContentFontBold.name
+                font.weight: Font.Bold
                 font.pixelSize: 20
             }
 
@@ -7426,9 +7332,10 @@ Item {
             anchors.right: parent.right
             anchors.top: parent.top
             anchors.bottom: compactBottomNav.top
+            anchors.topMargin: root.safeTopInset
             clip: true
             contentWidth: width
-            contentHeight: compactHomeContent.implicitHeight + root.mobileHomeTopMargin + root.mobileHomeBottomMargin
+            contentHeight: compactHomeContent.implicitHeight + compactHomeContent.y + root.mobileHomeBottomMargin
             boundsBehavior: Flickable.StopAtBounds
             flickableDirection: Flickable.VerticalFlick
             interactive: contentHeight > height
@@ -7436,9 +7343,9 @@ Item {
             ColumnLayout {
                 id: compactHomeContent
                 width: Math.max(0, compactHomeFlick.width - (root.mobileHomeHorizontalMargin * 2))
-                height: Math.max(implicitHeight, compactHomeFlick.height - root.mobileHomeTopMargin - root.mobileHomeBottomMargin)
+                height: Math.max(implicitHeight, compactHomeFlick.height - y - root.mobileHomeBottomMargin)
                 x: root.mobileHomeHorizontalMargin
-                y: root.mobileHomeTopMargin
+                y: root.mobileHomeTopMargin - root.safeTopInset
                 spacing: root.mobileHomeSectionGap
 
                 RowLayout {
@@ -7788,95 +7695,106 @@ Item {
                     Layout.maximumHeight: root.mobileLandscape ? 10 : (root.mobilePlatform ? 26 : 34)
                 }
 
-                Rectangle {
-                    Layout.alignment: Qt.AlignHCenter
+                Basic.Button {
+                    id: homeProfileButton
                     Layout.fillWidth: true
-                    Layout.preferredHeight: root.mobileHomeInfoPillHeight
-                    radius: 23
-                    color: root.themeColorToken("mainHex_f5f7fb", "mainHex_182230")
+                    Layout.minimumWidth: 0
+                    implicitHeight: Math.max(64, implicitContentHeight + topPadding + bottomPadding)
+                    leftPadding: 12
+                    rightPadding: 12
+                    topPadding: 10
+                    bottomPadding: 10
+                    hoverEnabled: !root.mobilePlatform
+                    focusPolicy: Qt.StrongFocus
+                    Accessible.name: I18n.t("Server Location") + ", " + root.selectedServerLabel
+                    LayoutMirroring.enabled: false
+                    LayoutMirroring.childrenInherit: true
+                    onClicked: {
+                        root.profilePopupAnchor = null
+                        profilePopup.open()
+                    }
 
-                    RowLayout {
-                        anchors.fill: parent
-                        anchors.leftMargin: 14
-                        anchors.rightMargin: 14
+                    background: Rectangle {
+                        radius: Metrics.radiusMd
+                        color: homeProfileButton.down || homeProfileButton.hovered ? Colors.dsSurfaceSoft : Colors.dsSurface
+                        border.width: homeProfileButton.visualFocus ? 2 : 1
+                        border.color: homeProfileButton.visualFocus ? Colors.dsPrimarySolid : Colors.dsBorderSoft
+                    }
+
+                    contentItem: RowLayout {
+                        layoutDirection: I18n.isRtl ? Qt.RightToLeft : Qt.LeftToRight
                         spacing: 10
 
-                        Rectangle {
+                        Text {
                             Layout.preferredWidth: 24
-                            Layout.preferredHeight: 24
-                            radius: 12
-                            color: vpnController.connected
-                                   ? root.themeColorToken("mainHex_e8faef", "mainHex_173323")
-                                   : root.themeColorToken("mainHex_f1edff", "mainHex_241f3d")
-
-                            Text {
-                                anchors.centerIn: parent
-                                text: root.iconShield
-                                color: vpnController.connected ? Colors.mainHex_22a557 : root.themeColor(root.brandViolet, Colors.mainHex_a88dff)
-                                font.family: root.faSolid
-                                font.pixelSize: 11
-                            }
+                            text: root.iconShield
+                            color: vpnController.connected ? Colors.dsSuccess : Colors.dsLinkIconBlue
+                            font.family: root.faSolid
+                            font.pixelSize: 18
+                            horizontalAlignment: Text.AlignHCenter
                         }
 
                         ColumnLayout {
                             Layout.fillWidth: true
-                            spacing: 0
+                            Layout.minimumWidth: 0
+                            spacing: 4
 
                             Text {
                                 Layout.fillWidth: true
-                                text: selectedServerLabel
-                                color: root.themeColorToken("mainHex_263248", "mainHex_d4e2f5")
-                                font.family: FontSystem.getContentFontBold.name
-                                font.pixelSize: 13
-                                font.bold: true
-                                elide: Text.ElideRight
-                            }
-
-                            Text {
-                                Layout.fillWidth: true
-                                text: root.infoIpText()
-                                color: root.themeColorToken("mainHex_65758b", "mainHex_9eb4ce")
+                                Layout.minimumWidth: 0
+                                text: I18n.ltr(root.selectedServerLabel)
+                                textFormat: Text.PlainText
+                                color: Colors.dsText
                                 font.family: FontSystem.contentFontFamily
-                                font.pixelSize: 11
-                                elide: Text.ElideMiddle
-                            }
-                        }
-
-                        RowLayout {
-                            Layout.alignment: Qt.AlignVCenter
-                            spacing: 5
-
-                            Controls.SignalBars {
-                                Layout.preferredWidth: 20
-                                Layout.preferredHeight: 18
-                                level: root.currentProfileSignalLevel()
-                                activeColor: root.currentProfileSignalColor()
-                                inactiveColor: root.themeColorToken("mainHex_d5deeb", "mainHex_33465f")
+                                font.pixelSize: Typography.uiBodyLg
+                                font.weight: Font.DemiBold
+                                horizontalAlignment: I18n.isRtl ? Text.AlignRight : Text.AlignLeft
+                                wrapMode: Text.WrapAtWordBoundaryOrAnywhere
                             }
 
                             Text {
-                                text: I18n.localizeDisplay(root.currentProfilePingText())
-                                color: root.currentProfileSignalColor()
-                                font.family: FontSystem.getContentFontBold.name
-                                font.pixelSize: 10
-                                font.bold: true
+                                Layout.fillWidth: true
+                                Layout.minimumWidth: 0
+                                text: root.infoIpText()
+                                textFormat: Text.PlainText
+                                color: Colors.dsTextMuted
+                                font.family: FontSystem.contentFontFamily
+                                font.pixelSize: Typography.uiBodySm
+                                horizontalAlignment: I18n.isRtl ? Text.AlignRight : Text.AlignLeft
+                                wrapMode: Text.WrapAtWordBoundaryOrAnywhere
+                            }
+
+                            RowLayout {
+                                Layout.fillWidth: true
+                                Layout.minimumWidth: 0
+                                layoutDirection: I18n.isRtl ? Qt.RightToLeft : Qt.LeftToRight
+                                spacing: 6
+
+                                Controls.SignalBars {
+                                    Layout.preferredWidth: 20
+                                    Layout.preferredHeight: 18
+                                    level: root.currentProfileSignalLevel()
+                                    activeColor: root.currentProfileSignalColor()
+                                    inactiveColor: Colors.dsBorderStrong
+                                }
+                                Text {
+                                    Layout.fillWidth: true
+                                    Layout.minimumWidth: 0
+                                    text: I18n.localizeDisplay(root.currentProfilePingText())
+                                    color: root.currentProfileSignalColor()
+                                    font.family: FontSystem.contentFontFamily
+                                    font.pixelSize: Typography.uiBodySm
+                                    horizontalAlignment: I18n.isRtl ? Text.AlignRight : Text.AlignLeft
+                                    wrapMode: Text.WrapAtWordBoundaryOrAnywhere
+                                }
                             }
                         }
 
                         Text {
                             text: root.iconChevronDown
-                            color: root.themeColorToken("mainHex_a0afc4", "mainHex_90a5bf")
+                            color: Colors.dsTextMuted
                             font.family: root.faSolid
-                            font.pixelSize: 11
-                        }
-                    }
-
-                    MouseArea {
-                        anchors.fill: parent
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: {
-                            root.profilePopupAnchor = null
-                            profilePopup.open()
+                            font.pixelSize: 12
                         }
                     }
                 }
@@ -7891,17 +7809,20 @@ Item {
 
                 RowLayout {
                 Layout.fillWidth: true
-                Layout.preferredHeight: root.mobileHomeStatsHeight
-                Layout.minimumHeight: root.mobileHomeStatsHeight
-                Layout.maximumHeight: root.mobileHomeStatsHeight
+                Layout.preferredHeight: Math.max(root.mobileHomeStatsHeight,
+                                                downTrafficColumn.implicitHeight + 12,
+                                                upTrafficColumn.implicitHeight + 12)
+                Layout.minimumHeight: Layout.preferredHeight
                 spacing: 0
 
                 Item {
                     Layout.fillWidth: true
+                    Layout.preferredWidth: 1
+                    Layout.minimumWidth: 0
                     Layout.fillHeight: true
-                    clip: true
 
                     ColumnLayout {
+                        id: downTrafficColumn
                         anchors.fill: parent
                         anchors.leftMargin: 10
                         anchors.rightMargin: 8
@@ -7928,34 +7849,36 @@ Item {
                                 }
                             }
 
-                            Column {
+                            ColumnLayout {
                                 Layout.fillWidth: true
+                                Layout.minimumWidth: 0
                                 spacing: 2
                                 Text {
+                                    Layout.fillWidth: true
                                     text: I18n.t("Downlink")
-                                    color: root.themeColorToken("mainHex_1b1b1f", "mainHex_cbd9ec")
+                                    color: Colors.dsText
                                     font.family: FontSystem.contentFontFamily
-                                    font.pixelSize: 12
+                                    font.pixelSize: Typography.uiBodySm
+                                    wrapMode: Text.WrapAtWordBoundaryOrAnywhere
                                 }
-                                Row {
-                                    spacing: 4
-                                    Controls.NumberFlowText {
-                                        id: downStatValueText
-                                        width: root.mobileLandscape ? 52 : 56
-                                        text: root.formatSpeedValue(Math.max(0, downRateBytesPerSec), dashboardStatsSettings.speedUnit).value
-                                        color: root.themeColorToken("mainHex_050505", "mainHex_eef4ff")
-                                        fontSize: root.mobileLandscape ? 15 : 16
-                                        bold: true
-                                        animated: root.powerVisualAnimationsEnabled
-                                    }
-                                    Text {
-                                        width: root.mobileLandscape ? 38 : 42
-                                        text: I18n.t(root.formatSpeedValue(Math.max(0, downRateBytesPerSec), dashboardStatsSettings.speedUnit).unit)
-                                        color: root.themeColorToken("mainHex_5b5d66", "mainHex_9db0c9")
-                                        font.family: FontSystem.contentFontFamily
-                                        font.pixelSize: root.mobileLandscape ? 11 : 12
-                                        elide: Text.ElideRight
-                                    }
+                                Controls.NumberFlowText {
+                                    id: downStatValueText
+                                    Layout.fillWidth: true
+                                    Layout.minimumWidth: 0
+                                    text: root.formatSpeedValue(Math.max(0, downRateBytesPerSec), dashboardStatsSettings.speedUnit).value
+                                    color: Colors.dsText
+                                    fontSize: 16
+                                    bold: true
+                                    animated: root.powerVisualAnimationsEnabled
+                                }
+                                Text {
+                                    Layout.fillWidth: true
+                                    Layout.minimumWidth: 0
+                                    text: I18n.t(root.formatSpeedValue(Math.max(0, downRateBytesPerSec), dashboardStatsSettings.speedUnit).unit)
+                                    color: Colors.dsTextMuted
+                                    font.family: FontSystem.contentFontFamily
+                                    font.pixelSize: Typography.uiCaption
+                                    wrapMode: Text.WrapAtWordBoundaryOrAnywhere
                                 }
                             }
                         }
@@ -8025,10 +7948,12 @@ Item {
 
                 Item {
                     Layout.fillWidth: true
+                    Layout.preferredWidth: 1
+                    Layout.minimumWidth: 0
                     Layout.fillHeight: true
-                    clip: true
 
                     ColumnLayout {
+                        id: upTrafficColumn
                         anchors.fill: parent
                         anchors.leftMargin: 10
                         anchors.rightMargin: 8
@@ -8055,34 +7980,36 @@ Item {
                                 }
                             }
 
-                            Column {
+                            ColumnLayout {
                                 Layout.fillWidth: true
+                                Layout.minimumWidth: 0
                                 spacing: 2
                                 Text {
+                                    Layout.fillWidth: true
                                     text: I18n.t("Uplink")
-                                    color: root.themeColorToken("mainHex_1b1b1f", "mainHex_cbd9ec")
+                                    color: Colors.dsText
                                     font.family: FontSystem.contentFontFamily
-                                    font.pixelSize: 12
+                                    font.pixelSize: Typography.uiBodySm
+                                    wrapMode: Text.WrapAtWordBoundaryOrAnywhere
                                 }
-                                Row {
-                                    spacing: 4
-                                    Controls.NumberFlowText {
-                                        id: upStatValueText
-                                        width: root.mobileLandscape ? 52 : 56
-                                        text: root.formatSpeedValue(Math.max(0, upRateBytesPerSec), dashboardStatsSettings.speedUnit).value
-                                        color: root.themeColorToken("mainHex_050505", "mainHex_eef4ff")
-                                        fontSize: root.mobileLandscape ? 15 : 16
-                                        bold: true
-                                        animated: root.powerVisualAnimationsEnabled
-                                    }
-                                    Text {
-                                        width: root.mobileLandscape ? 38 : 42
-                                        text: I18n.t(root.formatSpeedValue(Math.max(0, upRateBytesPerSec), dashboardStatsSettings.speedUnit).unit)
-                                        color: root.themeColorToken("mainHex_5b5d66", "mainHex_9db0c9")
-                                        font.family: FontSystem.contentFontFamily
-                                        font.pixelSize: root.mobileLandscape ? 11 : 12
-                                        elide: Text.ElideRight
-                                    }
+                                Controls.NumberFlowText {
+                                    id: upStatValueText
+                                    Layout.fillWidth: true
+                                    Layout.minimumWidth: 0
+                                    text: root.formatSpeedValue(Math.max(0, upRateBytesPerSec), dashboardStatsSettings.speedUnit).value
+                                    color: Colors.dsText
+                                    fontSize: 16
+                                    bold: true
+                                    animated: root.powerVisualAnimationsEnabled
+                                }
+                                Text {
+                                    Layout.fillWidth: true
+                                    Layout.minimumWidth: 0
+                                    text: I18n.t(root.formatSpeedValue(Math.max(0, upRateBytesPerSec), dashboardStatsSettings.speedUnit).unit)
+                                    color: Colors.dsTextMuted
+                                    font.family: FontSystem.contentFontFamily
+                                    font.pixelSize: Typography.uiCaption
+                                    wrapMode: Text.WrapAtWordBoundaryOrAnywhere
                                 }
                             }
                         }
@@ -8159,7 +8086,8 @@ Item {
             anchors.right: parent.right
             anchors.bottom: parent.bottom
 
-            height: root.compactBottomNavHeight
+            height: Math.max(root.compactBottomNavVisualHeight, compactNavRow.implicitHeight)
+                    + root.compactBottomNavInset + root.compactBottomNavTopMargin
 
             topLeftRadius: 22
             topRightRadius: 22
@@ -8177,71 +8105,32 @@ Item {
             }
 
             RowLayout {
+                id: compactNavRow
                 anchors.left: parent.left
                 anchors.right: parent.right
                 anchors.top: parent.top
                 anchors.topMargin: root.compactBottomNavTopMargin
-                height: root.compactBottomNavVisualHeight
-                anchors.leftMargin: root.mobileLandscape ? 24 : 42
-                anchors.rightMargin: root.mobileLandscape ? 24 : 42
+                height: Math.max(root.compactBottomNavVisualHeight, implicitHeight)
+                anchors.leftMargin: Metrics.pagePaddingMobile
+                anchors.rightMargin: Metrics.pagePaddingMobile
 
-                Item {
-                    Layout.fillWidth: true
-                    Layout.fillHeight: true
-
-                    Rectangle {
-                        anchors.centerIn: parent
-                        width: 42
-                        height: 42
-                        radius: 21
-                        color: root.themeColorToken("mainHex_3147d0", "mainHex_3e6fff")
-
-                        Text {
-                            anchors.centerIn: parent
-                            text: "\uf015"
-                            color: Colors.mainHex_ffffff
-                            font.family: root.faSolid
-                            font.pixelSize: 15
-                        }
-                    }
+                BottomNavigationButton {
+                    text: I18n.t("Dashboard")
+                    glyph: "\uf015"
+                    selected: true
+                    onClicked: compactHomeFlick.contentY = 0
                 }
 
-                Item {
-                    Layout.fillWidth: true
-                    Layout.fillHeight: true
-
-                    Text {
-                        anchors.centerIn: parent
-                        text: "\uf57d"
-                        color: root.themeColorToken("mainHex_050505", "mainHex_d7e4f6")
-                        font.family: root.faSolid
-                        font.pixelSize: 25
-                    }
-
-                    MouseArea {
-                        anchors.fill: parent
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: profilePopup.open()
-                    }
+                BottomNavigationButton {
+                    text: I18n.t("Profiles")
+                    glyph: "\uf57d"
+                    onClicked: profilePopup.open()
                 }
 
-                Item {
-                    Layout.fillWidth: true
-                    Layout.fillHeight: true
-
-                    Text {
-                        anchors.centerIn: parent
-                        text: "\uf013"
-                        color: root.themeColorToken("mainHex_050505", "mainHex_d7e4f6")
-                        font.family: root.faSolid
-                        font.pixelSize: 24
-                    }
-
-                    MouseArea {
-                        anchors.fill: parent
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: root.openSettingsSection("main")
-                    }
+                BottomNavigationButton {
+                    text: I18n.t("Settings")
+                    glyph: "\uf013"
+                    onClicked: root.openSettingsSection("main")
                 }
             }
         }

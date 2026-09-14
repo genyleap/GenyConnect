@@ -8,6 +8,7 @@
   libglvnd,
   libxkbcommon,
   xray,
+  iproute2,
 }:
 
 assert lib.versionAtLeast qt6.qtbase.version "6.8";
@@ -62,6 +63,7 @@ llvmPackages_18.stdenv.mkDerivation {
       "-DGENYCONNECT_AUTO_DOWNLOAD_WINTUN=OFF"
       "-DGENYCONNECT_BUNDLED_XRAY_PATH=${lib.getExe xray}"
       "-DGENYCONNECT_LINUX_INSTALL_DEPLOY=OFF"
+      "-DGENYCONNECT_LINUX_IP_EXECUTABLE=${lib.getExe' iproute2 "ip"}"
       "-DGENYCONNECT_LLVM_AUTO_SCAN=OFF"
       "-DGENYCONNECT_QT_AUTO_SCAN=OFF"
       "-DGENYCONNECT_TARGET_OS=linux"
@@ -70,6 +72,10 @@ llvmPackages_18.stdenv.mkDerivation {
       "-DGENYCONNECT_USE_MODULES=ON"
       "-DCMAKE_CXX_COMPILER_CLANG_SCAN_DEPS=${llvmPackages_18.clang-tools}/bin/clang-scan-deps"
     ];
+
+  # pkexec removes user PATH entries; the helper uses the compiled store path.
+  # Keep ip available to unprivileged diagnostics and maintenance actions too.
+  qtWrapperArgs = [ "--suffix" "PATH" ":" "${lib.makeBinPath [ iproute2 ]}" ];
 
   postInstall = ''
     rm -f "$out/bin/xray-core"

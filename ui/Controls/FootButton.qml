@@ -32,11 +32,9 @@ Item {
         Text {
             Layout.fillWidth: true
             Layout.fillHeight: true
-            font.family: FontSystem.getAwesomeLight.name
+            font.family: FontSystem.getAwesomeSolid.name
             font.pixelSize: Typography.h2
-            font.weight: Font.ExtraLight
-            font.bold: isSelected ? true : false
-            font.styleName: isSelected ? "Bold" : "Light"
+            font.weight: Font.Black
             verticalAlignment: Text.AlignVCenter
             horizontalAlignment: Text.AlignHCenter
             color: isSelected ? "#ffffff" : "#BEC0C8"
@@ -71,4 +69,3 @@ Item {
         onHoveredChanged: hover();
     }
 }
-

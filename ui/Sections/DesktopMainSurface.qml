@@ -3,6 +3,7 @@
 
 import QtQuick
 import QtQuick.Controls
+import QtQuick.Controls.Basic as Basic
 import QtQuick.Layouts
 import QtQuick.Effects
 import QtCore
@@ -26,15 +27,15 @@ Item {
     required property var dataUsagePopup
     required property var importPopup
 
-    readonly property color pageBg: root.themeColorToken("mainHex_f7f9fc", "mainHex_090b14")
-    readonly property color cardBg: root.themeColorToken("mainHex_ffffff", "mainHex_151c32")
-    readonly property color softBg: root.themeColorToken("mainHex_f3f6fb", "mainHex_20314b")
-    readonly property color borderColor: root.themeColorToken("mainHex_e0e6f0", "mainHex_30435d")
-    readonly property color textStrong: root.themeColorToken("mainHex_0f1622", "mainHex_d8e1f0")
-    readonly property color textMuted: root.themeColorToken("mainHex_667487", "mainHex_9bb0cb")
-    readonly property color accentBlue: root.themeColorToken("mainHex_2f6ff1", "mainHex_7fb0ff")
-    readonly property color accentGreen: root.themeColorToken("mainHex_16a34a", "mainHex_34d18a")
-    readonly property color accentYellow: root.themeColorToken("mainHex_d97706", "mainHex_f7b251")
+    readonly property color pageBg: Colors.dsWindow
+    readonly property color cardBg: Colors.dsSurface
+    readonly property color softBg: Colors.dsSurfaceSoft
+    readonly property color borderColor: Colors.dsBorder
+    readonly property color textStrong: Colors.dsText
+    readonly property color textMuted: Colors.dsTextMuted
+    readonly property color accentBlue: Colors.dsLinkIconBlue
+    readonly property color accentGreen: Colors.dsSuccess
+    readonly property color accentYellow: Colors.dsWarning
     readonly property string logoSource: "qrc:/ui/Resources/image/GenyConnect-Circle.png"
     readonly property bool connected: vpnController.connectionState === ConnectionState.Connected
     readonly property bool connecting: vpnController.connectionState === ConnectionState.Connecting
@@ -214,6 +215,17 @@ Item {
         return currentNavAction() === action
     }
 
+    function revealSidebarItem(item) {
+        const itemTop = item.mapToItem(sidebarNavColumn, 0, 0).y
+        const itemBottom = itemTop + item.height
+        let nextY = sidebarNavFlick.contentY
+        if (itemTop < nextY)
+            nextY = itemTop
+        else if (itemBottom > nextY + sidebarNavFlick.height)
+            nextY = itemBottom - sidebarNavFlick.height
+        sidebarNavFlick.contentY = Math.max(0, Math.min(nextY, Math.max(0, sidebarNavFlick.contentHeight - sidebarNavFlick.height)))
+    }
+
     function closeDrawer(popup) {
         if (popup && popup.visible)
             popup.close()
@@ -309,24 +321,28 @@ Item {
         }
     }
 
-    component TopActionButton: Rectangle {
+    component TopActionButton: Basic.Button {
         id: actionButton
         property string label: ""
         property string glyph: ""
         property color accent: desktop.accentBlue
-        signal clicked()
+        Layout.preferredWidth: Math.max(112, labelText.implicitWidth + 52)
+        Layout.preferredHeight: 40
+        padding: 12
+        hoverEnabled: true
+        focusPolicy: Qt.StrongFocus
+        Accessible.name: I18n.t(label)
 
-        Layout.preferredWidth: Math.max(112, labelText.implicitWidth + 48)
-        Layout.preferredHeight: 38
-        radius: 12
-        color: actionMouse.pressed
-               ? root.themeColorToken("mainHex_eaf2ff", "mainHex_223753")
-               : (actionMouse.containsMouse ? root.themeColorToken("mainHex_f3f6fb", "mainHex_20314b") : desktop.softBg)
-        border.width: 1
-        border.color: actionMouse.containsMouse ? Qt.rgba(accent.r, accent.g, accent.b, 0.26) : "transparent"
+        background: Rectangle {
+            radius: 12
+            color: actionButton.down ? Colors.dsPrimaryTint
+                                    : (actionButton.hovered ? Colors.dsSurfaceElevated : desktop.softBg)
+            border.width: actionButton.activeFocus ? 2 : 1
+            border.color: actionButton.activeFocus ? Colors.dsPrimarySolid
+                                                  : (actionButton.hovered ? desktop.borderColor : "transparent")
+        }
 
-        RowLayout {
-            anchors.centerIn: parent
+        contentItem: RowLayout {
             spacing: 8
 
             Text {
@@ -334,86 +350,86 @@ Item {
                 color: actionButton.accent
                 font.family: root.faSolid
                 font.pixelSize: 15
+                font.weight: Font.Black
             }
 
             Text {
                 id: labelText
                 text: I18n.t(actionButton.label)
                 color: desktop.textStrong
-                font.family: FontSystem.getContentFontBold.name
+                font.family: FontSystem.getContentFontMedium.name
                 font.pixelSize: 13
-                font.bold: true
+                font.weight: Font.Medium
             }
-        }
-
-        MouseArea {
-            id: actionMouse
-            anchors.fill: parent
-            hoverEnabled: true
-            cursorShape: Qt.PointingHandCursor
-            onClicked: actionButton.clicked()
         }
     }
 
-    component SidebarButton: Rectangle {
+    component SidebarButton: Basic.ItemDelegate {
         id: navItem
         property string label: ""
         property string glyph: ""
-        property string action: ""
+        property string navAction: ""
         property bool selected: false
 
         Layout.fillWidth: true
-        Layout.preferredHeight: 48
-        radius: 10
-        topLeftRadius: 0
-        bottomLeftRadius: 0
-        color: selected ? root.themeColorToken("mainHex_eaf2ff", "mainHex_223753")
-                        : (navMouse.containsMouse ? root.themeColorToken("mainHex_f3f6fb", "mainHex_20314b") : "transparent")
-        border.width: selected ? 0 : 1
-        border.color: navMouse.containsMouse ? desktop.borderColor : "transparent"
-
-        Rectangle {
-            visible: selected
-            anchors.left: parent.left
-            anchors.top: parent.top
-            anchors.bottom: parent.bottom
-            width: 3
-            radius: 2
-            color: desktop.accentBlue
+        Layout.preferredHeight: Math.max(52, navLabel.implicitHeight + 24)
+        leftPadding: 12
+        rightPadding: 12
+        topPadding: 10
+        bottomPadding: 10
+        hoverEnabled: true
+        focusPolicy: Qt.StrongFocus
+        text: I18n.t(label)
+        Accessible.name: text
+        onClicked: desktop.openNav(navAction)
+        onActiveFocusChanged: {
+            if (activeFocus)
+                desktop.revealSidebarItem(navItem)
         }
 
-        RowLayout {
-            anchors.fill: parent
-            anchors.leftMargin: 32
-            anchors.rightMargin: 14
-            spacing: 14
+        background: Rectangle {
+            radius: 12
+            color: navItem.selected || navItem.down ? Colors.dsPrimaryTint
+                                                   : (navItem.hovered ? Colors.dsSurfaceSoft : "transparent")
+            border.width: navItem.activeFocus ? 2 : 1
+            border.color: navItem.activeFocus ? Colors.dsPrimarySolid
+                                             : (navItem.selected ? Qt.rgba(desktop.accentBlue.r, desktop.accentBlue.g, desktop.accentBlue.b, 0.20)
+                                                                 : (navItem.hovered ? Colors.dsBorderSoft : "transparent"))
+        }
 
-            Text {
-                text: navItem.glyph
-                color: navItem.selected ? desktop.accentBlue : desktop.textMuted
-                font.family: root.faSolid
-                font.pixelSize: 16
-                Layout.preferredWidth: 20
-                horizontalAlignment: Text.AlignHCenter
+        contentItem: RowLayout {
+            spacing: 12
+
+            Rectangle {
+                Layout.preferredWidth: 30
+                Layout.preferredHeight: 30
+                radius: 9
+                color: navItem.selected ? Qt.rgba(desktop.accentBlue.r, desktop.accentBlue.g, desktop.accentBlue.b, Colors.lightMode ? 0.09 : 0.13) : "transparent"
+
+                Text {
+                    anchors.centerIn: parent
+                    text: navItem.glyph
+                    color: navItem.selected ? desktop.accentBlue : desktop.textMuted
+                    font.family: root.faSolid
+                    font.pixelSize: 16
+                    font.weight: Font.Black
+                }
             }
 
             Text {
+                id: navLabel
                 Layout.fillWidth: true
-                text: I18n.t(navItem.label)
+                text: navItem.text
                 color: navItem.selected ? desktop.accentBlue : desktop.textStrong
-                font.family: FontSystem.getContentFontBold.name
+                font.family: navItem.selected ? FontSystem.getContentFontBold.name : FontSystem.getContentFontMedium.name
                 font.pixelSize: 14
-                font.bold: true
-                elide: Text.ElideRight
+                font.weight: navItem.selected ? Font.Bold : Font.Medium
+                wrapMode: Text.WordWrap
+                // The row inherits mirroring; text alignment is set once here.
+                LayoutMirroring.enabled: false
+                horizontalAlignment: I18n.isRtl ? Text.AlignRight : Text.AlignLeft
+                verticalAlignment: Text.AlignVCenter
             }
-        }
-
-        MouseArea {
-            id: navMouse
-            anchors.fill: parent
-            hoverEnabled: true
-            cursorShape: Qt.PointingHandCursor
-            onClicked: desktop.openNav(navItem.action)
         }
     }
 
@@ -451,6 +467,8 @@ Item {
                 font.family: FontSystem.contentFontFamily
                 font.pixelSize: 12
                 elide: Text.ElideRight
+                LayoutMirroring.enabled: false
+                horizontalAlignment: I18n.isRtl ? Text.AlignRight : Text.AlignLeft
             }
 
             Text {
@@ -460,10 +478,8 @@ Item {
                              ? FontSystem.technicalFontFamily : FontSystem.contentFontFamily
                 font.pixelSize: 12
                 font.bold: sessionRow.emphasized
-                horizontalAlignment: sessionRow.technicalValue
-                                     ? Text.AlignLeft
-                                     : (I18n.isRtl ? Text.AlignRight : Text.AlignLeft)
-                LayoutMirroring.enabled: !sessionRow.technicalValue
+                horizontalAlignment: I18n.isRtl ? Text.AlignLeft : Text.AlignRight
+                LayoutMirroring.enabled: false
                 elide: Text.ElideRight
                 Layout.maximumWidth: 124
             }
@@ -487,6 +503,8 @@ Item {
         font.pixelSize: 11
         font.bold: true
         font.capitalization: Font.AllUppercase
+        LayoutMirroring.enabled: false
+        horizontalAlignment: I18n.isRtl ? Text.AlignRight : Text.AlignLeft
     }
 
     component MetricSummaryCard: Rectangle {
@@ -686,6 +704,7 @@ Item {
                         LayoutMirroring.enabled: false
                         color: root.themeColor(root.brandInk, Colors.mainHex_e5edf9)
                         font.family: I18n.language === "fa" ? FontSystem.getContentFontBold.name : FontSystem.technicalFontFamily
+                        font.weight: I18n.language === "fa" ? Font.Bold : Font.Normal
                         font.pixelSize: 20
                         elide: Text.ElideRight
                     }
@@ -694,21 +713,21 @@ Item {
                 Item { Layout.fillWidth: true }
 
                 TopActionButton {
-                    label: I18n.t("Quick Connect")
+                    label: "Quick Connect"
                     glyph: "\uf0e7"
                     accent: accentBlue
                     onClicked: root.handleConnectAction()
                 }
 
                 TopActionButton {
-                    label: I18n.t("Diagnostics")
+                    label: "Diagnostics"
                     glyph: root.iconSpeed
                     accent: Colors.dsLinkIconPurple
                     onClicked: openDiagnosticsDrawer()
                 }
 
                 TopActionButton {
-                    label: I18n.t("Update")
+                    label: "Update"
                     glyph: "\uf019"
                     accent: accentBlue
                     onClicked: {
@@ -717,27 +736,19 @@ Item {
                     }
                 }
 
-                Rectangle {
+                Controls.CircleIconButton {
                     Layout.preferredWidth: 40
                     Layout.preferredHeight: 40
-                    radius: 20
-                    color: settingsMouse.containsMouse ? softBg : root.themeColorToken("mainHex_f3f6fb", "mainHex_20314b")
-
-                    Text {
-                        anchors.centerIn: parent
-                        text: root.iconGear
-                        color: textStrong
-                        font.family: root.faSolid
-                        font.pixelSize: 16
-                    }
-
-                    MouseArea {
-                        id: settingsMouse
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: openSettingsDrawer("main")
-                    }
+                    diameter: 40
+                    backgroundColor: desktop.softBg
+                    borderColor: "transparent"
+                    iconText: root.iconGear
+                    iconColor: desktop.textStrong
+                    iconFontFamily: root.faSolid
+                    iconPixelSize: 16
+                    elevated: false
+                    accessibleName: I18n.t("Settings")
+                    onClicked: openSettingsDrawer("main")
                 }
             }
         }
@@ -752,7 +763,7 @@ Item {
                                        ? (I18n.isRtl ? 224 : 190)
                                        : (I18n.isRtl ? 282 : 238)
                 Layout.fillHeight: true
-                color: root.themeColorToken("mainHex_f7f9fc", "mainHex_111425")
+                color: Colors.dsWindow
                 border.width: 0
 
                 Rectangle {
@@ -765,26 +776,39 @@ Item {
 
                 ColumnLayout {
                     anchors.fill: parent
-                    anchors.topMargin: 14
-                    anchors.leftMargin: 0
-                    anchors.rightMargin: desktop.narrowLayout ? 10 : 14
-                    anchors.bottomMargin: 22
-                    spacing: 8
+                    anchors.margins: desktop.narrowLayout ? 12 : 14
+                    spacing: 16
 
-                    SidebarButton { label: I18n.t("Dashboard"); glyph: "\uf015"; selected: desktop.navSelected("dashboard"); action: "dashboard" }
-                    SidebarButton { label: I18n.t("Profiles"); glyph: "\uf007"; selected: desktop.navSelected("profiles"); action: "profiles" }
-                    SidebarButton { label: I18n.t("Routing"); glyph: "\uf542"; selected: desktop.navSelected("routing"); action: "routing" }
-                    SidebarButton { label: I18n.t("Traffic"); glyph: root.iconUsage; selected: desktop.navSelected("traffic"); action: "traffic" }
-                    SidebarButton { label: I18n.t("LAN Sharing"); glyph: "\uf108"; selected: desktop.navSelected("lan"); action: "lan" }
-                    SidebarButton { label: I18n.t("Logs"); glyph: "\uf15c"; selected: desktop.navSelected("logs"); action: "logs" }
-                    SidebarButton { label: I18n.t("Settings"); glyph: root.iconGear; selected: desktop.navSelected("settings"); action: "settings" }
+                    Flickable {
+                        id: sidebarNavFlick
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        contentWidth: width
+                        contentHeight: sidebarNavColumn.implicitHeight
+                        flickableDirection: Flickable.VerticalFlick
+                        boundsBehavior: Flickable.StopAtBounds
+                        clip: true
+                        onHeightChanged: contentY = Math.max(0, Math.min(contentY, Math.max(0, contentHeight - height)))
+                        Basic.ScrollIndicator.vertical: Basic.ScrollIndicator { }
 
-                    Item { Layout.fillHeight: true }
+                        ColumnLayout {
+                            id: sidebarNavColumn
+                            width: sidebarNavFlick.width
+                            spacing: 6
+
+                            SidebarButton { label: "Dashboard"; glyph: "\uf015"; selected: desktop.navSelected("dashboard"); navAction: "dashboard" }
+                            SidebarButton { label: "Profiles"; glyph: "\uf007"; selected: desktop.navSelected("profiles"); navAction: "profiles" }
+                            SidebarButton { label: "Routing"; glyph: "\uf542"; selected: desktop.navSelected("routing"); navAction: "routing" }
+                            SidebarButton { label: "Traffic"; glyph: root.iconUsage; selected: desktop.navSelected("traffic"); navAction: "traffic" }
+                            SidebarButton { label: "LAN Sharing"; glyph: "\uf108"; selected: desktop.navSelected("lan"); navAction: "lan" }
+                            SidebarButton { label: "Logs"; glyph: "\uf15c"; selected: desktop.navSelected("logs"); navAction: "logs" }
+                            SidebarButton { label: "Settings"; glyph: root.iconGear; selected: desktop.navSelected("settings"); navAction: "settings" }
+                        }
+                    }
 
                     Rectangle {
                         Layout.fillWidth: true
                         Layout.preferredHeight: 88
-                        Layout.leftMargin: 14
                         radius: 12
                         color: cardBg
                         border.width: 1
@@ -809,24 +833,32 @@ Item {
                                 spacing: 4
 
                                 Text {
+                                    Layout.fillWidth: true
                                     text: I18n.t("Core Status")
                                     color: textStrong
                                     font.family: FontSystem.contentFontFamily
                                     font.pixelSize: 12
                                     elide: Text.ElideRight
+                                    LayoutMirroring.enabled: false
+                                    horizontalAlignment: I18n.isRtl ? Text.AlignRight : Text.AlignLeft
                                 }
 
                                 Text {
+                                    Layout.fillWidth: true
                                     text: I18n.t(coreText())
                                     color: coreText() === "Healthy" ? accentGreen : accentYellow
                                     font.family: FontSystem.getContentFontBold.name
                                     font.pixelSize: 12
                                     font.bold: true
+                                    LayoutMirroring.enabled: false
+                                    horizontalAlignment: I18n.isRtl ? Text.AlignRight : Text.AlignLeft
                                 }
 
                                 Text {
+                                    Layout.fillWidth: true
                                     text: I18n.ltr("Xray Core " + ((vpnController.xrayVersion || "").trim().length > 0 ? vpnController.xrayVersion : "--"))
                                     LayoutMirroring.enabled: false
+                                    horizontalAlignment: I18n.isRtl ? Text.AlignRight : Text.AlignLeft
                                     color: textMuted
                                     font.family: FontSystem.contentFontFamily
                                     font.pixelSize: 10
@@ -1081,8 +1113,10 @@ Item {
                                     spacing: 2
 
                                     Text {
+                                        Layout.fillWidth: true
                                         text: I18n.ltr(root.selectedServerLabel)
                                         LayoutMirroring.enabled: false
+                                        horizontalAlignment: I18n.isRtl ? Text.AlignRight : Text.AlignLeft
                                         color: textStrong
                                         font.family: FontSystem.usePersianArabicFont
                                                      ? FontSystem.getContentFontBold.name
@@ -1093,8 +1127,10 @@ Item {
                                     }
 
                                     Text {
+                                        Layout.fillWidth: true
                                         text: I18n.ltr(serverMetaPreview())
                                         LayoutMirroring.enabled: false
+                                        horizontalAlignment: I18n.isRtl ? Text.AlignRight : Text.AlignLeft
                                         color: textMuted
                                         font.family: FontSystem.usePersianArabicFont
                                                      ? FontSystem.contentFontFamily
@@ -1307,12 +1343,15 @@ Item {
                         spacing: 4
 
                         Text {
+                            Layout.fillWidth: true
                             text: I18n.t("Session Info")
                             color: textStrong
                             font.family: FontSystem.getContentFontBold.name
                             font.pixelSize: 16
                             font.bold: true
                             Layout.bottomMargin: 8
+                            LayoutMirroring.enabled: false
+                            horizontalAlignment: I18n.isRtl ? Text.AlignRight : Text.AlignLeft
                         }
 
                         SessionGroupLabel { text: I18n.t("Connection") }

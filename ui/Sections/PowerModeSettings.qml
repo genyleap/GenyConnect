@@ -124,9 +124,7 @@ ColumnLayout {
                     color: Colors.dsTextMuted
                     font.family: FontSystem.contentFontFamily
                     font.pixelSize: compact ? Typography.uiBody : Typography.uiBodyLg
-                    wrapMode: Text.NoWrap
-                    maximumLineCount: 1
-                    elide: Text.ElideRight
+                    wrapMode: Text.WordWrap
                 }
             }
 

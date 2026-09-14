@@ -14,6 +14,7 @@
 
 module;
 #include <QString>
+#include <QStringList>
 #include <QVariantMap>
 
 export module genyconnect.backend.routingruleservice;
@@ -40,6 +41,9 @@ public:
 
         ///< True when process routing was checked and is unavailable.
         bool processSupportBlocked = false;
+
+        ///< Stored rules remain portable when the current runtime cannot apply them.
+        bool enforceRuntimeSupport = true;
     };
 
     /**
@@ -57,4 +61,10 @@ public:
         const QString& action,
         const QString& profileId,
         const ValidationContext& context);
+
+    /// Normalize an executable matcher without widening its path/name scope.
+    static QString normalizeProcessMatcher(const QString& value);
+
+    /// Process paths may contain commas and semicolons; one matcher per line.
+    static QStringList parseProcessRules(const QString& value);
 };

@@ -44,8 +44,7 @@ ColumnLayout {
     Rectangle {
         Layout.fillWidth: true
         visible: root.settingsSection === "updates" && vpnController.supportsAutoUpdate
-        Layout.maximumWidth: settingsFlick.width
-        implicitHeight: updateColumn.implicitHeight + 24
+        implicitHeight: updateColumn.implicitHeight + 28
         radius: Colors.innerRadius
         color: root.themeColorToken("mainHex_eff4fb", "mainHex_151c32")
         border.width: 1
@@ -203,8 +202,7 @@ ColumnLayout {
     Rectangle {
         Layout.fillWidth: true
         visible: root.settingsSection === "updates" && !vpnController.supportsAutoUpdate && !root.mobilePlatform
-        Layout.maximumWidth: settingsFlick.width
-        implicitHeight: manualUpdateColumn.implicitHeight + 24
+        implicitHeight: manualUpdateColumn.implicitHeight + 28
         radius: Colors.innerRadius
         color: root.themeColorToken("mainHex_eff4fb", "mainHex_151c32")
         border.width: 1

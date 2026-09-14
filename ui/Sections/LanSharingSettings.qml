@@ -772,22 +772,23 @@ ColumnLayout {
 
                 Rectangle {
                     Layout.fillWidth: true
-                    implicitHeight: 80
+                    implicitHeight: lanEndpointGrid.implicitHeight + 16
                     radius: Metrics.radiusMd
                     color: Colors.dsSurface
                     border.width: 1
                     border.color: Colors.dsBorderSoft
 
-                    RowLayout {
-                        anchors.fill: parent
-                        anchors.leftMargin: root.compact ? 2 : 4
-                        anchors.rightMargin: root.compact ? 2 : 4
-                        spacing: 0
+                    GridLayout {
+                        id: lanEndpointGrid
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        anchors.top: parent.top
+                        anchors.margins: 8
+                        columns: width < 430 ? 1 : 3
+                        columnSpacing: 4
+                        rowSpacing: 4
 
                         LanInfoCell {
-                            Layout.minimumWidth: root.compact ? 96 : 166
-                            Layout.preferredWidth: root.compact ? 148 : 260
-                            Layout.maximumWidth: root.compact ? 208 : 360
                             label: I18n.t(settingsFlick.width < 560 ? "Host" : "LAN Address (Host)")
                             value: root.lanProxyHost()
                             copyable: true
@@ -798,16 +799,7 @@ ColumnLayout {
                             }
                         }
 
-                        Rectangle {
-                            Layout.preferredWidth: 1
-                            Layout.preferredHeight: 52
-                            color: Colors.dsBorderSoft
-                        }
-
                         LanInfoCell {
-                            Layout.minimumWidth: root.compact ? 74 : 116
-                            Layout.preferredWidth: root.compact ? 94 : 162
-                            Layout.maximumWidth: root.compact ? 132 : 208
                             label: I18n.t("Port")
                             value: String(vpnController.httpPort)
                             copyable: true
@@ -818,16 +810,7 @@ ColumnLayout {
                             }
                         }
 
-                        Rectangle {
-                            Layout.preferredWidth: 1
-                            Layout.preferredHeight: 52
-                            color: Colors.dsBorderSoft
-                        }
-
                         LanInfoCell {
-                            Layout.minimumWidth: root.compact ? 104 : 188
-                            Layout.preferredWidth: root.compact ? 140 : 274
-                            Layout.maximumWidth: root.compact ? 210 : 380
                             label: I18n.t("Protocol")
                             value: root.lanProtocolDisplay(root.lanUiMode)
                             glyph: "\uf0ac"
@@ -1324,6 +1307,7 @@ ColumnLayout {
                                 text: I18n.t("Full VPN Gateway / Hotspot")
                                 color: Colors.dsText
                                 font.family: FontSystem.getContentFontBold.name
+                                font.weight: Font.Bold
                                 font.pixelSize: Typography.uiBody
                                 elide: Text.ElideRight
                             }

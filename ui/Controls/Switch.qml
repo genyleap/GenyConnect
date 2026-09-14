@@ -12,33 +12,46 @@ T.Switch {
     text: I18n.t(title)
     font.family: FontSystem.contentFontFamily
     font.pixelSize: Typography.t2
-    LayoutMirroring.enabled: false
+    // The native switch needs the page direction for pointer dragging. Its
+    // visual children opt out below because their alignment is explicit.
+    LayoutMirroring.enabled: I18n.isRtl
+    LayoutMirroring.childrenInherit: true
+    padding: 4
+    spacing: 8
+
+    implicitWidth: Math.max(implicitBackgroundWidth + leftInset + rightInset,
+                           (text.length > 0 ? implicitContentWidth : implicitIndicatorWidth)
+                           + leftPadding + rightPadding)
+    implicitHeight: Math.max(implicitBackgroundHeight + topInset + bottomInset,
+                            implicitContentHeight + topPadding + bottomPadding,
+                            implicitIndicatorHeight + topPadding + bottomPadding)
 
     indicator: Rectangle {
         id: rectangle
+        LayoutMirroring.enabled: false
+        LayoutMirroring.childrenInherit: true
         implicitWidth: 42
         implicitHeight: 22
-        x: I18n.isRtl
-           ? control.width - width - control.rightPadding
-           : control.leftPadding
+        x: control.text.length > 0
+           ? (control.mirrored ? control.width - width - control.rightPadding : control.leftPadding)
+           : control.leftPadding + (control.availableWidth - width) / 2
+        y: control.topPadding + (control.availableHeight - height) / 2
         radius: 11
-        anchors.verticalCenter: parent.verticalCenter
-        color: control.checked ? Colors.dsPrimarySolid : Colors.dsSurface
+        color: control.checked ? Colors.dsPrimarySolid : Colors.gcControlBg
         border.color: control.checked ? Colors.dsPrimarySolid : Colors.dsBorder
+        opacity: control.enabled ? 1 : 0.45
 
         Rectangle {
             id: rectTwo
-            x: control.checked
-               ? (I18n.isRtl ? 5 : parent.width - width - 5)
-               : (I18n.isRtl ? parent.width - width - 5 : 5)
-            width: 13
-            height: 13
+            x: 3 + control.visualPosition * (parent.width - width - 6)
+            width: 16
+            height: 16
             radius: width
             anchors.verticalCenter: parent.verticalCenter
             color: control.checked ? Colors.dsPrimaryText : Colors.dsTextMuted
 
             Behavior on x {
-                enabled: true
+                enabled: !control.down
                 NumberAnimation {
                     duration: Animations.normal
                     easing.type: Easing.Linear
@@ -51,17 +64,24 @@ T.Switch {
     }
 
     contentItem: Text {
+        LayoutMirroring.enabled: false
+        LayoutMirroring.childrenInherit: true
         text: I18n.t(control.text)
         font: control.font
-        fontSizeMode: Text.Fit
-        opacity: enabled ? 1.0 : 0.3
+        opacity: control.enabled ? 1 : 0.45
         color: Colors.dsText
-        leftPadding: I18n.isRtl ? 0 : control.indicator.width + control.spacing
-        rightPadding: I18n.isRtl ? control.indicator.width + control.spacing : 0
-        topPadding: 5
-        horizontalAlignment: I18n.isRtl ? Text.AlignRight : Text.AlignLeft
+        leftPadding: control.text.length > 0 && !control.mirrored ? control.indicator.width + control.spacing : 0
+        rightPadding: control.text.length > 0 && control.mirrored ? control.indicator.width + control.spacing : 0
+        horizontalAlignment: control.mirrored ? Text.AlignRight : Text.AlignLeft
+        verticalAlignment: Text.AlignVCenter
         wrapMode: Text.WordWrap
         Behavior on color { ColorAnimation { duration: Animations.normal} }
     }
 
+    background: Rectangle {
+        radius: Metrics.radiusSm
+        color: "transparent"
+        border.width: control.visualFocus ? 1 : 0
+        border.color: Colors.dsPrimarySolid
+    }
 }

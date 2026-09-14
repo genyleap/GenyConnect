@@ -149,6 +149,10 @@ GenyConnect currently supports:
 
 iOS support is under active development.
 
+For source builds, including Qt Creator's Android generator and NDK setup, see
+the [build instructions](docs/building.md). The application requires C++ modules;
+use Ninja rather than Unix Makefiles for Android.
+
 ---
 
 ## Linux AppImage Notes
@@ -184,6 +188,35 @@ nix profile install .#genyconnect
 ```
 
 The Nix package builds GenyConnect from source and uses the packaged `xray` runtime from nixpkgs.
+
+For NixOS TUN mode, import the flake's NixOS module into your system configuration
+and enable it (where `inputs.genyconnect` is this flake):
+
+```nix
+{
+  imports = [ inputs.genyconnect.nixosModules.default ];
+  programs.genyconnect.enable = true;
+}
+```
+
+The module installs GenyConnect, enables polkit and the TUN kernel module, and
+sets `networking.firewall.checkReversePath = "loose"` by default. TUN policy routing
+is asymmetric: replies arrive on the physical interface while ordinary outbound
+traffic selects the tunnel. Strict firewall reverse-path checks can drop those
+replies even when routes are correct. Loose mode keeps source reachability
+checks enabled. If another part of your configuration explicitly selects strict
+mode, change that setting to `"loose"` as well. A desktop polkit authentication
+agent must be running to display the privilege prompt.
+
+Installing only the package with `nix run` or `nix profile install` does not apply
+these NixOS system settings. The packaged helper retains its iproute2 dependency
+through an absolute Nix store path, including after polkit sanitizes `PATH`.
+The helper installs separate IPv4 and IPv6 policy routes (IPv4 only when IPv6
+is disabled system-wide), verifies public route selection and the core's outbound
+bypass, and removes its own routes on stop. It temporarily relaxes strict kernel
+reverse-path filtering on affected interfaces and restores those settings when
+the session ends. Use an explicit DNS server in Settings for TUN; Xray's
+`localhost` and `+local` resolver modes cannot use the helper's outbound bypass.
 
 ---
 

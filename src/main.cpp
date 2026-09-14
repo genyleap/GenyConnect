@@ -1,5 +1,7 @@
 #include <QDir>
 #include <QFileInfo>
+#include <QFont>
+#include <QFontDatabase>
 #include <QIcon>
 #include <QLocalServer>
 #include <QLocalSocket>
@@ -13,6 +15,7 @@
 #include <QQuickStyle>
 #include <QStandardPaths>
 #include <QTimer>
+#include <QVariantMap>
 #include <initializer_list>
 #include <QtCore/qglobal.h>
 
@@ -31,73 +34,48 @@
 import genyconnect.backend.vpncontroller;
 
 namespace {
-QStringList qmlImportRoots()
+QVariantMap loadApplicationFonts()
 {
-    QStringList roots;
-    const QString envImports = qEnvironmentVariable("QML2_IMPORT_PATH").trimmed();
-    if (!envImports.isEmpty()) {
-        roots.append(envImports.split(QDir::listSeparator(), Qt::SkipEmptyParts));
-    }
-    roots.append(QLibraryInfo::path(QLibraryInfo::QmlImportsPath));
-    const QString appDir = QCoreApplication::applicationDirPath();
-    if (!appDir.isEmpty()) {
-        roots.append(QDir(appDir).filePath(QString::fromUtf8("qml")));
-        roots.append(QDir(appDir).filePath(QString::fromUtf8("../qml")));
-    }
-    roots.removeAll(QString());
-    roots.removeDuplicates();
-    return roots;
-}
-
-bool qmlModuleAvailable(const QString& moduleName)
-{
-    QString modulePath = moduleName.trimmed();
-    modulePath.replace(QLatin1Char('.'), QLatin1Char('/'));
-    if (modulePath.isEmpty()) {
-        return false;
-    }
-    for (const QString& root : qmlImportRoots()) {
-        const QDir rootDir(root);
-        if (QFileInfo::exists(rootDir.filePath(modulePath + QString::fromUtf8("/qmldir")))) {
-            return true;
+    // Register bundled faces once, before QML starts shaping text, so every
+    // platform resolves the same complete set of families and weights.
+    QVariantMap families;
+    const auto load = [&families](const char *key, const char *fileName) {
+        const QString path = QString::fromUtf8(":/ui/Resources/fonts/%1")
+                                 .arg(QString::fromUtf8(fileName));
+        const int id = QFontDatabase::addApplicationFont(path);
+        const QStringList names = QFontDatabase::applicationFontFamilies(id);
+        if (id < 0 || names.isEmpty()) {
+            qWarning().noquote() << "[Fonts] Cannot load bundled font:" << path;
+            return;
         }
-    }
-    return false;
-}
+        families.insert(QString::fromUtf8(key), names.constFirst());
+    };
 
-bool quickControlsStyleAvailable(const QString& style)
-{
-    const QString trimmed = style.trimmed();
-    if (trimmed.isEmpty()) {
-        return false;
-    }
-    const QString lowered = trimmed.toLower();
-    if (lowered.contains(QString::fromUtf8("org.kde")) || lowered.contains(QString::fromUtf8("breeze"))) {
-        return false;
-    }
-    return qmlModuleAvailable(QString::fromUtf8("QtQuick.Controls.%1").arg(trimmed))
-           || qmlModuleAvailable(trimmed)
-           || qmlModuleAvailable(QString::fromUtf8("QtQuick.Controls.%1.Style").arg(trimmed));
-}
+    load("regular", "Inter-Regular.ttf");
+    load("medium", "Inter-Medium.ttf");
+    load("semibold", "Inter-SemiBold.ttf");
+    load("bold", "Inter-Bold.ttf");
+    load("arabicRegular", "Vazirmatn-Regular.ttf");
+    load("arabicMedium", "Vazirmatn-Medium.ttf");
+    load("arabicBold", "Vazirmatn-Bold.ttf");
+    load("icons", "fa-solid-900.otf");
+    load("brands", "fa-brands-400.otf");
 
-void configureQuickControlsFallback()
-{
-    const QString requestedStyle = qEnvironmentVariable("QT_QUICK_CONTROLS_STYLE").trimmed();
-
-    QQuickStyle::setFallbackStyle(QString::fromUtf8("Basic"));
-
-#if defined(Q_OS_LINUX) && !defined(Q_OS_ANDROID)
-    if (requestedStyle.isEmpty()) {
-        QQuickStyle::setStyle(QString::fromUtf8("Basic"));
-        qInfo().noquote() << "[Qt] Quick Controls style forced to Basic on Linux to avoid host KDE/Breeze QML dependencies.";
-        return;
+    const QString regular = families.value(QString::fromUtf8("regular")).toString();
+    if (!regular.isEmpty()) {
+        QFont defaultFont = QGuiApplication::font();
+        defaultFont.setFamily(regular);
+        defaultFont.setStyleName(QString());
+        defaultFont.setWeight(QFont::Normal);
+        QGuiApplication::setFont(defaultFont);
+        QFontDatabase::addApplicationFallbackFontFamily(QChar::Script_Latin, regular);
     }
-#endif
-
-    if (!requestedStyle.isEmpty() && !quickControlsStyleAvailable(requestedStyle)) {
-        QQuickStyle::setStyle(QString::fromUtf8("Basic"));
-        qInfo().noquote() << "[Qt] Quick Controls style forced to Basic because requested style is not bundled:" << requestedStyle;
+    const QString arabic = families.value(QString::fromUtf8("arabicRegular")).toString();
+    if (!arabic.isEmpty()) {
+        // Covers mixed-language profile names even while the UI is in English.
+        QFontDatabase::addApplicationFallbackFontFamily(QChar::Script_Arabic, arabic);
     }
+    return families;
 }
 
 void logQtRuntimeDiagnostics(const QQmlApplicationEngine *engine = nullptr)
@@ -141,7 +119,13 @@ auto main(int argc, char *argv[]) -> int
     QCoreApplication::setApplicationVersion(QString::fromUtf8("0.0.0"));
 #endif
 
-    configureQuickControlsFallback();
+    QQuickStyle::setFallbackStyle(QString::fromUtf8("Basic"));
+#if defined(Q_OS_LINUX) && !defined(Q_OS_ANDROID)
+    // The Linux bundle supplies Basic, not the host's KDE/Breeze QML modules.
+    // Keep native platform defaults on Windows, macOS, and mobile platforms.
+    QQuickStyle::setStyle(QString::fromUtf8("Basic"));
+#endif
+    const QVariantMap applicationFonts = loadApplicationFonts();
     logQtRuntimeDiagnostics();
 
     if (QCoreApplication::arguments().contains(QString::fromUtf8("--safe-network-reset"))) {
@@ -212,6 +196,7 @@ auto main(int argc, char *argv[]) -> int
     VpnController vpnController;
 
     QQmlApplicationEngine engine;
+    engine.rootContext()->setContextProperty(QString::fromUtf8("applicationFonts"), applicationFonts);
     engine.rootContext()->setContextProperty(QString::fromUtf8("vpnController"), &vpnController);
     engine.rootContext()->setContextProperty(QString::fromUtf8("updater"), vpnController.updater());
     logQtRuntimeDiagnostics(&engine);

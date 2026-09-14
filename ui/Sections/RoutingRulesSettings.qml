@@ -9,6 +9,7 @@
 
 import QtQuick
 import QtQuick.Controls
+import QtQuick.Controls.Basic as T
 import QtQuick.Layouts
 
 import GenyConnect 1.0
@@ -214,6 +215,8 @@ ColumnLayout {
             }
 
             Controls.TextField {
+                id: routingTargetField
+                Accessible.name: I18n.t("Target Value")
                 Layout.fillWidth: true
                 Layout.preferredHeight: 40
                 text: root.routingRuleDraftValue
@@ -222,9 +225,9 @@ ColumnLayout {
                     if (type === "ip")
                         return I18n.t("Example: 185.143.233.0/24 or geoip:ir")
                     if (type === "app")
-                        return I18n.t("Example: C:/Games/game.exe or /Applications/Telegram.app/Contents/MacOS/Telegram")
+                        return I18n.t("Example: C:/Games/game.exe or /usr/bin/firefox")
                     if (type === "process")
-                        return I18n.t("Example: telegram.exe or com.apple.Safari")
+                        return I18n.t("Example: telegram.exe or firefox")
                     if (type === "protocol")
                         return I18n.t("Example: tcp,udp")
                     return I18n.t("Example: example.com or domain:example.com")
@@ -245,9 +248,11 @@ ColumnLayout {
                 wrapMode: Text.WordWrap
             }
 
-            RowLayout {
+            GridLayout {
                 Layout.fillWidth: true
-                spacing: 8
+                columns: section.width < 420 ? 1 : 3
+                columnSpacing: 8
+                rowSpacing: 8
 
                 Controls.Button {
                     Layout.fillWidth: true
@@ -301,7 +306,7 @@ ColumnLayout {
 
             Text {
                 Layout.fillWidth: true
-                text: I18n.t("Active Rules")
+                text: I18n.t("Saved Rules")
                 color: root.themeColorToken("mainHex_334155", "mainHex_d7e4f6")
                 font.family: FontSystem.getContentFontBold.name
                 font.pixelSize: 13
@@ -311,118 +316,149 @@ ColumnLayout {
             ListView {
                 id: routingRuleListView
                 Layout.fillWidth: true
-                Layout.preferredHeight: count > 0 ? Math.min(320, Math.max(140, count * 72)) : 90
+                Layout.preferredHeight: count > 0 ? Math.max(120, Math.min(440, contentHeight)) : 90
                 clip: true
                 spacing: 6
                 model: root.currentRoutingRules()
 
                 delegate: Rectangle {
+                    id: ruleCard
                     required property int index
                     required property var modelData
-                    width: ListView.view.width
-                    height: 66
-                    radius: 10
-                    color: root.themeColorToken("mainHex_ffffff", "mainHex_22324a")
-                    border.width: 1
-                    border.color: root.themeColorToken("mainHex_dbe3ef", "mainHex_3a5470")
+                    readonly property real scrollInset: routingRulesScrollBar.visible ? routingRulesScrollBar.width + Metrics.gap4 : 0
+                    x: I18n.isRtl ? scrollInset : 0
+                    width: Math.max(0, ListView.view.width - scrollInset)
+                    implicitHeight: ruleContent.implicitHeight + 24
+                    height: implicitHeight
+                    radius: Metrics.radiusSm
+                    color: Colors.dsSurface
+                    border.color: modelData.available === false ? Colors.dsWarning : Colors.dsBorderSoft
 
-                    RowLayout {
-                        anchors.fill: parent
-                        anchors.leftMargin: 8
-                        anchors.rightMargin: 8
-                        spacing: 6
+                    ColumnLayout {
+                        id: ruleContent
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        anchors.top: parent.top
+                        anchors.margins: Metrics.gap12
+                        spacing: Metrics.gap8
 
-                        ColumnLayout {
+                        Text {
                             Layout.fillWidth: true
-                            spacing: 1
+                            text: I18n.localizeDigits(ruleCard.index + 1) + ". "
+                                  + I18n.t(root.routingRuleTypeLabel(ruleCard.modelData.targetType))
+                                  + " → " + I18n.t(root.routingRuleActionLabel(ruleCard.modelData.action))
+                            color: Colors.dsText
+                            font.family: FontSystem.contentFontFamily
+                            font.pixelSize: Typography.uiBodyLg
+                            font.weight: Font.DemiBold
+                            wrapMode: Text.WordWrap
+                        }
 
-                            Text {
-                                Layout.fillWidth: true
-                                text: (index + 1) + ". " + I18n.t(root.routingRuleTypeLabel(modelData.targetType))
-                                      + " → " + root.routingRuleActionLabel(modelData.action)
-                                color: root.themeColorToken("mainHex_334155", "mainHex_d2def0")
-                                font.family: FontSystem.getContentFontBold.name
-                                font.pixelSize: 12
-                                font.bold: true
-                                elide: Text.ElideRight
+                        Text {
+                            Layout.fillWidth: true
+                            text: I18n.ltr(ruleCard.modelData.targetValue || "")
+                            textFormat: Text.PlainText
+                            color: Colors.dsTextMuted
+                            font.family: FontSystem.contentFontFamily
+                            font.pixelSize: Typography.uiBody
+                            wrapMode: Text.WrapAtWordBoundaryOrAnywhere
+                        }
+
+                        Text {
+                            Layout.fillWidth: true
+                            text: I18n.t("Scope: %1", [ruleCard.modelData.profileName || I18n.t("All Profiles")])
+                                  + " • " + I18n.t(ruleCard.modelData.enabled === false ? "Disabled" : "Enabled")
+                            color: Colors.dsTextMuted
+                            font.family: FontSystem.contentFontFamily
+                            font.pixelSize: Typography.uiBodySm
+                            wrapMode: Text.WordWrap
+                        }
+
+                        Text {
+                            Layout.fillWidth: true
+                            visible: ruleCard.modelData.available === false
+                            text: I18n.t(ruleCard.modelData.unavailableReason || "App/process routing is not supported on this platform runtime.")
+                            color: Colors.dsWarning
+                            font.family: FontSystem.contentFontFamily
+                            font.pixelSize: Typography.uiBody
+                            wrapMode: Text.WordWrap
+                        }
+
+                        Flow {
+                            Layout.fillWidth: true
+                            spacing: Metrics.gap6
+                            layoutDirection: I18n.isRtl ? Qt.RightToLeft : Qt.LeftToRight
+                            LayoutMirroring.enabled: false
+                            LayoutMirroring.childrenInherit: true
+
+                            Controls.CircleIconButton {
+                                diameter: 36
+                                elevated: false
+                                iconText: "\uf062"
+                                iconFontFamily: root.faSolid
+                                iconPixelSize: 13
+                                accessibleName: I18n.t("Move up")
+                                enabled: ruleCard.index > 0
+                                onClicked: vpnController.moveRoutingRule(ruleCard.modelData.id || "", ruleCard.index - 1)
                             }
-
-                            Text {
-                                Layout.fillWidth: true
-                                text: modelData.targetValue || ""
-                                color: root.themeColorToken("mainHex_4f6078", "mainHex_9eb2cb")
-                                font.family: FontSystem.contentFontFamily
-                                font.pixelSize: 11
-                                elide: Text.ElideMiddle
+                            Controls.CircleIconButton {
+                                diameter: 36
+                                elevated: false
+                                iconText: "\uf063"
+                                iconFontFamily: root.faSolid
+                                iconPixelSize: 13
+                                accessibleName: I18n.t("Move down")
+                                enabled: ruleCard.index < routingRuleListView.count - 1
+                                onClicked: vpnController.moveRoutingRule(ruleCard.modelData.id || "", ruleCard.index + 1)
                             }
-
-                            Text {
-                                Layout.fillWidth: true
-                                text: I18n.t("Scope: %1", [I18n.ltr(modelData.profileName || I18n.t("All Profiles"))])
-                                      + " • " + (modelData.enabled === false ? "Disabled" : "Enabled")
-                                color: root.themeColorToken("mainHex_7f8da2", "mainHex_a8bdd7")
-                                font.family: FontSystem.contentFontFamily
-                                font.pixelSize: 10
-                                elide: Text.ElideRight
+                            Controls.CircleIconButton {
+                                diameter: 36
+                                elevated: false
+                                iconText: ruleCard.modelData.enabled === false ? "\uf04b" : "\uf04c"
+                                iconFontFamily: root.faSolid
+                                iconPixelSize: 13
+                                accessibleName: I18n.t(ruleCard.modelData.enabled === false ? "Enable rule" : "Disable rule")
+                                onClicked: vpnController.setRoutingRuleEnabled(ruleCard.modelData.id || "", ruleCard.modelData.enabled === false)
                             }
-                        }
-
-                        Controls.Button {
-                            Layout.fillWidth: false
-                            sizeType: "compact"
-                            text: "↑"
-                            implicitWidth: 32
-                            implicitHeight: 28
-                            enabled: index > 0
-                            onClicked: vpnController.moveRoutingRule(modelData.id || "", index - 1)
-                        }
-
-                        Controls.Button {
-                            Layout.fillWidth: false
-                            sizeType: "compact"
-                            text: "↓"
-                            implicitWidth: 32
-                            implicitHeight: 28
-                            enabled: index < routingRuleListView.count - 1
-                            onClicked: vpnController.moveRoutingRule(modelData.id || "", index + 1)
-                        }
-
-                        Controls.Button {
-                            Layout.fillWidth: false
-                            sizeType: "compact"
-                            text: I18n.t(modelData.enabled === false ? "Off" : "On")
-                            implicitWidth: 44
-                            implicitHeight: 28
-                            onClicked: vpnController.setRoutingRuleEnabled(modelData.id || "", modelData.enabled === false)
-                        }
-
-                        Controls.Button {
-                            Layout.fillWidth: false
-                            sizeType: "compact"
-                            text: I18n.t("Edit")
-                            implicitWidth: 46
-                            implicitHeight: 28
-                            onClicked: root.editRoutingRule(modelData)
-                        }
-
-                        Controls.Button {
-                            Layout.fillWidth: false
-                            sizeType: "compact"
-                            text: I18n.t("Dup")
-                            implicitWidth: 42
-                            implicitHeight: 28
-                            onClicked: vpnController.duplicateRoutingRule(modelData.id || "")
-                        }
-
-                        Controls.Button {
-                            Layout.fillWidth: false
-                            sizeType: "compact"
-                            text: I18n.t("Del")
-                            implicitWidth: 42
-                            implicitHeight: 28
-                            onClicked: vpnController.removeRoutingRule(modelData.id || "")
+                            Controls.CircleIconButton {
+                                diameter: 36
+                                elevated: false
+                                iconText: "\uf304"
+                                iconFontFamily: root.faSolid
+                                iconPixelSize: 13
+                                accessibleName: I18n.t("Edit")
+                                onClicked: {
+                                    root.editRoutingRule(ruleCard.modelData)
+                                    root.settingsFlick.contentY = 0
+                                    routingTargetField.forceActiveFocus()
+                                }
+                            }
+                            Controls.CircleIconButton {
+                                diameter: 36
+                                elevated: false
+                                iconText: "\uf0c5"
+                                iconFontFamily: root.faSolid
+                                iconPixelSize: 13
+                                accessibleName: I18n.t("Duplicate rule")
+                                onClicked: vpnController.duplicateRoutingRule(ruleCard.modelData.id || "")
+                            }
+                            Controls.CircleIconButton {
+                                diameter: 36
+                                elevated: false
+                                iconText: "\uf2ed"
+                                iconFontFamily: root.faSolid
+                                iconPixelSize: 13
+                                iconColor: Colors.dsDanger
+                                accessibleName: I18n.t("Delete rule")
+                                onClicked: vpnController.removeRoutingRule(ruleCard.modelData.id || "")
+                            }
                         }
                     }
+                }
+
+                ScrollBar.vertical: ScrollBar {
+                    id: routingRulesScrollBar
+                    policy: ScrollBar.AsNeeded
                 }
 
                 Text {
@@ -450,9 +486,6 @@ ColumnLayout {
             if (Qt.platform.os === "android" || Qt.platform.os === "ios")
                 return I18n.t("Mobile platforms currently support domain/IP/protocol rules. App-level routing visibility may be limited by OS/runtime constraints.")
             if (!vpnController.processRoutingSupported) {
-                const detected = (vpnController.xrayVersion || "").trim()
-                if (detected.length > 0)
-                    return detected
                 return I18n.t("Desktop app/process routing requires xray-core 26.1.23+ with process matching enabled.")
             }
             return I18n.t("App rules are supported on this runtime. Use absolute executable paths for the most reliable matching.")
@@ -669,230 +702,100 @@ ColumnLayout {
             model: root.visibleAppRuleSuggestions() || []
 
             delegate: Rectangle {
+                id: appCard
                 required property var modelData
-                width: ListView.view.width
-                height: 56
-                radius: 8
-                color: root.isAppSuggestionSelected(modelData)
-                       ? root.themeColorToken("mainHex_edf4ff", "mainHex_274062")
-                       : root.themeColorToken("mainHex_ffffff", "mainHex_22324a")
-                border.width: 0
-                border.color: root.isAppSuggestionSelected(modelData)
-                             ? root.themeColorToken("mainHex_b8d0ff", "mainHex_578dcf")
-                             : root.themeColorToken("mainHex_e1e9f4", "mainHex_3d5876")
+                readonly property real scrollInset: appsScrollBar.visible ? appsScrollBar.width + Metrics.gap4 : 0
+                x: I18n.isRtl ? scrollInset : 0
+                width: Math.max(0, ListView.view.width - scrollInset)
+                height: appCardColumn.implicitHeight + 16
+                radius: Metrics.radiusSm
+                color: root.isAppSuggestionSelected(modelData) ? Colors.dsPrimaryTint : Colors.dsSurface
+                border.color: root.isAppSuggestionSelected(modelData) ? Colors.dsPrimarySolid : Colors.dsBorderSoft
 
-                RowLayout {
-                    z: 1
-                    anchors.fill: parent
-                    anchors.leftMargin: 10
-                    anchors.rightMargin: 8
-                    spacing: 6
+                ColumnLayout {
+                    id: appCardColumn
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.top: parent.top
+                    anchors.margins: Metrics.gap8
+                    spacing: Metrics.gap8
 
-                    Rectangle {
-                        Layout.preferredWidth: 26
-                        Layout.preferredHeight: 26
-                        radius: 13
-                        color: root.isAppSuggestionSelected(modelData)
-                               ? root.themeColorToken("mainHex_dbe8ff", "mainHex_335178")
-                               : root.themeColorToken("mainHex_eff4fb", "mainHex_2a3f5b")
-                        border.width: 0
-                        border.color: root.isAppSuggestionSelected(modelData)
-                                     ? root.themeColorToken("mainHex_9db9f9", "mainHex_659bdf")
-                                     : root.themeColorToken("mainHex_d4dfef", "mainHex_496384")
-
-                        Text {
-                            anchors.centerIn: parent
-                            text: root.appSuggestionInitial(modelData)
-                            color: root.themeColorToken("mainHex_40618f", "mainHex_9fc3f2")
-                            font.family: FontSystem.getContentFontBold.name
-                            font.pixelSize: 11
-                            font.bold: true
-                        }
-                    }
-
-                    Column {
+                    T.ItemDelegate {
                         Layout.fillWidth: true
-                        spacing: 0
-
-                        Text {
-                            width: parent.width
-                            text: modelData.process || ""
-                            color: root.themeColorToken("mainHex_334155", "mainHex_d2def0")
-                            font.family: FontSystem.contentFontFamily
-                            font.pixelSize: 12
-                            elide: Text.ElideMiddle
+                        implicitHeight: appLabelColumn.implicitHeight + 12
+                        padding: 6
+                        checkable: true
+                        checked: root.isAppSuggestionSelected(appCard.modelData)
+                        enabled: vpnController.processRoutingSupported
+                        Accessible.name: appCard.modelData.process || ""
+                        Accessible.description: appCard.modelData.ruleTarget || ""
+                        onClicked: root.toggleAppSuggestionSelection(appCard.modelData)
+                        background: Rectangle {
+                            radius: Metrics.radiusXs
+                            color: "transparent"
+                            border.width: parent.activeFocus ? 2 : 0
+                            border.color: Colors.dsPrimarySolid
                         }
-
-                        Text {
-                            width: parent.width
-                            text: modelData.source ? I18n.t("Source: %1", [modelData.source]) : ""
-                            visible: text.length > 0
-                            color: root.themeColorToken("mainHex_95a3b8", "mainHex_a4b6cd")
-                            font.family: FontSystem.contentFontFamily
-                            font.pixelSize: 10
-                            elide: Text.ElideRight
-                        }
-
-                        Text {
-                            width: parent.width
-                            text: (modelData.ruleTarget || "").length > 0
-                                  ? ("Match: " + modelData.ruleTarget)
-                                  : ""
-                            visible: text.length > 0
-                                     && (modelData.ruleTarget || "") !== (modelData.process || "")
-                            color: root.themeColorToken("mainHex_95a3b8", "mainHex_a4b6cd")
-                            font.family: FontSystem.contentFontFamily
-                            font.pixelSize: 10
-                            elide: Text.ElideMiddle
-                        }
-                    }
-
-                    Rectangle {
-                        Layout.preferredWidth: 54
-                        Layout.preferredHeight: 24
-                        radius: 6
-                        color: root.themeColorToken("mainHex_f3f7ff", "mainHex_20314b")
-                        border.width: 0
-                        border.color: root.themeColorToken("mainHex_d4e1f8", "mainHex_4c6990")
-                        opacity: vpnController.processRoutingSupported ? 1.0 : 0.6
-
-                        Text {
-                            anchors.centerIn: parent
-                            text: I18n.t("Direct")
-                            color: root.themeColorToken("mainHex_3862a9", "mainHex_8bb7ff")
-                            font.family: FontSystem.contentFontFamily
-                            font.pixelSize: 11
-                            font.bold: true
-                        }
-
-                        MouseArea {
-                            anchors.fill: parent
-                            enabled: vpnController.processRoutingSupported
-                            cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
-                            onClicked: vpnController.appendAppRule("direct", root.appSuggestionRuleKey(modelData))
+                        contentItem: RowLayout {
+                            spacing: Metrics.gap8
+                            Text {
+                                text: root.isAppSuggestionSelected(appCard.modelData) ? "\uf14a" : "\uf0c8"
+                                font.family: root.faSolid
+                                font.pixelSize: 18
+                                color: Colors.dsPrimarySolid
+                            }
+                            ColumnLayout {
+                                id: appLabelColumn
+                                Layout.fillWidth: true
+                                spacing: Metrics.gap4
+                                Text {
+                                    Layout.fillWidth: true
+                                    text: appCard.modelData.process || ""
+                                    textFormat: Text.PlainText
+                                    color: Colors.dsText
+                                    font.family: FontSystem.contentFontFamily
+                                    font.pixelSize: Typography.uiBodyLg
+                                    font.weight: Font.DemiBold
+                                    wrapMode: Text.WrapAtWordBoundaryOrAnywhere
+                                }
+                                Text {
+                                    Layout.fillWidth: true
+                                    text: I18n.ltr(root.appSuggestionRuleKey(appCard.modelData))
+                                    textFormat: Text.PlainText
+                                    color: Colors.dsTextMuted
+                                    font.family: FontSystem.contentFontFamily
+                                    font.pixelSize: Typography.uiBodySm
+                                    wrapMode: Text.WrapAtWordBoundaryOrAnywhere
+                                }
+                            }
                         }
                     }
 
-                    Rectangle {
-                        Layout.preferredWidth: 56
-                        Layout.preferredHeight: 24
-                        radius: 6
-                        color: root.themeColorToken("mainHex_e9f1ff", "mainHex_1b2f4c")
-                        border.width: 0
-                        border.color: root.themeColorToken("mainHex_c3d8ff", "mainHex_4770af")
-                        opacity: vpnController.processRoutingSupported ? 1.0 : 0.6
-
-                        Text {
-                            anchors.centerIn: parent
-                            text: I18n.t("Tunnel")
-                            color: root.themeColorToken("mainHex_2f6ff1", "mainHex_86b6ff")
-                            font.family: FontSystem.contentFontFamily
-                            font.pixelSize: 11
-                            font.bold: true
-                        }
-
-                        MouseArea {
-                            anchors.fill: parent
-                            enabled: vpnController.processRoutingSupported
-                            cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
-                            onClicked: vpnController.appendAppRule("proxy", root.appSuggestionRuleKey(modelData))
-                        }
-                    }
-
-                    Rectangle {
-                        Layout.preferredWidth: 50
-                        Layout.preferredHeight: 24
-                        radius: 6
-                        color: root.themeColorToken("mainHex_fff0f0", "mainHex_3b2631")
-                        border.width: 0
-                        border.color: root.themeColorToken("mainHex_ffd0d0", "mainHex_7d5062")
-                        opacity: vpnController.processRoutingSupported ? 1.0 : 0.6
-
-                        Text {
-                            anchors.centerIn: parent
-                            text: I18n.t("Block")
-                            color: root.themeColorToken("mainHex_ca3b3b", "mainHex_ff8da0")
-                            font.family: FontSystem.contentFontFamily
-                            font.pixelSize: 11
-                            font.bold: true
-                        }
-
-                        MouseArea {
-                            anchors.fill: parent
-                            enabled: vpnController.processRoutingSupported
-                            cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
-                            onClicked: vpnController.appendAppRule("block", root.appSuggestionRuleKey(modelData))
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: Metrics.gap6
+                        Repeater {
+                            model: [ { name: "Direct", action: "direct" }, { name: "Tunnel", action: "proxy" }, { name: "Block", action: "block" } ]
+                            delegate: Controls.Button {
+                                required property var modelData
+                                Layout.fillWidth: true
+                                Layout.preferredWidth: 1
+                                sizeType: "compact"
+                                isDefault: false
+                                text: I18n.t(modelData.name)
+                                enabled: vpnController.processRoutingSupported
+                                onClicked: vpnController.appendAppRule(modelData.action, root.appSuggestionRuleKey(appCard.modelData))
+                            }
                         }
                     }
                 }
+            }
 
-                MouseArea {
-                    z: 0
-                    anchors.fill: parent
-                    acceptedButtons: Qt.LeftButton
-                    onClicked: root.toggleAppSuggestionSelection(modelData)
-                }
+            ScrollBar.vertical: ScrollBar {
+                id: appsScrollBar
+                policy: ScrollBar.AsNeeded
             }
         }
     }
 
-    Controls.TextArea {
-        Layout.fillWidth: true
-        visible: false
-        Layout.preferredHeight: 74
-        placeholderText: I18n.t("Tunnel Domains\nexample.com\ndomain:youtube.com\nregexp:.*\\\\.openai\\\\.com$")
-        text: vpnController.proxyDomainRules
-        onTextChanged: vpnController.proxyDomainRules = text
-    }
-
-    Controls.TextArea {
-        Layout.fillWidth: true
-        visible: false
-        Layout.preferredHeight: 74
-        placeholderText: I18n.t("Direct Domains\nfull:localhost\ngeosite:private\nexample.org")
-        text: vpnController.directDomainRules
-        onTextChanged: vpnController.directDomainRules = text
-    }
-
-    Controls.TextArea {
-        Layout.fillWidth: true
-        visible: false
-        Layout.preferredHeight: 74
-        placeholderText: I18n.t("Block Domains\ngeosite:category-ads-all\nregexp:.*ads.*")
-        text: vpnController.blockDomainRules
-        onTextChanged: vpnController.blockDomainRules = text
-    }
-
-    Controls.TextArea {
-        Layout.fillWidth: true
-        visible: false
-        Layout.preferredHeight: 66
-        enabled: vpnController.processRoutingSupported
-        opacity: enabled ? 1.0 : 0.6
-        placeholderText: I18n.t("Tunnel Apps\nTelegram\nchrome.exe\ncom.apple.Safari")
-        text: vpnController.proxyAppRules
-        onTextChanged: vpnController.proxyAppRules = text
-    }
-
-    Controls.TextArea {
-        Layout.fillWidth: true
-        visible: false
-        Layout.preferredHeight: 66
-        enabled: vpnController.processRoutingSupported
-        opacity: enabled ? 1.0 : 0.6
-        placeholderText: I18n.t("Direct Apps\nFinder\nexplorer.exe\nfirefox")
-        text: vpnController.directAppRules
-        onTextChanged: vpnController.directAppRules = text
-    }
-
-    Controls.TextArea {
-        Layout.fillWidth: true
-        visible: false
-        Layout.preferredHeight: 66
-        enabled: vpnController.processRoutingSupported
-        opacity: enabled ? 1.0 : 0.6
-        placeholderText: I18n.t("Block Apps\nsteam.exe\nDiscord\ncom.apple.Music")
-        text: vpnController.blockAppRules
-        onTextChanged: vpnController.blockAppRules = text
-    }
 }

@@ -8,6 +8,34 @@ module;
 
 module genyconnect.backend.routingruleservice;
 
+QString RoutingRuleService::normalizeProcessMatcher(const QString& value)
+{
+    QString matcher = value.trimmed();
+    if (matcher.size() > 1 && matcher.startsWith('"') && matcher.endsWith('"')) {
+        matcher = matcher.mid(1, matcher.size() - 2).trimmed();
+    }
+    // Recognize Windows paths even when loading settings on another platform.
+    // Do not lowercase: Xray process and executable path matches are case-sensitive.
+    static const QRegularExpression windowsDrive(QString::fromUtf8("^[A-Za-z]:[\\\\/]"));
+    if (windowsDrive.match(matcher).hasMatch() || matcher.startsWith(QString::fromUtf8("\\\\"))) {
+        matcher.replace('\\', '/');
+    }
+    return matcher;
+}
+
+QStringList RoutingRuleService::parseProcessRules(const QString& value)
+{
+    QStringList result;
+    const QStringList entries = value.split(QRegularExpression(QString::fromUtf8("[\\r\\n]+")), Qt::SkipEmptyParts);
+    for (const QString& entry : entries) {
+        const QString matcher = normalizeProcessMatcher(entry);
+        if (!matcher.isEmpty() && !result.contains(matcher)) {
+            result.append(matcher);
+        }
+    }
+    return result;
+}
+
 QVariantMap RoutingRuleService::validate(
     const QString& targetType,
     const QString& targetValue,
@@ -136,6 +164,11 @@ QVariantMap RoutingRuleService::validate(
                     result.insert(QString::fromUtf8("error"), QString::fromUtf8("CIDR suffix must be a number."));
                     return result;
                 }
+                if (cidrBits < 0) {
+                    result.insert(QString::fromUtf8("ok"), false);
+                    result.insert(QString::fromUtf8("error"), QString::fromUtf8("CIDR prefix length is out of range."));
+                    return result;
+                }
             }
 
             QHostAddress ip;
@@ -160,18 +193,41 @@ QVariantMap RoutingRuleService::validate(
         }
     } else if (normalizedType == QString::fromUtf8("app")
                || normalizedType == QString::fromUtf8("process")) {
-        if (normalizedValue.endsWith('/')) {
-            warning = QString::fromUtf8("Folder-level process rules match all processes under that directory.");
+        normalizedValue = normalizeProcessMatcher(normalizedValue);
+        if (normalizedValue.isEmpty() || normalizedValue.contains('\n')
+            || normalizedValue.contains('\r') || normalizedValue.contains(QChar::Null)) {
+            result.insert(QString::fromUtf8("ok"), false);
+            result.insert(QString::fromUtf8("error"), QString::fromUtf8("Enter one executable name, absolute path, or folder path per rule."));
+            return result;
         }
-        if (!context.perAppCapableRuntime || context.processSupportBlocked) {
+        const bool coreMatcher = normalizedValue == QString::fromUtf8("self/")
+            || normalizedValue == QString::fromUtf8("xray/");
+        static const QRegularExpression windowsAbsolutePath(QString::fromUtf8("^[A-Za-z]:/"));
+        if (normalizedValue.contains('/') && !coreMatcher
+            && !normalizedValue.startsWith('/')
+            && !windowsAbsolutePath.match(normalizedValue).hasMatch()) {
+            result.insert(QString::fromUtf8("ok"), false);
+            result.insert(QString::fromUtf8("error"), QString::fromUtf8("Use an absolute executable or folder path, or an executable name without a path."));
+            return result;
+        }
+        if (coreMatcher) {
+            warning = normalizedValue == QString::fromUtf8("self/")
+                ? QString::fromUtf8("self/ matches the current Xray process.")
+                : QString::fromUtf8("xray/ matches processes running the current Xray executable.");
+        } else if (normalizedValue.endsWith('/')) {
+            warning = QString::fromUtf8("Folder paths are case-sensitive and match every process beneath that directory, including subfolders.");
+        } else {
+            warning = QString::fromUtf8("Executable names and paths are case-sensitive. Select the running game or app itself; launcher rules do not include child processes.");
+        }
+        if (context.enforceRuntimeSupport && (!context.perAppCapableRuntime || context.processSupportBlocked)) {
             result.insert(QString::fromUtf8("ok"), false);
             result.insert(QString::fromUtf8("error"),
                           QString::fromUtf8("App/process routing is unavailable on this platform/runtime."));
             return result;
         }
-#if defined(Q_OS_WIN)
-        normalizedValue.replace('\\', '/');
-#endif
+        if (!context.perAppCapableRuntime || context.processSupportBlocked) {
+            warning = QString::fromUtf8("Saved for compatible runtimes. App/process rules require Windows or Linux with Xray 26.1.23+. Disable this rule to connect on an unsupported runtime.");
+        }
     } else if (normalizedType == QString::fromUtf8("protocol")) {
         const QStringList tokens = normalizedValue.split(QRegularExpression(QString::fromUtf8("[,\\s]+")), Qt::SkipEmptyParts);
         if (tokens.isEmpty()) {

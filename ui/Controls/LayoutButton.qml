@@ -35,12 +35,10 @@ T.Button {
 
         Text {
             Layout.alignment: Qt.AlignHCenter | Qt.AlignVCenter
-            font.family: FontSystem.getAwesomeLight.name
+            font.family: FontSystem.getAwesomeSolid.name
             font.pixelSize: Typography.h3
             text: setIcon
-            font.weight: Font.ExtraLight
-            font.bold: control.down ? true : false
-            font.styleName: control.down ? "Bold" : "Light"
+            font.weight: Font.Black
             color: isSelected ? Colors.foregroundFocused : Colors.primary
             horizontalAlignment: Text.AlignHCenter
             verticalAlignment: Text.AlignVCenter
@@ -55,8 +53,7 @@ T.Button {
             Layout.alignment: Qt.AlignHCenter | Qt.AlignVCenter
             Layout.fillWidth: false
             font.family: FontSystem.getContentFont.name
-            font.pixelSize: isBold ? Colors.h4 : Colors.h4
-            font.bold: isBold ? Font.Bold : Font.Normal
+            font.pixelSize: Typography.h4
             font.weight: isBold ? Font.Bold : Font.Normal
             color: frontColor
             visible: text ? true : false

@@ -30,7 +30,6 @@ ColumnLayout {
         id: customDnsCard
         Layout.fillWidth: true
         visible: root.settingsSection === "dns"
-        Layout.maximumWidth: settingsFlick.width
         Layout.preferredHeight: customDnsColumn.implicitHeight + 28
         implicitHeight: customDnsColumn.implicitHeight + 28
         radius: Metrics.radiusLg
@@ -105,7 +104,7 @@ ColumnLayout {
 
             GridLayout {
                 Layout.fillWidth: true
-                columns: root.width < 520 ? 1 : 4
+                columns: section.width < 500 ? 1 : 3
 
                 Repeater {
                     model: [
@@ -117,7 +116,7 @@ ColumnLayout {
                     delegate: Rectangle {
                         required property var modelData
                         Layout.fillWidth: true
-                        Layout.preferredWidth: root.width < 520 ? 1 : 152
+                        Layout.preferredWidth: 1
                         Layout.preferredHeight: 44
                         radius: 14
                         color: root.dnsDraftContains(modelData.server)
@@ -152,9 +151,9 @@ ColumnLayout {
                     }
                 }
 
-                Item { Layout.fillWidth: true }
-
                 Text {
+                    Layout.columnSpan: parent.columns
+                    Layout.fillWidth: true
                     color: root.themeColorToken("mainHex_7c8ba1", "mainHex_9eb2cb")
                     font.family: FontSystem.contentFontFamily
                     font.pixelSize: 12

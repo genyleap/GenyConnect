@@ -16,9 +16,15 @@ T.TabButton {
     property bool isBold: false
     property string setIcon : "\uf39b"
     property int count : 0
-    property bool isFocused: false
+    // Compatibility with callers that supply their own selected state.
+    property bool isFocused: checked
+    readonly property bool selectionActive: checked || isFocused
     width: 120
-    height: 36
+    implicitHeight: 44
+    padding: Metrics.gap8
+    hoverEnabled: Qt.platform.os !== "android" && Qt.platform.os !== "ios"
+    focusPolicy: Qt.StrongFocus
+    opacity: enabled ? 1 : 0.45
 
     text: title
 
@@ -29,12 +35,10 @@ T.TabButton {
         HorizontalSpacer { }
 
         Text {
-            font.family: FontSystem.getAwesomeRegular.name
-            color: controlTabButton.isFocused ? Colors.primary : Colors.backgroundDeactivated
+            font.family: FontSystem.getAwesomeSolid.name
+            color: controlTabButton.selectionActive ? Colors.dsPrimarySolid : Colors.dsTextMuted
             font.pixelSize: Typography.h3
-            font.weight: Font.ExtraLight
-            font.bold: controlTabButton.isFocused ? true : false
-            font.styleName: controlTabButton.isFocused ? "Bold" : "Light"
+            font.weight: Font.Black
             text: setIcon
         }
 
@@ -43,7 +47,7 @@ T.TabButton {
             font.pixelSize: Typography.t1
             Layout.alignment: Qt.AlignHCenter | Qt.AlignVCenter
             text: count
-            color: controlTabButton.isFocused ? Colors.primary : Colors.foregroundDeactivated
+            color: controlTabButton.selectionActive ? Colors.dsPrimarySolid : Colors.dsTextMuted
             visible: title.length > 0 ? true : false
         }
 
@@ -54,11 +58,11 @@ T.TabButton {
     background: Rectangle {
         id: rect
         width: parent.width
-        height: 2
-        anchors.bottom: controlTabButton.bottom
-        color: controlTabButton.isFocused ? Colors.primary : Colors.backgroundDeactivated
-        radius: 5
-        Layout.alignment: Qt.AlignHCenter | Qt.AlignVCenter
+        height: controlTabButton.height
+        color: controlTabButton.selectionActive ? Colors.dsPrimaryTint
+                                               : (controlTabButton.hovered || controlTabButton.down ? Colors.dsSurfaceSoft : "transparent")
+        radius: Metrics.radiusXs
+        border.width: controlTabButton.visualFocus ? 2 : 0
+        border.color: Colors.dsPrimarySolid
     }
 }
-
