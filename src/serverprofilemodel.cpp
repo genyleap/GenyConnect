@@ -79,6 +79,8 @@ QVariant ServerProfileModel::data(const QModelIndex& index, int role) const
         return profile.lastSuccessfulConnectionMs;
     case FailureCountRole:
         return profile.failureCount;
+    case RuntimeOnlyRole:
+        return profile.runtimeOnly;
     default:
         return {};
     }
@@ -105,6 +107,7 @@ QHash<int, QByteArray> ServerProfileModel::roleNames() const
         {ManualOrderRole, "manualOrder"},
         {LastSuccessfulConnectionRole, "lastSuccessfulConnectionMs"},
         {FailureCountRole, "failureCount"},
+        {RuntimeOnlyRole, "runtimeOnly"},
     };
 }
 

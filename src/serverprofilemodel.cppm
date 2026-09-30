@@ -66,7 +66,8 @@ public:
         PingingRole,               //!< True while ping is in progress.
         ManualOrderRole,           //!< Persisted manual order value.
         LastSuccessfulConnectionRole, //!< Last successful connection UTC ms.
-        FailureCountRole           //!< Recorded connection failure count.
+        FailureCountRole,          //!< Recorded connection failure count.
+        RuntimeOnlyRole            //!< True when profile exists only for the live runtime.
     };
 
     /**

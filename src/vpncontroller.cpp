@@ -12,6 +12,7 @@ module;
 #include <QFileInfo>
 #include <QFutureWatcher>
 #include <QGuiApplication>
+#include <QHash>
 #include <QHostAddress>
 #include <QHostInfo>
 #include <QJsonArray>
@@ -121,6 +122,7 @@ struct VpnControllerPrivate
     ServerProfileModel *profileModel = nullptr;
     Updater *updater = nullptr;
     SystemProxyManager *systemProxyManager = nullptr;
+    QHash<QString, ServerProfile> runtimeOnlyProfiles;
 };
 
 void VpnController::__geny_vtable_anchor() {}
@@ -3651,7 +3653,8 @@ int VpnController::removeProfilesBySourceId(const QString& sourceId, bool preser
     for (const ServerProfile& profile : allProfiles) {
         const QString profileSourceId = profile.sourceId.trimmed();
         const QString profileId = profile.id.trimmed();
-        if (profileSourceId.compare(normalizedSourceId, Qt::CaseInsensitive) == 0
+        if (!profile.runtimeOnly
+            && profileSourceId.compare(normalizedSourceId, Qt::CaseInsensitive) == 0
             && !(preserveProtectedProfiles && !profileId.isEmpty() && protectedIds.contains(profileId))) {
             ++removedCount;
             continue;
@@ -3977,7 +3980,8 @@ bool VpnController::renameProfileGroup(const QString& oldName, const QString& ne
     auto profiles = d->profileModel->profiles();
     bool profilesChanged = false;
     for (ServerProfile& profile : profiles) {
-        if (normalizeGroupName(profile.groupName).compare(from, Qt::CaseInsensitive) == 0) {
+        if (!profile.runtimeOnly
+            && normalizeGroupName(profile.groupName).compare(from, Qt::CaseInsensitive) == 0) {
             profile.groupName = to;
             profilesChanged = true;
             changed = true;
@@ -4067,7 +4071,8 @@ bool VpnController::removeProfileGroup(const QString& groupName)
     auto profiles = d->profileModel->profiles();
     bool profilesChanged = false;
     for (ServerProfile& profile : profiles) {
-        if (normalizeGroupName(profile.groupName).compare(normalized, Qt::CaseInsensitive) == 0) {
+        if (!profile.runtimeOnly
+            && normalizeGroupName(profile.groupName).compare(normalized, Qt::CaseInsensitive) == 0) {
             profile.groupName = QString::fromUtf8("General");
             profilesChanged = true;
             changed = true;
@@ -4122,6 +4127,9 @@ int VpnController::removeAllProfileGroups()
     auto profiles = d->profileModel->profiles();
     bool profilesChanged = false;
     for (ServerProfile& profile : profiles) {
+        if (profile.runtimeOnly) {
+            continue;
+        }
         const QString normalized = normalizeGroupName(profile.groupName);
         if (normalized.compare(QString::fromUtf8("General"), Qt::CaseInsensitive) != 0) {
             profile.groupName = QString::fromUtf8("General");
@@ -5627,8 +5635,137 @@ void VpnController::recomputeProfileStats()
     emit profileStatsChanged();
 }
 
+bool VpnController::isRuntimeOnlyProfile(int row) const
+{
+    const auto profile = d->profileModel->profileAt(row);
+    return profile.has_value() && profile->runtimeOnly;
+}
+
+int VpnController::profileIndexById(const QString& profileId) const
+{
+    return d->profileModel->indexOfId(profileId.trimmed());
+}
+
+int VpnController::upsertRuntimeOnlyProfile(const ServerProfile& displayProfile)
+{
+    const QString id = displayProfile.id.trimmed();
+    const QString name = displayProfile.name.trimmed();
+    if (id.isEmpty() || name.isEmpty()) {
+        setLastError(QString::fromUtf8(
+            "Runtime-only profile requires a stable id and display name."));
+        return -1;
+    }
+
+    const int existingRow = d->profileModel->indexOfId(id);
+    if (existingRow >= 0) {
+        const auto existing = d->profileModel->profileAt(existingRow);
+        if (!existing.has_value() || !existing->runtimeOnly) {
+            setLastError(QString::fromUtf8(
+                "Runtime-only profile id conflicts with a stored profile."));
+            return -1;
+        }
+    }
+
+    // Build the display placeholder from an allow-list. Never copy endpoint,
+    // credentials, transport secrets, original links or free-form metadata into
+    // the normal profile model.
+    ServerProfile sanitized;
+    sanitized.id = id;
+    sanitized.name = name;
+    sanitized.protocol = displayProfile.protocol.trimmed().left(32);
+    sanitized.groupName = displayProfile.groupName.trimmed();
+    sanitized.sourceName = displayProfile.sourceName.trimmed();
+    sanitized.sourceId = displayProfile.sourceId.trimmed();
+    sanitized.runtimeOnly = true;
+
+    if (!d->profileModel->addProfile(sanitized)) {
+        setLastError(QString::fromUtf8("Unable to register runtime-only profile."));
+        return -1;
+    }
+
+    refreshProfileGroups();
+    recomputeProfileStats();
+    return d->profileModel->indexOfId(sanitized.id);
+}
+
+bool VpnController::materializeRuntimeOnlyProfile(
+    const QString& profileId,
+    const ServerProfile& runtimeProfile)
+{
+    const QString id = profileId.trimmed();
+    const int row = d->profileModel->indexOfId(id);
+    const auto display = d->profileModel->profileAt(row);
+    if (id.isEmpty() || !display.has_value() || !display->runtimeOnly) {
+        setLastError(QString::fromUtf8("Runtime-only profile is not registered."));
+        return false;
+    }
+
+    ServerProfile materialized = runtimeProfile;
+    materialized.runtimeOnly = false;
+    materialized.id = id;
+    if (materialized.name.trimmed().isEmpty()) {
+        materialized.name = display->name;
+    }
+    if (!materialized.isValid()) {
+        setLastError(QString::fromUtf8(
+            "Runtime-only profile materialization is not a valid connection profile."));
+        return false;
+    }
+
+    d->runtimeOnlyProfiles.insert(id, std::move(materialized));
+    return true;
+}
+
+bool VpnController::removeRuntimeOnlyProfile(const QString& profileId)
+{
+    const QString id = profileId.trimmed();
+    const int row = d->profileModel->indexOfId(id);
+    if (row < 0) {
+        d->runtimeOnlyProfiles.remove(id);
+        return true;
+    }
+
+    const auto profile = d->profileModel->profileAt(row);
+    if (!profile.has_value() || !profile->runtimeOnly) {
+        return false;
+    }
+    if (row == m_currentProfileIndex
+        && ((m_runtimeBackend && m_runtimeBackend->isRunning()) || connected() || busy())) {
+        setLastError(QString::fromUtf8(
+            "Disconnect before removing the active runtime-only profile."));
+        return false;
+    }
+
+    d->runtimeOnlyProfiles.remove(id);
+    const int previousIndex = m_currentProfileIndex;
+    if (!d->profileModel->removeAt(row)) {
+        return false;
+    }
+
+    const int rowCount = d->profileModel->rowCount();
+    if (rowCount == 0 || previousIndex == row) {
+        setCurrentProfileIndex(-1);
+    } else if (row < previousIndex) {
+        setCurrentProfileIndex(previousIndex - 1);
+    } else if (m_currentProfileIndex >= rowCount) {
+        setCurrentProfileIndex(rowCount - 1);
+    }
+
+    refreshProfileGroups();
+    recomputeProfileStats();
+    saveSettings();
+    return true;
+}
+
 bool VpnController::removeProfile(int row)
 {
+    const auto candidate = d->profileModel->profileAt(row);
+    if (candidate.has_value() && candidate->runtimeOnly) {
+        setLastError(QString::fromUtf8(
+            "Runtime-only profiles are managed by their provider."));
+        return false;
+    }
+
     if (row == m_currentProfileIndex
         && ((m_runtimeBackend && m_runtimeBackend->isRunning()) || connected() || busy())) {
         setLastError(QString::fromUtf8("Disconnect before removing the active selected profile."));
@@ -5695,6 +5832,11 @@ bool VpnController::updateProfile(
     }
 
     ServerProfile& profile = profiles[row];
+    if (profile.runtimeOnly) {
+        setLastError(QString::fromUtf8(
+            "Runtime-only profiles cannot be edited."));
+        return false;
+    }
     const QString cleanName = name.trimmed();
     const QString cleanGroup = normalizeGroupName(groupName);
     const bool configProvided = !configLink.isNull();
@@ -5791,7 +5933,8 @@ int VpnController::removeAllProfiles()
 
     for (const ServerProfile& profile : allProfiles) {
         const QString profileId = profile.id.trimmed();
-        if (!profileId.isEmpty() && protectedIds.contains(profileId)) {
+        if (profile.runtimeOnly
+            || (!profileId.isEmpty() && protectedIds.contains(profileId))) {
             keptProfiles.append(profile);
             continue;
         }
@@ -5870,7 +6013,9 @@ int VpnController::removeDeadProfiles()
     int removedCount = 0;
     for (const ServerProfile& profile : allProfiles) {
         const QString profileId = profile.id.trimmed();
-        const bool protectedProfile = !profileId.isEmpty() && protectedIds.contains(profileId);
+        const bool protectedProfile =
+            profile.runtimeOnly
+            || (!profileId.isEmpty() && protectedIds.contains(profileId));
         if (!protectedProfile && !profile.pingInProgress && profile.lastPingMs < 0) {
             ++removedCount;
             continue;
@@ -6006,6 +6151,10 @@ void VpnController::pingProfile(int row)
 {
     const auto profile = d->profileModel->profileAt(row);
     if (!profile.has_value()) {
+        return;
+    }
+    if (profile->runtimeOnly) {
+        d->profileModel->setPingResult(row, -1, -1.0);
         return;
     }
 
@@ -6468,6 +6617,27 @@ void VpnController::connectToProfile(int row)
         return;
     }
 
+    const bool runtimeOnlySelection = profile->runtimeOnly;
+    if (runtimeOnlySelection) {
+        const QString runtimeOnlyId = profile->id.trimmed();
+        if (runtimeOnlyId.isEmpty()
+            || !d->runtimeOnlyProfiles.contains(runtimeOnlyId)) {
+            setLastError(QString());
+            emit runtimeOnlyProfileAuthorizationRequested(runtimeOnlyId);
+            return;
+        }
+
+        ServerProfile runtimeProfile =
+            d->runtimeOnlyProfiles.take(runtimeOnlyId);
+        runtimeProfile.id = runtimeOnlyId;
+        runtimeProfile.name = profile->name;
+        runtimeProfile.groupName = profile->groupName;
+        runtimeProfile.sourceName = profile->sourceName;
+        runtimeProfile.sourceId = profile->sourceId;
+        runtimeProfile.runtimeOnly = false;
+        profile = std::move(runtimeProfile);
+    }
+
     if (m_runtimeIsDesktop && m_xrayExecutablePath.trimmed().isEmpty()) {
         setLastError(QString::fromUtf8("Set the xray-core executable path first."));
         setConnectionState(ConnectionState::Error);
@@ -6813,7 +6983,7 @@ void VpnController::toggleConnection()
 bool VpnController::shouldShowSecurityWarningForProfile(int row) const
 {
     const auto profile = d->profileModel ? d->profileModel->profileAt(row) : std::nullopt;
-    if (!profile.has_value()) {
+    if (!profile.has_value() || profile->runtimeOnly) {
         return false;
     }
 
@@ -7587,6 +7757,12 @@ QString VpnController::currentProfileSubtitle() const
     if (!profile.has_value()) {
         return {};
     }
+    if (profile->runtimeOnly) {
+        const QString source = profile->sourceName.trimmed();
+        return source.isEmpty()
+            ? QString::fromUtf8("Managed runtime profile · endpoint hidden")
+            : QString::fromUtf8("%1 · endpoint hidden").arg(source);
+    }
 
     QString subtitle = QString::fromUtf8("%1  %2:%3")
                            .arg(profile->protocol.toUpper(), profile->address, QString::number(profile->port));
@@ -7808,6 +7984,9 @@ void VpnController::completeRuntimeConnectedStartup(bool restoredExistingMobileR
         emit profileStatsChanged();
     }
     resetPerProfileUsageSamples();
+    if (!m_runtimeIsMobile && isRuntimeOnlyProfile(m_currentProfileIndex)) {
+        QFile::remove(m_runtimeConfigPath);
+    }
     if (!m_runtimeIsMobile && !m_privilegedTunManaged) {
         writeManagedRuntimeRecord(m_runtimeBackend ? m_runtimeBackend->processId() : -1, QString::fromUtf8("proxy"));
     }
@@ -8225,6 +8404,13 @@ void VpnController::onProcessStopped(int exitCode, VpnRuntimeBackend::ExitStatus
     }
 
     if (m_stoppingProcess) {
+        const auto stoppedProfile = d->profileModel->profileAt(m_currentProfileIndex);
+        if (stoppedProfile.has_value() && stoppedProfile->runtimeOnly) {
+            QFile::remove(m_runtimeConfigPath);
+            if (m_pendingReconnectProfileIndex < 0) {
+                d->runtimeOnlyProfiles.remove(stoppedProfile->id.trimmed());
+            }
+        }
         m_stoppingProcess = false;
         m_disconnectRequested.store(false);
         setLastError(QString());
@@ -8234,6 +8420,11 @@ void VpnController::onProcessStopped(int exitCode, VpnRuntimeBackend::ExitStatus
     }
 
     if (exitStatus == VpnRuntimeBackend::ExitStatus::CrashExit) {
+        const auto crashedProfile = d->profileModel->profileAt(m_currentProfileIndex);
+        if (crashedProfile.has_value() && crashedProfile->runtimeOnly) {
+            QFile::remove(m_runtimeConfigPath);
+            d->runtimeOnlyProfiles.remove(crashedProfile->id.trimmed());
+        }
         if (m_powerModeManager) {
             m_powerModeManager->recordRuntimeInstability(QString::fromUtf8("runtime crash"));
         }
@@ -8265,6 +8456,12 @@ void VpnController::onProcessError(const QString& error)
 {
     if (m_stoppingProcess) {
         return;
+    }
+
+    const auto failedRuntimeProfile = d->profileModel->profileAt(m_currentProfileIndex);
+    if (failedRuntimeProfile.has_value() && failedRuntimeProfile->runtimeOnly) {
+        QFile::remove(m_runtimeConfigPath);
+        d->runtimeOnlyProfiles.remove(failedRuntimeProfile->id.trimmed());
     }
 
     ++m_statsPollGeneration;
@@ -11073,7 +11270,7 @@ bool VpnController::clearRoutingRules()
 QString VpnController::exportProfile(int row) const
 {
     const auto profile = d->profileModel->profileAt(row);
-    if (!profile.has_value()) {
+    if (!profile.has_value() || profile->runtimeOnly) {
         return QString();
     }
     return QString::fromUtf8(QJsonDocument(profile->toJson()).toJson(QJsonDocument::Indented));
@@ -11082,7 +11279,7 @@ QString VpnController::exportProfile(int row) const
 QString VpnController::exportProfileLink(int row) const
 {
     const auto profile = d->profileModel->profileAt(row);
-    if (!profile.has_value()) {
+    if (!profile.has_value() || profile->runtimeOnly) {
         return QString();
     }
     return profile->originalLink.trimmed();
@@ -11102,14 +11299,16 @@ QString VpnController::exportProfiles(const QVariantList& rows) const
     QJsonArray exported;
     if (uniqueRows.isEmpty()) {
         for (const ServerProfile& profile : d->profileModel->profiles()) {
-            exported.append(profile.toJson());
+            if (!profile.runtimeOnly) {
+                exported.append(profile.toJson());
+            }
         }
     } else {
         QList<int> sortedRows = uniqueRows.values();
         std::sort(sortedRows.begin(), sortedRows.end());
         for (int row : sortedRows) {
             const auto profile = d->profileModel->profileAt(row);
-            if (profile.has_value()) {
+            if (profile.has_value() && !profile->runtimeOnly) {
                 exported.append(profile->toJson());
             }
         }
@@ -13527,7 +13726,9 @@ void VpnController::saveProfiles() const
     QJsonArray arr;
     const auto allProfiles = d->profileModel->profiles();
     for (const auto &profile : allProfiles) {
-        arr.append(profile.toJson());
+        if (!profile.runtimeOnly) {
+            arr.append(profile.toJson());
+        }
     }
 
     QSaveFile file(m_profilesPath);
@@ -13689,8 +13890,15 @@ void VpnController::saveSettings() const
     settings.setValue(QString::fromUtf8("logs/enabled"), m_loggingEnabled);
     settings.setValue(QString::fromUtf8("profiles/autoPing"), m_autoPingProfiles);
     settings.setValue(QString::fromUtf8("network/latencyMeasurementMode"), m_latencyMeasurementMode);
-    settings.setValue(QString::fromUtf8("profiles/currentIndex"), m_currentProfileIndex);
-    settings.setValue(QString::fromUtf8("profiles/currentId"), m_currentProfileId);
+    const auto currentProfile = d->profileModel->profileAt(m_currentProfileIndex);
+    const bool runtimeOnlySelection =
+        currentProfile.has_value() && currentProfile->runtimeOnly;
+    settings.setValue(
+        QString::fromUtf8("profiles/currentIndex"),
+        runtimeOnlySelection ? -1 : m_currentProfileIndex);
+    settings.setValue(
+        QString::fromUtf8("profiles/currentId"),
+        runtimeOnlySelection ? QString() : m_currentProfileId);
     settings.setValue(QString::fromUtf8("profiles/currentGroup"), m_currentProfileGroup);
     settings.setValue(QString::fromUtf8("usage/selectedProfileId"), m_selectedUsageProfileId);
     QStringList dismissedSecurityWarnings;

@@ -70,6 +70,7 @@ export struct ServerProfile {
     QStringList wgDns;        //!< Per-profile DNS hints (imported only).
 
     bool allowInsecure = false; //!< Imported legacy insecure TLS flag.
+    bool runtimeOnly = false; //!< Runtime-only profile: never persist or export.
 
     QString originalLink;     //!< Original imported share link.
     QString groupName;        //!< Logical group/category name (for filtering).

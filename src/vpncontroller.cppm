@@ -720,6 +720,13 @@ public:
      * @return True when removal succeeds.
      */
     Q_INVOKABLE bool removeProfile(int row);
+    Q_INVOKABLE bool isRuntimeOnlyProfile(int row) const;
+    [[nodiscard]] int profileIndexById(const QString& profileId) const;
+    int upsertRuntimeOnlyProfile(const ServerProfile& displayProfile);
+    bool materializeRuntimeOnlyProfile(
+        const QString& profileId,
+        const ServerProfile& runtimeProfile);
+    bool removeRuntimeOnlyProfile(const QString& profileId);
     Q_INVOKABLE bool updateProfileBasics(int row, const QString& name, const QString& groupName);
     Q_INVOKABLE bool updateProfile(
         int row,
@@ -935,6 +942,8 @@ signals:
     void speedTestChanged();
     //! Emitted when selected profile index changes.
     void currentProfileIndexChanged();
+    //! Ask the owning product to authorize/materialize a runtime-only profile.
+    void runtimeOnlyProfileAuthorizationRequested(const QString& profileId);
     //! Emitted when executable path changes.
     void xrayExecutablePathChanged();
     //! Emitted when xray version string changes.

@@ -1689,6 +1689,7 @@ Item {
                                 required property int pingMs
                                 required property real packetLossPct
                                 required property string packetLossText
+                                required property bool runtimeOnly
 
                                 readonly property bool selected: index === vpnController.currentProfileIndex
                                 readonly property string groupBadge: root.profileGroupBadgeText(groupName)
@@ -1826,6 +1827,8 @@ Item {
                                                     bottomPadding: 0
                                                     hoverEnabled: !root.mobilePlatform
                                                     Accessible.name: I18n.t("Ping") + ", " + profileCard.latencyLabel
+                                                    visible: !profileCard.runtimeOnly
+                                                    enabled: !profileCard.runtimeOnly
                                                     onClicked: vpnController.pingProfile(profileCard.index)
                                                     background: Rectangle {
                                                         radius: 6
@@ -1862,9 +1865,10 @@ Item {
                                                 }
 
                                                 ProfileStatusChip {
-                                                    label: profileCard.groupBadge.length > 0 ? profileCard.groupBadge
-                                                        : ((vpnController.connected ? vpnController.runtimeTunActive : vpnController.tunMode) ? "TUN" : "PROXY")
-                                                    textColor: Colors.dsLinkIconBlue
+                                                    label: profileCard.runtimeOnly ? "Managed"
+                                                        : (profileCard.groupBadge.length > 0 ? profileCard.groupBadge
+                                                        : ((vpnController.connected ? vpnController.runtimeTunActive : vpnController.tunMode) ? "TUN" : "PROXY"))
+                                                    textColor: profileCard.runtimeOnly ? Colors.dsSuccess : Colors.dsLinkIconBlue
                                                     fillColor: Colors.dsSurfaceSoft
                                                     maximumWidth: profileMetadata.width
                                                 }
@@ -1876,6 +1880,7 @@ Item {
                                         Layout.alignment: (I18n.isRtl ? Qt.AlignLeft : Qt.AlignRight) | Qt.AlignVCenter
                                         layoutDirection: I18n.isRtl ? Qt.RightToLeft : Qt.LeftToRight
                                         spacing: 2
+                                        visible: !profileCard.runtimeOnly
 
                                         ProfileToolButton {
                                             iconText: "\uf062"

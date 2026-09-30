@@ -107,6 +107,11 @@ QJsonValue firstJsonValue(const QJsonObject& json, const QStringList& keys)
 
 bool ServerProfile::isValid() const
 {
+    if (runtimeOnly) {
+        return !id.trimmed().isEmpty()
+            && !name.trimmed().isEmpty();
+    }
+
     if (protocol.trimmed().compare(QString::fromUtf8("wireguard"), Qt::CaseInsensitive) == 0) {
         return !address.trimmed().isEmpty()
                && port > 0
