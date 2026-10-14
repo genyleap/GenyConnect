@@ -21,7 +21,8 @@ set(PROJECT_NAME "GenyConnect")
 set(GENYCONNECT_TARGET_BUILD_ARCH "" CACHE STRING "Override target arch for output build/package (arm64|x86_64)")
 
 # Must be defined before project() on macOS.
-set(GENYCONNECT_MACOS_DEPLOYMENT_TARGET "14.0" CACHE STRING "Minimum macOS version")
+# Test branch only: override the 14.0 CI cache value; do not merge before validation.
+set(GENYCONNECT_MACOS_DEPLOYMENT_TARGET "13.7.0" CACHE STRING "Minimum macOS version" FORCE)
 
 if(APPLE AND NOT IOS)
   if(NOT GENYCONNECT_TARGET_BUILD_ARCH)
