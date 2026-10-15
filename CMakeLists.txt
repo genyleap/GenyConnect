@@ -21,7 +21,8 @@ set(PROJECT_NAME "GenyConnect")
 set(GENYCONNECT_TARGET_BUILD_ARCH "" CACHE STRING "Override target arch for output build/package (arm64|x86_64)")
 
 # Must be defined before project() on macOS.
-set(GENYCONNECT_MACOS_DEPLOYMENT_TARGET "14.0" CACHE STRING "Minimum macOS version")
+# Test branch only: override the 14.0 CI cache value; do not merge before validation.
+set(GENYCONNECT_MACOS_DEPLOYMENT_TARGET "13.7.0" CACHE STRING "Minimum macOS version" FORCE)
 
 if(APPLE AND NOT IOS)
   if(NOT GENYCONNECT_TARGET_BUILD_ARCH)
@@ -1145,6 +1146,14 @@ if(BUILD_TESTING AND NOT ANDROID AND NOT IOS)
   target_include_directories(genyconnect_linuxhelperlaunch_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
   target_link_libraries(genyconnect_linuxhelperlaunch_tests PRIVATE Qt6::Core Qt6::Test)
   add_test(NAME genyconnect_linuxhelperlaunch_tests COMMAND genyconnect_linuxhelperlaunch_tests)
+
+  add_executable(genyconnect_publiciplookup_tests
+    tests/publiciplookup_tests.cpp
+    src/publiciplookup.hpp
+  )
+  target_include_directories(genyconnect_publiciplookup_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+  target_link_libraries(genyconnect_publiciplookup_tests PRIVATE Qt6::Core Qt6::Network Qt6::Test)
+  add_test(NAME genyconnect_publiciplookup_tests COMMAND genyconnect_publiciplookup_tests)
 endif()
 
 if(GENYCONNECT_AUTO_DOWNLOAD_XRAY AND NOT GENYCONNECT_BUNDLED_XRAY_PATH)
