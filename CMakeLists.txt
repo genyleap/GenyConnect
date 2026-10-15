@@ -1146,6 +1146,14 @@ if(BUILD_TESTING AND NOT ANDROID AND NOT IOS)
   target_include_directories(genyconnect_linuxhelperlaunch_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
   target_link_libraries(genyconnect_linuxhelperlaunch_tests PRIVATE Qt6::Core Qt6::Test)
   add_test(NAME genyconnect_linuxhelperlaunch_tests COMMAND genyconnect_linuxhelperlaunch_tests)
+
+  add_executable(genyconnect_publiciplookup_tests
+    tests/publiciplookup_tests.cpp
+    src/publiciplookup.hpp
+  )
+  target_include_directories(genyconnect_publiciplookup_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+  target_link_libraries(genyconnect_publiciplookup_tests PRIVATE Qt6::Core Qt6::Network Qt6::Test)
+  add_test(NAME genyconnect_publiciplookup_tests COMMAND genyconnect_publiciplookup_tests)
 endif()
 
 if(GENYCONNECT_AUTO_DOWNLOAD_XRAY AND NOT GENYCONNECT_BUNDLED_XRAY_PATH)

@@ -68,6 +68,7 @@ module;
 #include "runtime/runtimefactory.hpp"
 #include "runtime/vpnruntimebackend.hpp"
 #include "linuxhelperlaunch.hpp"
+#include "publiciplookup.hpp"
 #include "powermodemanager.hpp"
 #include "securitystatus.hpp"
 #include "thirdparty/qrcodegen/qrcodegen.h"
@@ -167,7 +168,6 @@ constexpr int kProfileUsageSaveDelayMs = 2500;
 constexpr int kProfileMetadataSaveDelayMs = 750;
 constexpr int kPublicIpTimeoutMs = 6500;
 constexpr int kPublicIpRetryDelayMs = 2200;
-constexpr const char kPublicIpEndpoint[] = "https://api.ipify.org?format=text";
 constexpr const char kManagedRuntimeRecordFile[] = "managed-runtime.json";
 constexpr int kDonationBaseChainId = 8453;
 constexpr const char kDonationBaseChainName[] = "Base Mainnet";
@@ -1898,7 +1898,7 @@ double mbpsFromBytes(qint64 bytes, qint64 elapsedMs)
 
 bool checkLocalProxyConnectivitySync(quint16 socksPort, QString *errorMessage)
 {
-    auto runHttpProxyProbe = [socksPort](const QString& url, const QString& hostHeader, int *latencyMs, QString *probeError) -> bool {
+    auto runHttpProxyProbe = [socksPort](const QString& url, const QString& hostHeader, int expectedStatus, int *latencyMs, QString *probeError) -> bool {
         QTcpSocket socket;
         QElapsedTimer latencyTimer;
         latencyTimer.start();
@@ -1963,7 +1963,12 @@ bool checkLocalProxyConnectivitySync(quint16 socksPort, QString *errorMessage)
             return false;
         }
 
-        Q_UNUSED(statusCode);
+        if (statusCode != expectedStatus) {
+            if (probeError) {
+                *probeError = QString::fromUtf8("Unexpected HTTP status %1 from %2.").arg(statusCode).arg(hostHeader);
+            }
+            return false;
+        }
         if (latencyMs) {
             *latencyMs = static_cast<int>(qBound<qint64>(1, latencyTimer.elapsed(), 60000LL));
         }
@@ -1973,24 +1978,28 @@ bool checkLocalProxyConnectivitySync(quint16 socksPort, QString *errorMessage)
     QString probeError;
     if (runHttpProxyProbe(QString::fromUtf8("http://1.1.1.1/cdn-cgi/trace"),
                           QString::fromUtf8("1.1.1.1"),
+                          200,
                           nullptr,
                           &probeError)) {
         return true;
     }
     if (runHttpProxyProbe(QString::fromUtf8("http://connectivitycheck.gstatic.com/generate_204"),
                           QString::fromUtf8("connectivitycheck.gstatic.com"),
+                          204,
                           nullptr,
                           &probeError)) {
         return true;
     }
     if (runHttpProxyProbe(QString::fromUtf8("http://cp.cloudflare.com/generate_204"),
                           QString::fromUtf8("cp.cloudflare.com"),
+                          204,
                           nullptr,
                           &probeError)) {
         return true;
     }
     if (runHttpProxyProbe(QString::fromUtf8("http://www.gstatic.com/generate_204"),
                           QString::fromUtf8("www.gstatic.com"),
+                          204,
                           nullptr,
                           &probeError)) {
         return true;
@@ -7105,35 +7114,49 @@ void VpnController::refreshPublicIp()
     return;
 #endif
 
+    m_publicIpRetryTimer.stop();
     if (m_publicIpReply) {
         QObject::disconnect(m_publicIpReply, nullptr, this, nullptr);
         m_publicIpReply->abort();
         m_publicIpReply->deleteLater();
         m_publicIpReply = nullptr;
     }
+    if (m_publicIpRetryCount > m_publicIpRetryLimit) {
+        // An explicit refresh after all automatic retries gets a fresh budget.
+        m_publicIpRetryCount = 0;
+    }
+    m_publicIpEndpointIndex = 0;
+    m_publicIpLastFailureReason.clear();
+
+    // All providers use this same tunnel-local SOCKS port. Never fall back to
+    // a direct connection when an IP provider is filtered or unavailable.
     m_publicIpNetworkManager.setProxy(
         QNetworkProxy(QNetworkProxy::Socks5Proxy, QString::fromUtf8("127.0.0.1"), m_buildOptions.socksPort));
 
-    QNetworkRequest request(QUrl(QString::fromLatin1(kPublicIpEndpoint)));
-    request.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::NoLessSafeRedirectPolicy);
+    m_publicIpRefreshing = true;
+    emit publicIpAddressChanged();
+    requestNextPublicIpEndpoint();
+}
+
+void VpnController::requestNextPublicIpEndpoint()
+{
+    if (!connected() || m_publicIpEndpointIndex < 0
+        || m_publicIpEndpointIndex >= PublicIpLookup::endpoints().size()) {
+        return;
+    }
+
+    const QUrl endpoint(PublicIpLookup::endpoints().at(m_publicIpEndpointIndex));
+    QNetworkRequest request(endpoint);
+    request.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::ManualRedirectPolicy);
     request.setAttribute(QNetworkRequest::CacheLoadControlAttribute, QNetworkRequest::AlwaysNetwork);
     request.setAttribute(QNetworkRequest::Http2AllowedAttribute, false);
     request.setTransferTimeout(kPublicIpTimeoutMs);
     request.setRawHeader("User-Agent", "GenyConnect-IPCheck/1.0");
     request.setRawHeader("Accept", "text/plain");
 
-    m_publicIpRefreshing = true;
-    emit publicIpAddressChanged();
-
     m_publicIpReply = m_publicIpNetworkManager.get(request);
-#if QT_CONFIG(ssl)
-    connect(m_publicIpReply, &QNetworkReply::sslErrors, this, [this](const QList<QSslError>& errors) {
-        Q_UNUSED(errors)
-        if (m_publicIpReply != nullptr) {
-            m_publicIpReply->abort();
-        }
-    });
-#endif
+    // Qt enforces TLS certificate verification. Do not ignore SSL errors or
+    // retry over HTTP; an unusable HTTPS endpoint advances to the next one.
     connect(m_publicIpReply, &QNetworkReply::finished, this, &VpnController::onPublicIpFinished);
 }
 
@@ -9104,34 +9127,89 @@ void VpnController::onPublicIpFinished()
         return;
     }
 
-    const bool ok = reply->error() == QNetworkReply::NoError;
-    QByteArray payload;
-    if (reply->isReadable() && reply->isOpen()) {
-        payload = reply->readAll();
-    }
-    const QString ipText = QString::fromUtf8(payload).trimmed();
-    const QHostAddress parsed(ipText);
+    const bool transportOk = reply->error() == QNetworkReply::NoError;
+    const int httpStatus = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+    const QByteArray payload = transportOk ? reply->readAll() : QByteArray();
+    const QString publicAddress = transportOk
+        ? PublicIpLookup::parsePublicAddress(payload, httpStatus)
+        : QString();
+    const bool usedFallback = m_publicIpEndpointIndex > 0;
 
-    const bool success = ok && !parsed.isNull();
-    if (success) {
-        m_publicIpAddress = ipText;
+    m_publicIpReply = nullptr;
+    if (!publicAddress.isEmpty() && connected()) {
+        m_publicIpAddress = publicAddress;
         m_publicIpRetryCount = 0;
-    } else {
-        ++m_publicIpRetryCount;
-        if (connected() && m_publicIpRetryCount <= m_publicIpRetryLimit) {
-            const int retryDelayMs = m_powerModeManager
-                ? m_powerModeManager->effectivePolicy().publicIpRetryDelayMs
-                : kPublicIpRetryDelayMs;
-            m_publicIpRetryTimer.start(retryDelayMs * m_publicIpRetryCount);
-        } else {
-            appendSystemLog(QString::fromUtf8("[System] VPN IP lookup unavailable: %1").arg(reply->errorString().trimmed()));
+        m_publicIpLastFailureReason.clear();
+        if (usedFallback) {
+            appendSystemLog(QString::fromUtf8("[System] VPN IP display recovered via alternate provider (%1).")
+                                .arg(reply->url().host()));
         }
+        m_publicIpRefreshing = false;
+        reply->deleteLater();
+        emit publicIpAddressChanged();
+        return;
+    }
+
+    const QString failure = transportOk
+        ? QString::fromUtf8("HTTP %1 or invalid public IP response").arg(httpStatus)
+        : reply->errorString().trimmed();
+    m_publicIpLastFailureReason = QString::fromUtf8("%1: %2").arg(reply->url().host(), failure);
+    reply->deleteLater();
+
+    // Exhaust independent providers before consuming one retry. A lookup
+    // failure only affects the optional displayed IP, never VPN/TUN state.
+    if (connected() && ++m_publicIpEndpointIndex < PublicIpLookup::endpoints().size()) {
+        requestNextPublicIpEndpoint();
+        return;
+    }
+
+    ++m_publicIpRetryCount;
+    if (connected() && m_publicIpRetryCount <= m_publicIpRetryLimit) {
+        const int retryDelayMs = m_powerModeManager
+            ? m_powerModeManager->effectivePolicy().publicIpRetryDelayMs
+            : kPublicIpRetryDelayMs;
+        m_publicIpRetryTimer.start(retryDelayMs * m_publicIpRetryCount);
+    } else if (connected()) {
+        appendSystemLog(QString::fromUtf8(
+            "[System] VPN IP lookup unavailable (display only; VPN connection unchanged): %1")
+                            .arg(m_publicIpLastFailureReason));
     }
 
     m_publicIpRefreshing = false;
-    m_publicIpReply = nullptr;
-    reply->deleteLater();
     emit publicIpAddressChanged();
+}
+
+void VpnController::verifyTunOutboundConnectivity(quint64 generation)
+{
+    if (!connected() || !m_effectiveTunMode || m_runtimeIsMobile
+        || generation != m_tunConnectivityProbeGeneration) {
+        return;
+    }
+    const quint16 socksPort = m_buildOptions.socksPort;
+    const QPointer<VpnController> guard(this);
+    // Diagnostic only: reachability through Xray is independent of the IP
+    // display providers and does not change the established TUN state.
+    [[maybe_unused]] auto diagnostic = QtConcurrent::run([guard, socksPort, generation]() {
+        QString probeError;
+        const bool reachable = checkLocalProxyConnectivitySync(socksPort, &probeError);
+        if (!guard) {
+            return;
+        }
+        QMetaObject::invokeMethod(guard.data(), [guard, generation, reachable, probeError]() {
+            if (!guard || !guard->connected() || !guard->m_effectiveTunMode
+                || generation != guard->m_tunConnectivityProbeGeneration) {
+                return;
+            }
+            if (reachable) {
+                guard->appendSystemLog(QString::fromUtf8(
+                    "[System] Independent TUN egress probe passed via local Xray proxy (separate from IP display)."));
+            } else {
+                guard->appendSystemLog(QString::fromUtf8(
+                    "[System] Independent TUN egress probe inconclusive: %1 (VPN state unchanged; verify routes and website access).")
+                        .arg(probeError));
+            }
+        }, Qt::QueuedConnection);
+    });
 }
 
 void VpnController::setConnectionState(ConnectionState state)
@@ -9142,6 +9220,7 @@ void VpnController::setConnectionState(ConnectionState state)
 
     const ConnectionState previousState = m_connectionState;
     m_connectionState = state;
+    const quint64 connectivityGeneration = ++m_tunConnectivityProbeGeneration;
     if (state == ConnectionState::Connected) {
         appendConnectionHistoryEvent(state);
         appendSystemLog(QString::fromUtf8("[Connection] Connected."));
@@ -9158,6 +9237,14 @@ void VpnController::setConnectionState(ConnectionState state)
     if (state == ConnectionState::Connected) {
         m_disconnectRequested.store(false);
         m_publicIpRetryCount = 0;
+        m_publicIpEndpointIndex = 0;
+        m_publicIpAddress.clear(); // Never display an IP from a previous session.
+        emit publicIpAddressChanged();
+        if (m_effectiveTunMode && !m_runtimeIsMobile) {
+            QTimer::singleShot(1500, this, [this, connectivityGeneration]() {
+                verifyTunOutboundConnectivity(connectivityGeneration);
+            });
+        }
         if (m_pendingReconnectProfileIndex >= 0) {
             const int requestedIndex = m_pendingReconnectProfileIndex;
             appendSystemLog(QString::fromUtf8("[Routing] Applying queued reconnect request."));

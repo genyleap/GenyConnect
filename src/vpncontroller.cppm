@@ -1014,6 +1014,8 @@ private slots:
     //! Handle speed-test request completion.
     void onSpeedTestFinished();
     void onPublicIpFinished();
+    void requestNextPublicIpEndpoint();
+    void verifyTunOutboundConnectivity(quint64 generation);
 
 private:
     struct SubscriptionEntry {
@@ -1341,6 +1343,9 @@ private:
     bool m_publicIpRefreshing = false;
     int m_publicIpRetryCount = 0;
     int m_publicIpRetryLimit = 2;
+    int m_publicIpEndpointIndex = 0;
+    QString m_publicIpLastFailureReason;
+    quint64 m_tunConnectivityProbeGeneration = 0;
 
     QString m_xrayExecutablePath;
     QString m_xrayVersion = QString::fromUtf8("Unknown");
